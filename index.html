@@ -27,22 +27,44 @@
 	.justify-center {
 		justify-content: center;
 	}
+	.justify-end {
+		justify-content: end;
+	}
+	.items-center {
+		align-items: center;
+	}
 
+	.m-8 {
+		margin: 8px;
+	}
+	.p-8 {
+		padding: 8px;
+	}
+	.py-18 {
+		padding-top: 18px;
+		padding-bottom: 18px;
+	}
+
+	.py-8 {
+		padding-top: 8px;
+		padding-bottom: 8px;
+	}
+	
 </style>
 
 
-
-<header class="bg-gray-900">
-	<div class="flex justify-center">
-		<!-- <img src="" alt=""> -->
-		<a href="" class="text-white">Pricing</a>
-		<a href="" class="text-white">Courses</a>
-		<a href="" class="text-white">Blog</a>
-		<a href="" class="text-white">Forum</a>
+<!-- Note: Try to keep using padding shorthand! - 5/23/24 -->
+<header class="bg-gray-900 flex justify-between" style="padding: 18px 12px;">
+	<div class="flex justify-center items-center">
+		<img src="./logo.svg" alt="" style="margin-right: 50px;">
+		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Pricing</a>
+		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Courses</a>
+		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Blog</a>
+		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Forum</a>
 	</div>
-	<div>
-		<a href="">Login</a>
-		<button>Sign Up</button>
+	<div class="flex items-center">
+		<a href="" class = "text-white py-8 px-16" style="margin-right: 12px;">Login</a>
+		<button>Sign Up</button>	
 	</div>
 </header>
 
