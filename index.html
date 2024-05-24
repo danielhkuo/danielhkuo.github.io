@@ -1,70 +1,140 @@
-<style>
-	body {
-		margin: 0;
-	}
-	.bg-gray-900 {
-		background-color: #121826;
-	}
-	.text-white {
-		color: white;
-	}
-	.block {
-		display: block;
-	}
-	.inline-block {
-		display: inline-block;
-	}
-	.hidden {
-		display: none;
-	}
+<head>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Lato&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--nord0: #2E3440;
+			--nord1: #3B4252;
+			--nord2: #434C5E;
+			--nord3: #4C566A;
+			--nord4: #D8DEE9;
+			--nord5: #E5E9F0;
+			--nord6: #ECEFF4;
+			--nord7: #8FBCBB;
+			--nord8: #88C0D0;
+			--nord9: #81A1C1;
+			--nord10: #5E81AC;
+			--nord11: #BF616A;
+			--nord12: #D08770;
+			--nord13: #EBCB8B;
+			--nord14: #A3BE8C;
+			--nord15: #B48EAD;
+		}
+		body {
+			margin: 0;
+			font-family: "Lato", sans-serif;
+			font-weight: 400;
+			font-style: normal;
+			/* Adding Font Smoothing */
+			-webkit-font-smoothing: antialiased;
+			-moz-osx-font-smoothing: grayscale;
+		}
+		button {
+			font-family: "Lato", sans-serif;
+			font-weight: 700;
+			font-style: bold;
+		}
 
-	.flex {
-		display: flex;
-	}
-	.justify-between {
-		justify-content: space-between;
-	}
-	.justify-center {
-		justify-content: center;
-	}
-	.justify-end {
-		justify-content: end;
-	}
-	.items-center {
-		align-items: center;
-	}
+		.bg-gray-900 {
+			background-color: var(--nord0);
+		}
+		.bg-brand-teal {
+			background-color: var(--nord8);
+		}
+		.text-white {
+			color: var(--nord6);
+		}
 
-	.m-8 {
-		margin: 8px;
-	}
-	.p-8 {
-		padding: 8px;
-	}
-	.py-18 {
-		padding-top: 18px;
-		padding-bottom: 18px;
-	}
 
-	.py-8 {
-		padding-top: 8px;
-		padding-bottom: 8px;
-	}
-	
-</style>
+		.block {
+			display: block;
+		}
+		.inline-block {
+			display: inline-block;
+		}
+		.hidden {
+			display: none;
+		}
 
+		.flex {
+			display: flex;
+		}
+		.justify-between {
+			justify-content: space-between;
+		}
+		.justify-center {
+			justify-content: center;
+		}
+		.justify-end {
+			justify-content: end;
+		}
+		.items-center {
+			align-items: center;
+		}
+
+		.m-8 {
+			margin: 8px;
+		}
+		.p-8 {
+			padding: 8px;
+		}
+		.py-18 {
+			padding-top: 18px;
+			padding-bottom: 18px;
+		}
+		.py-12 {
+			padding-top: 12px;
+			padding-bottom: 12px;
+		}
+		.py-8 {
+			padding-top: 8px;
+			padding-bottom: 8px;
+		}
+		.px-16 {
+			padding-left: 16px;
+			padding-right: 16px;
+		}
+		.px-28 {
+			padding-left: 28px;
+			padding-right: 28px;
+		}
+		.no-underline {
+			text-decoration: none;
+		}
+
+		.border-none {
+			border: none;
+		}
+		
+		.rounded-full {
+			border-radius: 9999px;
+		}
+		.font-bold {
+			font-weight: bold;
+		}
+		.uppercase {
+			text-transform: uppercase;
+		}
+		.text-sm {
+			font-size: 14px;
+		}
+		
+	</style>
+</head>
 
 <!-- Note: Try to keep using padding shorthand! - 5/23/24 -->
 <header class="bg-gray-900 flex justify-between" style="padding: 18px 12px;">
 	<div class="flex justify-center items-center">
 		<img src="./logo.svg" alt="" style="margin-right: 50px;">
-		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Pricing</a>
-		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Courses</a>
-		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Blog</a>
-		<a href="" class="text-white py-8 px-16" style="margin-right: 16px;">Forum</a>
+		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Pricing</a>
+		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Courses</a>
+		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Blog</a>
+		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Forum</a>
 	</div>
 	<div class="flex items-center">
-		<a href="" class = "text-white py-8 px-16" style="margin-right: 12px;">Login</a>
-		<button>Sign Up</button>	
+		<a href="" class = "text-white py-8 px-16 no-underline" style="margin-right: 12px;">Login</a>
+		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase" style="margin-right: 16px">Sign Up</button>	
 	</div>
 </header>
 
