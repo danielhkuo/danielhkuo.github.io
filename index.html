@@ -35,12 +35,28 @@
 			font-weight: 700;
 			font-style: bold;
 		}
+		h1 {
+			margin: 0;
+		}
+		p {
+			margin: 0;
+			/* This is so that we can apply our own margin later on */
+		}
 
 		.bg-gray-900 {
 			background-color: var(--nord0);
 		}
 		.bg-brand-teal {
-			background-color: var(--nord8);
+			background-color: var(--nord7);
+		}
+		.bg-white {
+			background-color: var(--nord6);
+		}
+		.text-brand-teal {
+			color: var(--nord7);
+		}
+		.text-brand-teal-dark {
+			color: var(--nord8);
 		}
 		.text-white {
 			color: var(--nord6);
@@ -110,6 +126,7 @@
 		.rounded-full {
 			border-radius: 9999px;
 		}
+
 		.font-bold {
 			font-weight: bold;
 		}
@@ -137,6 +154,9 @@
 		.object-cover {
 			object-fit: cover;
 		}
+		.absolute {
+			position: absolute;
+		}
 		
 	</style>
 </head>
@@ -155,8 +175,17 @@
 		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase" style="margin-right: 16px">Sign Up</button>	
 	</div>
 </header>
-<section class="relative" style="top: -79px">
-	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50">
+<section class="relative">
+	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50 absolute" style="top: -79px; min-height: 550px;">
+	<div style="padding: 0 12px; padding-top: 150px;">
+	<div class="relative z-10" style="max-width: 250px;">
+		<h1 style="font-size: 60px;" class="text-white">
+			Hello 
+			<span class="text-brand-teal-dark">World</span></h1>
+		<p class="text-white" style="max-width: 300px; margin-top: 30px;">A starter website that I made</p>
+		<button class="bg-white text-brand-teal border-none py-12 px-28" style="margin-top: 30px; border-radius: 4px;">Get Started</button>
+	</div>
+	</div>
 </section>
 
 <!--
