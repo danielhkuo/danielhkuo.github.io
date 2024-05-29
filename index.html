@@ -119,12 +119,30 @@
 		.text-sm {
 			font-size: 14px;
 		}
+		.w-full {
+			width: 100%;
+		}
+		.relative {
+			position: relative;
+		}
+		.z-10 {
+			z-index: 10;
+		}
+		.tint-50 {
+			filter: brightness(50%);
+		}
+		.tint-30 {
+			filter: brightness(30%);
+		}
+		.object-cover {
+			object-fit: cover;
+		}
 		
 	</style>
 </head>
 
 <!-- Note: Try to keep using padding shorthand! - 5/23/24 -->
-<header class="bg-gray-900 flex justify-between" style="padding: 18px 12px;">
+<header class="flex justify-between relative z-10" style="padding: 18px 12px;">
 	<div class="flex justify-center items-center">
 		<img src="./logo.svg" alt="" style="margin-right: 50px;">
 		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Pricing</a>
@@ -137,6 +155,9 @@
 		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase" style="margin-right: 16px">Sign Up</button>	
 	</div>
 </header>
+<section class="relative" style="top: -79px">
+	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50">
+</section>
 
 <!--
 	-block
