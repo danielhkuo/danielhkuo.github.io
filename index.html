@@ -2,6 +2,7 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Lato&display=swap" rel="stylesheet">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<style>
 		:root {
 			--nord0: #2E3440;
@@ -21,6 +22,7 @@
 			--nord14: #A3BE8C;
 			--nord15: #B48EAD;
 		}
+
 		body {
 			margin: 0;
 			font-family: "Lato", sans-serif;
@@ -30,14 +32,17 @@
 			-webkit-font-smoothing: antialiased;
 			-moz-osx-font-smoothing: grayscale;
 		}
+
 		button {
 			font-family: "Lato", sans-serif;
 			font-weight: 700;
 			font-style: bold;
 		}
+
 		h1 {
 			margin: 0;
 		}
+
 		p {
 			margin: 0;
 			/* This is so that we can apply our own margin later on */
@@ -46,18 +51,23 @@
 		.bg-gray-900 {
 			background-color: var(--nord0);
 		}
+
 		.bg-brand-teal {
 			background-color: var(--nord7);
 		}
+
 		.bg-white {
 			background-color: var(--nord6);
 		}
+
 		.text-brand-teal {
 			color: var(--nord7);
 		}
+
 		.text-brand-teal-dark {
 			color: var(--nord8);
 		}
+
 		.text-white {
 			color: var(--nord6);
 		}
@@ -66,9 +76,11 @@
 		.block {
 			display: block;
 		}
+
 		.inline-block {
 			display: inline-block;
 		}
+
 		.hidden {
 			display: none;
 		}
@@ -76,15 +88,19 @@
 		.flex {
 			display: flex;
 		}
+
 		.justify-between {
 			justify-content: space-between;
 		}
+
 		.justify-center {
 			justify-content: center;
 		}
+
 		.justify-end {
 			justify-content: end;
 		}
+
 		.items-center {
 			align-items: center;
 		}
@@ -92,29 +108,36 @@
 		.m-8 {
 			margin: 8px;
 		}
+
 		.p-8 {
 			padding: 8px;
 		}
+
 		.py-18 {
 			padding-top: 18px;
 			padding-bottom: 18px;
 		}
+
 		.py-12 {
 			padding-top: 12px;
 			padding-bottom: 12px;
 		}
+
 		.py-8 {
 			padding-top: 8px;
 			padding-bottom: 8px;
 		}
+
 		.px-16 {
 			padding-left: 16px;
 			padding-right: 16px;
 		}
+
 		.px-28 {
 			padding-left: 28px;
 			padding-right: 28px;
 		}
+
 		.no-underline {
 			text-decoration: none;
 		}
@@ -122,7 +145,7 @@
 		.border-none {
 			border: none;
 		}
-		
+
 		.rounded-full {
 			border-radius: 9999px;
 		}
@@ -130,39 +153,70 @@
 		.font-bold {
 			font-weight: bold;
 		}
+
 		.uppercase {
 			text-transform: uppercase;
 		}
+
 		.text-sm {
 			font-size: 14px;
 		}
+
 		.w-full {
 			width: 100%;
 		}
+
 		.relative {
 			position: relative;
 		}
+
 		.z-10 {
 			z-index: 10;
 		}
+
 		.tint-50 {
 			filter: brightness(50%);
 		}
+
 		.tint-30 {
 			filter: brightness(30%);
 		}
+
 		.object-cover {
 			object-fit: cover;
 		}
+
 		.absolute {
 			position: absolute;
 		}
-		
+
+		/* Auto margin width! */
+		.mx-auto {
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		.text-36px {
+			font-size: 36px;
+		}
+		.text-16px {
+			font-size: 16px;
+		}
+
+		/* When a screen is greater than 640px... these properties will apply. YOU NEED TO SET VIEWPORT*/
+		@media (min-width: 640px) {
+			.sm\:text-60px {
+				font-size: 60px;
+			}
+			.sm\:text-20px {
+				font-size: 20px;
+			}
+		}
 	</style>
 </head>
 
 <!-- Note: Try to keep using padding shorthand! - 5/23/24 -->
-<header class="flex justify-between relative z-10" style="padding: 18px 12px;">
+<header class="flex justify-between relative z-10 mx-auto" style="padding: 18px 12px; max-width: 1200px;">
 	<div class="flex justify-center items-center">
 		<img src="./logo.svg" alt="" style="margin-right: 50px;">
 		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Pricing</a>
@@ -171,20 +225,24 @@
 		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Forum</a>
 	</div>
 	<div class="flex items-center">
-		<a href="" class = "text-white py-8 px-16 no-underline" style="margin-right: 12px;">Login</a>
-		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase" style="margin-right: 16px">Sign Up</button>	
+		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 12px;">Login</a>
+		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase"
+			style="margin-right: 16px">Sign Up</button>
 	</div>
 </header>
 <section class="relative">
-	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50 absolute" style="top: -79px; min-height: 550px;">
-	<div style="padding: 0 12px; padding-top: 150px;">
-	<div class="relative z-10" style="max-width: 250px;">
-		<h1 style="font-size: 60px;" class="text-white">
-			Hello 
-			<span class="text-brand-teal-dark">World</span></h1>
-		<p class="text-white" style="max-width: 300px; margin-top: 30px;">A starter website that I made</p>
-		<button class="bg-white text-brand-teal border-none py-12 px-28" style="margin-top: 30px; border-radius: 4px;">Get Started</button>
-	</div>
+	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50 absolute"
+		style="top: -79px; min-height: 550px;">
+	<div  class="mx-auto" style="padding: 0 12px; padding-top: 150px; max-width: 1200px;">
+		<div class="relative z-10" style="max-width: 300px;">
+			<h1 class="text-white text-36px sm:text-60px">
+				Hello
+				<span class="text-brand-teal-dark">World</span>
+			</h1>
+			<p class="text-white text-16px sm:text-20px" style="max-width: 300px; margin-top: 30px;">A starter website that I made</p>
+			<button class="bg-white text-brand-teal border-none py-12 px-28"
+				style="margin-top: 30px; border-radius: 4px;">Get Started</button>
+		</div>
 	</div>
 </section>
 
