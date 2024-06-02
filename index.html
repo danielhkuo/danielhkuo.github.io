@@ -3,6 +3,7 @@
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=Lato&display=swap" rel="stylesheet">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<script src="https://cdn.tailwindcss.com"></script>
 	<style>
 		:root {
 			--nord0: #2E3440;
@@ -39,15 +40,6 @@
 			font-style: bold;
 		}
 
-		h1 {
-			margin: 0;
-		}
-
-		p {
-			margin: 0;
-			/* This is so that we can apply our own margin later on */
-		}
-
 		.bg-gray-900 {
 			background-color: var(--nord0);
 		}
@@ -70,23 +62,6 @@
 
 		.text-white {
 			color: var(--nord6);
-		}
-
-
-		.block {
-			display: block;
-		}
-
-		.inline-block {
-			display: inline-block;
-		}
-
-		.hidden {
-			display: none;
-		}
-
-		.flex {
-			display: flex;
 		}
 
 		.justify-between {
@@ -113,31 +88,6 @@
 			padding: 8px;
 		}
 
-		.py-18 {
-			padding-top: 18px;
-			padding-bottom: 18px;
-		}
-
-		.py-12 {
-			padding-top: 12px;
-			padding-bottom: 12px;
-		}
-
-		.py-8 {
-			padding-top: 8px;
-			padding-bottom: 8px;
-		}
-
-		.px-16 {
-			padding-left: 16px;
-			padding-right: 16px;
-		}
-
-		.px-28 {
-			padding-left: 28px;
-			padding-right: 28px;
-		}
-
 		.no-underline {
 			text-decoration: none;
 		}
@@ -150,20 +100,12 @@
 			border-radius: 9999px;
 		}
 
-		.font-bold {
-			font-weight: bold;
-		}
-
 		.uppercase {
 			text-transform: uppercase;
 		}
 
 		.text-sm {
 			font-size: 14px;
-		}
-
-		.w-full {
-			width: 100%;
 		}
 
 		.relative {
@@ -203,44 +145,55 @@
 			font-size: 16px;
 		}
 
-		/* When a screen is greater than 640px... these properties will apply. YOU NEED TO SET VIEWPORT*/
+		/* sm screen size */
 		@media (min-width: 640px) {
-			.sm\:text-60px {
-				font-size: 60px;
-			}
-			.sm\:text-20px {
-				font-size: 20px;
+
+		}
+
+		/* md screen size */
+		@media (min-width: 768px) {
+			.md\:h-550px {
+				height: 550px;
 			}
 		}
 	</style>
 </head>
 
 <!-- Note: Try to keep using padding shorthand! - 5/23/24 -->
-<header class="flex justify-between relative z-10 mx-auto" style="padding: 18px 12px; max-width: 1200px;">
-	<div class="flex justify-center items-center">
-		<img src="./logo.svg" alt="" style="margin-right: 50px;">
-		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Pricing</a>
-		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Courses</a>
-		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Blog</a>
-		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 16px;">Forum</a>
+<header class="flex justify-between relative z-10 mx-auto px-6 py-8" style="max-width: 1200px;">
+	<div class="flex items-center w-full md:w-auto">
+		<img src="./logo.svg" alt="" style="margin-right: 16px;">
+		<nav class="hidden md:flex">
+			<a href="" class="text-white py-4 px-4 no-underline" style="margin-right: 16px;">Pricing</a>
+			<a href="" class="text-white py-4 px-4 no-underline" style="margin-right: 16px;">Courses</a>
+			<a href="" class="text-white py-4 px-4 no-underline" style="margin-right: 16px;">Blog</a>
+			<a href="" class="text-white py-4 px-4 no-underline" style="margin-right: 16px;">Forum</a>
+		</nav>
 	</div>
-	<div class="flex items-center">
-		<a href="" class="text-white py-8 px-16 no-underline" style="margin-right: 12px;">Login</a>
-		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-12 px-28 uppercase"
-			style="margin-right: 16px">Sign Up</button>
+	<div class="flex items-center hidden md:flex">
+		<a href="" class="text-white py-4 px-4 no-underline" style="margin-right: 12px;">Login</a>
+		<button class="bg-brand-teal text-white border-none rounded-full font-bold py-2 px-4 uppercase text-sm"
+			style="margin-right: 16px; overflow:hidden; min-width: 100px;">Sign Up</button>
 	</div>
+	<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 text-white md:hidden" style="width: 30px;">
+		<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5" />
+	  </svg>	  
 </header>
+
 <section class="relative">
-	<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50 absolute"
-		style="top: -79px; min-height: 550px;">
-	<div  class="mx-auto" style="padding: 0 12px; padding-top: 150px; max-width: 1200px;">
-		<div class="relative z-10" style="max-width: 300px;">
-			<h1 class="text-white text-36px sm:text-60px">
+	<div class="w-full object-cover absolute md:h-550px">
+		<div class="bg-black inset-0 opacity-50 absolute z-10"></div>
+		<img src="videos\snow.gif" alt="" class="w-full object-cover tint-50 absolute md:h-550px"
+			style="top: -180px; min-height: 400px;">
+	</div>
+	<div  class="mx-auto" style="max-width: 1200px;">
+		<div class="relative z-10 md:pt-32 px-6" style="max-width: 300px;">
+			<h1 class="text-white text-36px sm:text-60px font-bold leading-none">
 				Hello
 				<span class="text-brand-teal-dark">World</span>
 			</h1>
 			<p class="text-white text-16px sm:text-20px" style="max-width: 300px; margin-top: 30px;">A starter website that I made</p>
-			<button class="bg-white text-brand-teal border-none py-12 px-28"
+			<button class="bg-white text-brand-teal border-none py-2 px-4 w-full md:w-auto"
 				style="margin-top: 30px; border-radius: 4px;">Get Started</button>
 		</div>
 	</div>
