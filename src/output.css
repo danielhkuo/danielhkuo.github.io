@@ -1,0 +1,108 @@
+@import 'https://fonts.googleapis.com/css2?family=Lato&display=swap';
+
+:root {
+  --nord0: #2E3440;
+  --nord1: #3B4252;
+  --nord2: #434C5E;
+  --nord3: #4C566A;
+  --nord4: #D8DEE9;
+  --nord5: #E5E9F0;
+  --nord6: #ECEFF4;
+  --nord7: #8FBCBB;
+  --nord8: #88C0D0;
+  --nord9: #81A1C1;
+  --nord10: #5E81AC;
+  --nord11: #BF616A;
+  --nord12: #D08770;
+  --nord13: #EBCB8B;
+  --nord14: #A3BE8C;
+  --nord15: #B48EAD;
+}
+
+body {
+  margin: 0;
+  font-family: 'Lato', sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+}
+
+.bg-gray-900 {
+  background-color: var(--nord0);
+}
+
+.bg-brand-teal {
+  background-color: var(--nord7);
+}
+
+.bg-white {
+  background-color: var(--nord6);
+}
+
+.text-brand-teal {
+  color: var(--nord7);
+}
+
+.text-brand-teal-dark {
+  color: var(--nord8);
+}
+
+.text-white {
+  color: var(--nord6);
+}
+
+.text-36px {
+  font-size: 36px;
+}
+
+.text-16px {
+  font-size: 16px;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.p-8 {
+  padding: 8px;
+}
+
+.no-underline {
+  text-decoration: none;
+}
+
+.border-none {
+  border: none;
+}
+
+.rounded-full {
+  border-radius: 9999px;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.text-sm {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  .md\:hidden {
+    display: none;
+  }
+
+  .md\:flex {
+    display: flex;
+  }
+}
