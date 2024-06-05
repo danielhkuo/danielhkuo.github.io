@@ -18,29 +18,30 @@
 
 </head>
 
-<body class="bg-nord6 text-nord0">
-	<header class="md:flex">
-		<!-- Photo Here? For mobile design -->
-		<img src="./assets/img/frog.png" alt="" style="width: 200px; height: 200px; overflow: hidden;" class="">
 
-		<div>
-			<h1 class="text-4xl text-center font-bold">
-				Daniel Kuo
-			</h1>
-			<h2 class="text-xl text-center pt-4">
-				“Advancing Computer Science and Business Student”
-			</h2>
-			<span class="flex justify-center pt-2">
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 pr-1">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-					<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-				  </svg>
-				Houston, Texas, United States
-			</span>
-
-		</div>
-		<!-- Photo Here! For desktop design -->
-	</header>
+<body class="bg-nord6 text-nord0 text-sm">
+	<div class="w-full max-w-3xl mx-auto pt-8 md:px-0 md:pt-10"> <!-- Fixed width container -->
+		<header class="flex flex-col md:flex-row md:justify-between">
+			<!-- Mobile and Desktop design -->
+			<div class="order-2 md:order-1 text-center md:text-left md:flex-1 md:pt-10">
+				<h1 class="text-3xl font-bold">
+					Daniel Kuo
+				</h1>
+				<h2 class="text-lg pt-4 max-w-80 mx-auto md:mx-0">
+					“Advancing Computer Science and Business Student”
+				</h2>
+				<span class="flex justify-center md:justify-start pt-2">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 pr-1">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+					</svg>
+					Houston, Texas, United States
+				</span>
+			</div>
+			<!-- Anchor the image to the right in desktop view -->
+			<img src="./assets/img/frog.png" alt="Frog" class="order-1 md:order-2 self-center md:self-start md:ml-auto" style="width: 200px; height: 200px; overflow: hidden;">
+		</header>
+	</div>
 </body>
 
 </html>
