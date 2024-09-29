@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Daniel Kuo - Personal Website</title>
-    <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Root variables for easy theme management */
         :root {
             --background: #ECEFF4;
             --text: #2E3440;
@@ -27,10 +28,11 @@
             }
         }
 
+        /* General body styling */
         body {
             background-color: var(--background);
             color: var(--text);
-            font-family: 'League Spartan', sans-serif;
+            font-family: 'Lato', sans-serif; /* Use Lato for all text */
             margin: 0;
             padding: 0;
             display: flex;
@@ -38,6 +40,18 @@
             min-height: 100vh;
         }
 
+        h1, h2, p, input, textarea {
+            font-family: 'Lato', sans-serif; /* Use Lato for headings, body text, and form inputs */
+            font-weight: 400; /* Regular weight for body text */
+        }
+
+        h1, h2 {
+            font-weight: 700; /* Bold for headings */
+            color: var(--primary);
+        }
+
+
+        /* Container for the website content */
         .container {
             width: 33.33%;
             max-width: 600px;
@@ -45,15 +59,30 @@
             box-sizing: border-box;
         }
 
-        .controls {
-            margin-bottom: 1.5rem;
+        /* Header with title and image */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
         }
 
-        .controls h3 {
-            color: var(--text);
-            margin-bottom: 0.5rem;
+        .header-info {
+            flex: 1;
+            padding-right: 20px;
         }
 
+        .headshot {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            background-color: var(--accent);
+        }
+
+
+
+        /* Form elements */
         input[type="checkbox"] {
             display: none;
         }
@@ -94,6 +123,7 @@
             font-size: 0.9rem;
         }
 
+        /* Floating label for inputs and textareas */
         .floating-placeholder {
             position: relative;
             margin-bottom: 1.5rem;
@@ -106,8 +136,8 @@
             background-color: var(--background);
             border: none;
             border-bottom: 1px solid var(--secondary);
-            color: var(--text);
             font-size: 1rem;
+            color: var(--text);
             transition: border-color 0.3s ease;
         }
 
@@ -136,6 +166,7 @@
             color: var(--primary);
         }
 
+        /* Submit button styling */
         .submit-button {
             background-color: var(--primary);
             color: var(--background);
@@ -153,56 +184,11 @@
             background-color: var(--accent);
         }
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .header-info {
-            flex: 1;
-            padding-right: 20px;
-        }
-
-        .headshot {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            object-fit: cover;
-            background-color: var(--accent);
-        }
-
-        .info-row, .social-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .info-item, .social-item {
-            display: flex;
-            align-items: center;
-            color: var(--primary);
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
-
-        .info-item:hover, .social-item:hover {
-            color: var(--accent);
-        }
-
-        .icon-placeholder {
-            width: 20px;
-            height: 20px;
-            background-color: var(--primary);
-            margin-right: 5px;
-        }
-
-
+        /* Social icons with hover effects */
         .social-row {
             text-align: center;
-            padding: 40px 0;  /* Increased padding to prevent overlap */
-            margin-top: 20px; /* Added margin to create more space */
+            padding: 40px 0;
+            margin-top: 20px;
         }
 
         .social-item {
@@ -229,7 +215,6 @@
         }
 
         .social-item span {
-            color: var(--text);
             position: absolute;
             font-family: sans-serif;
             bottom: 0;
@@ -243,18 +228,7 @@
             opacity: 0;
             transition: all 0.3s ease;
             white-space: nowrap;
-            pointer-events: none; /* Prevents the tooltip from interfering with hover */
-        }
-
-        .social-item span:before {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: var(--card-bg) transparent transparent transparent;
+            pointer-events: none;
         }
 
         .social-item:hover span {
@@ -263,6 +237,7 @@
             bottom: 50px;
         }
 
+        /* Project cards */
         .projects {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -272,7 +247,7 @@
         .project {
             background-color: var(--card-bg);
             border-radius: 10px;
-            padding: 15px;
+            padding: 20px; /* Increase padding for more space around content */
             cursor: pointer;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
@@ -284,12 +259,12 @@
 
         .project-thumbnail {
             width: 100%;
-            height: 150px;
+            height: 250px; /* Increased height for more thumbnail space */
             background-color: var(--secondary);
             border-radius: 5px;
             margin-bottom: 10px;
         }
-
+        /* Contact form styling */
         .contact-form {
             background-color: var(--card-bg);
             color: var(--text);
@@ -312,70 +287,13 @@
             margin-bottom: 0.5rem;
         }
 
-        .contact-form .floating-placeholder {
-            position: relative;
-            margin-bottom: 1.5rem;
-        }
-
-        .contact-form .floating-placeholder input,
-        .contact-form .floating-placeholder textarea {
-            width: 100%;
-            padding: 0.5rem;
-            background-color: var(--background);
-            border: none;
-            border-bottom: 1px solid var(--secondary);
-            color: var(--text);
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .contact-form .floating-placeholder input:focus,
-        .contact-form .floating-placeholder textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .contact-form .floating-placeholder label {
-            position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
-            color: var(--secondary);
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            pointer-events: none;
-        }
-
-        .contact-form .floating-placeholder input:focus ~ label,
-        .contact-form .floating-placeholder input:not(:placeholder-shown) ~ label,
-        .contact-form .floating-placeholder textarea:focus ~ label,
-        .contact-form .floating-placeholder textarea:not(:placeholder-shown) ~ label {
-            top: -1.2rem;
-            font-size: 0.8rem;
-            color: var(--primary);
-        }
-
-        .contact-form .submit-button {
-            background-color: var(--primary);
-            color: var(--background);
-            border: none;
-            padding: 0.5rem 1rem;
-            font-size: 1rem;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            display: block;
-            margin: 0 auto;
-        }
-
-        .contact-form .submit-button:hover {
-            background-color: var(--accent);
-        }
-
+        /* Info buttons */
         .info-row {
             display: flex;
             justify-content: space-around;
-            flex-wrap: wrap;
             padding: 20px 0;
+            /* Remove flex-wrap to ensure items stay in a single row */
+            flex-wrap: nowrap;
         }
 
         .info-button {
@@ -442,6 +360,7 @@
             transform: scale(0.1, 1);
         }
 
+        /* Footer section */
         .footer-note {
             text-align: center;
             font-size: 0.8em;
@@ -454,7 +373,7 @@
             opacity: 0.7;
         }
 
-
+        /* Responsive adjustments */
         @media (max-width: 768px) {
             .container {
                 width: 100%;
@@ -486,26 +405,24 @@
             }
 
             .social-row {
-                padding: 20px 0;  /* Reduced padding for mobile */
+                padding: 20px 0;
             }
 
             .social-item {
-                margin: 0 5px;  /* Reduced margin for mobile */
+                margin: 0 5px;
             }
 
             .social-item:hover span {
-                bottom: 45px;  /* Adjusted position for mobile */
+                bottom: 45px;
             }
-
-
         }
-
 
         @media (max-width: 480px) {
             .info-button {
                 width: 100%;
             }
         }
+
     </style>
 </head>
 <body>
@@ -534,30 +451,54 @@
     </div>
 
     <div class="social-row">
-        <a href="https://instagram.com" class="social-item" aria-label="Instagram">
+        <a href="https://instagram.com" class="social-item">
             <i class="fab fa-instagram"></i>
+            <span>Instagram</span>
         </a>
-        <a href="https://linkedin.com" class="social-item" aria-label="LinkedIn">
-            <i class="fab fa-linkedin-in"></i>
+        <a href="https://linkedin.com/in/danielhkuo" class="social-item">
+            <i class="fab fa-linkedin"></i>
+            <span>LinkedIn</span>
         </a>
-        <a href="https://twitter.com" class="social-item" aria-label="Twitter">
+        <a href="https://twitter.com" class="social-item">
             <i class="fab fa-twitter"></i>
+            <span>Twitter</span>
         </a>
-        <a href="https://github.com" class="social-item" aria-label="GitHub">
+        <a href="https://github.com/danielhkuo" class="social-item">
             <i class="fab fa-github"></i>
+            <span>GitHub</span>
         </a>
     </div>
 
     <div class="projects">
+
         <div class="project">
             <div class="project-thumbnail"></div>
-            <h3>Project 1</h3>
-            <p>Brief explanation of the project.</p>
+            <a href="https://github.com/danielhkuo/FeynmanJunior" target="_blank" style="text-decoration: none; color: inherit;">
+                <h3>Feynman Junior</h3>
+                <p>Developed an AI-powered tool using Node.js, React, and TypeScript to simulate different audience types for presentation practice.</p>
+            </a>
         </div>
+
         <div class="project">
             <div class="project-thumbnail"></div>
-            <h3>Project 2</h3>
-            <p>Brief explanation of the project.</p>
+            <a href="https://github.com/danielhkuo/BusiChat" target="_blank" style="text-decoration: none; color: inherit;">
+                <h3>BusiChat</h3>
+                <p>Full-stack real-time chat application with workspace management, secure authentication, and OAuth integration.</p>
+            </a>
+        </div>
+
+        <div class="project">
+            <div class="project-thumbnail"></div>
+            <a href="https://github.com/danielhkuo/MeetMeScheduler" target="_blank" style="text-decoration: none; color: inherit;">
+                <h3>MeetMe Scheduler</h3>
+                <p>Created a Discord bot using Dart to process multiple time inputs and generate a schedule.</p>
+            </a>
+        </div>
+
+        <div class="project">
+            <div class="project-thumbnail"></div>
+            <h3>Unraid Cloud Server</h3>
+            <p>Set up a locally hosted reverse-proxied server using Docker containers and Unraid OS.</p>
         </div>
     </div>
 
