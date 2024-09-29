@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daniel Kuo</title>
+    <style>
+        :root {
+            --background: #ECEFF4;
+            --text: #2E3440;
+            --primary: #5E81AC;
+            --secondary: #81A1C1;
+            --accent: #88C0D0;
+            --card-bg: #E5E9F0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --background: #2E3440;
+                --text: #ECEFF4;
+                --primary: #88C0D0;
+                --secondary: #81A1C1;
+                --accent: #5E81AC;
+                --card-bg: #3B4252;
+            }
+        }
+
+        .controls {
+            margin-bottom: 1.5rem;
+        }
+
+        .controls h3 {
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="checkbox"] {
+            display: none;
+        }
+
+        input[type="checkbox"] + label {
+            cursor: pointer;
+            display: inline-block;
+            position: relative;
+            padding-left: 1.5rem;
+            margin-right: 1rem;
+            color: var(--text);
+        }
+
+        input[type="checkbox"] + label:before {
+            content: '';
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            position: absolute;
+            left: 0;
+            background-color: var(--background);
+            border: 1px solid var(--secondary);
+            border-radius: 0.2rem;
+            transition: all 0.3s ease;
+        }
+
+        input[type="checkbox"]:checked + label:before {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        input[type="checkbox"]:checked + label:after {
+            content: '\2713';
+            position: absolute;
+            left: 0.25rem;
+            top: -0.1rem;
+            color: var(--background);
+            font-size: 0.9rem;
+        }
+
+        .floating-placeholder {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .floating-placeholder input,
+        .floating-placeholder textarea {
+            width: 100%;
+            padding: 0.5rem;
+            background-color: var(--background);
+            border: none;
+            border-bottom: 1px solid var(--secondary);
+            color: var(--text);
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .floating-placeholder input:focus,
+        .floating-placeholder textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .floating-placeholder label {
+            position: absolute;
+            top: 0.5rem;
+            left: 0.5rem;
+            color: var(--secondary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .floating-placeholder input:focus ~ label,
+        .floating-placeholder input:not(:placeholder-shown) ~ label,
+        .floating-placeholder textarea:focus ~ label,
+        .floating-placeholder textarea:not(:placeholder-shown) ~ label {
+            top: -1.2rem;
+            font-size: 0.8rem;
+            color: var(--primary);
+        }
+
+        .submit-button {
+            background-color: var(--primary);
+            color: var(--background);
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .submit-button:hover {
+            background-color: var(--accent);
+        }
+
+        body {
+            font-family: 'Lato', Arial, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 33.33%;
+            max-width: 600px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header-info {
+            flex: 1;
+            padding-right: 20px;
+        }
+
+        .headshot {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            object-fit: cover;
+            background-color: var(--accent);
+        }
+
+        .info-row, .social-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .info-item, .social-item {
+            display: flex;
+            align-items: center;
+            color: var(--primary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .info-item:hover, .social-item:hover {
+            color: var(--accent);
+        }
+
+        .icon-placeholder {
+            width: 20px;
+            height: 20px;
+            background-color: var(--primary);
+            margin-right: 5px;
+        }
+
+        .social-row {
+            justify-content: center;
+        }
+
+        .social-item {
+            margin: 0 10px;
+            font-size: 24px;
+            transition: transform 0.3s ease;
+        }
+
+        .social-item:hover {
+            transform: scale(1.2);
+        }
+
+        .projects {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .project {
+            background-color: var(--card-bg);
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .project:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .project-thumbnail {
+            width: 100%;
+            height: 150px;
+            background-color: var(--secondary);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .contact-form {
+            background-color: var(--card-bg);
+            color: var(--text);
+            padding: 2rem;
+            border-radius: 0.5rem;
+            margin-top: 2rem;
+        }
+
+        .contact-form h2 {
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-form .controls {
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-form .controls h3 {
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-form .floating-placeholder {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-form .floating-placeholder input,
+        .contact-form .floating-placeholder textarea {
+            width: 100%;
+            padding: 0.5rem;
+            background-color: var(--background);
+            border: none;
+            border-bottom: 1px solid var(--secondary);
+            color: var(--text);
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .contact-form .floating-placeholder input:focus,
+        .contact-form .floating-placeholder textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .contact-form .floating-placeholder label {
+            position: absolute;
+            top: 0.5rem;
+            left: 0.5rem;
+            color: var(--secondary);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .contact-form .floating-placeholder input:focus ~ label,
+        .contact-form .floating-placeholder input:not(:placeholder-shown) ~ label,
+        .contact-form .floating-placeholder textarea:focus ~ label,
+        .contact-form .floating-placeholder textarea:not(:placeholder-shown) ~ label {
+            top: -1.2rem;
+            font-size: 0.8rem;
+            color: var(--primary);
+        }
+
+        .contact-form .submit-button {
+            background-color: var(--primary);
+            color: var(--background);
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .contact-form .submit-button:hover {
+            background-color: var(--accent);
+        }
+
+
+        @media (max-width: 768px) {
+            .container {
+                width: 100%;
+                max-width: none;
+            }
+
+            .header {
+                flex-direction: column-reverse;
+                align-items: center;
+            }
+
+            .header-info {
+                text-align: center;
+                padding-right: 0;
+                margin-top: 20px;
+            }
+
+            .projects {
+                grid-template-columns: 1fr;
+            }
+
+            .theme-toggle {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="header">
+        <div class="header-info">
+            <h1>Daniel Kuo</h1>
+            <p>Advancing Computer Science and Business Student</p>
+        </div>
+        <img src="path_to_your_headshot.jpg" alt="Daniel Kuo" class="headshot">
+    </header>
+
+    <div class="info-row">
+        <a href="#" class="info-item"><div class="icon-placeholder"></div>Education</a>
+        <a href="#" class="info-item"><div class="icon-placeholder"></div>Resume</a>
+        <a href="#" class="info-item"><div class="icon-placeholder"></div>Email</a>
+        <a href="#" class="info-item"><div class="icon-placeholder"></div>Location</a>
+    </div>
+
+    <div class="social-row">
+        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
+        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
+        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
+        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
+    </div>
+
+    <div class="projects">
+        <div class="project">
+            <div class="project-thumbnail"></div>
+            <h3>Project 1</h3>
+            <p>Brief explanation of the project.</p>
+        </div>
+        <div class="project">
+            <div class="project-thumbnail"></div>
+            <h3>Project 2</h3>
+            <p>Brief explanation of the project.</p>
+        </div>
+    </div>
+
+    <div class="contact-form">
+        <h2>Contact Me</h2>
+        <form>
+            <div class="controls">
+                <h3>Purpose of Contact</h3>
+                <input id="business" type="checkbox" name="purpose" value="business">
+                <label for="business">Business</label>
+
+                <input id="personal" type="checkbox" name="purpose" value="personal">
+                <label for="personal">Personal</label>
+
+                <input id="other" type="checkbox" name="purpose" value="other">
+                <label for="other">Other</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <input id="name" name="name" type="text" placeholder=" " required>
+                <label for="name">Name</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <input id="email" name="email" type="email" placeholder=" " required>
+                <label for="email">Email</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <textarea id="message" name="message" rows="4" placeholder=" " required></textarea>
+                <label for="message">Message</label>
+            </div>
+
+            <button type="submit" class="submit-button">Send</button>
+        </form>
+</div>
+
+</div>
+</body>
+</html>
