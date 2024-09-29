@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daniel Kuo</title>
+    <title>Daniel Kuo - Personal Website</title>
+    <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --background: #ECEFF4;
@@ -23,6 +25,24 @@
                 --accent: #5E81AC;
                 --card-bg: #3B4252;
             }
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            font-family: 'League Spartan', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 33.33%;
+            max-width: 600px;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         .controls {
@@ -133,24 +153,6 @@
             background-color: var(--accent);
         }
 
-        body {
-            font-family: 'Lato', Arial, sans-serif;
-            background-color: var(--background);
-            color: var(--text);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
-
-        .container {
-            width: 33.33%;
-            max-width: 600px;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
         .header {
             display: flex;
             justify-content: space-between;
@@ -196,18 +198,69 @@
             margin-right: 5px;
         }
 
+
         .social-row {
-            justify-content: center;
+            text-align: center;
+            padding: 40px 0;  /* Increased padding to prevent overlap */
+            margin-top: 20px; /* Added margin to create more space */
         }
 
         .social-item {
+            color: var(--text);
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            text-align: center;
+            text-decoration: none;
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
             margin: 0 10px;
-            font-size: 24px;
-            transition: transform 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .social-item:hover {
-            transform: scale(1.2);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            background: var(--primary);
+            color: var(--background);
+        }
+
+        .social-item span {
+            color: var(--text);
+            position: absolute;
+            font-family: sans-serif;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            background: var(--card-bg);
+            visibility: hidden;
+            opacity: 0;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            pointer-events: none; /* Prevents the tooltip from interfering with hover */
+        }
+
+        .social-item span:before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--card-bg) transparent transparent transparent;
+        }
+
+        .social-item:hover span {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
         }
 
         .projects {
@@ -318,6 +371,89 @@
             background-color: var(--accent);
         }
 
+        .info-row {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            padding: 20px 0;
+        }
+
+        .info-button {
+            position: relative;
+            color: var(--text);
+            text-decoration: none;
+            line-height: 50px;
+            height: 50px;
+            text-align: center;
+            width: 200px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+        }
+
+        .info-button span {
+            transition: all 0.3s;
+            position: relative;
+            z-index: 2;
+        }
+
+        .info-button::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            opacity: 0;
+            transition: all 0.3s;
+            border-top-width: 1px;
+            border-bottom-width: 1px;
+            border-top-style: solid;
+            border-bottom-style: solid;
+            border-top-color: var(--primary);
+            border-bottom-color: var(--primary);
+            transform: scale(0.1, 1);
+        }
+
+        .info-button:hover span {
+            letter-spacing: 2px;
+        }
+
+        .info-button:hover::before {
+            opacity: 1;
+            transform: scale(1, 1);
+        }
+
+        .info-button::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            transition: all 0.3s;
+            background-color: var(--card-bg);
+        }
+
+        .info-button:hover::after {
+            opacity: 0;
+            transform: scale(0.1, 1);
+        }
+
+        .footer-note {
+            text-align: center;
+            font-size: 0.8em;
+            margin-top: 40px;
+            color: var(--secondary);
+        }
+
+        .footer-credits {
+            font-size: 0.6em;
+            opacity: 0.7;
+        }
+
 
         @media (max-width: 768px) {
             .container {
@@ -340,8 +476,34 @@
                 grid-template-columns: 1fr;
             }
 
-            .theme-toggle {
-                display: none;
+            .info-row {
+                flex-wrap: wrap;
+            }
+
+            .info-button {
+                width: 48%;
+                margin-bottom: 10px;
+            }
+
+            .social-row {
+                padding: 20px 0;  /* Reduced padding for mobile */
+            }
+
+            .social-item {
+                margin: 0 5px;  /* Reduced margin for mobile */
+            }
+
+            .social-item:hover span {
+                bottom: 45px;  /* Adjusted position for mobile */
+            }
+
+
+        }
+
+
+        @media (max-width: 480px) {
+            .info-button {
+                width: 100%;
             }
         }
     </style>
@@ -357,17 +519,33 @@
     </header>
 
     <div class="info-row">
-        <a href="#" class="info-item"><div class="icon-placeholder"></div>Education</a>
-        <a href="#" class="info-item"><div class="icon-placeholder"></div>Resume</a>
-        <a href="#" class="info-item"><div class="icon-placeholder"></div>Email</a>
-        <a href="#" class="info-item"><div class="icon-placeholder"></div>Location</a>
+        <a href="#education" class="info-button">
+            <span>Education</span>
+        </a>
+        <a href="#resume" class="info-button">
+            <span>Resume</span>
+        </a>
+        <a href="#email" class="info-button">
+            <span>Email</span>
+        </a>
+        <a href="#location" class="info-button">
+            <span>Location</span>
+        </a>
     </div>
 
     <div class="social-row">
-        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
-        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
-        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
-        <a href="#" class="social-item"><div class="icon-placeholder"></div></a>
+        <a href="https://instagram.com" class="social-item" aria-label="Instagram">
+            <i class="fab fa-instagram"></i>
+        </a>
+        <a href="https://linkedin.com" class="social-item" aria-label="LinkedIn">
+            <i class="fab fa-linkedin-in"></i>
+        </a>
+        <a href="https://twitter.com" class="social-item" aria-label="Twitter">
+            <i class="fab fa-twitter"></i>
+        </a>
+        <a href="https://github.com" class="social-item" aria-label="GitHub">
+            <i class="fab fa-github"></i>
+        </a>
     </div>
 
     <div class="projects">
@@ -416,7 +594,10 @@
             <button type="submit" class="submit-button">Send</button>
         </form>
 </div>
-
+    <div class="footer-note">
+        <p>🚀 This entire portfolio is crafted in a single HTML file with CSS magic! 🎨</p>
+        <p class="footer-credits">Credits: Info buttons inspired by codepen.io/natalia-reshetnikova/ and social icons by codepen.io/kieranfivestars</p>
+    </div>
 </div>
 </body>
 </html>
