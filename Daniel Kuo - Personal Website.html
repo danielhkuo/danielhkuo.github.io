@@ -53,7 +53,7 @@
 
         /* Container for the website content */
         .container {
-            width: 50%;
+            width: 33.33%;
             max-width: 600px;
             padding: 20px;
             box-sizing: border-box;
@@ -378,65 +378,6 @@
             transform: scale(0.1, 1);
         }
 
-        /* Modal styling (shared) */
-        .modal-window {
-            position: fixed;
-            background-color: rgba(255, 255, 255, 0.25);
-            top: 0;
-            right: 0;
-            bottom: 0;
-            left: 0;
-            z-index: 999;
-            visibility: hidden;
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s;
-        }
-
-        .modal-window:target {
-            visibility: visible;
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* Modal content shared styles */
-        .modal-content {
-            position: relative;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--card-bg);
-            border-radius: 1rem;
-            padding: 2em;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            overflow: hidden; /* Ensures content doesn't overflow the modal */
-        }
-
-        /* Education modal - smaller size */
-        .education-content {
-            width: 80%;   /* Smaller width */
-            max-width: 400px;  /* Cap maximum width */
-            height: auto;  /* Adjust height based on content */
-        }
-
-        /* Resume modal - large, full-screen style */
-        .resume-content {
-            width: 90%;
-            height: 90%;
-            max-width: 1000px;  /* Ensure a max width */
-            max-height: 90vh;   /* Limit height to viewport height */
-        }
-
-        /* iframe for the resume */
-        .resume-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: block;
-        }
-
-
-
         /* Footer section */
         .footer-note {
             text-align: center;
@@ -492,34 +433,11 @@
             .social-item:hover span {
                 bottom: 45px;
             }
-
-            .resume-content {
-                width: 70%;  /* Adjusts width for mobile */
-                height: 60%;
-            }
-
-            .education-content {
-                width: 90%;
-            }
-
-            .resume-content {
-                width: 70%;
-                height: 60%;
-            }
         }
 
         @media (max-width: 480px) {
             .info-button {
                 width: 100%;
-            }
-
-            .education-content {
-                width: 100%;
-            }
-
-            .resume-content {
-                width: 90%;
-                height: 50%;
             }
         }
 
@@ -532,14 +450,14 @@
             <h1>Daniel Kuo</h1>
             <p>Advancing Computer Science and Business Student</p>
         </div>
-        <img src="./headshot.jpg" alt="Daniel Kuo" class="headshot">
+        <img src="path_to_your_headshot.jpg" alt="Daniel Kuo" class="headshot">
     </header>
 
     <div class="info-row">
-        <a href="#education-modal" class="info-button">
+        <a href="#education" class="info-button">
             <span>Education</span>
         </a>
-        <a href="#resume-modal" class="info-button">
+        <a href="#resume" class="info-button">
             <span>Resume</span>
         </a>
         <a href="#email" class="info-button">
@@ -548,22 +466,6 @@
         <a href="#location" class="info-button">
             <span>Location</span>
         </a>
-    </div>
-
-    <div id="education-modal" class="modal-window">
-        <div class="modal-content education-content">
-            <a href="#" class="modal-close">Close</a>
-            <h1>Education</h1>
-            <p>Bachelor of Science in Computer Science</p>
-            <p>Rice University, Class of 2027</p>
-        </div>
-    </div>
-    <div id="resume-modal" class="modal-window">
-        <div class="modal-content resume-content">
-            <a href="#" class="modal-close">Close</a>
-            <h1>Resume</h1>
-            <iframe src="Daniel-Kuo-Resume.pdf" class="resume-iframe"></iframe>
-        </div>
     </div>
 
     <div class="social-row">
