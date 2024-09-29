@@ -224,17 +224,35 @@
             border-radius: 4px;
             font-size: 14px;
             background: var(--card-bg);
+            color: var(--text);
             visibility: hidden;
             opacity: 0;
             transition: all 0.3s ease;
             white-space: nowrap;
             pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
 
         .social-item:hover span {
             visibility: visible;
             opacity: 1;
             bottom: 50px;
+        }
+
+        /* Improved contrast for hover text in light mode */
+        @media (prefers-color-scheme: light) {
+            .social-item span {
+                background: var(--text);
+                color: var(--background);
+            }
+        }
+
+        /* Improved contrast for hover text in dark mode */
+        @media (prefers-color-scheme: dark) {
+            .social-item span {
+                background: var(--background);
+                color: var(--text);
+            }
         }
 
         /* Project cards */
