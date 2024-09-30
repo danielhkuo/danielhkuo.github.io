@@ -6,7 +6,7 @@
     <title>Kuofolio</title>
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
     <style>
         /* Root variables for easy theme management */
         :root {
@@ -508,20 +508,23 @@
             max-height: 90vh;
         }
 
-        /* Media modal */
-        .media-content {
-            width: 90%;
-            height: 90%;
-            max-width: 1000px;
-            max-height: 90vh;
-        }
-
         /* iframe for the resume and media embeds */
-        .resume-iframe, .media-iframe {
+        .resume-iframe {
             width: 100%;
             height: 100%;
             border: none;
             display: block;
+        }
+
+        .about-content {
+            width: 80%;
+            max-width: 600px;
+            padding: 2em;
+        }
+
+        .about-content p {
+            margin-bottom: 1em;
+            line-height: 1.6;
         }
 
         .skills-container {
@@ -717,6 +720,11 @@
             .skills-slider .inner {
                 gap: 0 0.4rem;
             }
+
+            .about-content {
+                width: 90%;
+                padding: 1em;
+            }
         }
 
         @media (max-width: 480px) {
@@ -789,18 +797,17 @@
     </div>
 </div>
 
-<div class="modal-window" id="media-modal">
-    <div class="modal-content media-content">
+<div class="modal-window" id="about-modal">
+    <div class="modal-content about-content">
         <div class="modal-header">
-            <h1>Media</h1>
+            <h1>About Me</h1>
             <a class="modal-close" href="#">&times;</a>
         </div>
-        <div class="media-embeds">
-            <h2>Goodreads</h2>
-            <iframe class="media-iframe"
-                    src="https://www.goodreads.com/widgets/user_update_widget?num_updates=5&user=YOUR_GOODREADS_USER_ID"></iframe>
-            <h2>Letterboxd</h2>
-            <iframe class="media-iframe" src="https://letterboxd.com/YOUR_LETTERBOXD_USERNAME/rss/"></iframe>
+        <div class="about-content">
+            <p>Hello! I'm Daniel Kuo, a Computer Science student at Rice University with a passion for technology and innovation.</p>
+            <p>My journey in tech has led me to explore various areas including full-stack development, AI & ML, and project management. I'm constantly learning and challenging myself with new projects and technologies.</p>
+            <p>When I'm not coding, you can find me reading, watching films, or exploring the latest tech trends. I believe in the power of technology to solve real-world problems and I'm excited to be part of this ever-evolving field.</p>
+            <p>Feel free to reach out if you'd like to collaborate on a project or just chat about tech!</p>
         </div>
     </div>
 </div>
@@ -859,8 +866,8 @@
         <a class="info-button" href="#resume-modal">
             <span>Resume</span>
         </a>
-        <a class="info-button" href="#media-modal">
-            <span>Media</span>
+        <a class="info-button" href="#about-modal">
+            <span>About Me</span>
         </a>
         <a class="info-button" href="#location">
             <span>Blog</span>
