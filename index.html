@@ -475,15 +475,22 @@
             margin-top: 0; /* Remove top margin */
         }
 
-        /* Updated modal close button */
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h1,
+        .modal-header h2 {
+            margin: 0;
+        }
+
+        /* Update the modal close button styles */
         .modal-close {
             color: var(--text);
-            line-height: 30px;
-            font-size: 30px;
-            position: absolute;
-            right: 20px;
-            top: 10px;
-            text-align: center;
+            font-size: 24px;
             text-decoration: none;
             transition: all 0.3s ease;
         }
@@ -702,12 +709,12 @@
             }
 
             .skill-tag {
-                    font-size: 0.7rem;
-                    padding: 0.3rem 0.5rem;
+                font-size: 0.7rem;
+                padding: 0.3rem 0.5rem;
             }
 
             .skills-slider .inner {
-                    gap: 0 0.4rem;
+                gap: 0 0.4rem;
             }
         }
 
@@ -734,8 +741,10 @@
 
 <div class="modal-window" id="contact-modal">
     <div class="modal-content contact-content">
-        <a class="modal-close" href="#">&times;</a>
-        <h2>Contact Me</h2>
+        <div class="modal-header">
+            <h2>Contact Me</h2>
+            <a class="modal-close" href="#">&times;</a>
+        </div>
         <form class="contact-form">
             <div class="controls">
                 <h3>Purpose of Contact</h3>
@@ -771,19 +780,24 @@
 
 <div class="modal-window" id="resume-modal">
     <div class="modal-content resume-content">
-        <a class="modal-close" href="#">&times;</a>
-        <h1>Resume</h1>
+        <div class="modal-header">
+            <h1>Resume</h1>
+            <a class="modal-close" href="#">&times;</a>
+        </div>
         <iframe class="resume-iframe" src="Daniel-Kuo-Resume.pdf"></iframe>
     </div>
 </div>
 
 <div class="modal-window" id="media-modal">
     <div class="modal-content media-content">
-        <a class="modal-close" href="#">&times;</a>
-        <h1>Media</h1>
+        <div class="modal-header">
+            <h1>Media</h1>
+            <a class="modal-close" href="#">&times;</a>
+        </div>
         <div class="media-embeds">
             <h2>Goodreads</h2>
-            <iframe class="media-iframe" src="https://www.goodreads.com/widgets/user_update_widget?num_updates=5&user=YOUR_GOODREADS_USER_ID"></iframe>
+            <iframe class="media-iframe"
+                    src="https://www.goodreads.com/widgets/user_update_widget?num_updates=5&user=YOUR_GOODREADS_USER_ID"></iframe>
             <h2>Letterboxd</h2>
             <iframe class="media-iframe" src="https://letterboxd.com/YOUR_LETTERBOXD_USERNAME/rss/"></iframe>
         </div>
@@ -839,7 +853,7 @@
 
     <div class="info-row">
         <a class="info-button" href="#contact-modal">
-        <span>Contact Me</span>
+            <span>Contact Me</span>
         </a>
         <a class="info-button" href="#resume-modal">
             <span>Resume</span>
@@ -911,10 +925,13 @@
     </div>
 
     <div class="footer-note">
-        <p>🚀 This entire portfolio is crafted with pure CSS magic! 🎨</p>
-        <p class="footer-credits">Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and social icons by
+        <p>"It is only with the heart that one can see rightly. What is essential is invisible to the eye"</p>
+        <p class="footer-credits">Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and
+            social icons by
             kieranfivestars</p>
     </div>
 </div>
 </body>
 </html>
+
+
