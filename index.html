@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>Daniel Kuo - Personal Website</title>
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* Root variables for easy theme management */
         :root {
@@ -40,6 +40,10 @@
             min-height: 100vh;
         }
 
+        .blur-background {
+            transition: filter 0.3s ease;
+        }
+
         h1, h2, p, input, textarea {
             font-family: 'Lato', sans-serif; /* Use Lato for headings, body text, and form inputs */
             font-weight: 400; /* Regular weight for body text */
@@ -53,33 +57,66 @@
 
         /* Container for the website content */
         .container {
-            width: 50%;
-            max-width: 600px;
+            width: 60%; /* Increased from 50% */
+            max-width: 800px; /* Increased from 600px */
             padding: 20px;
             box-sizing: border-box;
+            transition: filter 0.3s ease;
         }
 
-        /* Header with title and image */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 40px;
+            background-color: var(--card-bg);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .header-info {
             flex: 1;
-            padding-right: 20px;
+            padding-right: 30px; /* Increased padding */
+        }
+
+        .header h1 {
+            font-size: 2.2em; /* Slightly reduced font size */
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        .tagline {
+            font-size: 1.1em; /* Slightly reduced font size */
+            color: var(--secondary);
+            margin-bottom: 10px; /* Reduced margin */
+        }
+
+        .education {
+            font-style: italic;
+            margin-bottom: 10px; /* Reduced margin */
+        }
+
+        .skills li {
+            display: inline-block;
+            background-color: var(--accent);
+            color: var(--background);
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
         }
 
         .headshot {
-            width: 150px;
-            height: 150px;
+            width: 180px; /* Restored to original size */
+            height: 180px; /* Restored to original size */
             border-radius: 50%;
             object-fit: cover;
-            background-color: var(--accent);
+            border: 4px solid var(--primary);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0; /* Prevent image from shrinking */
         }
-
 
 
         /* Form elements */
@@ -282,6 +319,7 @@
             border-radius: 5px;
             margin-bottom: 10px;
         }
+
         /* Contact form styling */
         .contact-form {
             background-color: var(--card-bg);
@@ -399,7 +437,11 @@
             pointer-events: auto;
         }
 
-        /* Modal content shared styles */
+        .modal-window:target ~ .blur-background {
+            filter: blur(5px);
+            pointer-events: none;
+        }
+
         .modal-content {
             position: relative;
             top: 50%;
@@ -409,32 +451,128 @@
             border-radius: 1rem;
             padding: 2em;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            overflow: hidden; /* Ensures content doesn't overflow the modal */
+            overflow: auto;
+            max-height: 90vh;
         }
 
-        /* Education modal - smaller size */
-        .education-content {
-            width: 80%;   /* Smaller width */
-            max-width: 400px;  /* Cap maximum width */
-            height: auto;  /* Adjust height based on content */
+        /* Updated contact modal styles */
+        .contact-content {
+            width: 80%;
+            max-width: 500px;
+            padding-top: 1em; /* Reduced top padding */
+        }
+
+        .contact-content h2 {
+            margin-top: 0; /* Remove top margin from the heading */
+            margin-bottom: 1em; /* Add some space below the heading */
+            color: var(--primary);
+        }
+
+        .contact-form {
+            background-color: transparent; /* Remove background color */
+            padding: 0; /* Remove padding */
+            border-radius: 0; /* Remove border radius */
+            margin-top: 0; /* Remove top margin */
+        }
+
+        /* Updated modal close button */
+        .modal-close {
+            color: var(--text);
+            line-height: 30px;
+            font-size: 30px;
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            text-align: center;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--primary);
         }
 
         /* Resume modal - large, full-screen style */
         .resume-content {
             width: 90%;
             height: 90%;
-            max-width: 1000px;  /* Ensure a max width */
-            max-height: 90vh;   /* Limit height to viewport height */
+            max-width: 1000px;
+            max-height: 90vh;
         }
 
-        /* iframe for the resume */
-        .resume-iframe {
+        /* Media modal */
+        .media-content {
+            width: 90%;
+            height: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+        }
+
+        /* iframe for the resume and media embeds */
+        .resume-iframe, .media-iframe {
             width: 100%;
             height: 100%;
             border: none;
             display: block;
         }
 
+        .skills-container {
+            width: 100%;
+            max-width: 400px; /* Increased max-width */
+            overflow: hidden;
+            position: relative;
+            padding: 0.5rem 0;
+        }
+
+        .skills-slider {
+            display: flex;
+            width: fit-content;
+            animation-name: loop;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+            animation-direction: var(--direction);
+            animation-duration: var(--duration);
+        }
+
+        .skills-slider .inner {
+            display: flex;
+            width: fit-content;
+            gap: 0 0.5rem;
+            padding: 0.25rem 0;
+        }
+
+        .skill-tag {
+            display: flex;
+            align-items: center;
+            color: var(--text);
+            font-size: 0.8rem; /* Reduced from 0.9rem */
+            background-color: var(--card-bg);
+            border-radius: 0.4rem;
+            padding: 0.4rem 0.6rem; /* Reduced padding */
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .skill-tag i {
+            margin-right: 0.3rem;
+            color: var(--primary);
+        }
+
+        .skills-fade {
+            pointer-events: none;
+            background: linear-gradient(90deg, var(--card-bg), transparent 5%, transparent 95%, var(--card-bg));
+            position: absolute;
+            inset: 0;
+        }
+
+        @keyframes loop {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(-50%);
+            }
+        }
 
 
         /* Footer section */
@@ -451,21 +589,72 @@
         }
 
         /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .container {
+                width: 90%;
+            }
+
+            .header {
+                flex-direction: column-reverse;
+                text-align: center;
+                padding: 20px;
+            }
+
+            .header-info {
+                padding-right: 0;
+                margin-bottom: 20px;
+            }
+
+            .headshot {
+                width: 150px;
+                height: 150px;
+                margin-bottom: 0; /* Remove bottom margin */
+            }
+
+            .skills-container {
+                max-width: 300px; /* Adjusted for mobile */
+                margin: 0 auto; /* Center the skills container */
+            }
+
+            /* Adjust font sizes for better fit */
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .tagline {
+                font-size: 1em;
+            }
+
+            .education {
+                font-size: 0.9em;
+            }
+        }
+
+
         @media (max-width: 768px) {
             .container {
-                width: 100%;
+                width: 90%; /* Adjusted for better mobile layout */
                 max-width: none;
             }
 
             .header {
                 flex-direction: column-reverse;
-                align-items: center;
+                text-align: center;
+                padding: 20px;
             }
 
             .header-info {
-                text-align: center;
                 padding-right: 0;
                 margin-top: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center; /* Center content in mobile view */
+            }
+
+            .headshot {
+                width: 150px; /* Slightly reduced for mobile */
+                height: 150px; /* Slightly reduced for mobile */
+                margin-bottom: 20px;
             }
 
             .projects {
@@ -477,7 +666,7 @@
             }
 
             .info-button {
-                width: 48%;
+                width: 100%;
                 margin-bottom: 10px;
             }
 
@@ -494,27 +683,43 @@
             }
 
             .resume-content {
-                width: 70%;  /* Adjusts width for mobile */
+                width: 70%; /* Adjusts width for mobile */
                 height: 60%;
-            }
-
-            .education-content {
-                width: 90%;
             }
 
             .resume-content {
                 width: 70%;
                 height: 60%;
             }
+
+            .modal-window:target ~ .blur-background {
+                filter: blur(3px); /* Less blur on smaller screens */
+            }
+
+            .skills-container {
+                max-width: 300px; /* Adjusted for mobile */
+                margin: 0 auto; /* Center the skills container */
+            }
+
+            .skill-tag {
+                    font-size: 0.7rem;
+                    padding: 0.3rem 0.5rem;
+            }
+
+            .skills-slider .inner {
+                    gap: 0 0.4rem;
+            }
         }
 
         @media (max-width: 480px) {
-            .info-button {
-                width: 100%;
+
+            .container {
+                width: 95%; /* Further adjusted for smaller screens */
             }
 
-            .education-content {
-                width: 100%;
+            .headshot {
+                width: 120px; /* Further reduced for smaller screens */
+                height: 120px; /* Further reduced for smaller screens */
             }
 
             .resume-content {
@@ -526,60 +731,142 @@
     </style>
 </head>
 <body>
-<div class="container">
+
+<div class="modal-window" id="contact-modal">
+    <div class="modal-content contact-content">
+        <a class="modal-close" href="#">&times;</a>
+        <h2>Contact Me</h2>
+        <form class="contact-form">
+            <div class="controls">
+                <h3>Purpose of Contact</h3>
+                <input id="business" name="purpose" type="checkbox" value="business">
+                <label for="business">Business</label>
+
+                <input id="personal" name="purpose" type="checkbox" value="personal">
+                <label for="personal">Personal</label>
+
+                <input id="other" name="purpose" type="checkbox" value="other">
+                <label for="other">Other</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <input id="name" name="name" placeholder=" " required type="text">
+                <label for="name">Name</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <input id="email" name="email" placeholder=" " required type="email">
+                <label for="email">Email</label>
+            </div>
+
+            <div class="floating-placeholder">
+                <textarea id="message" name="message" placeholder=" " required rows="4"></textarea>
+                <label for="message">Message</label>
+            </div>
+
+            <button class="submit-button" type="submit">Send</button>
+        </form>
+    </div>
+</div>
+
+<div class="modal-window" id="resume-modal">
+    <div class="modal-content resume-content">
+        <a class="modal-close" href="#">&times;</a>
+        <h1>Resume</h1>
+        <iframe class="resume-iframe" src="Daniel-Kuo-Resume.pdf"></iframe>
+    </div>
+</div>
+
+<div class="modal-window" id="media-modal">
+    <div class="modal-content media-content">
+        <a class="modal-close" href="#">&times;</a>
+        <h1>Media</h1>
+        <div class="media-embeds">
+            <h2>Goodreads</h2>
+            <iframe class="media-iframe" src="https://www.goodreads.com/widgets/user_update_widget?num_updates=5&user=YOUR_GOODREADS_USER_ID"></iframe>
+            <h2>Letterboxd</h2>
+            <iframe class="media-iframe" src="https://letterboxd.com/YOUR_LETTERBOXD_USERNAME/rss/"></iframe>
+        </div>
+    </div>
+</div>
+
+<div class="container blur-background">
     <header class="header">
         <div class="header-info">
             <h1>Daniel Kuo</h1>
-            <p>Advancing Computer Science and Business Student</p>
+            <p class="tagline">Computer Science | Developer | Tech Enthusiast</p>
+            <p class="education">B.S. Computer Science @ Rice University</p>
+            <div class="skills-container">
+                <div class="skills-slider" style="--duration:30s; --direction:normal;">
+                    <div class="inner">
+                        <div class="skill-tag"><i class="fas fa-code"></i>Full-Stack</div>
+                        <div class="skill-tag"><i class="fas fa-tasks"></i>Project Management</div>
+                        <div class="skill-tag"><i class="fas fa-robot"></i>AI & ML</div>
+                        <div class="skill-tag"><i class="fab fa-java"></i>Java</div>
+                        <div class="skill-tag"><i class="fab fa-python"></i>Python</div>
+                        <div class="skill-tag"><i class="fas fa-moon"></i>Lua</div>
+                    </div>
+                    <div class="inner">
+                        <div class="skill-tag"><i class="fas fa-code"></i>Full-Stack</div>
+                        <div class="skill-tag"><i class="fas fa-tasks"></i>Project Management</div>
+                        <div class="skill-tag"><i class="fas fa-robot"></i>AI & ML</div>
+                        <div class="skill-tag"><i class="fab fa-java"></i>Java</div>
+                        <div class="skill-tag"><i class="fab fa-python"></i>Python</div>
+                        <div class="skill-tag"><i class="fas fa-moon"></i>Lua</div>
+                    </div>
+                </div>
+                <div class="skills-slider" style="--duration:35s; --direction:reverse;">
+                    <div class="inner">
+                        <div class="skill-tag"><i class="fas fa-bullseye"></i>Dart</div>
+                        <div class="skill-tag"><i class="fab fa-cuttlefish"></i>C#</div>
+                        <div class="skill-tag"><i class="fab fa-js"></i>JavaScript</div>
+                        <div class="skill-tag"><i class="fab fa-html5"></i>HTML/CSS</div>
+                        <div class="skill-tag"><i class="fas fa-database"></i>SQL</div>
+                    </div>
+                    <div class="inner">
+                        <div class="skill-tag"><i class="fas fa-bullseye"></i>Dart</div>
+                        <div class="skill-tag"><i class="fab fa-cuttlefish"></i>C#</div>
+                        <div class="skill-tag"><i class="fab fa-js"></i>JavaScript</div>
+                        <div class="skill-tag"><i class="fab fa-html5"></i>HTML/CSS</div>
+                        <div class="skill-tag"><i class="fas fa-database"></i>SQL</div>
+                    </div>
+                </div>
+                <div class="skills-fade"></div>
+            </div>
         </div>
-        <img src="./headshot.jpg" alt="Daniel Kuo" class="headshot">
+        <img alt="Daniel Kuo" class="headshot" src="./headshot.jpg">
     </header>
 
     <div class="info-row">
-        <a href="#education-modal" class="info-button">
-            <span>Education</span>
+        <a class="info-button" href="#contact-modal">
+        <span>Contact Me</span>
         </a>
-        <a href="#resume-modal" class="info-button">
+        <a class="info-button" href="#resume-modal">
             <span>Resume</span>
         </a>
-        <a href="#email" class="info-button">
-            <span>Email</span>
+        <a class="info-button" href="#media-modal">
+            <span>Media</span>
         </a>
-        <a href="#location" class="info-button">
-            <span>Location</span>
+        <a class="info-button" href="#location">
+            <span>Blog</span>
         </a>
     </div>
 
-    <div id="education-modal" class="modal-window">
-        <div class="modal-content education-content">
-            <a href="#" class="modal-close">Close</a>
-            <h1>Education</h1>
-            <p>Bachelor of Science in Computer Science</p>
-            <p>Rice University, Class of 2027</p>
-        </div>
-    </div>
-    <div id="resume-modal" class="modal-window">
-        <div class="modal-content resume-content">
-            <a href="#" class="modal-close">Close</a>
-            <h1>Resume</h1>
-            <iframe src="Daniel-Kuo-Resume.pdf" class="resume-iframe"></iframe>
-        </div>
-    </div>
 
     <div class="social-row">
-        <a href="https://instagram.com" class="social-item">
+        <a class="social-item" href="https://www.instagram.com/danielhankuo/">
             <i class="fab fa-instagram"></i>
             <span>Instagram</span>
         </a>
-        <a href="https://linkedin.com/in/danielhkuo" class="social-item">
+        <a class="social-item" href="https://linkedin.com/in/danielhkuo">
             <i class="fab fa-linkedin"></i>
             <span>LinkedIn</span>
         </a>
-        <a href="https://twitter.com" class="social-item">
+        <a class="social-item" href="https://twitter.com">
             <i class="fab fa-twitter"></i>
             <span>Twitter</span>
         </a>
-        <a href="https://github.com/danielhkuo" class="social-item">
+        <a class="social-item" href="https://github.com/danielhkuo">
             <i class="fab fa-github"></i>
             <span>GitHub</span>
         </a>
@@ -589,23 +876,28 @@
 
         <div class="project">
             <div class="project-thumbnail"></div>
-            <a href="https://github.com/danielhkuo/FeynmanJunior" target="_blank" style="text-decoration: none; color: inherit;">
+            <a href="https://github.com/danielhkuo/FeynmanJunior" style="text-decoration: none; color: inherit;"
+               target="_blank">
                 <h3>Feynman Junior</h3>
-                <p>Developed an AI-powered tool using Node.js, React, and TypeScript to simulate different audience types for presentation practice.</p>
+                <p>Developed an AI-powered tool using Node.js, React, and TypeScript to simulate different audience
+                    types for presentation practice.</p>
             </a>
         </div>
 
         <div class="project">
             <div class="project-thumbnail"></div>
-            <a href="https://github.com/danielhkuo/BusiChat" target="_blank" style="text-decoration: none; color: inherit;">
+            <a href="https://github.com/danielhkuo/BusiChat" style="text-decoration: none; color: inherit;"
+               target="_blank">
                 <h3>BusiChat</h3>
-                <p>Full-stack real-time chat application with workspace management, secure authentication, and OAuth integration.</p>
+                <p>Full-stack real-time chat application with workspace management, secure authentication, and OAuth
+                    integration.</p>
             </a>
         </div>
 
         <div class="project">
             <div class="project-thumbnail"></div>
-            <a href="https://github.com/danielhkuo/MeetMeScheduler" target="_blank" style="text-decoration: none; color: inherit;">
+            <a href="https://github.com/danielhkuo/MeetMeScheduler" style="text-decoration: none; color: inherit;"
+               target="_blank">
                 <h3>MeetMe Scheduler</h3>
                 <p>Created a Discord bot using Dart to process multiple time inputs and generate a schedule.</p>
             </a>
@@ -618,42 +910,10 @@
         </div>
     </div>
 
-    <div class="contact-form">
-        <h2>Contact Me</h2>
-        <form>
-            <div class="controls">
-                <h3>Purpose of Contact</h3>
-                <input id="business" type="checkbox" name="purpose" value="business">
-                <label for="business">Business</label>
-
-                <input id="personal" type="checkbox" name="purpose" value="personal">
-                <label for="personal">Personal</label>
-
-                <input id="other" type="checkbox" name="purpose" value="other">
-                <label for="other">Other</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <input id="name" name="name" type="text" placeholder=" " required>
-                <label for="name">Name</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <input id="email" name="email" type="email" placeholder=" " required>
-                <label for="email">Email</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <textarea id="message" name="message" rows="4" placeholder=" " required></textarea>
-                <label for="message">Message</label>
-            </div>
-
-            <button type="submit" class="submit-button">Send</button>
-        </form>
-</div>
     <div class="footer-note">
-        <p>🚀 This entire portfolio is crafted in a single HTML file with CSS magic! 🎨</p>
-        <p class="footer-credits">Credits: Info buttons inspired by codepen.io/natalia-reshetnikova/ and social icons by codepen.io/kieranfivestars</p>
+        <p>🚀 This entire portfolio is crafted with pure CSS magic! 🎨</p>
+        <p class="footer-credits">Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and social icons by
+            kieranfivestars</p>
     </div>
 </div>
 </body>
