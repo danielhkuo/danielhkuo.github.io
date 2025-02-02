@@ -1,12 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!--
+        KUOFOLIO - Personal Portfolio Website
+        =====================================
+        Designed with:
+        - No JavaScript dependency
+        - Nord color palette (https://www.nordtheme.com/)
+        - Mobile-first responsive design
+        - CSS-only interactivity
+        - Semantic HTML5 markup
+        - Accessible UI components
+
+        Features:
+        - Dark/light mode auto-detection
+        - CSS animations and transitions
+        - Modal system using :target pseudo-class
+        - Infinite skill marquee
+        - Project card hover effects
+        - Social media tooltips
+    -->
     <meta charset="UTF-8">
-    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kuofolio</title>
     <link rel="icon" type="image/x-icon" href="./favicon.ico">
+
+    <!-- External Resources -->
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+
     <style>
         /* Root variables for easy theme management */
         :root {
@@ -119,109 +141,6 @@
             flex-shrink: 0; /* Prevent image from shrinking */
         }
 
-
-        /* Form elements */
-        input[type="checkbox"] {
-            display: none;
-        }
-
-        input[type="checkbox"] + label {
-            cursor: pointer;
-            display: inline-block;
-            position: relative;
-            padding-left: 1.5rem;
-            margin-right: 1rem;
-            color: var(--text);
-        }
-
-        input[type="checkbox"] + label:before {
-            content: '';
-            display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            position: absolute;
-            left: 0;
-            background-color: var(--background);
-            border: 1px solid var(--secondary);
-            border-radius: 0.2rem;
-            transition: all 0.3s ease;
-        }
-
-        input[type="checkbox"]:checked + label:before {
-            background-color: var(--primary);
-            border-color: var(--primary);
-        }
-
-        input[type="checkbox"]:checked + label:after {
-            content: '\2713';
-            position: absolute;
-            left: 0.25rem;
-            top: -0.1rem;
-            color: var(--background);
-            font-size: 0.9rem;
-        }
-
-        /* Floating label for inputs and textareas */
-        .floating-placeholder {
-            position: relative;
-            margin-bottom: 1.5rem;
-        }
-
-        .floating-placeholder input,
-        .floating-placeholder textarea {
-            width: 100%;
-            padding: 0.5rem;
-            background-color: var(--background);
-            border: none;
-            border-bottom: 1px solid var(--secondary);
-            font-size: 1rem;
-            color: var(--text);
-            transition: border-color 0.3s ease;
-        }
-
-        .floating-placeholder input:focus,
-        .floating-placeholder textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .floating-placeholder label {
-            position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
-            color: var(--secondary);
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            pointer-events: none;
-        }
-
-        .floating-placeholder input:focus ~ label,
-        .floating-placeholder input:not(:placeholder-shown) ~ label,
-        .floating-placeholder textarea:focus ~ label,
-        .floating-placeholder textarea:not(:placeholder-shown) ~ label {
-            top: -1.2rem;
-            font-size: 0.8rem;
-            color: var(--primary);
-        }
-
-        /* Submit button styling */
-        .submit-button {
-            background-color: var(--primary);
-            color: var(--background);
-            border: none;
-            padding: 0.5rem 1rem;
-            font-size: 1rem;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            display: block;
-            margin: 0 auto;
-        }
-
-        .submit-button:hover {
-            background-color: var(--accent);
-        }
-
         /* Social icons with hover effects */
         .social-row {
             text-align: center;
@@ -313,35 +232,10 @@
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
 
-        .project-thumbnail {
-            width: 100%;
-            height: 250px; /* Increased height for more thumbnail space */
-            background-color: var(--secondary);
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-
-        /* Contact form styling */
-        .contact-form {
-            background-color: var(--card-bg);
-            color: var(--text);
-            padding: 2rem;
-            border-radius: 0.5rem;
-            margin-top: 2rem;
-        }
-
-        .contact-form h2 {
+        .project h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.2em;
             color: var(--primary);
-            margin-bottom: 1.5rem;
-        }
-
-        .contact-form .controls {
-            margin-bottom: 1.5rem;
-        }
-
-        .contact-form .controls h3 {
-            color: var(--text);
-            margin-bottom: 0.5rem;
         }
 
         /* Info buttons */
@@ -454,26 +348,6 @@
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             overflow: auto;
             max-height: 90vh;
-        }
-
-        /* Updated contact modal styles */
-        .contact-content {
-            width: 80%;
-            max-width: 500px;
-            padding-top: 1em; /* Reduced top padding */
-        }
-
-        .contact-content h2 {
-            margin-top: 0; /* Remove top margin from the heading */
-            margin-bottom: 1em; /* Add some space below the heading */
-            color: var(--primary);
-        }
-
-        .contact-form {
-            background-color: transparent; /* Remove background color */
-            padding: 0; /* Remove padding */
-            border-radius: 0; /* Remove border radius */
-            margin-top: 0; /* Remove top margin */
         }
 
         .modal-header {
@@ -748,45 +622,6 @@
 </head>
 <body>
 
-<div class="modal-window" id="contact-modal">
-    <div class="modal-content contact-content">
-        <div class="modal-header">
-            <h2>Contact Me</h2>
-            <a class="modal-close" href="#">&times;</a>
-        </div>
-        <form class="contact-form">
-            <div class="controls">
-                <h3>Purpose of Contact</h3>
-                <input id="business" name="purpose" type="checkbox" value="business">
-                <label for="business">Business</label>
-
-                <input id="personal" name="purpose" type="checkbox" value="personal">
-                <label for="personal">Personal</label>
-
-                <input id="other" name="purpose" type="checkbox" value="other">
-                <label for="other">Other</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <input id="name" name="name" placeholder=" " required type="text">
-                <label for="name">Name</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <input id="email" name="email" placeholder=" " required type="email">
-                <label for="email">Email</label>
-            </div>
-
-            <div class="floating-placeholder">
-                <textarea id="message" name="message" placeholder=" " required rows="4"></textarea>
-                <label for="message">Message</label>
-            </div>
-
-            <button class="submit-button" type="submit">Send</button>
-        </form>
-    </div>
-</div>
-
 <div class="modal-window" id="resume-modal">
     <div class="modal-content resume-content">
         <div class="modal-header">
@@ -860,7 +695,7 @@
     </header>
 
     <div class="info-row">
-        <a class="info-button" href="#contact-modal">
+        <a class="info-button" href="mailto:danielhkuo@rice.edu">
             <span>Contact Me</span>
         </a>
         <a class="info-button" href="#resume-modal">
@@ -894,40 +729,31 @@
         </a>
     </div>
 
+    <!-- Remove .project-thumbnail div and add emojis to h3 in each project -->
     <div class="projects">
-
         <div class="project">
-            <div class="project-thumbnail"></div>
-            <a href="https://github.com/ACED-HR2024/feynman-junior" style="text-decoration: none; color: inherit;"
-               target="_blank">
-                <h3>Feynman Junior</h3>
-                <p>Developed an AI-powered tool using Node.js, React, and TypeScript to simulate different audience
-                    types for presentation practice.</p>
+            <a href="https://github.com/ACED-HR2024/feynman-junior" style="text-decoration: none; color: inherit;" target="_blank">
+                <h3>Feynman Junior 🚀🤖💡</h3>
+                <p>Developed an AI-powered tool using Node.js, React, and TypeScript to simulate different audience types for presentation practice.</p>
             </a>
         </div>
 
         <div class="project">
-            <div class="project-thumbnail"></div>
-            <a href="https://github.com/danielhkuo/busichat" style="text-decoration: none; color: inherit;"
-               target="_blank">
-                <h3>BusiChat</h3>
-                <p>Full-stack real-time chat application with workspace management, secure authentication, and OAuth
-                    integration.</p>
+            <a href="https://github.com/danielhkuo/busichat" style="text-decoration: none; color: inherit;" target="_blank">
+                <h3>BusiChat 💬🔒🌐</h3>
+                <p>Full-stack real-time chat application with workspace management, secure authentication, and OAuth integration.</p>
             </a>
         </div>
 
         <div class="project">
-            <div class="project-thumbnail"></div>
-            <a href="https://github.com/GODV-HR13/MeetMe" style="text-decoration: none; color: inherit;"
-               target="_blank">
-                <h3>MeetMe Scheduler</h3>
+            <a href="https://github.com/GODV-HR13/MeetMe" style="text-decoration: none; color: inherit;" target="_blank">
+                <h3>MeetMe Scheduler ⏰📅🤖</h3>
                 <p>Created a Discord bot using Dart to process multiple time inputs and generate a schedule.</p>
             </a>
         </div>
 
         <div class="project">
-            <div class="project-thumbnail"></div>
-            <h3>Unraid Cloud Server</h3>
+            <h3>Unraid Cloud Server 🖥️🔒🐳</h3>
             <p>Set up a locally hosted reverse-proxied server using Docker containers and Unraid OS.</p>
         </div>
     </div>
