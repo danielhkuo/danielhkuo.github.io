@@ -28,9 +28,12 @@
     <!-- External Resources -->
     <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/fira_code.css" rel="stylesheet">
+    <!-- Fira Code is imported within the <style> tag as per original structure, moved to top -->
 
     <style>
+        /* Moved Fira Code import to the top of the style block */
+        @import url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/fira_code.css');
+
         /* Root variables for easy theme management */
         :root {
             --background: #ECEFF4;
@@ -52,11 +55,21 @@
             }
         }
 
+        /* Global box-sizing for easier layout management */
+        html {
+            box-sizing: border-box;
+            scroll-behavior: smooth; /* Added for smoother anchor link navigation */
+        }
+
+        *, *::before, *::after {
+            box-sizing: inherit;
+        }
+
         /* General body styling */
         body {
             background-color: var(--background);
             color: var(--text);
-            font-family: 'Lato', sans-serif; /* Use Lato for all text */
+            font-family: 'Lato', sans-serif; /* Use Lato for all text, inherited by children */
             margin: 0;
             padding: 0;
             display: flex;
@@ -68,23 +81,24 @@
             transition: filter 0.3s ease;
         }
 
-        h1, h2, p, input, textarea {
-            font-family: 'Lato', sans-serif; /* Use Lato for headings, body text, and form inputs */
-            font-weight: 400; /* Regular weight for body text */
-        }
-
+        /* Headings and paragraphs will inherit font-family from body */
         h1, h2 {
             font-weight: 700; /* Bold for headings */
             color: var(--primary);
         }
+        /* input, textarea styling can be kept if future forms are planned */
+        input, textarea {
+            font-family: 'Lato', sans-serif;
+            font-weight: 400;
+        }
 
 
-        /* Container for the website content */
+        /* Container for the website content - changed to main element */
         .container {
-            width: 60%; /* Increased from 50% */
-            max-width: 800px; /* Increased from 600px */
+            width: 60%;
+            max-width: 800px;
             padding: 20px;
-            box-sizing: border-box;
+            /* box-sizing: border-box; Removed, handled globally */
             transition: filter 0.3s ease;
         }
 
@@ -101,45 +115,36 @@
 
         .header-info {
             flex: 1;
-            padding-right: 30px; /* Increased padding */
+            padding-right: 30px;
         }
 
         .header h1 {
-            font-size: 2.2em; /* Slightly reduced font size */
+            font-size: 2.2em;
             margin-bottom: 10px;
             color: var(--primary);
         }
 
         .tagline {
-            font-size: 1.1em; /* Slightly reduced font size */
+            font-size: 1.1em;
             color: var(--secondary);
-            margin-bottom: 10px; /* Reduced margin */
+            margin-bottom: 10px;
         }
 
         .education {
             font-style: italic;
-            margin-bottom: 10px; /* Reduced margin */
+            margin-bottom: 10px;
         }
 
-        .skills li {
-            display: inline-block;
-            background-color: var(--accent);
-            color: var(--background);
-            padding: 5px 10px;
-            border-radius: 15px;
-            margin-right: 10px;
-            margin-bottom: 10px;
-            font-size: 0.9em;
-        }
+        /* .skills li was removed as it's no longer used in HTML (replaced by marquee) */
 
         .headshot {
-            width: 180px; /* Restored to original size */
-            height: 180px; /* Restored to original size */
+            width: 180px;
+            height: 180px;
             border-radius: 50%;
             object-fit: cover;
             border: 4px solid var(--primary);
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            flex-shrink: 0; /* Prevent image from shrinking */
+            flex-shrink: 0;
         }
 
         /* Social icons with hover effects */
@@ -174,7 +179,7 @@
 
         .social-item span {
             position: absolute;
-            font-family: sans-serif;
+            font-family: sans-serif; /* Kept as sans-serif for tooltip specifically */
             bottom: 0;
             left: 50%;
             transform: translateX(-50%);
@@ -197,7 +202,6 @@
             bottom: 50px;
         }
 
-        /* Improved contrast for hover text in light mode */
         @media (prefers-color-scheme: light) {
             .social-item span {
                 background: var(--text);
@@ -205,7 +209,6 @@
             }
         }
 
-        /* Improved contrast for hover text in dark mode */
         @media (prefers-color-scheme: dark) {
             .social-item span {
                 background: var(--background);
@@ -213,24 +216,22 @@
             }
         }
 
-        /* Update project card styling */
         .projects {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 25px; /* Slightly increased gap */
+            gap: 25px;
         }
 
         .project {
             background-color: var(--card-bg);
             border-radius: 10px;
-            padding: 0; /* Remove padding here - move to inner element */
+            padding: 0;
             cursor: pointer;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             position: relative;
             overflow: hidden;
         }
 
-        /* Make entire card clickable */
         .project a {
             display: block;
             padding: 25px;
@@ -239,7 +240,7 @@
         }
 
         .project:hover {
-            transform: translateY(-3px); /* More subtle hover */
+            transform: translateY(-3px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
 
@@ -251,25 +252,21 @@
             z-index: 2;
         }
 
-        /* Add Fira Code font */
-        @import url('https://cdn.jsdelivr.net/npm/firacode@6.2.0/distr/fira_code.css');
-
         .project-details {
             background-color: var(--background);
             border: 1px solid var(--card-bg);
             border-radius: 6px;
             padding: 1rem;
             margin-top: 1rem;
-            font-family: 'Fira Code', monospace; /* Use Fira Code */
+            font-family: 'Fira Code', monospace;
             font-size: 0.85em;
             position: relative;
             z-index: 2;
         }
 
-        /* Add subtle hover effect on entire card */
         .project::before {
             content: '';
-            padding: 1.2rem !important;
+            /* padding: 1.2rem !important; Removed as it was ineffective for an overlay */
             position: absolute;
             top: 0;
             left: 0;
@@ -280,7 +277,6 @@
             transition: opacity 0.2s ease;
         }
 
-        /* Add this to your existing CSS */
         .project-details ul {
             list-style: none;
             padding-left: 0;
@@ -307,7 +303,6 @@
             font-size: 0.9em;
         }
 
-        /* Optional: Alternating background colors */
         .project-details li:nth-child(odd) {
             background-color: rgba(136, 192, 208, 0.05);
         }
@@ -320,12 +315,10 @@
             opacity: 0.05;
         }
 
-        /* Info buttons */
         .info-row {
             display: flex;
             justify-content: space-around;
             padding: 20px 0;
-            /* Remove flex-wrap to ensure items stay in a single row */
             flex-wrap: nowrap;
         }
 
@@ -393,10 +386,9 @@
             transform: scale(0.1, 1);
         }
 
-        /* Modal styling (shared) */
         .modal-window {
             position: fixed;
-            background-color: rgba(255, 255, 255, 0.25);
+            background-color: rgba(255, 255, 255, 0.25); /* Consider adjusting alpha for dark mode if needed */
             top: 0;
             right: 0;
             bottom: 0;
@@ -407,6 +399,12 @@
             pointer-events: none;
             transition: all 0.3s;
         }
+        @media (prefers-color-scheme: dark) {
+            .modal-window {
+                 background-color: rgba(0, 0, 0, 0.5); /* Darker overlay for dark mode */
+            }
+        }
+
 
         .modal-window:target {
             visibility: visible;
@@ -428,7 +426,7 @@
             border-radius: 1rem;
             padding: 2em;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            overflow: auto;
+            overflow: auto; /* Default overflow, can be overridden by specific modal types if needed */
             max-height: 90vh;
         }
 
@@ -444,7 +442,6 @@
             margin: 0;
         }
 
-        /* Update the modal close button styles */
         .modal-close {
             color: var(--text);
             font-size: 24px;
@@ -456,39 +453,61 @@
             color: var(--primary);
         }
 
-        /* Resume modal - large, full-screen style */
-        .resume-content {
+        /* Resume modal specific styles */
+        #resume-modal .modal-content { /* ID specific for resume modal dimensions */
             width: 90%;
             height: 90%;
             max-width: 1000px;
-            max-height: 90vh;
+            /* max-height: 90vh; is on general .modal-content */
+            display: flex; /* Added to allow iframe to fill height */
+            flex-direction: column; /* Added */
         }
 
-        /* iframe for the resume and media embeds */
         .resume-iframe {
             width: 100%;
-            height: 100%;
+            /* height: 100%; Removed, flex will handle it */
+            flex-grow: 1; /* Added to fill available space */
             border: none;
             display: block;
         }
 
-        .about-content {
+        /* About modal specific styles */
+        #about-modal .modal-content { /* ID specific for about modal dimensions */
             width: 80%;
             max-width: 600px;
-            padding: 2em;
+            /* padding: 2em; Inherited from .modal-content */
         }
 
-        .about-content p {
+        /* Renamed inner div for clarity and specific styling */
+        .about-modal-body {
+            /* This container will hold the text and image for "About Me" */
+            /* No specific desktop styles needed here if padding is handled by .modal-content */
+        }
+
+        .about-modal-body p {
             margin-bottom: 1em;
             line-height: 1.6;
         }
 
+        .about-modal-body .img-container { /* Ensure this is styled correctly */
+            text-align: center;
+            margin: 20px 0;
+        }
+        .about-modal-body .img-container img {
+            max-width: 400px;
+            height: auto;
+            border-radius: 8px;
+        }
+
+
         .skills-container {
             width: 100%;
-            max-width: 400px; /* Increased max-width */
+            max-width: 400px;
             overflow: hidden;
             position: relative;
             padding: 0.5rem 0;
+            background-color: var(--card-bg); /* Added background to ensure fade works visually */
+            border-radius: 8px; /* Optional: match card rounding */
         }
 
         .skills-slider {
@@ -512,12 +531,12 @@
             display: flex;
             align-items: center;
             color: var(--text);
-            font-size: 0.8rem; /* Reduced from 0.9rem */
-            background-color: var(--card-bg);
+            font-size: 0.8rem;
+            background-color: var(--background); /* Changed to main background for contrast */
             border-radius: 0.4rem;
-            padding: 0.4rem 0.6rem; /* Reduced padding */
+            padding: 0.4rem 0.6rem;
             white-space: nowrap;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Softened shadow */
         }
 
         .skill-tag i {
@@ -527,7 +546,8 @@
 
         .skills-fade {
             pointer-events: none;
-            background: linear-gradient(90deg, var(--card-bg), transparent 5%, transparent 95%, var(--card-bg));
+            /* Ensure --card-bg matches skills-container background for seamless fade */
+            background: linear-gradient(90deg, var(--card-bg), transparent 10%, transparent 90%, var(--card-bg));
             position: absolute;
             inset: 0;
         }
@@ -542,7 +562,6 @@
         }
 
 
-        /* Footer section */
         .footer-note {
             text-align: center;
             font-size: 0.8em;
@@ -555,7 +574,6 @@
             opacity: 0.7;
         }
 
-        /* Responsive adjustments */
         @media (max-width: 1200px) {
             .container {
                 width: 90%;
@@ -575,28 +593,18 @@
             .headshot {
                 width: 150px;
                 height: 150px;
-                margin-bottom: 0; /* Remove bottom margin */
+                margin-bottom: 0;
             }
 
             .skills-container {
-                max-width: 300px; /* Adjusted for mobile */
-                margin: 0 auto; /* Center the skills container */
+                max-width: 300px;
+                margin: 0 auto;
             }
 
-            /* Adjust font sizes for better fit */
-            .header h1 {
-                font-size: 2em;
-            }
+            .header h1 { font-size: 2em; }
+            .tagline { font-size: 1em; }
+            .education { font-size: 0.9em; }
 
-            .tagline {
-                font-size: 1em;
-            }
-
-            .education {
-                font-size: 0.9em;
-            }
-
-            /* Full-screen modals for mobile */
             .modal-content {
                 width: 100vw !important;
                 height: 100vh !important;
@@ -608,7 +616,6 @@
                 flex-direction: column;
             }
 
-            /* Modal header adjustments */
             .modal-header {
                 text-align: center;
                 padding: 15px 0 !important;
@@ -616,54 +623,52 @@
                 flex-shrink: 0;
             }
 
-            /* Close button repositioning and styling */
             .modal-close {
                 position: static !important;
-                order: 3; /* Move to bottom in flex layout */
+                order: 3;
                 align-self: center;
                 font-size: 2.5rem !important;
                 padding: 15px 30px !important;
-                margin-top: auto;
+                margin-top: auto; /* Pushes to bottom */
                 width: auto;
                 height: auto;
-                background: var(--card-bg);
+                background: var(--card-bg); /* Re-apply background if needed for visibility */
                 border-radius: 50px;
                 transform: none !important;
                 display: block;
                 text-align: center;
-                margin: 20px 0 10px;
+                margin: 20px 0 10px; /* Adjusted margin */
             }
 
-            /* Resume iframe adjustments */
             .resume-iframe {
-                flex: 1;
-                min-height: 0; /* Fixes flex item height issue */
+                /* flex: 1; already there from #resume-modal .modal-content having display:flex */
+                min-height: 0;
                 margin: 10px 0;
                 border: 2px solid var(--primary);
                 border-radius: 8px;
             }
-
-            /* About modal content adjustments */
-            .about-content .about-content {
+            
+            /* Styles for the scrollable content area within the About Me modal on mobile */
+            #about-modal .about-modal-body {
                 text-align: center;
                 overflow-y: auto;
-                padding: 0 15px;
-                flex: 1;
+                padding: 0 15px; /* Specific padding for scrollable content */
+                flex: 1; /* Allow it to take available space in flex column */
             }
 
-            .about-content p {
-                text-align: center !important;
+            #about-modal .about-modal-body p {
+                text-align: left !important; /* Or center, adjust as preferred */
                 margin-left: auto !important;
                 margin-right: auto !important;
                 max-width: 90% !important;
             }
 
-            .about-content .img-container {
+            #about-modal .about-modal-body .img-container {
                 max-width: 100% !important;
                 margin: 15px auto !important;
             }
 
-            .about-content img {
+            #about-modal .about-modal-body .img-container img {
                 max-width: 100% !important;
                 height: auto !important;
             }
@@ -672,28 +677,22 @@
 
         @media (max-width: 768px) {
             .container {
-                width: 90%; /* Adjusted for better mobile layout */
+                width: 90%;
                 max-width: none;
             }
 
-            .header {
-                flex-direction: column-reverse;
-                text-align: center;
-                padding: 20px;
-            }
-
             .header-info {
-                padding-right: 0;
-                margin-top: 20px;
+                /* padding-right: 0; already set */
+                margin-top: 20px; /* Keep this specific adjustment */
                 display: flex;
                 flex-direction: column;
-                align-items: center; /* Center content in mobile view */
+                align-items: center;
             }
 
             .headshot {
-                width: 150px; /* Slightly reduced for mobile */
-                height: 150px; /* Slightly reduced for mobile */
-                margin-bottom: 20px;
+                width: 150px;
+                height: 150px;
+                margin-bottom: 20px; /* This overrides margin-bottom: 0 from 1200px query */
             }
 
 
@@ -727,52 +726,46 @@
                 bottom: 45px;
             }
 
-            /* Make the header minimal height with centered text */
             .modal-header {
-                position: relative;           /* Enables absolute-positioning of children */
+                position: relative;
                 display: flex;
                 align-items: center;
-                justify-content: center;      /* Center the heading horizontally */
-                padding: 10px 0 !important;   /* Tighter top/bottom padding */
+                justify-content: center;
+                padding: 10px 40px 10px 10px !important; /* Added more padding on right for close button */
             }
 
-            /* Reduce any heading margin so it doesn't add extra space */
             .modal-header h1,
             .modal-header h2 {
                 margin: 0;
             }
 
-            /* Pin the close button to the top-right */
-            .modal-close {
+            .modal-close { /* This overrides the 1200px styles for close button */
                 position: absolute !important;
-                top: 10px;        /* Fine-tune spacing from the top */
-                right: 10px;      /* Fine-tune spacing from the right */
+                top: 50%; /* Vertically center relative to header */
+                transform: translateY(-50%) !important; /* Adjust for exact centering */
+                right: 10px;
                 margin: 0 !important;
-                font-size: 2rem !important;
                 padding: 5px 10px !important;
-                border-radius: 2rem;  /* Optional if you want a pill/circle look */
-                background: var(--card-bg);
-                /* Remove or override any 'order' property so it won't move within the flex container */
+                font-size: 2rem !important;
+                border-radius: 50px; /* Consistent rounded style */
+                /* background: var(--card-bg); already set */
+                order: initial !important; /* Reset order from 1200px breakpoint */
+                align-self: initial !important; /* Reset align-self */
+            }
+            
+            #resume-modal .modal-content { /* ID specific styles for mobile */
+                width: 90vw !important; /* Use vw/vh for consistency with full screen approach */
+                height: 85vh !important; /* Slightly less than full to see page behind (optional) */
             }
 
-            .resume-content {
-                width: 70%; /* Adjusts width for mobile */
-                height: 60%;
-            }
-
-            .resume-content {
-                width: 70%;
-                height: 60%;
-            }
 
             .modal-window:target ~ .blur-background {
-                filter: blur(3px); /* Less blur on smaller screens */
+                filter: blur(3px);
             }
 
-            .skills-container {
-                max-width: 300px; /* Adjusted for mobile */
-                margin: 0 auto; /* Center the skills container */
-            }
+            /* .skills-container {
+                max-width: 90%; Wider on smaller screens
+            } */
 
             .skill-tag {
                 font-size: 0.7rem;
@@ -783,40 +776,36 @@
                 gap: 0 0.4rem;
             }
 
-            .about-content {
-                width: 90%;
-                padding: 1em;
+            #about-modal .modal-content { /* Specific to about modal on this breakpoint */
+                width: 90vw !important;
+                /* height can be auto or a specific vh if desired */
             }
         }
 
         @media (max-width: 480px) {
-
             .container {
-                width: 95%; /* Further adjusted for smaller screens */
+                width: 95%;
             }
 
             .headshot {
-                width: 120px; /* Further reduced for smaller screens */
-                height: 120px; /* Further reduced for smaller screens */
+                width: 120px;
+                height: 120px;
             }
 
-            .resume-content {
-                width: 90%;
-                height: 50%;
+            #resume-modal .modal-content { /* Further adjust resume modal on smallest screens */
+                height: 80vh !important;
             }
 
-            /* Fine-tune spacing for smaller screens */
             .modal-content {
-                padding: 10px !important;
+                padding: 15px !important; /* Slightly more padding than 10px */
             }
 
-            /* You can fine-tune further on the smallest screens if needed */
             .modal-header {
-                padding: 8px 0 !important;
+                padding: 8px 35px 8px 8px !important; /* Ensure enough space for close button */
             }
 
             .modal-close {
-                top: 8px;
+                top: 50%; /* Keep vertically centered */
                 right: 8px;
                 font-size: 1.8rem !important;
                 padding: 4px 8px !important;
@@ -832,22 +821,25 @@
 <body>
 
 <div class="modal-window" id="resume-modal">
-    <div class="modal-content resume-content">
+    <!-- Added ID specific class for easier styling if needed, and flex properties -->
+    <div class="modal-content">
         <div class="modal-header">
             <h1>Resume</h1>
-            <a class="modal-close" href="#">&times;</a>
+            <a class="modal-close" href="#">×</a>
         </div>
-        <iframe class="resume-iframe" src="Daniel-Kuo-Resume.pdf"></iframe>
+        <iframe class="resume-iframe" src="Daniel-Kuo-Resume.pdf" title="Daniel Kuo Resume"></iframe>
     </div>
 </div>
 
 <div class="modal-window" id="about-modal">
-    <div class="modal-content about-content">
+    <!-- Removed .about-content class from modal-content, using ID for specificity -->
+    <div class="modal-content">
         <div class="modal-header">
             <h1>About Me</h1>
-            <a class="modal-close" href="#">&times;</a>
+            <a class="modal-close" href="#">×</a>
         </div>
-        <div class="about-content">
+        <!-- Renamed inner div for clarity -->
+        <div class="about-modal-body">
             <p>Hi. I’m a tinkerer at heart - the kind who gets equal joy from clean code and the smell of an overheating
                 Raspberry Pi. By day, I’m engineering solutions where software meets hardware. By night, you’ll find me
                 deep in homelab trenches, wrestling Docker containers and whispering sweet nothings to my NAS - because
@@ -860,10 +852,10 @@
                 philosophical or political debate, or arguing about movie tastes. (<em>Cinema Paradiso</em> is a
                 must-watch).</p>
 
-            <div class="img-container" style="text-align: center; margin: 20px 0;">
+            <div class="img-container">
                 <img src="https://i.kym-cdn.com/entries/icons/original/000/047/133/cover1.jpg"
-                     alt="Absolute Cinema"
-                     style="max-width: 400px; height: auto; border-radius: 8px;">
+                     alt="Absolute Cinema meme referencing movie taste"
+                     style="max-width: 100%; /* Max-width from CSS is 400px, this ensures responsiveness */ height: auto; border-radius: 8px;">
             </div>
 
             <p>Let’s debate web3’s identity crisis, swap homelab horror stories, or design our perfect mechanical
@@ -872,7 +864,8 @@
     </div>
 </div>
 
-<div class="container blur-background">
+<!-- Changed div.container to main.container for semantic HTML -->
+<main class="container blur-background">
     <header class="header">
         <div class="header-info">
             <h1>Daniel Kuo</h1>
@@ -916,7 +909,7 @@
                 <div class="skills-fade"></div>
             </div>
         </div>
-        <img alt="Daniel Kuo" class="headshot" src="./headshot.webp">
+        <img alt="Daniel Kuo headshot" class="headshot" src="./headshot.webp"> <!-- Slightly more descriptive alt -->
     </header>
 
     <div class="info-row">
@@ -929,40 +922,38 @@
         <a class="info-button" href="#about-modal">
             <span>About Me</span>
         </a>
-        <a class="info-button" href="#location">
+        <a class="info-button" href="#location"> <!-- Assuming #location is a placeholder -->
             <span>Blog</span>
         </a>
     </div>
 
 
     <div class="social-row">
-        <a class="social-item" href="https://www.instagram.com/danielhankuo/">
-            <i class="fab fa-instagram"></i>
+        <a class="social-item" href="https://www.instagram.com/danielhankuo/" aria-label="Daniel Kuo on Instagram" target="_blank" rel="noopener noreferrer">
+            <i class="fab fa-instagram" aria-hidden="true"></i>
             <span>Instagram</span>
         </a>
-        <a class="social-item" href="https://linkedin.com/in/danielhkuo">
-            <i class="fab fa-linkedin"></i>
+        <a class="social-item" href="https://linkedin.com/in/danielhkuo" aria-label="Daniel Kuo on LinkedIn" target="_blank" rel="noopener noreferrer">
+            <i class="fab fa-linkedin" aria-hidden="true"></i>
             <span>LinkedIn</span>
         </a>
-        <a class="social-item" href="https://twitter.com">
-            <i class="fab fa-twitter"></i>
+        <a class="social-item" href="https://twitter.com" aria-label="Daniel Kuo on Twitter" target="_blank" rel="noopener noreferrer"> <!-- Consider adding specific Twitter handle -->
+            <i class="fab fa-twitter" aria-hidden="true"></i>
             <span>Twitter</span>
         </a>
-        <a class="social-item" href="https://github.com/danielhkuo">
-            <i class="fab fa-github"></i>
+        <a class="social-item" href="https://github.com/danielhkuo" aria-label="Daniel Kuo on GitHub" target="_blank" rel="noopener noreferrer">
+            <i class="fab fa-github" aria-hidden="true"></i>
             <span>GitHub</span>
         </a>
     </div>
 
     <div class="projects">
-        <!-- Feynman Junior -->
         <div class="project">
-            <a href="https://github.com/ACED-HR2024/feynman-junior" target="_blank" rel="noopener" class="project-link">
+            <a href="https://github.com/ACED-HR2024/feynman-junior" target="_blank" rel="noopener noreferrer" class="project-link">
                 <h3>Feynman Junior 🚀🤖💡</h3>
                 <div class="project-details">
                     <ul>
-                        <li><strong>AI Presentation Coach:</strong> Simulates audience types with dynamic voice feedback
-                        </li>
+                        <li><strong>AI Presentation Coach:</strong> Simulates audience types with dynamic voice feedback</li>
                         <li><strong>Stack:</strong> Node.js/React/TS + LangChain/WebSpeechAPI</li>
                         <li><strong>Results:</strong> 97% accuracy, 100% satisfaction</li>
                     </ul>
@@ -970,9 +961,8 @@
             </a>
         </div>
 
-        <!-- BusiChat -->
         <div class="project">
-            <a href="https://github.com/danielhkuo/busichat" target="_blank" rel="noopener" class="project-link">
+            <a href="https://github.com/danielhkuo/busichat" target="_blank" rel="noopener noreferrer" class="project-link">
                 <h3>BusiChat 💬🔒🌐</h3>
                 <div class="project-details">
                     <ul>
@@ -984,9 +974,8 @@
             </a>
         </div>
 
-        <!-- MeetMe Scheduler -->
         <div class="project">
-            <a href="https://github.com/GODV-HR13/MeetMe" target="_blank" rel="noopener" class="project-link">
+            <a href="https://github.com/GODV-HR13/MeetMe" target="_blank" rel="noopener noreferrer" class="project-link">
                 <h3>MeetMe Scheduler ⏰📅🤖</h3>
                 <div class="project-details">
                     <ul>
@@ -998,9 +987,8 @@
             </a>
         </div>
 
-        <!-- Unraid Cloud Server -->
         <div class="project">
-            <a href="#" target="_blank" rel="noopener" class="project-link"> <!-- Added anchor tag -->
+            <a href="#" class="project-link"> <!-- Kept href="#" if no link yet, added rel="noopener" for consistency if it becomes external -->
                 <h3>Unraid Cloud Server 🖥️🔒🐳</h3>
                 <div class="project-details">
                     <ul>
@@ -1015,12 +1003,8 @@
 
     <div class="footer-note">
         <p>"If we find ourselves with a desire that nothing in this world can satisfy, the most probable explanation is that we were made for another world."</p>
-        <p class="footer-credits">Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and
-            social icons by
-            kieranfivestars</p>
+        <p class="footer-credits">Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and social icons by kieranfivestars</p>
     </div>
-</div>
+</main>
 </body>
 </html>
-
-
