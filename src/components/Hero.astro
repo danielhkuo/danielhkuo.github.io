@@ -1,0 +1,133 @@
+---
+// Hero.astro - Main header/bio section component
+---
+
+<section class="header bg-card-bg rounded-2xl p-8 shadow-lg mb-10">
+  <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center">
+    <!-- Header Info -->
+    <div class="flex-1 lg:pr-8 mb-6 lg:mb-0 text-center lg:text-left">
+      <h1 class="text-4xl lg:text-5xl font-bold text-primary mb-3">Daniel Kuo</h1>
+      <p class="text-lg lg:text-xl text-secondary mb-3">Computer Science | Developer | Tech Enthusiast</p>
+      <p class="italic text-text mb-4">B.S. Computer Science @ Rice University</p>
+      
+      <!-- Skills Marquee Container -->
+      <div class="skills-container w-full max-w-md mx-auto lg:mx-0 overflow-hidden relative p-2 bg-card-bg rounded-lg">
+        <!-- First row - moving right -->
+        <div class="skills-slider flex w-fit animate-scroll-right">
+          <div class="flex gap-2 px-1 py-1">
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-code mr-2 text-primary"></i>Full-Stack
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-tasks mr-2 text-primary"></i>Project Management
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-robot mr-2 text-primary"></i>AI & ML
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-java mr-2 text-primary"></i>Java
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-python mr-2 text-primary"></i>Python
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-moon mr-2 text-primary"></i>Lua
+            </div>
+          </div>
+          <!-- Duplicate for seamless loop -->
+          <div class="flex gap-2 px-1 py-1">
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-code mr-2 text-primary"></i>Full-Stack
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-tasks mr-2 text-primary"></i>Project Management
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-robot mr-2 text-primary"></i>AI & ML
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-java mr-2 text-primary"></i>Java
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-python mr-2 text-primary"></i>Python
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-moon mr-2 text-primary"></i>Lua
+            </div>
+          </div>
+        </div>
+        
+        <!-- Second row - moving left -->
+        <div class="skills-slider flex w-fit animate-scroll-left mt-2">
+          <div class="flex gap-2 px-1 py-1">
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-bullseye mr-2 text-primary"></i>Dart
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-cuttlefish mr-2 text-primary"></i>C#
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-js mr-2 text-primary"></i>JavaScript
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-html5 mr-2 text-primary"></i>HTML/CSS
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-database mr-2 text-primary"></i>SQL
+            </div>
+          </div>
+          <!-- Duplicate for seamless loop -->
+          <div class="flex gap-2 px-1 py-1">
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-bullseye mr-2 text-primary"></i>Dart
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-cuttlefish mr-2 text-primary"></i>C#
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-js mr-2 text-primary"></i>JavaScript
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fab fa-html5 mr-2 text-primary"></i>HTML/CSS
+            </div>
+            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
+              <i class="fas fa-database mr-2 text-primary"></i>SQL
+            </div>
+          </div>
+        </div>
+        
+        <!-- Fade overlay -->
+        <div class="skills-fade absolute inset-0 pointer-events-none bg-gradient-to-r from-card-bg via-transparent to-card-bg"></div>
+      </div>
+    </div>
+    
+    <!-- Headshot -->
+    <div class="flex-shrink-0 text-center">
+      <img 
+        alt="Daniel Kuo headshot" 
+        class="headshot w-36 h-36 lg:w-44 lg:h-44 rounded-full object-cover border-4 border-primary shadow-lg mx-auto" 
+        src="/headshot.webp"
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  @keyframes scroll-right {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  
+  @keyframes scroll-left {
+    0% { transform: translateX(-50%); }
+    100% { transform: translateX(0); }
+  }
+  
+  .animate-scroll-right {
+    animation: scroll-right 30s linear infinite;
+  }
+  
+  .animate-scroll-left {
+    animation: scroll-left 35s linear infinite;
+  }
+</style> 
