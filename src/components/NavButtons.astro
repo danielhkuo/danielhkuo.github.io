@@ -1,0 +1,93 @@
+---
+// NavButtons.astro - Navigation buttons component
+---
+
+<div class="info-row flex flex-wrap justify-center gap-4 py-8">
+  <a 
+    class="info-button group relative text-text no-underline text-center w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    href="mailto:danielhkuo@rice.edu"
+  >
+    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
+      Contact Me
+    </span>
+    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
+    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+  </a>
+  
+  <a 
+    class="info-button group relative text-text no-underline text-center w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    href="#resume-modal"
+  >
+    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
+      Resume
+    </span>
+    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
+    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+  </a>
+  
+  <a 
+    class="info-button group relative text-text no-underline text-center w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    href="#about-modal"
+  >
+    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
+      About Me
+    </span>
+    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
+    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+  </a>
+</div>
+
+<!-- Social Media Row -->
+<div class="social-row text-center py-10 mt-5">
+  <a 
+    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    href="https://www.instagram.com/danielhankuo/" 
+    aria-label="Daniel Kuo on Instagram" 
+    target="_blank" 
+    rel="noopener noreferrer"
+  >
+    <i class="fab fa-instagram" aria-hidden="true"></i>
+    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
+      Instagram
+    </span>
+  </a>
+  
+  <a 
+    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    href="https://linkedin.com/in/danielhkuo" 
+    aria-label="Daniel Kuo on LinkedIn" 
+    target="_blank" 
+    rel="noopener noreferrer"
+  >
+    <i class="fab fa-linkedin" aria-hidden="true"></i>
+    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
+      LinkedIn
+    </span>
+  </a>
+  
+  <a 
+    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    href="https://twitter.com" 
+    aria-label="Daniel Kuo on Twitter" 
+    target="_blank" 
+    rel="noopener noreferrer"
+  >
+    <i class="fab fa-twitter" aria-hidden="true"></i>
+    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
+      Twitter
+    </span>
+  </a>
+  
+  <a 
+    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    href="https://github.com/danielhkuo" 
+    aria-label="Daniel Kuo on GitHub" 
+    target="_blank" 
+    rel="noopener noreferrer"
+  >
+    <i class="fab fa-github" aria-hidden="true"></i>
+    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
+      GitHub
+    </span>
+  </a>
+</div> 
