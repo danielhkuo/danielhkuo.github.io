@@ -23,3 +23,6 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Remove old website files
+old_index.html
