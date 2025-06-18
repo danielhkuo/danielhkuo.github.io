@@ -3,7 +3,9 @@ import BaseHead from '../components/BaseHead.astro';
 import Hero from '../components/Hero.astro';
 import NavButtons from '../components/NavButtons.astro';
 import ProjectCard from '../components/ProjectCard.astro';
+import ProjectModal from '../components/ProjectModal.astro';
 import ThemeToggle from '../components/ThemeToggle.svelte';
+import AccentPicker from '../components/AccentPicker.svelte';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
 import { getCollection } from 'astro:content';
 import '../styles/tailwind.css';
@@ -25,16 +27,23 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 		<!-- Theme Toggle Button -->
 		<ThemeToggle client:load />
 		
+		<!-- Accent Color Picker -->
+		<AccentPicker client:load />
+		
 		<div class="container w-full max-w-4xl px-5 py-8">
-			<!-- Hero Section -->
-			<Hero />
+			<div class="animate-fade-in-up">
+				<!-- Hero Section -->
+				<Hero />
+			</div>
 			
-			<!-- Navigation Buttons -->
-			<NavButtons />
+			<div class="animate-fade-in-up" style="animation-delay: 200ms;">
+				<!-- Navigation Buttons -->
+				<NavButtons />
+			</div>
 			
 			<!-- Projects Section -->
-			<section class="projects-section mt-16">
-				<h2 class="text-2xl font-bold text-primary text-center mb-8">Featured Projects</h2>
+			<section class="projects-section mt-16 animate-fade-in-up" style="animation-delay: 400ms;">
+				<h2 class="text-2xl font-bold text-secondary text-center mb-8">Featured Projects</h2>
 				<div class="projects grid grid-cols-1 md:grid-cols-2 gap-6">
 					{featuredProjects.map((project) => (
 						<ProjectCard
@@ -43,6 +52,7 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 							tech={project.data.tech}
 							repoUrl={project.data.repoUrl}
 							emoji={project.data.emoji}
+							slug={project.id}
 						/>
 					))}
 				</div>
@@ -50,13 +60,18 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 			
 			<!-- Footer Quote -->
 			<div class="footer-note text-center mt-16">
-				<p class="text-secondary mb-2">
+				<p class="text-text-secondary mb-2">
 					"If we find ourselves with a desire that nothing in this world can satisfy, the most probable explanation is that we were made for another world."
 				</p>
-				<p class="footer-credits text-xs opacity-70 text-secondary">
+				<p class="footer-credits text-xs opacity-70 text-text-secondary">
 					Credits: Info buttons inspired by natalia reshetnikova, skills inspired by ykadosh and social icons by kieranfivestars
 				</p>
 			</div>
 		</div>
+
+		<!-- Project Modals -->
+		{featuredProjects.map(project => (
+			<ProjectModal project={project} />
+		))}
 	</body>
 </html>
