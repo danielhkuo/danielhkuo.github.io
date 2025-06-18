@@ -2,23 +2,133 @@
 
 /* Root CSS Custom Properties for Theme Management */
 :root {
-  /* Light Mode (Nord Snow Storm + Frost) */
+  /* Light Mode (Nord Snow Storm + Better Contrast) */
   --background: #ECEFF4;    /* nord6 */
-  --text: #2E3440;          /* nord0 */
-  --primary: #5E81AC;       /* nord10 */
-  --secondary: #81A1C1;     /* nord9 */
-  --accent: #88C0D0;        /* nord8 */
+  --text: #2E3440;          /* nord0 - dark for good contrast */
+  --text-secondary: #434C5E; /* nord3 - lighter secondary text */
+  --primary: #5E81AC;       /* nord10 - main accent (user selectable) */
+  --secondary: #81A1C1;     /* nord9 - supporting accent */
+  --accent: #8FBCBB;        /* nord7 - tertiary accent */
   --card-bg: #E5E9F0;       /* nord5 */
+  --border: #D8DEE9;        /* nord4 - subtle borders */
+  
+  /* Complete Nord Color Palette */
+  --nord-0: #2E3440;        /* Polar Night */
+  --nord-1: #3B4252;
+  --nord-2: #434C5E;
+  --nord-3: #4C566A;
+  --nord-4: #D8DEE9;        /* Snow Storm */
+  --nord-5: #E5E9F0;
+  --nord-6: #ECEFF4;
+  --nord-7: #8FBCBB;        /* Frost */
+  --nord-8: #88C0D0;
+  --nord-9: #81A1C1;
+  --nord-10: #5E81AC;
+  --nord-11: #BF616A;       /* Aurora */
+  --nord-12: #D08770;
+  --nord-13: #EBCB8B;
+  --nord-14: #A3BE8C;
+  --nord-15: #B48EAD;
+  
+  /* Glow and shadow colors derived from Nord theme */
+  --glow-primary: rgba(94, 129, 172, 0.3);     /* nord10 with transparency */
+  --glow-accent: rgba(136, 192, 208, 0.25);    /* nord8 with transparency */
 }
 
-/* Dark Mode (Nord Polar Night + Frost) */
+/* Dark Mode (Nord Polar Night + Better Contrast) */
 html.dark {
   --background: #2E3440;    /* nord0 */
-  --text: #ECEFF4;          /* nord6 */
-  --primary: #88C0D0;       /* nord8 */
-  --secondary: #81A1C1;     /* nord9 */
-  --accent: #5E81AC;        /* nord10 */
+  --text: #E5E9F0;          /* nord5 - bright white for better contrast */
+  --text-secondary: #D8DEE9; /* nord4 - dimmer but still readable */
+  --primary: #88C0D0;       /* nord8 - main accent (user selectable) */
+  --secondary: #81A1C1;     /* nord9 - supporting accent */
+  --accent: #8FBCBB;        /* nord7 - tertiary accent */
   --card-bg: #3B4252;       /* nord1 */
+  --border: #434C5E;        /* nord3 - subtle borders */
+  
+  /* Complete Nord Color Palette (same in dark mode) */
+  --nord-0: #2E3440;        /* Polar Night */
+  --nord-1: #3B4252;
+  --nord-2: #434C5E;
+  --nord-3: #4C566A;
+  --nord-4: #D8DEE9;        /* Snow Storm */
+  --nord-5: #E5E9F0;
+  --nord-6: #ECEFF4;
+  --nord-7: #8FBCBB;        /* Frost */
+  --nord-8: #88C0D0;
+  --nord-9: #81A1C1;
+  --nord-10: #5E81AC;
+  --nord-11: #BF616A;       /* Aurora */
+  --nord-12: #D08770;
+  --nord-13: #EBCB8B;
+  --nord-14: #A3BE8C;
+  --nord-15: #B48EAD;
+  
+  /* Glow and shadow colors derived from Nord theme - Dark Mode */
+  --glow-primary: rgba(136, 192, 208, 0.4);    /* nord8 with transparency */
+  --glow-accent: rgba(129, 161, 193, 0.3);     /* nord9 with transparency */
+}
+
+/* Custom Tailwind utilities for Nord colors */
+.text-text {
+  color: var(--text) !important;
+}
+
+.text-text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-primary {
+  color: var(--primary) !important;
+}
+
+.text-secondary {
+  color: var(--secondary) !important;
+}
+
+.text-accent {
+  color: var(--accent) !important;
+}
+
+.bg-primary {
+  background-color: var(--primary) !important;
+}
+
+.bg-secondary {
+  background-color: var(--secondary) !important;
+}
+
+.bg-accent {
+  background-color: var(--accent) !important;
+}
+
+.border-primary {
+  border-color: var(--primary) !important;
+}
+
+.border-secondary {
+  border-color: var(--secondary) !important;
+}
+
+.border-accent {
+  border-color: var(--accent) !important;
+}
+
+.border-border {
+  border-color: var(--border);
+}
+
+/* Ensure proper text color inheritance */
+html.dark {
+  color: var(--text) !important;
+}
+
+html.dark * {
+  color: inherit;
+}
+
+html.dark .text-text {
+  color: var(--text) !important;
 }
 
 /* Smooth transitions for theme changes */
@@ -33,6 +143,9 @@ html {
 
 body {
   font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--background);
+  color: var(--text) !important;
+  /* The animated gradient is applied in the @media block below to respect prefers-reduced-motion */
 }
 
 /* Custom scrollbar for webkit browsers */
@@ -65,4 +178,62 @@ body {
     background: white !important;
     color: black !important;
   }
-} 
+}
+
+/* --- CREATIVE ANIMATIONS --- */
+/* Added by AI to enhance visual appeal and interactivity. */
+/* These are wrapped in a media query to respect user's motion preferences. */
+
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    background: linear-gradient(
+      -45deg, 
+      var(--background), 
+      var(--card-bg), 
+      var(--background)
+    );
+    background-size: 400% 400%;
+    animation: gradient-animation 25s ease infinite;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    opacity: 0; /* Start hidden before animation */
+  }
+
+  @keyframes gradient-animation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+    100% { transform: translateY(0px); }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Enhanced Nord-themed hover effects */
+  .social-item:hover {
+    box-shadow: 0 8px 25px var(--glow-primary), 0 0 20px var(--glow-accent) !important;
+  }
+
+  .project:hover {
+    box-shadow: 0 25px 50px -12px var(--glow-primary), 0 0 25px var(--glow-accent) !important;
+  }
+}
