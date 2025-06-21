@@ -1,174 +1,133 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
+  import { themes } from '../lib/themes';
+  import type { ThemeVariant } from '../lib/themes';
 
-  let isFabOpen = false;
-  let isAccentPickerOpen = false;
+  let isSettingsOpen = false;
   let mounted = false;
 
-  // --- State from ThemeToggle ---
-  let isDark = false;
+  // Component state for the current theme and mode
+  let currentThemeId: string = 'nord';
+  let currentMode: 'light' | 'dark' = 'light';
 
-  // --- State from AccentPicker ---
-  const accentOptions = [
-    { name: 'Arctic Ice', color: '#8FBCBB', id: 'nord-7' },
-    { name: 'Frost Blue', color: '#88C0D0', id: 'nord-8' },
-    { name: 'Polar Blue', color: '#81A1C1', id: 'nord-9' },
-    { name: 'Deep Frost', color: '#5E81AC', id: 'nord-10' },
-    { name: 'Aurora Red', color: '#BF616A', id: 'nord-11' },
-    { name: 'Aurora Orange', color: '#D08770', id: 'nord-12' },
-    { name: 'Aurora Yellow', color: '#EBCB8B', id: 'nord-13' },
-    { name: 'Aurora Green', color: '#A3BE8C', id: 'nord-14' },
-    { name: 'Aurora Purple', color: '#B48EAD', id: 'nord-15' }
-  ];
-  let currentAccent = accentOptions[1]; // Default to Frost Blue
+  /**
+   * Applies the selected theme and mode by setting CSS custom properties
+   * on the root <html> element. This is our single source of truth for styling.
+   * It also manages the `.dark` class for Tailwind CSS compatibility.
+   */
+  function applyThemeAndMode() {
+    // Guard against running in a non-browser environment (SSR)
+    if (typeof document === 'undefined') return;
 
-  // --- Merged onMount Logic ---
-  onMount(() => {
-    // Theme initialization
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      isDark = savedTheme === 'dark';
-    } else {
-      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // Find the full theme object, or fall back to the first one
+    const theme = themes.find(t => t.id === currentThemeId) || themes[0];
+    const variant: ThemeVariant = theme.variants[currentMode];
+
+    // Set the .dark class for any Tailwind CSS dark mode selectors
+    document.documentElement.classList.toggle('dark', currentMode === 'dark');
+    
+    // Set the data-theme attribute for reference or CSS targeting if needed
+    document.documentElement.dataset.theme = currentThemeId;
+
+    // Programmatically set all CSS variables from the theme variant object
+    for (const [key, value] of Object.entries(variant)) {
+      document.documentElement.style.setProperty(key, value);
     }
-    updateTheme();
+  }
 
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleThemeChange = (e) => {
-      if (!localStorage.getItem('theme')) {
-        isDark = e.matches;
-        updateTheme();
-      }
-    };
-    mediaQuery.addEventListener('change', handleThemeChange);
-
-    // Accent initialization
-    const savedAccent = localStorage.getItem('accent-color');
-    if (savedAccent) {
-      const foundAccent = accentOptions.find(option => option.id === savedAccent);
-      if (foundAccent) {
-        currentAccent = foundAccent;
-        applyAccent(currentAccent);
-      }
+  // onMount runs after the component is added to the DOM
+  onMount(() => {
+    // Sync component state with the initial state set by the inline script in BaseHead.astro
+    // This ensures a seamless handover from the initial paint to the interactive component.
+    currentThemeId = localStorage.getItem('theme-id') || 'nord';
+    const storedMode = localStorage.getItem('mode');
+    
+    if (storedMode === 'light' || storedMode === 'dark') {
+      currentMode = storedMode;
     } else {
-      applyAccent(currentAccent);
+      // If no mode is stored, respect the user's OS preference
+      currentMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
     
-    mounted = true;
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleThemeChange);
-    };
+    // The initial theme application is handled by the inline script to prevent FOUC.
+    // We just need to ensure our component state is up-to-date.
+    mounted = true; // Enable animations and interactive elements
   });
 
-  // --- Merged Functions ---
-  function updateTheme() {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+  function toggleSettings() {
+    isSettingsOpen = !isSettingsOpen;
   }
 
-  function toggleTheme() {
-    isDark = !isDark;
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    updateTheme();
+  function selectTheme(themeId: string) {
+    currentThemeId = themeId;
+    localStorage.setItem('theme-id', themeId);
+    applyThemeAndMode();
   }
 
-  function applyAccent(accent) {
-    document.documentElement.style.setProperty('--primary', accent.color);
-    const r = parseInt(accent.color.slice(1, 3), 16);
-    const g = parseInt(accent.color.slice(3, 5), 16);
-    const b = parseInt(accent.color.slice(5, 7), 16);
-    document.documentElement.style.setProperty('--glow-primary', `rgba(${r}, ${g}, ${b}, 0.4)`);
-    document.documentElement.style.setProperty('--glow-accent', `rgba(${r}, ${g}, ${b}, 0.25)`);
-    if (accent.id.includes('nord-1')) {
-      document.documentElement.style.setProperty('--secondary', '#81A1C1');
-      document.documentElement.style.setProperty('--accent', '#8FBCBB');
-    } else {
-      const secondaryColors = { 'nord-7': '#88C0D0', 'nord-8': '#81A1C1', 'nord-9': '#5E81AC', 'nord-10': '#8FBCBB' };
-      const accentColors = { 'nord-7': '#81A1C1', 'nord-8': '#8FBCBB', 'nord-9': '#8FBCBB', 'nord-10': '#88C0D0' };
-      document.documentElement.style.setProperty('--secondary', secondaryColors[accent.id] || '#81A1C1');
-      document.documentElement.style.setProperty('--accent', accentColors[accent.id] || '#8FBCBB');
-    }
-    localStorage.setItem('accent-color', accent.id);
+  // This function handles the change event from the toggle switch.
+  // It's more explicit than two-way binding and often preferred.
+  function handleToggleChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    currentMode = target.checked ? 'dark' : 'light';
+    localStorage.setItem('mode', currentMode);
+    applyThemeAndMode();
   }
 
-  function selectAccent(accent) {
-    currentAccent = accent;
-    applyAccent(accent);
-    isAccentPickerOpen = false;
-  }
+  // Reactive derived state: `isDark` is always in sync with `currentMode`
+  $: isDark = currentMode === 'dark';
 
-  function toggleFab() {
-    if (isAccentPickerOpen) {
-      isAccentPickerOpen = false;
-    } else {
-      isFabOpen = !isFabOpen;
-    }
-  }
-
-  function openAccentPicker() {
-    isAccentPickerOpen = true;
-    isFabOpen = false;
-  }
 </script>
 
-<div class="fab-container" class:open={isFabOpen}>
-  <!-- Accent Picker Panel -->
-  {#if isAccentPickerOpen}
-    <div transition:fly={{ y: 20, duration: 250 }} class="accent-picker-panel">
-      <h3 class="panel-title">Choose Accent Color</h3>
-      <div class="color-grid">
-        {#each accentOptions as option}
-          <button
-            on:click={() => selectAccent(option)}
-            class="color-option"
-            class:selected={currentAccent.id === option.id}
-            style="background-color: {option.color};"
-            title={option.name}
-            aria-label={option.name}
-          ></button>
-        {/each}
+<div class="fab-container">
+  <!-- Settings Panel -->
+  {#if isSettingsOpen}
+    <div transition:fly={{ y: 20, duration: 250 }} class="settings-panel">
+      <!-- Theme Selector -->
+      <div class="setting-section">
+        <h3 class="panel-title">Theme</h3>
+        <div class="theme-grid">
+          {#each themes as theme (theme.id)}
+            <button
+              on:click={() => selectTheme(theme.id)}
+              class="theme-button"
+              class:selected={currentThemeId === theme.id}
+              title={theme.name}
+              aria-label={`Select ${theme.name} theme`}
+            >
+              <div class="theme-swatch">
+                <div class="swatch-color" style="background-color: {theme.variants.dark['--background']};"></div>
+                <div class="swatch-color" style="background-color: {theme.variants.dark['--primary']};"></div>
+                <div class="swatch-color" style="background-color: {theme.variants.light['--background']};"></div>
+                <div class="swatch-color" style="background-color: {theme.variants.light['--primary']};"></div>
+              </div>
+              <span class="theme-name">{theme.name}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Mode Toggle -->
+      <div class="setting-section">
+        <h3 class="panel-title">Mode</h3>
+        <div class="mode-toggle">
+          <i class="fas fa-sun"></i>
+          <label class="switch" aria-label="Toggle dark mode">
+            <input type="checkbox" checked={isDark} on:change={handleToggleChange}>
+            <span class="slider"></span>
+          </label>
+          <i class="fas fa-moon"></i>
+        </div>
       </div>
     </div>
   {/if}
 
-  <!-- Secondary Action Buttons -->
-  {#if isFabOpen}
-    <button
-      transition:fly={{ y: 20, duration: 250 }}
-      on:click={openAccentPicker}
-      class="fab-button secondary"
-      style="transform: translateY(-120%);"
-      aria-label="Choose accent color"
-      title="Choose accent color"
-    >
-      <i class="fas fa-palette"></i>
-    </button>
-    <button
-      transition:fly={{ y: 20, duration: 250 }}
-      on:click={toggleTheme}
-      class="fab-button secondary"
-      style="transform: translateY(-60%);"
-      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      {#if isDark}
-        <i class="fas fa-sun"></i>
-      {:else}
-        <i class="fas fa-moon"></i>
-      {/if}
-    </button>
-  {/if}
-
   <!-- Main FAB Button -->
-  <button on:click={toggleFab} class="fab-button main" aria-label="Open settings">
+  <button on:click={toggleSettings} class="fab-button main" aria-label="Open settings">
     {#if mounted}
-      <i class="fas fa-cog transition-transform duration-300" class:rotate-45={isFabOpen}></i>
+      <i class="fas fa-cog transition-transform duration-300" class:rotate-45={isSettingsOpen}></i>
     {:else}
+      <!-- Show a loading pulse before the component is fully mounted to prevent layout shift -->
       <div class="w-6 h-6 bg-current opacity-20 rounded-full animate-pulse"></div>
     {/if}
   </button>
@@ -182,7 +141,7 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-end;
   }
 
   .fab-button {
@@ -203,11 +162,11 @@
     background-color: var(--primary);
     color: var(--background);
     transform: scale(1.1);
-    box-shadow: 0 8px 25px var(--glow-primary);
+    box-shadow: 0 8px 25px -5px var(--primary);
   }
-  .fab-button:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px var(--primary);
+  .fab-button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .main {
@@ -218,72 +177,136 @@
     z-index: 2;
   }
 
-  .secondary {
-    position: absolute;
-    bottom: 0;
-    width: 48px;
-    height: 48px;
-    font-size: 1.25rem;
-    z-index: 1;
-  }
-
   .rotate-45 {
     transform: rotate(45deg);
   }
 
-  .accent-picker-panel {
+  .settings-panel {
     position: absolute;
     bottom: calc(100% + 1rem);
     right: 0;
-    width: 240px;
+    width: 280px;
     background-color: var(--card-bg);
-    border: 2px solid var(--border);
+    border: 1px solid var(--border);
     border-radius: 1rem;
     padding: 1rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
   .panel-title {
     font-size: 0.875rem;
     font-weight: 600;
-    color: var(--text);
-    margin-bottom: 0.75rem;
-    text-align: center;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
   }
 
-  .color-grid {
+  .theme-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
   }
 
-  .color-option {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+  .theme-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
     border: 2px solid transparent;
-    cursor: pointer;
+    background-color: var(--background);
     transition: all 0.2s ease;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit; /* Ensure button inherits the body font */
+  }
+  .theme-button:hover {
+    border-color: var(--secondary);
+  }
+  .theme-button.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary);
+  }
+
+  .theme-swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    transform: rotate(45deg);
+    border: 1px solid var(--border);
+  }
+  .swatch-color {
+    width: 100%;
+    height: 100%;
+  }
+
+  .theme-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--background);
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+  }
+  .mode-toggle i {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+  }
+
+  /* Modern Toggle Switch */
+  .switch {
     position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
   }
-  .color-option:hover {
-    transform: scale(1.1);
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
-  .color-option.selected {
-    border-color: var(--text);
-    box-shadow: 0 0 0 2px var(--card-bg);
-  }
-  .color-option.selected::after {
-    content: '✓';
+  .slider {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-weight: bold;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--secondary);
+    transition: 0.4s;
+    border-radius: 28px;
   }
-</style> 
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: var(--background);
+    transition: 0.4s;
+    border-radius: 50%;
+  }
+  input:checked + .slider {
+    background-color: var(--primary);
+  }
+  input:checked + .slider:before {
+    transform: translateX(22px);
+  }
+</style>
