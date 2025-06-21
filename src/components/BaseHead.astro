@@ -2,7 +2,7 @@
 // Import the tailwind.css file here so that it is included on
 // all pages through the use of the <BaseHead /> component.
 import '../styles/tailwind.css';
-import { SITE_TITLE } from '../consts';
+import { themes } from '../lib/themes';
 
 interface Props {
 	title: string;
@@ -10,9 +10,11 @@ interface Props {
 	image?: string;
 }
 
-const canonicalURL = new URL(Astro.url.pathname, Astro.site);
-
 const { title, description, image = '/headshot.webp' } = Astro.props;
+
+// Use Astro's global URL object directly. It's cleaner and avoids linter issues.
+const canonicalURL = Astro.url;
+const imageURL = new globalThis.URL(image, Astro.site ?? Astro.url).href;
 ---
 
 <!-- Global Metadata -->
@@ -26,8 +28,34 @@ const { title, description, image = '/headshot.webp' } = Astro.props;
 <link rel="preload" href="/fonts/atkinson-regular.woff" as="font" type="font/woff" crossorigin />
 <link rel="preload" href="/fonts/atkinson-bold.woff" as="font" type="font/woff" crossorigin />
 
+<!-- ** THEME INITIALIZATION SCRIPT (REFACTORED) ** -->
+<script is:inline set:html={`
+  const themes = ${JSON.stringify(themes)};
+
+  function applyTheme() {
+    const themeId = localStorage.getItem('theme-id') || 'nord';
+    let mode = localStorage.getItem('mode');
+
+    if (!mode) {
+      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    const theme = themes.find(t => t.id === themeId) || themes[0];
+    const variant = theme.variants[mode];
+
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+    document.documentElement.dataset.theme = themeId;
+
+    for (const [key, value] of Object.entries(variant)) {
+      document.documentElement.style.setProperty(key, value);
+    }
+  }
+
+  applyTheme();
+`} />
+
 <!-- Canonical URL -->
-<link rel="canonical" href={canonicalURL} />
+<link rel="canonical" href={canonicalURL.href} />
 
 <!-- Primary Meta Tags -->
 <title>{title}</title>
@@ -39,11 +67,11 @@ const { title, description, image = '/headshot.webp' } = Astro.props;
 <meta property="og:url" content={Astro.url} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
-<meta property="og:image" content={new URL(image, Astro.url)} />
+<meta property="og:image" content={imageURL} />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />
 <meta property="twitter:url" content={Astro.url} />
 <meta property="twitter:title" content={title} />
 <meta property="twitter:description" content={description} />
-<meta property="twitter:image" content={new URL(image, Astro.url)} />
+<meta property="twitter:image" content={imageURL} />
