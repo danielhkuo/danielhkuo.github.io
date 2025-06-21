@@ -39,7 +39,6 @@ export default {
         'card-bg': 'var(--card-bg)',
       },
       fontFamily: {
-        'lato': ['Lato', 'sans-serif'],
         'fira': ['Fira Code', 'monospace'],
       },
       animation: {

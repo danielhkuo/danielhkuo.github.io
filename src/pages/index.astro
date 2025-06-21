@@ -4,8 +4,7 @@ import Hero from '../components/Hero.astro';
 import NavButtons from '../components/NavButtons.astro';
 import ProjectCard from '../components/ProjectCard.astro';
 import ProjectModal from '../components/ProjectModal.astro';
-import ThemeToggle from '../components/ThemeToggle.svelte';
-import AccentPicker from '../components/AccentPicker.svelte';
+import SettingsFAB from '../components/SettingsFAB.svelte';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
 import { getCollection } from 'astro:content';
 import '../styles/tailwind.css';
@@ -20,15 +19,11 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 	<head>
 		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
 		<!-- External Resources -->
-		<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
 		<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
 	</head>
-	<body class="bg-background text-text font-lato min-h-screen flex justify-center">
-		<!-- Theme Toggle Button -->
-		<ThemeToggle client:load />
-		
-		<!-- Accent Color Picker -->
-		<AccentPicker client:load />
+	<body class="bg-background text-text min-h-screen flex justify-center">
+		<!-- Settings FAB -->
+		<SettingsFAB client:load />
 		
 		<div class="container w-full max-w-4xl px-5 py-8">
 			<div class="animate-fade-in-up">
@@ -52,7 +47,7 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 							tech={project.data.tech}
 							repoUrl={project.data.repoUrl}
 							emoji={project.data.emoji}
-							slug={project.id}
+							slug={project.slug}
 						/>
 					))}
 				</div>
@@ -75,3 +70,31 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 		))}
 	</body>
 </html>
+
+<script>
+	const DESKTOP_BREAKPOINT = 768;
+
+	document.addEventListener('DOMContentLoaded', () => {
+		const projectCards = document.querySelectorAll('.project');
+
+		projectCards.forEach(card => {
+			card.addEventListener('click', (event) => {
+				const href = (card as HTMLElement).dataset.href;
+				if (!href) return;
+
+				// On desktop, prevent navigation and open the modal instead.
+				if (window.innerWidth >= DESKTOP_BREAKPOINT) {
+					event.preventDefault(); // Good practice, though div has no default.
+					const slug = href.split('/')[2];
+					if (slug) {
+						const modalId = `#${slug}-modal`;
+						window.location.hash = modalId;
+					}
+				} else {
+					// On mobile, navigate to the project page.
+					window.location.href = href;
+				}
+			});
+		});
+	});
+</script>

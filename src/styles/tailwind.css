@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Font Definitions */
+@font-face {
+  font-family: 'Atkinson';
+  src: url('/fonts/atkinson-regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atkinson';
+  src: url('/fonts/atkinson-bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+}
+
 /* Root CSS Custom Properties for Theme Management */
 :root {
   /* Light Mode (Nord Snow Storm + Better Contrast) */
@@ -138,11 +153,12 @@ html.dark .text-text {
 
 /* Global styles */
 html {
+  font-size: clamp(16px, 1rem + 0.1vw, 18px);
   scroll-behavior: smooth;
 }
 
 body {
-  font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Atkinson', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--background);
   color: var(--text) !important;
   /* The animated gradient is applied in the @media block below to respect prefers-reduced-motion */

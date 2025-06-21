@@ -11,20 +11,17 @@ export interface Props {
 const { title, description, tech, repoUrl, emoji, slug } = Astro.props;
 ---
 
-<div 
-  class="project group bg-card-bg rounded-lg overflow-hidden cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-xl relative"
-  onclick={`window.location.hash = '#${slug}-modal'`}
-  role="button"
-  tabindex="0"
-  onkeydown={`if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.hash = '#${slug}-modal'; }`}
+<div
+  class="project group bg-card-bg rounded-lg overflow-hidden cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-xl relative flex flex-col"
+  data-href={`/projects/${slug}/`}
 >
-  <div class="p-6 h-full">
+  <div class="p-6 h-full flex flex-col">
     <h3 class="text-xl font-semibold text-primary mb-4 relative z-10">
       {emoji && <span class="mr-2">{emoji}</span>}
       {title}
     </h3>
     
-    <div class="project-details bg-background border border-card-bg rounded-md p-4 mt-4 font-mono text-sm relative z-10 text-text">
+    <div class="project-details bg-background border border-card-bg rounded-md p-4 mt-4 font-mono text-sm relative z-10 text-text flex-grow">
       <ul class="list-none p-0 m-0">
         <li class="relative pl-6 py-2 my-2 leading-relaxed border-b border-secondary last:border-b-0 odd:bg-accent/5 even:bg-secondary/5 text-text">
           <span class="absolute left-0 text-primary text-sm">▹</span>
@@ -53,4 +50,4 @@ const { title, description, tech, repoUrl, emoji, slug } = Astro.props;
   
   <!-- Hover overlay -->
   <div class="absolute inset-0 bg-primary opacity-0 transition-opacity duration-200 group-hover:opacity-5 pointer-events-none"></div>
-</div> 
+</div>
