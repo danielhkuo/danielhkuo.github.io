@@ -60,9 +60,17 @@
   border-color: var(--accent) !important;
 }
 
+.border-border {
+  border-color: var(--border);
+}
+
 /* Ensure proper text color inheritance */
 html.dark {
   color: var(--text) !important;
+}
+
+html.dark * {
+  color: inherit;
 }
 
 html.dark .text-text {
@@ -169,8 +177,10 @@ body {
 
   /* Enhanced Nord-themed hover effects */
   .social-item:hover {
+    box-shadow: 0 8px 25px var(--glow-primary), 0 0 20px var(--glow-accent) !important;
   }
 
   .project:hover {
+    box-shadow: 0 25px 50px -12px var(--glow-primary), 0 0 25px var(--glow-accent) !important;
   }
 }

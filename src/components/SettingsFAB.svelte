@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
   import { themes } from '../lib/themes';
   import type { ThemeVariant } from '../lib/themes';
 
@@ -66,7 +66,6 @@
   }
 
   // This function handles the change event from the toggle switch.
-  // It's more explicit than two-way binding and often preferred.
   function handleToggleChange(event: Event) {
     const target = event.target as HTMLInputElement;
     currentMode = target.checked ? 'dark' : 'light';
@@ -82,7 +81,7 @@
 <div class="fab-container">
   <!-- Settings Panel -->
   {#if isSettingsOpen}
-    <div transition:fly={{ y: 20, duration: 250 }} class="settings-panel">
+    <div transition:fade={{ duration: 200 }} class="settings-panel">
       <!-- Theme Selector -->
       <div class="setting-section">
         <h3 class="panel-title">Theme</h3>
@@ -136,8 +135,8 @@
 <style>
   .fab-container {
     position: fixed;
-    bottom: 1rem;
-    right: 1rem;
+    bottom: 1.5rem;
+    right: 1.5rem;
     z-index: 1000;
     display: flex;
     flex-direction: column;
@@ -149,20 +148,17 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    border: 2px solid var(--primary);
-    color: var(--primary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
     background-color: var(--card-bg);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
   }
   .fab-button:hover {
-    background-color: var(--primary);
-    color: var(--background);
-    transform: scale(1.1);
-    box-shadow: 0 8px 25px -5px var(--primary);
+    color: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 4px 15px -5px var(--primary);
   }
   .fab-button:focus-visible {
     outline: 2px solid var(--primary);
@@ -170,9 +166,9 @@
   }
 
   .main {
-    width: 56px;
-    height: 56px;
-    font-size: 1.5rem;
+    width: 48px;
+    height: 48px;
+    font-size: 1.25rem;
     position: relative;
     z-index: 2;
   }
@@ -183,16 +179,14 @@
 
   .settings-panel {
     position: absolute;
-    bottom: calc(100% + 1rem);
+    bottom: calc(100% + 0.75rem);
     right: 0;
     width: 280px;
     background-color: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 1rem;
+    border-radius: 0.75rem; /* rounded-lg */
     padding: 1rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     z-index: 3;
     display: flex;
     flex-direction: column;
@@ -206,6 +200,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 0.5rem;
+    font-family: var(--font-sans, sans-serif);
   }
 
   .theme-grid {
@@ -226,14 +221,14 @@
     transition: all 0.2s ease;
     cursor: pointer;
     color: var(--text);
-    font-family: inherit; /* Ensure button inherits the body font */
+    font-family: inherit;
   }
   .theme-button:hover {
     border-color: var(--secondary);
   }
   .theme-button.selected {
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
   }
 
   .theme-swatch {
