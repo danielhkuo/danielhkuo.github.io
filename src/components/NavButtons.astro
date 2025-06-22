@@ -2,45 +2,36 @@
 // NavButtons.astro - Navigation buttons component
 ---
 
-<div class="info-row flex flex-col sm:flex-row flex-wrap justify-center gap-4 py-8">
+<div class="info-row flex flex-col sm:flex-row flex-wrap justify-center items-center gap-x-8 gap-y-4 py-8">
   <a 
-    class="info-button group relative text-text no-underline text-center w-full sm:w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="mailto:danielhkuo@rice.edu"
   >
-    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
-      Contact Me
-    </span>
-    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
-    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+    Contact Me
+    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
   </a>
   
   <a 
-    class="info-button group relative text-text no-underline text-center w-full sm:w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="#resume-modal"
   >
-    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
-      Resume
-    </span>
-    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
-    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+    Resume
+    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
   </a>
   
   <a 
-    class="info-button group relative text-text no-underline text-center w-full sm:w-48 h-12 leading-[3rem] cursor-pointer transition-all duration-300 mx-2 mb-4 overflow-hidden"
+    class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="#about-modal"
   >
-    <span class="relative z-10 transition-all duration-300 group-hover:tracking-widest">
-      About Me
-    </span>
-    <div class="absolute inset-0 bg-card-bg transition-all duration-300 group-hover:scale-x-[0.1] group-hover:opacity-0"></div>
-    <div class="absolute inset-0 border-t border-b border-primary opacity-0 scale-x-[0.1] transition-all duration-300 group-hover:opacity-100 group-hover:scale-x-100"></div>
+    About Me
+    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
   </a>
 </div>
 
 <!-- Social Media Row -->
 <div class="social-row text-center py-6 md:py-4 mt-3 md:mt-2">
   <a 
-    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
     href="https://www.instagram.com/danielhankuo/" 
     aria-label="Daniel Kuo on Instagram" 
     target="_blank" 
@@ -53,7 +44,7 @@
   </a>
   
   <a 
-    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
     href="https://linkedin.com/in/danielhkuo" 
     aria-label="Daniel Kuo on LinkedIn" 
     target="_blank" 
@@ -66,7 +57,7 @@
   </a>
   
   <a 
-    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
     href="https://twitter.com" 
     aria-label="Daniel Kuo on Twitter" 
     target="_blank" 
@@ -79,7 +70,7 @@
   </a>
   
   <a 
-    class="social-item group relative inline-block w-10 h-10 leading-10 mx-2 text-text bg-card-bg border-2 border-primary rounded-full text-center no-underline transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg hover:bg-primary hover:text-background"
+    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
     href="https://github.com/danielhkuo" 
     aria-label="Daniel Kuo on GitHub" 
     target="_blank" 
@@ -90,4 +81,4 @@
       GitHub
     </span>
   </a>
-</div> 
+</div>
