@@ -2,7 +2,9 @@
 // Import the tailwind.css file here so that it is included on
 // all pages through the use of the <BaseHead /> component.
 import '../styles/tailwind.css';
-import { themes } from '../lib/themes';
+// Import Carbon Design System CSS for dynamic theming
+import 'carbon-components-svelte/css/all.css';
+import { themes, applyCarbonTokens, createThemeTokenMapping, getThemeVariant } from '../lib/themes';
 
 interface Props {
 	title: string;
@@ -30,9 +32,38 @@ const imageURL = new globalThis.URL(image, Astro.site ?? Astro.url).href;
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
 
 
-<!-- ** THEME INITIALIZATION SCRIPT (REFACTORED) ** -->
+<!-- ** THEME INITIALIZATION SCRIPT (REFACTORED WITH CARBON SUPPORT) ** -->
 <script is:inline set:html={`
   const themes = ${JSON.stringify(themes)};
+
+  function applyCarbonTokens(variant) {
+    if (typeof document === 'undefined') return;
+    
+    // Set the Carbon theme attribute on the document element
+    document.documentElement.setAttribute('data-carbon-theme', variant.carbonMapping.carbonTheme);
+    
+    // Apply custom Carbon token overrides
+    for (const [token, value] of Object.entries(variant.carbonMapping.customOverrides)) {
+      document.documentElement.style.setProperty(token, value);
+    }
+  }
+
+  function createThemeTokenMapping(variant) {
+    const customTokens = {};
+    
+    // Copy custom theme variables
+    for (const [key, value] of Object.entries(variant)) {
+      if (key !== 'carbonMapping' && typeof value === 'string') {
+        customTokens[key] = value;
+      }
+    }
+    
+    // Merge with Carbon token overrides
+    return {
+      ...customTokens,
+      ...variant.carbonMapping.customOverrides
+    };
+  }
 
   function applyTheme() {
     const themeId = localStorage.getItem('theme-id') || 'nord';
@@ -45,12 +76,18 @@ const imageURL = new globalThis.URL(image, Astro.site ?? Astro.url).href;
     const theme = themes.find(t => t.id === themeId) || themes[0];
     const variant = theme.variants[mode];
 
+    // Set traditional classes and attributes
     document.documentElement.classList.toggle('dark', mode === 'dark');
     document.documentElement.dataset.theme = themeId;
 
-    for (const [key, value] of Object.entries(variant)) {
+    // Apply both custom CSS variables and Carbon design tokens
+    const allTokens = createThemeTokenMapping(variant);
+    for (const [key, value] of Object.entries(allTokens)) {
       document.documentElement.style.setProperty(key, value);
     }
+
+    // Apply Carbon-specific theme attribute
+    applyCarbonTokens(variant);
   }
 
   applyTheme();

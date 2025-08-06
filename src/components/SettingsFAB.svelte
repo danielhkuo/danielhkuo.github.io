@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { themes } from '../lib/themes';
-  import type { ThemeVariant } from '../lib/themes';
+  import { themes, applyCarbonTokens, createThemeTokenMapping, getThemeVariant } from '../lib/themes';
+  import type { CarbonThemeVariant } from '../lib/themes';
 
   let isSettingsOpen = false;
   let mounted = false;
@@ -14,15 +14,15 @@
   /**
    * Applies the selected theme and mode by setting CSS custom properties
    * on the root <html> element. This is our single source of truth for styling.
-   * It also manages the `.dark` class for Tailwind CSS compatibility.
+   * It also manages the `.dark` class for Tailwind CSS compatibility and
+   * applies Carbon design tokens.
    */
   function applyThemeAndMode() {
     // Guard against running in a non-browser environment (SSR)
     if (typeof document === 'undefined') return;
 
-    // Find the full theme object, or fall back to the first one
-    const theme = themes.find(t => t.id === currentThemeId) || themes[0];
-    const variant: ThemeVariant = theme.variants[currentMode];
+    // Get the theme variant with Carbon mappings
+    const variant: CarbonThemeVariant = getThemeVariant(currentThemeId, currentMode);
 
     // Set the .dark class for any Tailwind CSS dark mode selectors
     document.documentElement.classList.toggle('dark', currentMode === 'dark');
@@ -30,10 +30,14 @@
     // Set the data-theme attribute for reference or CSS targeting if needed
     document.documentElement.dataset.theme = currentThemeId;
 
-    // Programmatically set all CSS variables from the theme variant object
-    for (const [key, value] of Object.entries(variant)) {
+    // Apply both custom CSS variables and Carbon design tokens
+    const allTokens = createThemeTokenMapping(variant);
+    for (const [key, value] of Object.entries(allTokens)) {
       document.documentElement.style.setProperty(key, value);
     }
+
+    // Apply Carbon-specific theme configuration
+    applyCarbonTokens(variant);
   }
 
   // onMount runs after the component is added to the DOM

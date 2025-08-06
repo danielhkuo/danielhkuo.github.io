@@ -1,84 +1,41 @@
 ---
 // NavButtons.astro - Navigation buttons component
+import CarbonSocialLinks from "./CarbonSocialLinks.svelte";
 ---
 
-<div class="info-row flex flex-col sm:flex-row flex-wrap justify-center items-center gap-x-8 gap-y-4 py-8">
-  <a 
+<div
+  class="info-row flex flex-col sm:flex-row flex-wrap justify-center items-center gap-x-8 gap-y-4 py-8"
+>
+  <a
     class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="mailto:danielhkuo@rice.edu"
   >
     Contact Me
-    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
+    <span
+      class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"
+    ></span>
   </a>
-  
-  <a 
+
+  <a
     class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="#resume-modal"
   >
     Resume
-    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
+    <span
+      class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"
+    ></span>
   </a>
-  
-  <a 
+
+  <a
     class="info-button group relative text-text no-underline text-center cursor-pointer transition-colors duration-300 font-serif-heading text-lg py-2 hover:text-primary"
     href="#about-modal"
   >
     About Me
-    <span class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"></span>
+    <span
+      class="absolute bottom-0 left-0 w-full h-[2px] bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"
+    ></span>
   </a>
 </div>
 
-<!-- Social Media Row -->
-<div class="social-row text-center py-6 md:py-4 mt-3 md:mt-2">
-  <a 
-    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
-    href="https://www.instagram.com/danielhankuo/" 
-    aria-label="Daniel Kuo on Instagram" 
-    target="_blank" 
-    rel="noopener noreferrer"
-  >
-    <i class="fab fa-instagram" aria-hidden="true"></i>
-    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
-      Instagram
-    </span>
-  </a>
-  
-  <a 
-    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
-    href="https://linkedin.com/in/danielhkuo" 
-    aria-label="Daniel Kuo on LinkedIn" 
-    target="_blank" 
-    rel="noopener noreferrer"
-  >
-    <i class="fab fa-linkedin" aria-hidden="true"></i>
-    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
-      LinkedIn
-    </span>
-  </a>
-  
-  <a 
-    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
-    href="https://twitter.com" 
-    aria-label="Daniel Kuo on Twitter" 
-    target="_blank" 
-    rel="noopener noreferrer"
-  >
-    <i class="fab fa-twitter" aria-hidden="true"></i>
-    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
-      Twitter
-    </span>
-  </a>
-  
-  <a 
-    class="social-item group relative inline-flex items-center justify-center w-10 h-10 mx-2 text-primary bg-transparent border-2 border-primary rounded-full no-underline transition-all duration-300 hover:bg-primary hover:text-background"
-    href="https://github.com/danielhkuo" 
-    aria-label="Daniel Kuo on GitHub" 
-    target="_blank" 
-    rel="noopener noreferrer"
-  >
-    <i class="fab fa-github" aria-hidden="true"></i>
-    <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-sm bg-card-bg text-text invisible opacity-0 transition-all duration-300 whitespace-nowrap pointer-events-none shadow-md group-hover:visible group-hover:opacity-100 group-hover:bottom-12">
-      GitHub
-    </span>
-  </a>
-</div>
+<!-- Social Media Row - Carbon Components -->
+<CarbonSocialLinks client:load />
