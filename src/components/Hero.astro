@@ -1,113 +1,158 @@
 ---
-// Hero.astro - Main header/bio section component
+// Hero.astro - Main header/bio section component migrated to Carbon Design System
+// Using Carbon CSS classes instead of Svelte components for better Astro compatibility
 ---
 
-<section class="header bg-card-bg rounded-2xl p-8 shadow-lg mb-10 animate-float">
-  <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center">
-    <!-- Header Info -->
-    <div class="flex-1 lg:pr-8 mb-6 lg:mb-0 text-center lg:text-left">
-      <h1 class="text-4xl lg:text-5xl font-bold text-primary mb-3">Daniel Kuo</h1>
-      <p class="text-lg lg:text-xl text-accent mb-3">Computer Science | Developer | Tech Enthusiast</p>
-      <p class="italic text-text-secondary mb-4">B.S. Computer Science @ Rice University</p>
-      
-      <!-- Skills Marquee Container -->
-      <div class="skills-container w-full max-w-md mx-auto lg:mx-0 overflow-hidden relative p-2 bg-card-bg rounded-lg">
-        <!-- First row - moving right -->
-        <div class="skills-slider flex w-fit animate-scroll-right">
-          <div class="flex gap-2 px-1 py-1">
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-code mr-2 text-primary"></i>Full-Stack
+<section
+  class="hero-section bg-card-bg rounded-2xl p-8 shadow-lg mb-10 animate-float"
+>
+  <!-- Carbon Grid System using CSS classes -->
+  <div class="cds--grid cds--grid--full-width">
+    <div class="cds--row">
+      <!-- Header Info -->
+      <div class="cds--col-lg-8 cds--col-md-6 cds--col-sm-4 hero-content">
+        <div class="hero-text-content text-center lg:text-left">
+          <h1
+            class="hero-title text-4xl lg:text-5xl font-bold text-primary mb-3"
+          >
+            Daniel Kuo
+          </h1>
+          <p class="hero-subtitle text-lg lg:text-xl text-accent mb-3">
+            Computer Science | Developer | Tech Enthusiast
+          </p>
+          <p class="hero-education italic text-text-secondary mb-4">
+            B.S. Computer Science @ Rice University
+          </p>
+
+          <!-- Skills Marquee Container -->
+          <div
+            class="skills-container w-full max-w-2xl mx-auto lg:mx-0 overflow-hidden relative p-4 bg-card-bg rounded-lg"
+          >
+            <!-- First row - moving right -->
+            <div class="skills-slider flex w-fit animate-scroll-right">
+              <div class="flex gap-3 px-2 py-2">
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-code mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Full-Stack</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-tasks mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Project Management</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-robot mr-2 text-primary"></i>
+                  <span class="cds--tag__label">AI & ML</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-java mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Java</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-python mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Python</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-moon mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Lua</span>
+                </span>
+              </div>
+              <!-- Duplicate for seamless loop -->
+              <div class="flex gap-3 px-2 py-2">
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-code mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Full-Stack</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-tasks mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Project Management</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-robot mr-2 text-primary"></i>
+                  <span class="cds--tag__label">AI & ML</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-java mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Java</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-python mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Python</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-moon mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Lua</span>
+                </span>
+              </div>
             </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-tasks mr-2 text-primary"></i>Project Management
+
+            <!-- Second row - moving left -->
+            <div class="skills-slider flex w-fit animate-scroll-left mt-3">
+              <div class="flex gap-3 px-2 py-2">
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-bullseye mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Dart</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-cuttlefish mr-2 text-primary"></i>
+                  <span class="cds--tag__label">C#</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-js mr-2 text-primary"></i>
+                  <span class="cds--tag__label">JavaScript</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-html5 mr-2 text-primary"></i>
+                  <span class="cds--tag__label">HTML/CSS</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-database mr-2 text-primary"></i>
+                  <span class="cds--tag__label">SQL</span>
+                </span>
+              </div>
+              <!-- Duplicate for seamless loop -->
+              <div class="flex gap-3 px-2 py-2">
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-bullseye mr-2 text-primary"></i>
+                  <span class="cds--tag__label">Dart</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-cuttlefish mr-2 text-primary"></i>
+                  <span class="cds--tag__label">C#</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-js mr-2 text-primary"></i>
+                  <span class="cds--tag__label">JavaScript</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fab fa-html5 mr-2 text-primary"></i>
+                  <span class="cds--tag__label">HTML/CSS</span>
+                </span>
+                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag">
+                  <i class="fas fa-database mr-2 text-primary"></i>
+                  <span class="cds--tag__label">SQL</span>
+                </span>
+              </div>
             </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-robot mr-2 text-primary"></i>AI & ML
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-java mr-2 text-primary"></i>Java
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-python mr-2 text-primary"></i>Python
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-moon mr-2 text-primary"></i>Lua
-            </div>
-          </div>
-          <!-- Duplicate for seamless loop -->
-          <div class="flex gap-2 px-1 py-1">
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-code mr-2 text-primary"></i>Full-Stack
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-tasks mr-2 text-primary"></i>Project Management
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-robot mr-2 text-primary"></i>AI & ML
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-java mr-2 text-primary"></i>Java
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-python mr-2 text-primary"></i>Python
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-moon mr-2 text-primary"></i>Lua
+
+            <!-- Fade overlay -->
+            <div
+              class="skills-fade absolute inset-0 pointer-events-none bg-gradient-to-r from-card-bg via-transparent to-card-bg"
+            >
             </div>
           </div>
         </div>
-        
-        <!-- Second row - moving left -->
-        <div class="skills-slider flex w-fit animate-scroll-left mt-2">
-          <div class="flex gap-2 px-1 py-1">
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-bullseye mr-2 text-primary"></i>Dart
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-cuttlefish mr-2 text-primary"></i>C#
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-js mr-2 text-primary"></i>JavaScript
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-html5 mr-2 text-primary"></i>HTML/CSS
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-database mr-2 text-primary"></i>SQL
-            </div>
-          </div>
-          <!-- Duplicate for seamless loop -->
-          <div class="flex gap-2 px-1 py-1">
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-bullseye mr-2 text-primary"></i>Dart
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-cuttlefish mr-2 text-primary"></i>C#
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-js mr-2 text-primary"></i>JavaScript
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fab fa-html5 mr-2 text-primary"></i>HTML/CSS
-            </div>
-            <div class="skill-tag flex items-center text-text text-sm bg-background rounded-md px-3 py-2 whitespace-nowrap shadow-sm">
-              <i class="fas fa-database mr-2 text-primary"></i>SQL
-            </div>
-          </div>
-        </div>
-        
-        <!-- Fade overlay -->
-        <div class="skills-fade absolute inset-0 pointer-events-none bg-gradient-to-r from-card-bg via-transparent to-card-bg"></div>
       </div>
-    </div>
-    
-    <!-- Headshot -->
-    <div class="flex-shrink-0 text-center">
-      <img 
-        alt="Daniel Kuo headshot" 
-        class="headshot w-36 h-36 lg:w-44 lg:h-44 rounded-full object-cover border-4 border-primary shadow-lg mx-auto" 
-        src="/headshot.webp"
-      />
+
+      <!-- Headshot -->
+      <div class="cds--col-lg-4 cds--col-md-2 cds--col-sm-4 hero-image">
+        <div class="headshot-container text-center">
+          <img
+            alt="Daniel Kuo headshot"
+            class="headshot w-36 h-36 lg:w-44 lg:h-44 rounded-full object-cover border-4 border-primary shadow-lg mx-auto"
+            src="/headshot.webp"
+          />
+        </div>
+      </div>
     </div>
   </div>
 </section>
