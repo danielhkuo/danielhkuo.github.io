@@ -13,8 +13,21 @@ export default [
   {
     ignores: ['dist/**', '.astro/**'],
   },
-  // Base JS recommended rules
-  js.configs.recommended,
+  // Base JS recommended rules with browser globals
+  {
+    ...js.configs.recommended,
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        MouseEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        Event: 'readonly',
+        HTMLElement: 'readonly',
+      },
+    },
+  },
 
   // TypeScript files
   {
@@ -25,6 +38,15 @@ export default [
         project: './tsconfig.json',
         sourceType: 'module',
         ecmaVersion: 'latest',
+      },
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        MouseEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        Event: 'readonly',
+        HTMLElement: 'readonly',
       },
     },
     plugins: {
@@ -67,6 +89,15 @@ export default [
       parser: svelteParser,
       parserOptions: {
         parser: tsParser,
+      },
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        MouseEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        Event: 'readonly',
+        HTMLElement: 'readonly',
       },
     },
     plugins: {

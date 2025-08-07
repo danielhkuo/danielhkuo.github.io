@@ -2,12 +2,11 @@
 import BaseHead from '../components/BaseHead.astro';
 import Hero from '../components/Hero.astro';
 import NavButtons from '../components/NavButtons.astro';
-import ProjectCard from '../components/ProjectCard.astro';
-import ProjectModal from '../components/ProjectModal.astro';
+import CarbonProjectCard from '../components/CarbonProjectCard.svelte';
+import CarbonProjectModalWrapper from '../components/CarbonProjectModalWrapper.astro';
 import SettingsFAB from '../components/SettingsFAB.svelte';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
 import { getCollection } from 'astro:content';
-import '../styles/tailwind.css';
 
 // Fetch all projects and filter for featured ones
 const allProjects = await getCollection('projects');
@@ -21,7 +20,7 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 		<!-- External Resources -->
 		<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
 	</head>
-	<body class="bg-background text-text min-h-screen flex justify-center">
+	<body>
 		<!-- Settings FAB -->
 		<SettingsFAB client:load />
 		
@@ -30,7 +29,6 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 				<!-- Hero Section -->
 				<Hero />
 			</div>
-			
 			<div class="animate-fade-in-up" style="animation-delay: 200ms;">
 				<!-- Navigation Buttons -->
 				<NavButtons />
@@ -38,16 +36,16 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 			
 			<!-- Projects Section -->
 			<section class="projects-section mt-16 animate-fade-in-up" style="animation-delay: 400ms;">
-				<h2 class="text-2xl font-bold text-secondary text-center mb-8">Featured Projects</h2>
+				<h2 class="text-2xl font-bold text- text-center mb-8">Featured Projects</h2>
 				<div class="projects grid grid-cols-1 md:grid-cols-2 gap-6">
 					{featuredProjects.map((project) => (
-						<ProjectCard
+						<CarbonProjectCard
 							title={project.data.title}
 							description={project.data.description}
 							tech={project.data.tech}
 							repoUrl={project.data.repoUrl}
-							emoji={project.data.emoji}
 							slug={project.slug}
+							client:load
 						/>
 					))}
 				</div>
@@ -66,35 +64,9 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 
 		<!-- Project Modals -->
 		{featuredProjects.map(project => (
-			<ProjectModal project={project} />
+			<CarbonProjectModalWrapper project={project} />
 		))}
 	</body>
 </html>
 
-<script>
-	const DESKTOP_BREAKPOINT = 768;
 
-	document.addEventListener('DOMContentLoaded', () => {
-		const projectCards = document.querySelectorAll('.project');
-
-		projectCards.forEach(card => {
-			card.addEventListener('click', (event) => {
-				const href = (card as HTMLElement).dataset.href;
-				if (!href) return;
-
-				// On desktop, prevent navigation and open the modal instead.
-				if (window.innerWidth >= DESKTOP_BREAKPOINT) {
-					event.preventDefault(); // Good practice, though div has no default.
-					const slug = href.split('/')[2];
-					if (slug) {
-						const modalId = `#${slug}-modal`;
-						window.location.hash = modalId;
-					}
-				} else {
-					// On mobile, navigate to the project page.
-					window.location.href = href;
-				}
-			});
-		});
-	});
-</script>

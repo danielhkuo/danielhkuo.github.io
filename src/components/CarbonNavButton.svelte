@@ -26,7 +26,7 @@
     background: transparent !important;
     border: none !important;
     color: var(--cds-text-primary) !important;
-    font-family: 'Atkinson', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     font-size: 1.125rem !important; /* text-lg equivalent */
     font-weight: normal !important;
     padding: 0.5rem 0 !important; /* py-2 equivalent */

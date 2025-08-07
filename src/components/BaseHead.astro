@@ -1,10 +1,8 @@
 ---
-// Import the tailwind.css file here so that it is included on
+// Import the global.css file here so that it is included on
 // all pages through the use of the <BaseHead /> component.
-import '../styles/tailwind.css';
-// Import Carbon Design System CSS for dynamic theming
-import 'carbon-components-svelte/css/all.css';
-import { themes, applyCarbonTokens, createThemeTokenMapping, getThemeVariant } from '../lib/themes';
+import '../styles/global.css';
+import { themes } from '../lib/themes';
 
 interface Props {
 	title: string;
@@ -26,10 +24,75 @@ const imageURL = new globalThis.URL(image, Astro.site ?? Astro.url).href;
 <link rel="sitemap" href="/sitemap-index.xml" />
 <meta name="generator" content={Astro.generator} />
 
-<!-- Font preloads for scholarly aesthetic -->
+<!-- IBM Plex Sans font import -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+
+<!-- Critical styles for animations and fonts -->
+<style>
+  /* Global body styles */
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--background);
+    color: var(--text) !important;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Critical animations */
+  @media (prefers-reduced-motion: no-preference) {
+    body {
+      background: linear-gradient(
+        -45deg, 
+        var(--background), 
+        var(--card-bg), 
+        var(--background)
+      );
+      background-size: 400% 400%;
+      animation: gradient-animation 25s ease infinite;
+    }
+
+    .animate-float {
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .animate-fade-in-up {
+      animation: fade-in-up 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+      opacity: 0;
+    }
+
+
+
+    @keyframes gradient-animation {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+      100% { transform: translateY(0px); }
+    }
+
+    @keyframes fade-in-up {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+
+  }
+</style>
 
 
 <!-- ** THEME INITIALIZATION SCRIPT (REFACTORED WITH CARBON SUPPORT) ** -->
