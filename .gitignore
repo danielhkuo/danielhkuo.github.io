@@ -23,6 +23,8 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+.vscode/
+.kiro/
 
 # Remove old website files
 old_index.html

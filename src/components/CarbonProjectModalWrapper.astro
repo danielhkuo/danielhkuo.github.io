@@ -1,0 +1,20 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { markdown } from '@astropub/md';
+import CarbonProjectModal from './CarbonProjectModal.svelte';
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+}
+
+const { project } = Astro.props;
+
+// Render the markdown content to HTML
+const renderedContent = await markdown(project.body || '');
+---
+
+<CarbonProjectModal 
+  project={project} 
+  renderedContent={renderedContent}
+  client:load 
+/>
