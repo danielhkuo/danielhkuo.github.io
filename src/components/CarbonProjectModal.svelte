@@ -1,13 +1,45 @@
 <script lang="ts">
-  import { Modal, Button, Tag } from 'carbon-components-svelte';
-  import type { CollectionEntry } from 'astro:content';
-  import { onMount } from 'svelte';
+  import { Modal, Tag } from "carbon-components-svelte";
+  import type { CollectionEntry } from "astro:content";
+  import { onMount, tick } from "svelte"; // FIX: Import tick
 
-  export let project: CollectionEntry<'projects'>;
+  export let project: CollectionEntry<"projects">;
   export let renderedContent: string;
   export let isOpen = false;
 
   let scrollProgress = 0;
+
+  const MODAL_SEL = ".cds--modal, .bx--modal";
+  const CONTAINER_SEL = ".cds--modal-container, .bx--modal-container";
+
+  async function syncModalTheme() {
+    if (typeof document === "undefined") return;
+    await tick();
+    const modal = document.querySelector(MODAL_SEL) as HTMLElement | null;
+    const container = document.querySelector(
+      CONTAINER_SEL
+    ) as HTMLElement | null;
+    if (!modal || !container) return;
+    const currentTheme =
+      document.documentElement.getAttribute("data-carbon-theme") || "g100";
+    [modal, container].forEach((el) =>
+      el.setAttribute("data-carbon-theme", currentTheme)
+    );
+    const computed = getComputedStyle(document.documentElement);
+    // copy all Carbon vars
+    for (const name of Array.from(computed)) {
+      if (name.startsWith("--cds-")) {
+        const value = computed.getPropertyValue(name);
+        modal.style.setProperty(name, value);
+        container.style.setProperty(name, value);
+      }
+    }
+  }
+
+  // Keep the modal synced whenever it opens
+  $: if (isOpen) {
+    syncModalTheme();
+  }
 
   // Handle modal opening via URL hash
   onMount(() => {
@@ -20,13 +52,31 @@
     // Check initial hash
     handleHashChange();
 
-    // Listen for hash changes and keyboard events
-    window.addEventListener('hashchange', handleHashChange);
-    window.addEventListener('keydown', handleKeyDown);
+    // Listen for hash changes, keyboard events, and theme changes
+    window.addEventListener("hashchange", handleHashChange);
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Listen for theme attribute changes
+    const observer = new MutationObserver((m) => {
+      if (
+        m.some(
+          (x) =>
+            x.type === "attributes" && x.attributeName === "data-carbon-theme"
+        )
+      ) {
+        if (isOpen) syncModalTheme();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-carbon-theme"],
+    });
 
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("keydown", handleKeyDown);
+      observer.disconnect();
     };
   });
 
@@ -34,15 +84,23 @@
     isOpen = false;
     // Clear the hash to close the modal
     if (window.location.hash === `#${project.slug}-modal`) {
-      window.history.pushState('', document.title, window.location.pathname + window.location.search);
+      window.history.pushState(
+        "",
+        document.title,
+        window.location.pathname + window.location.search
+      );
     }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
     // Close modal on Escape key
-    if (event.key === 'Escape' && isOpen) {
+    if (event.key === "Escape" && isOpen) {
       handleClose();
     }
+  }
+
+  function handleRepoClick() {
+    window.open(project.data.repoUrl, "_blank", "noopener,noreferrer");
   }
 
   function handleScroll(event: Event) {
@@ -51,27 +109,35 @@
     const scrollHeight = target.scrollHeight - target.clientHeight;
     scrollProgress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
   }
-
-
 </script>
 
 <Modal
   bind:open={isOpen}
-  modalHeading={project.data.title}
   size="lg"
   on:close={handleClose}
   hasScrollingContent={true}
-  class="carbon-project-modal"
   passiveModal={true}
+  class="carbon-project-modal"
+  primaryButtonText="Close"
+  secondaryButtonText="View Repository"
+  on:submit={handleClose}
+  on:click:button--secondary={handleRepoClick}
 >
-  <div slot="heading" class="modal-header">
-    <!-- Scroll Progress Indicator -->
+  <h3 slot="heading" class="modal-heading-link">
+    <a
+      href={project.data.repoUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      on:click|stopPropagation
+    >
+      {project.data.title}
+    </a>
+  </h3>
+  <div class="modal-content" on:scroll={handleScroll}>
+    <!-- Scroll Progress Indicator - MOVED HERE -->
     <div class="scroll-progress">
       <div class="scroll-progress-bar" style="width: {scrollProgress}%"></div>
     </div>
-  </div>
-
-  <div class="modal-content" on:scroll={handleScroll}>
     <!-- Project Header Section - Carbon Tile Style -->
     <div class="project-tile">
       <div class="project-tile-content">
@@ -79,13 +145,17 @@
           {#if project.data.emoji}
             <span class="project-emoji">{project.data.emoji}</span>
           {/if}
-          <h1 class="project-title cds--type-productive-heading-04">{project.data.title}</h1>
+          <h1 class="project-title cds--type-productive-heading-04">
+            {project.data.title}
+          </h1>
         </div>
-        
-        <p class="project-description cds--type-body-long-01">{project.data.description}</p>
-        
+
+        <p class="project-description cds--type-body-long-01">
+          {project.data.description}
+        </p>
+
         <hr class="project-divider" />
-        
+
         <div class="project-footer">
           <div class="tech-stack">
             <span class="tech-label cds--type-body-short-01">
@@ -97,20 +167,6 @@
               {/each}
             </div>
           </div>
-          
-          <Button
-            href={project.data.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            kind="tertiary"
-            size="small"
-            class="repo-button"
-          >
-            <svg slot="icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            View Repository
-          </Button>
         </div>
       </div>
     </div>
@@ -123,50 +179,88 @@
 </Modal>
 
 <style>
-  :global(.carbon-project-modal .cds--modal-container) {
+  /* FIX: Target the modal container directly WITHOUT the wrapper class. */
+  /* This ensures our custom layout overrides apply. */
+  :global(.cds--modal-container) {
     max-width: 1100px;
     width: 100%;
     height: 90vh;
     max-height: 90vh;
+    /* Note: We no longer need to force background-color here, as the programmatic theme injection will handle it correctly via Carbon's own styles. */
   }
 
-  :global(.carbon-project-modal .cds--modal-content) {
+  /* Let Carbon control the backdrop via --cds-overlay */
+
+  /* Border styling for modal container */
+  :global(:where(.cds--modal-container, .bx--modal-container)) {
+    border: 1px solid var(--cds-border-subtle);
+  }
+
+  /* FIX: Ensure the close button icon inherits the correct theme color. */
+  :global(.cds--modal-close .cds--modal-close__icon) {
+    fill: var(--cds-icon-primary);
+  }
+
+  :global(.cds--modal-content) {
     padding: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
   }
 
-  :global(.carbon-project-modal .cds--modal-header) {
+  :global(.cds--modal-header) {
     position: relative;
     padding: var(--cds-spacing-05);
     border-bottom: 1px solid var(--cds-border-subtle);
   }
 
-  .modal-header {
-    position: relative;
-    width: 100%;
+  .modal-heading-link {
+    margin: 0;
+    font-size: var(--cds-productive-heading-04-font-size);
+    font-weight: var(--cds-productive-heading-04-font-weight);
+    line-height: var(--cds-productive-heading-04-line-height);
+  }
+
+  .modal-heading-link a {
+    color: var(--cds-text-primary);
+    text-decoration: none;
+    transition: color var(--cds-productive-standard, 0.15s) ease;
+  }
+
+  .modal-heading-link a:hover {
+    color: var(--cds-link-primary);
+    text-decoration: underline;
+  }
+
+  .modal-heading-link a:focus {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
   }
 
   .scroll-progress {
-    position: absolute;
-    bottom: 0;
+    position: sticky;
+    top: -1px; /* Position slightly above to hide behind the header's border */
     left: 0;
     right: 0;
     height: 4px;
     background: var(--cds-layer-accent);
     overflow: hidden;
+    z-index: 10; /* Ensure it appears above content but below the modal header */
   }
 
   .scroll-progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, var(--cds-interactive), var(--cds-focus));
+    background: linear-gradient(
+      90deg,
+      var(--cds-interactive),
+      var(--cds-focus)
+    );
     transition: width 0.1s ease;
     position: relative;
   }
 
   .scroll-progress-bar::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     right: -10px;
@@ -177,11 +271,17 @@
   }
 
   @keyframes shimmer {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 1; }
+    0%,
+    100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .modal-content {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -194,9 +294,11 @@
     background-color: var(--cds-layer);
     border: 1px solid var(--cds-border-subtle);
     border-radius: var(--cds-border-radius, 0.5rem);
+    margin-top: var(--cds-spacing-04);
     margin-bottom: var(--cds-spacing-06);
     box-shadow: var(--cds-shadow);
-    transition: all var(--cds-productive-standard, 0.15s) cubic-bezier(0.2, 0, 0.38, 0.9);
+    transition: all var(--cds-productive-standard, 0.15s)
+      cubic-bezier(0.2, 0, 0.38, 0.9);
     position: relative;
     overflow: hidden;
   }
@@ -271,16 +373,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--cds-spacing-02);
-  }
-
-  :global(.repo-button) {
-    align-self: flex-start;
-    margin-top: var(--cds-spacing-02);
-  }
-
-  :global(.repo-button svg) {
-    width: 16px;
-    height: 16px;
   }
 
   .prose {
@@ -359,7 +451,8 @@
     color: var(--cds-text-primary);
     padding: 0.125rem 0.25rem;
     border-radius: 0.25rem;
-    font-family: 'IBM Plex Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    font-family: "IBM Plex Mono", "Menlo", "Monaco", "Consolas",
+      "Liberation Mono", "Courier New", monospace;
     font-size: 0.875em;
   }
 
@@ -389,21 +482,29 @@
   }
 
   .modal-content::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, var(--cds-interactive), var(--cds-focus));
+    background: linear-gradient(
+      180deg,
+      var(--cds-interactive),
+      var(--cds-focus)
+    );
     border-radius: 6px;
     border: 2px solid var(--cds-layer);
     transition: all 0.3s ease;
   }
 
   .modal-content::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, var(--cds-focus), var(--cds-interactive));
+    background: linear-gradient(
+      180deg,
+      var(--cds-focus),
+      var(--cds-interactive)
+    );
     transform: scale(1.1);
     box-shadow: 0 0 10px rgba(var(--cds-interactive-rgb, 0, 123, 255), 0.3);
   }
 
   /* Responsive Design */
   @media (max-width: 640px) {
-    :global(.carbon-project-modal .cds--modal-container) {
+    :global(.cds--modal-container) {
       width: 100vw;
       height: 100vh;
       max-height: 100vh;
@@ -412,7 +513,7 @@
       max-width: none;
     }
 
-    :global(.carbon-project-modal .cds--modal-content) {
+    :global(.cds--modal-content) {
       height: 100vh;
       border-radius: 0;
     }

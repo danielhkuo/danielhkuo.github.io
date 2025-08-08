@@ -10,7 +10,8 @@ interface Props {
 const { project } = Astro.props;
 
 // Render the markdown content to HTML
-const renderedContent = await markdown(project.body || '');
+const markdownResult = await markdown(project.body || '');
+const renderedContent = markdownResult.html || markdownResult.toString() || '';
 ---
 
 <CarbonProjectModal 

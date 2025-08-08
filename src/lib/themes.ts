@@ -429,12 +429,11 @@ export const themes: Theme[] = [
 export function applyCarbonTokens(variant: CarbonThemeVariant): void {
   if (typeof document === 'undefined') return;
 
-  // Set the Carbon theme attribute on the document element
-  document.documentElement.setAttribute('data-carbon-theme', variant.carbonMapping.carbonTheme);
-
-  // Apply custom Carbon token overrides
-  for (const [token, value] of Object.entries(variant.carbonMapping.customOverrides)) {
-    document.documentElement.style.setProperty(token, value);
+  const { carbonTheme, customOverrides } = variant.carbonMapping;
+  const targets = [document.documentElement, document.body];
+  for (const el of targets) {
+    el.setAttribute('data-carbon-theme', carbonTheme);
+    for (const [k, v] of Object.entries(customOverrides)) el.style.setProperty(k, v);
   }
 }
 
