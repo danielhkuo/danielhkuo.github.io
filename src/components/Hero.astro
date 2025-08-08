@@ -1,6 +1,310 @@
 ---
-// Hero.astro - Main header/bio section component migrated to Carbon Design System
-// Using Carbon CSS classes instead of Svelte components for better Astro compatibility
+// Hero.astro - Receives skills as a prop and renders them dynamically.
+// 1. Receive the 'skills' array passed from index.astro
+const { skills } = Astro.props;
+
+// 2. The Master Skill-to-Icon Dictionary
+// This is the only place you'll need to update icons.
+// Add any new technologies you might use in the future here.
+const skillIcons: { [key: string]: string } = {
+  // --- Languages ---
+  JavaScript: "fab fa-js-square",
+  TypeScript: "fab fa-js-square",
+  Python: "fab fa-python",
+  Java: "fab fa-java",
+  Dart: "fas fa-gem",
+  Lua: "fas fa-moon",
+  SQL: "fas fa-database",
+  "HTML/CSS": "fab fa-html5",
+  HTML: "fab fa-html5",
+  CSS: "fab fa-css3-alt",
+  "C#": "fab fa-cuttlefish",
+  "C++": "fas fa-code",
+  C: "fas fa-code",
+  Go: "fab fa-golang",
+  Rust: "fab fa-rust",
+  PHP: "fab fa-php",
+  Swift: "fab fa-swift",
+  Kotlin: "fab fa-kickstarter-k",
+  Ruby: "fas fa-gem",
+  Scala: "fas fa-code",
+  R: "fas fa-chart-line",
+  MATLAB: "fas fa-calculator",
+
+  // --- Frontend Frameworks & Libraries ---
+  React: "fab fa-react",
+  "React Native": "fab fa-react",
+  "Next.js": "fab fa-react",
+  Vue: "fab fa-vuejs",
+  "Vue.js": "fab fa-vuejs",
+  "Nuxt.js": "fab fa-vuejs",
+  Angular: "fab fa-angular",
+  Svelte: "fas fa-fan",
+  SvelteKit: "fas fa-fan",
+  Astro: "fas fa-rocket",
+  Gatsby: "fab fa-react",
+  Remix: "fab fa-react",
+  "Solid.js": "fas fa-cube",
+  Preact: "fab fa-react",
+  "Alpine.js": "fas fa-mountain",
+  Lit: "fas fa-fire",
+  Stencil: "fas fa-atom",
+
+  // --- CSS Frameworks & Styling ---
+  "Tailwind CSS": "fas fa-wind",
+  Bootstrap: "fab fa-bootstrap",
+  Bulma: "fas fa-columns",
+  "Material-UI": "fas fa-palette",
+  "Ant Design": "fas fa-ant",
+  "Chakra UI": "fas fa-circle",
+  "Styled Components": "fas fa-paint-brush",
+  Emotion: "fas fa-smile",
+  SASS: "fab fa-sass",
+  SCSS: "fab fa-sass",
+  Less: "fas fa-minus",
+  PostCSS: "fas fa-mail-forward",
+
+  // --- Mobile Development ---
+  Expo: "fas fa-mobile-alt",
+  Flutter: "fas fa-mobile-alt",
+  Ionic: "fas fa-mobile-alt",
+  Xamarin: "fab fa-microsoft",
+  Cordova: "fas fa-mobile-alt",
+  PhoneGap: "fas fa-mobile-alt",
+  NativeScript: "fas fa-mobile-alt",
+
+  // --- Backend Frameworks & Runtimes ---
+  "Node.js": "fab fa-node-js",
+  "Express.js": "fas fa-server",
+  Fastify: "fas fa-bolt",
+  "Koa.js": "fas fa-server",
+  NestJS: "fas fa-cat",
+  Django: "fab fa-python",
+  Flask: "fab fa-python",
+  FastAPI: "fas fa-rocket",
+  "Spring Boot": "fab fa-java",
+  Spring: "fab fa-java",
+  "Ruby on Rails": "fas fa-gem",
+  Laravel: "fab fa-php",
+  Symfony: "fab fa-php",
+  "ASP.NET": "fab fa-microsoft",
+  ".NET": "fab fa-microsoft",
+  Gin: "fab fa-golang",
+  Echo: "fab fa-golang",
+  Actix: "fab fa-rust",
+  Rocket: "fab fa-rust",
+
+  // --- Databases & Storage ---
+  PostgreSQL: "fas fa-database",
+  MySQL: "fas fa-database",
+  MongoDB: "fas fa-leaf",
+  Redis: "fas fa-database",
+  SQLite: "fas fa-database",
+  MariaDB: "fas fa-database",
+  CouchDB: "fas fa-database",
+  Cassandra: "fas fa-database",
+  DynamoDB: "fab fa-aws",
+  Elasticsearch: "fas fa-search",
+  InfluxDB: "fas fa-chart-line",
+  Neo4j: "fas fa-project-diagram",
+  Supabase: "fas fa-database",
+  PlanetScale: "fas fa-globe",
+  Prisma: "fas fa-prism",
+
+  // --- Cloud & Backend Services ---
+  Firebase: "fas fa-fire",
+  Appwrite: "fas fa-cloud",
+  AWS: "fab fa-aws",
+  "Google Cloud": "fab fa-google",
+  Azure: "fab fa-microsoft",
+  Heroku: "fas fa-cloud",
+  Railway: "fas fa-train",
+  Render: "fas fa-cloud",
+  DigitalOcean: "fas fa-water",
+  Linode: "fas fa-server",
+  Vultr: "fas fa-server",
+  Convex: "fas fa-shapes",
+  Sanity: "fas fa-leaf",
+  Strapi: "fas fa-server",
+  Contentful: "fas fa-file-alt",
+
+  // --- DevOps & Deployment ---
+  Docker: "fab fa-docker",
+  Kubernetes: "fas fa-dharmachakra",
+  Unraid: "fas fa-server",
+  Proxmox: "fas fa-server",
+  NGINX: "fas fa-network-wired",
+  Apache: "fas fa-feather-alt",
+  Caddy: "fas fa-server",
+  Traefik: "fas fa-route",
+  Vercel: "fas fa-triangle",
+  Netlify: "fas fa-cloud-upload-alt",
+  Cloudflare: "fas fa-cloud",
+  "GitHub Actions": "fab fa-github",
+  "GitLab CI": "fab fa-gitlab",
+  Jenkins: "fas fa-cogs",
+  CircleCI: "fas fa-circle",
+  "Travis CI": "fas fa-check",
+  Terraform: "fas fa-layer-group",
+  Ansible: "fas fa-cogs",
+  Vagrant: "fas fa-box",
+
+  // --- Version Control & Collaboration ---
+  Git: "fab fa-git-alt",
+  GitHub: "fab fa-github",
+  GitLab: "fab fa-gitlab",
+  Bitbucket: "fab fa-bitbucket",
+  SVN: "fas fa-code-branch",
+
+  // --- Build Tools & Bundlers ---
+  Webpack: "fas fa-box-open",
+  Vite: "fas fa-bolt",
+  Rollup: "fas fa-scroll",
+  Parcel: "fas fa-package",
+  esbuild: "fas fa-rocket",
+  Turbopack: "fas fa-bolt",
+  Gulp: "fas fa-stream",
+  Grunt: "fas fa-hammer",
+  Babel: "fas fa-language",
+  ESLint: "fas fa-check-circle",
+  Prettier: "fas fa-magic",
+
+  // --- Testing ---
+  Jest: "fas fa-vial",
+  Vitest: "fas fa-vial",
+  Cypress: "fas fa-check-circle",
+  Playwright: "fas fa-theater-masks",
+  Selenium: "fas fa-robot",
+  "Testing Library": "fas fa-flask",
+  Mocha: "fas fa-coffee",
+  Chai: "fas fa-tea",
+  Jasmine: "fas fa-flower",
+  Puppeteer: "fas fa-dog",
+
+  // --- APIs & Communication ---
+  "REST API": "fas fa-exchange-alt",
+  GraphQL: "fas fa-project-diagram",
+  WebSockets: "fas fa-bolt",
+  "Socket.io": "fas fa-plug",
+  gRPC: "fas fa-network-wired",
+  tRPC: "fas fa-route",
+  Apollo: "fas fa-rocket",
+  Relay: "fas fa-satellite",
+  OAuth2: "fas fa-key",
+  JWT: "fas fa-user-lock",
+  Auth0: "fas fa-shield-alt",
+  Clerk: "fas fa-user-shield",
+  NextAuth: "fas fa-lock",
+
+  // --- Web APIs & Browser Features ---
+  WebSpeechAPI: "fas fa-microphone-alt",
+  WebRTC: "fas fa-video",
+  "Service Workers": "fas fa-cog",
+  PWA: "fas fa-mobile-alt",
+  WebAssembly: "fas fa-cube",
+  IndexedDB: "fas fa-database",
+  "Local Storage": "fas fa-save",
+  Geolocation: "fas fa-map-marker-alt",
+
+  // --- AI & Machine Learning ---
+  LangChain: "fas fa-robot",
+  OpenAI: "fas fa-brain",
+  TensorFlow: "fas fa-brain",
+  PyTorch: "fas fa-brain",
+  Keras: "fas fa-brain",
+  "Scikit-learn": "fas fa-chart-line",
+  Pandas: "fas fa-table",
+  NumPy: "fas fa-calculator",
+  Jupyter: "fas fa-book",
+  "Hugging Face": "fas fa-smile",
+  Ollama: "fas fa-llama",
+  Anthropic: "fas fa-robot",
+
+  // --- Data & Analytics ---
+  "Apache Spark": "fas fa-fire",
+  Hadoop: "fas fa-elephant",
+  Kafka: "fas fa-stream",
+  RabbitMQ: "fas fa-rabbit",
+  Tableau: "fas fa-chart-bar",
+  "Power BI": "fas fa-chart-pie",
+  "D3.js": "fas fa-chart-area",
+  "Chart.js": "fas fa-chart-bar",
+
+  // --- Automation & Scheduling ---
+  Cron: "fas fa-clock",
+  "CI/CD": "fas fa-cogs",
+  Zapier: "fas fa-bolt",
+  IFTTT: "fas fa-link",
+  n8n: "fas fa-project-diagram",
+
+  // --- CMS & Content ---
+  WordPress: "fab fa-wordpress",
+  Drupal: "fab fa-drupal",
+  Ghost: "fas fa-ghost",
+  Notion: "fas fa-sticky-note",
+  Airtable: "fas fa-table",
+
+  // --- Communication & APIs ---
+  "Discord API": "fab fa-discord",
+  "Slack API": "fab fa-slack",
+  "Telegram API": "fas fa-paper-plane",
+  "WhatsApp API": "fab fa-whatsapp",
+  Twilio: "fas fa-phone",
+  SendGrid: "fas fa-envelope",
+  Mailgun: "fas fa-mail-bulk",
+
+  // --- Monitoring & Analytics ---
+  "Google Analytics": "fab fa-google",
+  Mixpanel: "fas fa-chart-line",
+  Amplitude: "fas fa-wave-square",
+  Sentry: "fas fa-bug",
+  LogRocket: "fas fa-video",
+  Datadog: "fas fa-dog",
+  "New Relic": "fas fa-chart-line",
+
+  // --- E-commerce & Payments ---
+  Stripe: "fab fa-stripe",
+  PayPal: "fab fa-paypal",
+  Shopify: "fab fa-shopify",
+  WooCommerce: "fab fa-wordpress",
+  Square: "fas fa-square",
+
+  // --- General Skills & Concepts ---
+  "Full-Stack": "fas fa-code",
+  Frontend: "fas fa-desktop",
+  Backend: "fas fa-server",
+  DevOps: "fas fa-cogs",
+  "UI/UX": "fas fa-paint-brush",
+  "Responsive Design": "fas fa-mobile-alt",
+  Accessibility: "fas fa-universal-access",
+  SEO: "fas fa-search",
+  Performance: "fas fa-tachometer-alt",
+  Security: "fas fa-shield-alt",
+  Microservices: "fas fa-cubes",
+  Serverless: "fas fa-cloud",
+  "AI & ML": "fas fa-robot",
+  "Data Science": "fas fa-chart-line",
+  "Project Management": "fas fa-tasks",
+  Agile: "fas fa-sync",
+  Scrum: "fas fa-users",
+  RAID: "fas fa-hdd",
+
+  // --- Fallback Icon ---
+  default: "fas fa-code",
+};
+
+// 3. Helper function to safely get an icon for a skill
+const getIconForSkill = (skill: string) => {
+  // Return the specific icon if it exists, otherwise return the default icon
+  return skillIcons[skill] || skillIcons["default"];
+};
+
+// NEW: base skills + multi-row lanes (3 on desktop; we'll hide one on mobile via CSS)
+const baseSkills = skills ?? [];
+const LANES = 3;
+const lanes = Array.from({ length: LANES }, (_: unknown, laneIdx: number) =>
+  baseSkills.filter((_: string, i: number) => i % LANES === laneIdx)
+);
 ---
 
 <section
@@ -10,97 +314,174 @@
   <div class="cds--grid cds--grid--full-width">
     <div class="cds--row hero-row">
       <!-- Header Info -->
-      <div class="cds--col-lg-8 cds--col-md-6 cds--col-sm-4 hero-content">
-        <div class="hero-text-content text-center lg:text-left">
-          <!-- Identity Block - Enhanced visual hierarchy and grouping -->
-          <div class="identity-block">
-            <h1
-              class="hero-title text-4xl lg:text-5xl font-bold text-primary micro-space-1"
-            >
-              Daniel Kuo
-            </h1>
-            <p class="hero-subtitle text-lg lg:text-xl text-accent micro-space-1">
-              Computer Science | Developer | Tech Enthusiast
-            </p>
-            <p class="hero-education italic text-text-secondary">
-              B.S. Computer Science @ Rice University
-            </p>
-          </div>
+      <div
+        class="cds--col-lg-8 cds--col-md-6 cds--col-sm-4 hero-content text-center lg:text-left"
+      >
+        <!-- Identity Block - Enhanced visual hierarchy and grouping -->
+        <div class="identity-block pl-4">
+          <h1
+            class="hero-title text-4xl lg:text-5xl font-bold text-primary micro-space-1"
+          >
+            Daniel Kuo
+          </h1>
+          <p class="hero-subtitle text-lg lg:text-xl text-accent micro-space-1">
+            Computer Science | Developer | Tech Enthusiast
+          </p>
+          <p class="hero-education italic text-text-secondary">
+            B.S. Computer Science @ Rice University
+          </p>
+        </div>
 
-          <!-- Skills Compact Container - Enhanced visual hierarchy -->
-          <div class="skills-compact-container w-full max-w-2xl mx-auto lg:mx-0">
-            <div class="skills-grid group-separated">
-              <!-- Column 1 -->
-              <div class="skills-column group-tight">
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-code mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Full-Stack</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-robot mr-2 text-primary"></i>
-                  <span class="cds--tag__label">AI & ML</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fab fa-python mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Python</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fab fa-js mr-2 text-primary"></i>
-                  <span class="cds--tag__label">JavaScript</span>
-                </span>
+        <!-- Skills Marquee (multi-row lanes) -->
+        <div class="skills-marquee-wrapper">
+          {
+            lanes.map((lane, idx) => (
+              <div
+                class={`skills-marquee-lane ${idx % 2 ? "reverse" : ""}`}
+                style={`--duration:${28 + idx * 6}s`}
+              >
+                {lane.concat(lane).map((skill: string) => (
+                  <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
+                    <i
+                      class:list={[
+                        getIconForSkill(skill),
+                        "mr-2",
+                        "text-primary",
+                      ]}
+                    />
+                    <span class="cds--tag__label">{skill}</span>
+                  </span>
+                ))}
               </div>
-              <!-- Column 2 -->
-              <div class="skills-column group-tight">
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-tasks mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Project Management</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fab fa-java mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Java</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-moon mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Lua</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fab fa-html5 mr-2 text-primary"></i>
-                  <span class="cds--tag__label">HTML/CSS</span>
-                </span>
-              </div>
-              <!-- Column 3 -->
-              <div class="skills-column group-tight">
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-bullseye mr-2 text-primary"></i>
-                  <span class="cds--tag__label">Dart</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fab fa-cuttlefish mr-2 text-primary"></i>
-                  <span class="cds--tag__label">C#</span>
-                </span>
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class="fas fa-database mr-2 text-primary"></i>
-                  <span class="cds--tag__label">SQL</span>
-                </span>
-              </div>
-            </div>
-          </div>
+            ))
+          }
         </div>
       </div>
 
       <!-- Headshot - Simplified structure -->
       <div class="cds--col-lg-4 cds--col-md-2 cds--col-sm-4 hero-image">
-        <!-- Use a simple div with flex for centering the image -->
-        <div class="headshot-container flex justify-center items-start">
+        <div class="headshot-container">
           <img
             alt="Daniel Kuo headshot"
-            class="headshot rounded-full object-cover border-4 border-primary shadow-lg w-full h-auto max-w-[170px] md:max-w-[135px] sm:max-w-[100px]"
-            src="/headshot.webp"
-            loading="eager"
+            width="512"
+            height="512"
+            fetchpriority="high"
             decoding="async"
+            loading="eager"
+            class="headshot shadow-lg"
+            src="/headshot.webp"
           />
         </div>
       </div>
     </div>
   </div>
 </section>
+
+<style>
+  /* Wrapper: looks like a Carbon card, masks edges, stacks rows */
+  .skills-marquee-wrapper {
+    background-color: var(--card-bg);
+    border: 1px solid var(--cds-border-subtle, rgba(255, 255, 255, 0.1));
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden; /* keep everything inside the hero */
+    box-sizing: border-box; /* Include padding and border in width calculation */
+    position: relative;
+    margin-top: 1.5rem;
+    margin-left: auto; /* Center the marquee on mobile by default */
+    margin-right: auto;
+    box-shadow:
+      0 2px 4px -1px rgba(0, 0, 0, 0.1),
+      0 1px 2px -1px rgba(0, 0, 0, 0.06);
+
+    /* Edge fade */
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 10%,
+      black 90%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 10%,
+      black 90%,
+      transparent 100%
+    );
+
+    /* NEW: stack multiple lanes with responsive height */
+    display: grid;
+    gap: 0.375rem;
+  }
+
+  /* Each lane is its own endless marquee */
+  .skills-marquee-lane {
+    display: flex;
+    gap: 0.375rem;
+    width: max-content; /* lay out as one long row per lane */
+    will-change: transform;
+    animation: marquee-left var(--duration, 30s) linear infinite;
+    height: fit-content; /* Prevent lanes from expanding vertically */
+  }
+
+  .skills-marquee-lane.reverse {
+    animation-name: marquee-right;
+  }
+
+  /* Pause all lanes on hover */
+  .skills-marquee-wrapper:hover .skills-marquee-lane {
+    animation-play-state: paused;
+  }
+
+  /* Keyframes for opposite directions */
+  @keyframes marquee-left {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    } /* doubled lane content => -50% loops cleanly */
+  }
+
+  @keyframes marquee-right {
+    from {
+      transform: translateX(-50%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* Keep tags from shrinking in the flex lanes */
+  .skills-marquee-lane .skill-tag-compact {
+    flex-shrink: 0;
+    margin: 0;
+    font-size: 0.75rem; /* Slightly smaller tags to fit better */
+    padding: 0.25rem 0.5rem; /* Tighter padding */
+  }
+
+  /* Accessibility: respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .skills-marquee-lane {
+      animation: none;
+    }
+  }
+
+  /* Responsive: show 2 rows on small screens to avoid tall hero */
+  @media (max-width: 671px) {
+    .skills-marquee-wrapper .skills-marquee-lane:nth-child(3) {
+      display: none;
+    }
+  }
+
+  /* On desktop, align the marquee with the left-aligned text */
+  @media (min-width: 672px) {
+    .skills-marquee-wrapper {
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
+</style>

@@ -8,9 +8,15 @@ import SettingsFAB from '../components/SettingsFAB.svelte';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
 import { getCollection } from 'astro:content';
 
-// Fetch all projects and filter for featured ones
+// 1. Fetch all projects from the 'src/content/projects' directory
 const allProjects = await getCollection('projects');
 const featuredProjects = allProjects.filter(project => project.data.featured);
+
+// 2. Extract all 'tech' arrays and flatten them into a single array
+const allTech = allProjects.flatMap(project => project.data.tech);
+
+// 3. Create a unique, de-duplicated list and sort it alphabetically
+const uniqueTech = [...new Set(allTech)].sort();
 ---
 
 <!doctype html>
@@ -26,8 +32,8 @@ const featuredProjects = allProjects.filter(project => project.data.featured);
 		
 		<div class="container w-full max-w-4xl px-5 py-8">
 			<div class="animate-fade-in-up">
-				<!-- Hero Section -->
-				<Hero />
+				<!-- 4. Pass the 'uniqueTech' array to the Hero component as the 'skills' prop -->
+				<Hero skills={uniqueTech} />
 			</div>
 			<div class="animate-fade-in-up" style="animation-delay: 200ms;">
 				<!-- Navigation Buttons -->

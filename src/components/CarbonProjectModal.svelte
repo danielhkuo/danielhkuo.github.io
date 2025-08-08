@@ -402,7 +402,7 @@
   }
 
   /* Responsive Design */
-  @media (max-width: 768px) {
+  @media (max-width: 640px) {
     :global(.carbon-project-modal .cds--modal-container) {
       width: 100vw;
       height: 100vh;
