@@ -123,21 +123,26 @@
   on:submit={handleClose}
   on:click:button--secondary={handleRepoClick}
 >
-  <h3 slot="heading" class="modal-heading-link">
+  <h3 slot="heading" class="modal-heading-with-progress">
     <a
       href={project.data.repoUrl}
       target="_blank"
       rel="noopener noreferrer"
       on:click|stopPropagation
+      class="heading-link"
     >
       {project.data.title}
     </a>
+
+    <!-- Always-visible progress in header -->
+    <div class="header-progress" aria-hidden="true">
+      <div class="header-progress-bar" style="width: {scrollProgress}%"></div>
+    </div>
+    <span class="visually-hidden" role="status" aria-live="polite">
+      {Math.round(scrollProgress)}% scrolled
+    </span>
   </h3>
   <div class="modal-content" on:scroll={handleScroll}>
-    <!-- Scroll Progress Indicator - MOVED HERE -->
-    <div class="scroll-progress">
-      <div class="scroll-progress-bar" style="width: {scrollProgress}%"></div>
-    </div>
     <!-- Project Header Section - Carbon Tile Style -->
     <div class="project-tile">
       <div class="project-tile-content">
@@ -214,41 +219,47 @@
     border-bottom: 1px solid var(--cds-border-subtle);
   }
 
-  .modal-heading-link {
+  /* Wrap heading + progress for easier control */
+  .modal-heading-with-progress {
+    position: relative;
     margin: 0;
+    padding-bottom: calc(
+      var(--cds-spacing-05) - 4px
+    ); /* make space for the bar */
     font-size: var(--cds-productive-heading-04-font-size);
     font-weight: var(--cds-productive-heading-04-font-weight);
     line-height: var(--cds-productive-heading-04-line-height);
   }
 
-  .modal-heading-link a {
+  .modal-heading-with-progress .heading-link {
     color: var(--cds-text-primary);
     text-decoration: none;
     transition: color var(--cds-productive-standard, 0.15s) ease;
   }
 
-  .modal-heading-link a:hover {
+  .modal-heading-with-progress .heading-link:hover {
     color: var(--cds-link-primary);
     text-decoration: underline;
   }
 
-  .modal-heading-link a:focus {
+  .modal-heading-with-progress .heading-link:focus {
     outline: 2px solid var(--cds-focus);
     outline-offset: 2px;
   }
 
-  .scroll-progress {
-    position: sticky;
-    top: -1px; /* Position slightly above to hide behind the header's border */
+  .header-progress {
+    position: absolute;
     left: 0;
     right: 0;
+    bottom: -1px; /* sit on top of the header's bottom border */
     height: 4px;
     background: var(--cds-layer-accent);
     overflow: hidden;
-    z-index: 10; /* Ensure it appears above content but below the modal header */
+    pointer-events: none; /* don't block header clicks */
+    z-index: 1;
   }
 
-  .scroll-progress-bar {
+  .header-progress-bar {
     height: 100%;
     background: linear-gradient(
       90deg,
@@ -256,28 +267,17 @@
       var(--cds-focus)
     );
     transition: width 0.1s ease;
-    position: relative;
   }
 
-  .scroll-progress-bar::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: -10px;
-    width: 10px;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3));
-    animation: shimmer 2s infinite;
-  }
-
-  @keyframes shimmer {
-    0%,
-    100% {
-      opacity: 0;
-    }
-    50% {
-      opacity: 1;
-    }
+  /* a11y helper */
+  .visually-hidden {
+    position: absolute !important;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 1px;
   }
 
   .modal-content {
@@ -287,6 +287,10 @@
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     padding: var(--cds-spacing-05);
+
+    /* Hide scrollbar, keep scrollability */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge legacy */
   }
 
   /* Carbon Tile-inspired project header */
@@ -470,36 +474,10 @@
     padding: 0;
   }
 
-  /* Custom Scrollbar for Webkit browsers */
+  /* Hide scrollbar for WebKit/Chromium */
   .modal-content::-webkit-scrollbar {
-    width: 12px;
-  }
-
-  .modal-content::-webkit-scrollbar-track {
-    background: var(--cds-layer);
-    border-radius: 6px;
-    margin: 10px 0;
-  }
-
-  .modal-content::-webkit-scrollbar-thumb {
-    background: linear-gradient(
-      180deg,
-      var(--cds-interactive),
-      var(--cds-focus)
-    );
-    border-radius: 6px;
-    border: 2px solid var(--cds-layer);
-    transition: all 0.3s ease;
-  }
-
-  .modal-content::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(
-      180deg,
-      var(--cds-focus),
-      var(--cds-interactive)
-    );
-    transform: scale(1.1);
-    box-shadow: 0 0 10px rgba(var(--cds-interactive-rgb, 0, 123, 255), 0.3);
+    width: 0;
+    height: 0;
   }
 
   /* Responsive Design */
