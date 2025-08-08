@@ -6,6 +6,8 @@ import astroParser from 'astro-eslint-parser';
 import sveltePlugin from 'eslint-plugin-svelte';
 import svelteParser from 'svelte-eslint-parser';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
+import globals from 'globals';
+
 
 /** @type {import('eslint').Linter.FlatConfig[]} */
 export default [
@@ -107,4 +109,19 @@ export default [
       ...sveltePlugin.configs.recommended.rules,
     },
   },
+  +  {
+        files: ['scripts/**/*.{js,mjs,ts}'],
+        languageOptions: {
+          sourceType: 'module',
+          ecmaVersion: 'latest',
+          globals: {
+            ...globals.node,
+            // Some versions of `globals` include Bun. If yours does, this adds `Bun`, etc.
+            ...(globals.bun ?? {}),
+          },
+        },
+        rules: {
+          'no-console': 'off',
+        },
+      },
 ]; 
