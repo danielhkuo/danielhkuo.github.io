@@ -131,13 +131,13 @@
 
   .repo-link {
     font-weight: var(--cds-font-weight-semibold);
-    color: var(--cds-link-primary);
+    color: var(--cds-interactive);
     text-decoration: none;
     transition: color var(--cds-productive-standard, 0.15s) cubic-bezier(0.2, 0, 0.38, 0.9);
   }
 
   .repo-link:hover {
-    color: var(--cds-link-primary-hover);
+    color: var(--cds-focus);
     text-decoration: underline;
   }
 
@@ -147,6 +147,6 @@
   }
 
   .repo-link:visited {
-    color: var(--cds-link-visited);
+    color: var(--cds-interactive);
   }
 </style>

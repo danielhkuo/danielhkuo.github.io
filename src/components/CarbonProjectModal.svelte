@@ -232,13 +232,13 @@
   }
 
   .modal-heading-with-progress .heading-link {
-    color: var(--cds-text-primary);
+    color: var(--cds-interactive);
     text-decoration: none;
     transition: color var(--cds-productive-standard, 0.15s) ease;
   }
 
   .modal-heading-with-progress .heading-link:hover {
-    color: var(--cds-link-primary);
+    color: var(--cds-focus);
     text-decoration: underline;
   }
 
