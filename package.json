@@ -6,7 +6,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "gen:resume": "bun scripts/build-resume.mjs",
+    "prebuild": "bun run gen:resume",
+    "predev": "bun run gen:resume"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.3",
@@ -29,5 +32,9 @@
     "svelte": "^5.37.3",
     "svelte-eslint-parser": "^1.3.1",
     "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "globals": "^16.3.0",
+    "pdf-parse": "^1.1.1"
   }
 }
