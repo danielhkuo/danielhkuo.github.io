@@ -1112,3 +1112,26 @@ body {
   margin-bottom: 0.75rem;
   color: var(--text);
 }
+/
+* ==== Carbon Modal hardening (dark mode safe) ==== */
+/* Backdrop uses overlay token */
+:where(.cds--modal, .bx--modal) {
+  background-color: var(--cds-overlay) !important;
+}
+
+/* The dialog shell should always be the current layer */
+:where(.cds--modal-container, .bx--modal-container),
+:where(.cds--modal-header, .bx--modal-header),
+:where(.cds--modal-content, .bx--modal-content),
+:where(.cds--modal-footer, .bx--modal-footer) {
+  background-color: var(--cds-layer) !important;
+  color: var(--cds-text-primary) !important;
+}
+
+/* Keep borders in theme */
+:where(.cds--modal-header, .bx--modal-header) {
+  border-bottom: 1px solid var(--cds-border-subtle) !important;
+}
+:where(.cds--modal-footer, .bx--modal-footer) {
+  border-top: 1px solid var(--cds-border-subtle) !important;
+}
