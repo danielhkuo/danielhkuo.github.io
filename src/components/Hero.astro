@@ -318,7 +318,7 @@ const lanes = Array.from({ length: LANES }, (_: unknown, laneIdx: number) =>
         class="cds--col-lg-8 cds--col-md-6 cds--col-sm-4 hero-content text-center lg:text-left"
       >
         <!-- Identity Block - Enhanced visual hierarchy and grouping -->
-        <div class="identity-block pl-4">
+        <div class="identity-block pl-8">
           <h1
             class="hero-title text-4xl lg:text-5xl font-bold text-primary micro-space-1"
           >
@@ -378,6 +378,40 @@ const lanes = Array.from({ length: LANES }, (_: unknown, laneIdx: number) =>
 </section>
 
 <style>
+  /* Fix uneven spacing in identity block by normalizing line heights */
+  .identity-block > * {
+    line-height: 1.15; /* tighter, uniform height */
+  }
+
+  /* Fix left alignment jaggedness caused by different font sizes and italic text */
+  .identity-block .hero-title {
+    margin-left: calc(
+      1rem - 0.05em
+    ); /* Base margin plus adjustment for bold text */
+  }
+
+  .identity-block .hero-subtitle {
+    margin-left: calc(
+      1rem - 0.02em
+    ); /* Base margin plus adjustment for medium text */
+  }
+
+  .identity-block .hero-education {
+    margin-left: calc(
+      1rem + 0.1em
+    ); /* Base margin plus adjustment for italic text */
+    font-style: italic;
+  }
+
+  /* On mobile, reset the left margins since text is centered */
+  @media (max-width: 671px) {
+    .identity-block .hero-title,
+    .identity-block .hero-subtitle,
+    .identity-block .hero-education {
+      margin-left: 0;
+    }
+  }
+
   /* Wrapper: looks like a Carbon card, masks edges, stacks rows */
   .skills-marquee-wrapper {
     background-color: var(--card-bg);
