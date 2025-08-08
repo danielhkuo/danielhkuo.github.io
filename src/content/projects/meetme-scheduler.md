@@ -47,4 +47,4 @@ An intelligent Discord bot that solves timezone scheduling conflicts and automat
 - Interactive timezone selection
 - Automatic conflict detection
 - Rich embed notifications
-- Calendar integration support 
+- Calendar integration support
