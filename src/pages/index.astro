@@ -1,20 +1,20 @@
 ---
-import BaseHead from '../components/BaseHead.astro';
-import Hero from '../components/Hero.astro';
-import NavButtons from '../components/NavButtons.astro';
-import CarbonProjectCard from '../components/CarbonProjectCard.svelte';
-import CarbonProjectModalWrapper from '../components/CarbonProjectModalWrapper.astro';
-import CarbonResumeModal from '../components/CarbonResumeModal.svelte';
-import SettingsFAB from '../components/SettingsFAB.svelte';
-import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
-import { getCollection } from 'astro:content';
+import BaseHead from "../components/BaseHead.astro";
+import Hero from "../components/Hero.astro";
+import NavButtons from "../components/NavButtons.astro";
+import CarbonProjectCard from "../components/CarbonProjectCard.svelte";
+import CarbonProjectModalWrapper from "../components/CarbonProjectModalWrapper.astro";
+
+import SettingsFAB from "../components/SettingsFAB.svelte";
+import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { getCollection } from "astro:content";
 
 // 1) Fetch all projects from the 'src/content/projects' directory
-const allProjects = await getCollection('projects');
-const featuredProjects = allProjects.filter(project => project.data.featured);
+const allProjects = await getCollection("projects");
+const featuredProjects = allProjects.filter((project) => project.data.featured);
 
 // 2) Extract all 'tech' arrays and flatten them into a single array
-const allTech = allProjects.flatMap(project => project.data.tech);
+const allTech = allProjects.flatMap((project) => project.data.tech);
 
 // 3) Create a unique, de-duplicated list and sort it alphabetically
 const uniqueTech = [...new Set(allTech)].sort();
@@ -25,7 +25,10 @@ const uniqueTech = [...new Set(allTech)].sort();
   <head>
     <BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
     <!-- External Resources -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <!-- Settings FAB -->
@@ -38,31 +41,40 @@ const uniqueTech = [...new Set(allTech)].sort();
       </div>
 
       <div class="animate-fade-in-up" style="animation-delay: 200ms;">
-        <!-- Navigation Buttons (includes Resume -> #resume-modal) -->
+        <!-- Navigation Buttons -->
         <NavButtons />
       </div>
 
       <!-- Projects Section -->
-      <section class="projects-section mt-16 animate-fade-in-up" style="animation-delay: 400ms;">
-        <h2 class="text-2xl font-bold text- text-center mb-8">Featured Projects</h2>
+      <section
+        class="projects-section mt-16 animate-fade-in-up"
+        style="animation-delay: 400ms;"
+      >
+        <h2 class="text-2xl font-bold text- text-center mb-8">
+          Featured Projects
+        </h2>
         <div class="projects grid grid-cols-1 md:grid-cols-2 gap-6">
-          {featuredProjects.map((project) => (
-            <CarbonProjectCard
-              title={project.data.title}
-              description={project.data.description}
-              tech={project.data.tech}
-              repoUrl={project.data.repoUrl}
-              slug={project.slug}
-              client:load
-            />
-          ))}
+          {
+            featuredProjects.map((project) => (
+              <CarbonProjectCard
+                title={project.data.title}
+                description={project.data.description}
+                tech={project.data.tech}
+                repoUrl={project.data.repoUrl}
+                slug={project.slug}
+                client:load
+              />
+            ))
+          }
         </div>
       </section>
 
       <!-- Footer Quote -->
       <div class="footer-note text-center mt-16">
         <p class="text-text-secondary mb-2">
-          "If we find ourselves with a desire that nothing in this world can satisfy, the most probable explanation is that we were made for another world."
+          "If we find ourselves with a desire that nothing in this world can
+          satisfy, the most probable explanation is that we were made for
+          another world."
         </p>
         <p class="footer-credits text-xs opacity-70 text-text-secondary">
           Credits: Me :)
@@ -71,11 +83,10 @@ const uniqueTech = [...new Set(allTech)].sort();
     </div>
 
     <!-- Project Modals -->
-    {featuredProjects.map(project => (
-      <CarbonProjectModalWrapper project={project} />
-    ))}
-
-    <!-- Resume Modal (opens when URL hash is #resume-modal) -->
-    <CarbonResumeModal client:load />
+    {
+      featuredProjects.map((project) => (
+        <CarbonProjectModalWrapper project={project} />
+      ))
+    }
   </body>
 </html>
