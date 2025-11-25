@@ -6,10 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro",
-    "gen:resume": "bun scripts/build-resume.mjs",
-    "prebuild": "bun run gen:resume",
-    "predev": "bun run gen:resume"
+    "astro": "astro"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.3",
