@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Modal, Tag } from "carbon-components-svelte";
   import type { CollectionEntry } from "astro:content";
-  import { onMount, tick } from "svelte"; // FIX: Import tick
+  import { onMount } from "svelte";
 
   export let project: CollectionEntry<"projects">;
   export let renderedContent: string;
@@ -9,36 +9,9 @@
 
   let scrollProgress = 0;
 
-  const MODAL_SEL = ".cds--modal, .bx--modal";
-  const CONTAINER_SEL = ".cds--modal-container, .bx--modal-container";
-
-  async function syncModalTheme() {
-    if (typeof document === "undefined") return;
-    await tick();
-    const modal = document.querySelector(MODAL_SEL) as HTMLElement | null;
-    const container = document.querySelector(
-      CONTAINER_SEL
-    ) as HTMLElement | null;
-    if (!modal || !container) return;
-    const currentTheme =
-      document.documentElement.getAttribute("data-carbon-theme") || "g100";
-    [modal, container].forEach((el) =>
-      el.setAttribute("data-carbon-theme", currentTheme)
-    );
-    const computed = getComputedStyle(document.documentElement);
-    // copy all Carbon vars
-    for (const name of Array.from(computed)) {
-      if (name.startsWith("--cds-")) {
-        const value = computed.getPropertyValue(name);
-        modal.style.setProperty(name, value);
-        container.style.setProperty(name, value);
-      }
-    }
-  }
-
-  // Keep the modal synced whenever it opens
-  $: if (isOpen) {
-    syncModalTheme();
+  // Reactive body scroll lock
+  $: if (typeof document !== "undefined") {
+    document.body.style.overflow = isOpen ? "hidden" : "";
   }
 
   // Handle modal opening via URL hash
@@ -46,37 +19,25 @@
     const handleHashChange = () => {
       const hash = window.location.hash;
       const expectedHash = `#${project.slug}-modal`;
-      isOpen = hash === expectedHash;
+      // Only open if hash matches, but don't auto-close if hash changes to something else
+      // (unless we want that behavior). For now, simple check.
+      if (hash === expectedHash) {
+        isOpen = true;
+      }
     };
 
     // Check initial hash
     handleHashChange();
 
-    // Listen for hash changes, keyboard events, and theme changes
+    // Listen for hash changes and keyboard events
     window.addEventListener("hashchange", handleHashChange);
     window.addEventListener("keydown", handleKeyDown);
-
-    // Listen for theme attribute changes
-    const observer = new MutationObserver((m) => {
-      if (
-        m.some(
-          (x) =>
-            x.type === "attributes" && x.attributeName === "data-carbon-theme"
-        )
-      ) {
-        if (isOpen) syncModalTheme();
-      }
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-carbon-theme"],
-    });
 
     return () => {
       window.removeEventListener("hashchange", handleHashChange);
       window.removeEventListener("keydown", handleKeyDown);
-      observer.disconnect();
+      // Ensure scroll is unlocked when component unmounts
+      document.body.style.overflow = "";
     };
   });
 

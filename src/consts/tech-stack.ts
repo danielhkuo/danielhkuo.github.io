@@ -114,6 +114,7 @@ export const TECH_STACK: Record<string, TechIcon> = {
     Appwrite: { iconClass: "fas fa-cloud", label: "Appwrite", category: "cloud" },
     AWS: { iconClass: "fab fa-aws", label: "AWS", category: "cloud" },
     "Google Cloud": { iconClass: "fab fa-google", label: "Google Cloud", category: "cloud" },
+    "Oracle Cloud": { iconClass: "fas fa-cloud", label: "Oracle Cloud", category: "cloud" },
     Azure: { iconClass: "fab fa-microsoft", label: "Azure", category: "cloud" },
     Heroku: { iconClass: "fas fa-cloud", label: "Heroku", category: "cloud" },
     Railway: { iconClass: "fas fa-train", label: "Railway", category: "cloud" },

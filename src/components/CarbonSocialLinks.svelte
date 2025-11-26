@@ -35,7 +35,7 @@
   ];
 </script>
 
-<div class="social-row flex justify-center items-center gap-4">
+<div class="social-row flex flex-wrap justify-center lg:justify-start gap-2">
   {#each socialLinks as link}
     <Button
       kind="ghost"
@@ -45,6 +45,8 @@
       rel="noopener noreferrer"
       aria-label={link.label}
       class="social-button"
+      tooltipPosition="bottom"
+      iconDescription={link.label}
     >
       <svelte:component this={link.icon} size={24} />
     </Button>
@@ -53,34 +55,41 @@
 
 <style>
   .social-row {
-    text-align: center;
-    padding: 1.5rem 0 1rem 0;
-    margin-top: 0.75rem;
+    /* 
+       "Staircase" Fix:
+       Carbon Ghost buttons have internal padding (approx 12px/0.75rem).
+       To align the ICON visually with the text above it, we must pull 
+       the container left by that exact padding amount.
+    */
+    margin-left: -12px; 
+    
+    /* Reduced top margin to tighten the layout ("Trapped Whitespace" Fix) */
+    margin-top: 0.5rem;
   }
 
-  @media (min-width: 768px) {
+  /* Reset alignment for mobile */
+  @media (max-width: 671px) {
     .social-row {
-      padding: 1rem 0;
-      margin-top: 0.5rem;
+      margin-left: 0;
+      justify-content: center;
     }
   }
 
   :global(.social-button) {
-    /* Clean Carbon button styling */
     min-height: 48px !important;
     width: 48px !important;
     padding: 12px !important;
     background: transparent !important;
     border: none !important;
     border-radius: 8px !important;
-    color: var(--cds-text-primary) !important;
+    color: var(--cds-text-secondary) !important;
     transition: all 0.15s ease !important;
   }
 
   :global(.social-button:hover) {
     background: var(--cds-hover-ui, var(--cds-layer-hover)) !important;
     color: var(--cds-text-primary) !important;
-    transform: translateY(-1px) !important;
+    transform: translateY(-2px) !important;
   }
 
   :global(.social-button:focus) {
@@ -94,7 +103,6 @@
     transform: translateY(0) !important;
   }
 
-  /* Ensure icons are properly sized and centered */
   :global(.social-button svg) {
     width: 24px !important;
     height: 24px !important;

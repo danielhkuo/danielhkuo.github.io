@@ -1,160 +1,181 @@
 ---
 // Hero.astro - Receives skills as a prop and renders them dynamically.
-// 1. Receive the 'skills' array passed from index.astro
-// Hero.astro - Receives skills as a prop and renders them dynamically.
-// 1. Receive the 'skills' array passed from index.astro
-const { skills } = Astro.props;
+interface Props {
+  skills?: string[];
+  bio?: string;
+}
+
+const { skills = [], bio = "" } = Astro.props;
 
 import { getIcon } from "../consts/tech-stack";
-
-const baseSkills = skills ?? [];
+import CarbonSocialLinks from "./CarbonSocialLinks.svelte";
 ---
 
 <section
-  class="hero-section bg-card-bg rounded-2xl p-8 shadow-lg mb-10 animate-float"
+  class="hero-section bg-card-bg rounded-2xl p-8 shadow-lg mb-10 animate-float flex flex-col"
 >
-  <!-- Carbon Grid System using CSS classes -->
-  <div class="cds--grid cds--grid--full-width">
-    <div class="cds--row hero-row">
-      <!-- Header Info -->
-      <div
-        class="cds--col-lg-6 cds--col-md-6 cds--col-sm-4 hero-content text-center lg:text-left"
-      >
-        <!-- Identity Block - Enhanced visual hierarchy and grouping -->
-        <div class="identity-block pl-8">
-          <h1
-            class="hero-title text-4xl lg:text-5xl font-bold text-primary micro-space-1"
-          >
-            Daniel Kuo
-          </h1>
-          <p class="hero-subtitle text-lg lg:text-xl text-accent micro-space-1">
-            Computer Science | Developer | Tech Enthusiast
-          </p>
-          <p class="hero-education italic text-text-secondary">
-            B.S. Computer Science @ Rice University
-          </p>
-        </div>
+  <!-- Reduced bottom margin to close the "Vertical Void" -->
+  <div class="hero-grid mb-6">
+    <!-- Header Info -->
+    <div class="hero-content text-center lg:text-left">
+      <!-- Identity Block -->
+      <div class="identity-block pl-8">
+        <h1
+          class="hero-title text-4xl lg:text-5xl font-bold text-primary micro-space-1"
+        >
+          Daniel Kuo
+        </h1>
+        <p class="hero-subtitle text-lg lg:text-xl text-accent micro-space-1">
+          Computer Science | Developer | Tech Enthusiast
+        </p>
+        <p class="hero-education italic text-text-secondary mb-4">
+          B.S. Computer Science @ Rice University
+        </p>
 
-        <!-- Skills Grid (Static) -->
-        <div class="skills-grid-wrapper mt-6">
-          <div class="skills-grid">
-            {
-              baseSkills.map((skill: string) => (
-                <span class="cds--tag cds--tag--outline cds--tag--sm skill-tag-compact">
-                  <i class:list={[getIcon(skill), "mr-2", "text-primary"]} />
-                  <span class="cds--tag__label">{skill}</span>
-                </span>
-              ))
-            }
-          </div>
-        </div>
-      </div>
+        <!-- Bio Component -->
+        {
+          bio && (
+            <p class="hero-bio text-text-secondary leading-relaxed max-w-prose ml-4 mt-4">
+              {bio}
+            </p>
+          )
+        }
 
-      <!-- Headshot - Simplified structure -->
-      <div class="cds--col-lg-6 cds--col-md-2 cds--col-sm-4 hero-image">
-        <div class="headshot-container">
-          <img
-            alt="Daniel Kuo headshot"
-            fetchpriority="high"
-            decoding="async"
-            loading="eager"
-            class="headshot shadow-lg"
-            src="/headshot.webp"
-          />
+        <!-- Contextual Social Links -->
+        <!-- "Staircase" Fix: Strictly aligns with .hero-bio (ml-4) -->
+        <div class="hero-socials ml-4">
+          <CarbonSocialLinks client:load />
         </div>
       </div>
     </div>
+
+    <!-- Headshot -->
+    <div class="hero-image">
+      <div class="headshot-container">
+        <img
+          alt="Daniel Kuo headshot"
+          fetchpriority="high"
+          decoding="async"
+          loading="eager"
+          class="headshot shadow-lg"
+          src="/headshot.webp"
+        />
+      </div>
+    </div>
   </div>
+
+  <!-- Tech Stack Ribbon -->
+  <!-- "Alignment Clash" Fix: Enforced justify-start on LG screens to match F-Pattern -->
+  {
+    skills.length > 0 && (
+      <div class="tech-ribbon-wrapper mt-auto pt-4 border-t border-border-subtle">
+        <div class="tech-ribbon flex flex-wrap justify-center lg:justify-start gap-4">
+          {skills.map((skill) => (
+            <div class="tech-item flex items-center gap-2 text-text-secondary hover:text-primary transition-colors duration-200">
+              <i class:list={[getIcon(skill), "text-lg"]} />
+              <span class="text-sm font-medium">{skill}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 </section>
 
 <style>
-  /* Fix uneven spacing in identity block by normalizing line heights */
-  .identity-block > * {
-    line-height: 1.15; /* tighter, uniform height */
+  /* Responsive Grid Layout */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr; /* Default to 1 column (mobile) */
+    gap: 2rem;
+    align-items: center;
   }
 
-  /* Fix left alignment jaggedness caused by different font sizes and italic text */
+  /* Ensure content and image take up space properly */
+  .hero-content {
+    min-width: 0; /* Prevent grid blowout */
+  }
+
+  .hero-image {
+    display: flex;
+    justify-content: center;
+    order: -1;
+    margin-bottom: 1rem;
+  }
+
+  /* Identity Block Typography Alignment */
+  .identity-block > * {
+    line-height: 1.15;
+  }
+
   .identity-block .hero-title {
-    margin-left: calc(
-      1rem - 0.05em
-    ); /* Base margin plus adjustment for bold text */
+    margin-left: calc(1rem - 0.05em);
   }
 
   .identity-block .hero-subtitle {
-    margin-left: calc(
-      1rem - 0.02em
-    ); /* Base margin plus adjustment for medium text */
+    margin-left: calc(1rem - 0.02em);
   }
 
   .identity-block .hero-education {
-    margin-left: calc(
-      1rem + 0.1em
-    ); /* Base margin plus adjustment for italic text */
+    margin-left: calc(1rem + 0.1em);
     font-style: italic;
   }
 
-  /* Make headshot larger on desktop */
+  /* Unified indentation for Bio and Socials */
+  .identity-block .hero-bio {
+    margin-left: 1rem;
+    margin-top: 1rem;
+  }
+
+  /* Matches bio margin exactly */
+  .hero-socials {
+    margin-left: 1rem;
+  }
+
+  .headshot-container {
+    width: 200;
+    height: auto;
+    min-width: 200px;
+  }
+
   .headshot {
     width: 100%;
     height: auto;
-    max-width: 400px; /* Larger than the default 512px constraint */
+    max-width: 300px;
     aspect-ratio: 1;
     object-fit: cover;
   }
 
-  /* On mobile, reset the left margins since text is centered */
+  /* Mobile: Reset margins for center alignment */
   @media (max-width: 671px) {
     .identity-block .hero-title,
     .identity-block .hero-subtitle,
-    .identity-block .hero-education {
+    .identity-block .hero-education,
+    .identity-block .hero-bio,
+    .hero-socials {
       margin-left: 0;
+    }
+
+    .identity-block .hero-bio {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
+
+  /* Desktop Layout (672px+) */
+  @media (min-width: 672px) {
+    .hero-grid {
+      grid-template-columns: 1.5fr 1fr;
+    }
+
+    .hero-image {
+      order: 0;
+      margin-bottom: 0;
+      justify-content: center;
     }
 
     .headshot {
-      max-width: 300px; /* Smaller on mobile */
-    }
-  }
-
-  /* Wrapper for the static skills grid */
-  .skills-grid-wrapper {
-    background-color: var(--card-bg);
-    border: 1px solid var(--cds-border-subtle, rgba(255, 255, 255, 0.1));
-    border-radius: 0.75rem;
-    padding: 0.75rem;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    position: relative;
-    margin-left: auto;
-    margin-right: auto;
-    box-shadow:
-      0 2px 4px -1px rgba(0, 0, 0, 0.1),
-      0 1px 2px -1px rgba(0, 0, 0, 0.06);
-  }
-
-  /* Static Grid Layout */
-  .skills-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    justify-content: center; /* Center tags on mobile */
-  }
-
-  /* Keep tags consistent */
-  .skill-tag-compact {
-    margin: 0;
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-  }
-
-  /* On desktop, align the grid to the left */
-  @media (min-width: 672px) {
-    .skills-grid-wrapper {
-      margin-left: 0;
-      margin-right: 0;
-    }
-    .skills-grid {
-      justify-content: flex-start;
+      max-width: 400px;
     }
   }
 </style>
