@@ -5,7 +5,7 @@ import NavButtons from "../components/NavButtons.astro";
 import CarbonProjectCard from "../components/CarbonProjectCard.svelte";
 import CarbonProjectModalWrapper from "../components/CarbonProjectModalWrapper.astro";
 
-import SettingsFAB from "../components/SettingsFAB.svelte";
+import ThemeSwitcher from "../components/ThemeSwitcher.svelte";
 import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
 import { getCollection } from "astro:content";
 
@@ -31,8 +31,8 @@ const uniqueTech = [...new Set(allTech)].sort();
     />
   </head>
   <body>
-    <!-- Settings FAB -->
-    <SettingsFAB client:load />
+    <!-- Theme Switcher -->
+    <ThemeSwitcher client:load />
 
     <div class="container w-full max-w-4xl px-5 py-8">
       <div class="animate-fade-in-up">
