@@ -5,8 +5,10 @@
   /* scales from ~96px on small to ~176px on large */
   --headshot-size: clamp(96px, 16vw, 176px);
   --headshot-border: 3px;
-  --hero-col-gap-sm: 1.25rem;   /* tighter on mobile */
-  --hero-col-gap-lg: 2.5rem;    /* a touch more on desktop */
+  --hero-col-gap-sm: 1.25rem;
+  /* tighter on mobile */
+  --hero-col-gap-lg: 2.5rem;
+  /* a touch more on desktop */
 }
 
 /* Custom utility classes for theme colors */
@@ -108,7 +110,8 @@ body {
   justify-content: center;
   /* Scoped transitions for theme changes */
   transition: background-color 0.3s ease, color 0.3s ease;
-  /* The animated gradient is applied in the @media block below to respect prefers-reduced-motion */
+  background-image: radial-gradient(var(--cds-border-subtle) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* Custom scrollbar for webkit browsers */
@@ -146,10 +149,13 @@ body {
 /* Container and layout utilities */
 .container {
   width: 100%;
-  max-width: 64rem; /* max-w-4xl equivalent */
-  padding-left: 1.25rem; /* px-5 equivalent */
+  max-width: 64rem;
+  /* max-w-4xl equivalent */
+  padding-left: 1.25rem;
+  /* px-5 equivalent */
   padding-right: 1.25rem;
-  padding-top: 2rem; /* py-8 equivalent */
+  padding-top: 2rem;
+  /* py-8 equivalent */
   padding-bottom: 2rem;
 }
 
@@ -392,19 +398,20 @@ body {
 
 @media (min-width: 1024px) {
   .lg\:text-left {
-    text-align: left !important; /* Ensure this overrides the mobile-first .text-center */
+    text-align: left !important;
+    /* Ensure this overrides the mobile-first .text-center */
   }
-  
+
   .lg\:text-5xl {
     font-size: 3rem;
     line-height: 1;
   }
-  
+
   .lg\:text-xl {
     font-size: 1.25rem;
     line-height: 1.75rem;
   }
-  
+
   .lg\:mx-0 {
     margin-left: 0;
     margin-right: 0;
@@ -414,16 +421,7 @@ body {
 /* --- CREATIVE ANIMATIONS --- */
 
 @media (prefers-reduced-motion: no-preference) {
-  body {
-    background: linear-gradient(
-      -45deg, 
-      var(--background), 
-      var(--card-bg), 
-      var(--background)
-    );
-    background-size: 400% 400%;
-    animation: gradient-animation 25s ease infinite;
-  }
+
 
   .animate-float {
     animation: float 6s ease-in-out infinite;
@@ -431,21 +429,26 @@ body {
 
   .animate-fade-in-up {
     animation: fade-in-up 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-    opacity: 0; /* Start hidden before animation */
+    opacity: 0;
+    /* Start hidden before animation */
   }
 
 
 
-  @keyframes gradient-animation {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
+
 
   @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
-    100% { translateY:(0px); }
+    0% {
+      transform: translateY(0px);
+    }
+
+    50% {
+      transform: translateY(-8px);
+    }
+
+    100% {
+      translateY: (0px);
+    }
   }
 
   @keyframes fade-in-up {
@@ -453,6 +456,7 @@ body {
       opacity: 0;
       transform: translateY(20px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -520,7 +524,8 @@ body {
 .headshot-container {
   width: var(--headshot-size);
   height: var(--headshot-size);
-  aspect-ratio: 1;                   /* keep the square box predictable */
+  aspect-ratio: 1;
+  /* keep the square box predictable */
   transition: width .3s ease, height .3s ease, margin-top .3s ease;
 }
 
@@ -530,7 +535,8 @@ body {
   object-fit: cover;
   display: block;
   background-color: var(--card-bg);
-  border: var(--headshot-border) solid var(--primary);  /* moved from utilities */
+  border: var(--headshot-border) solid var(--primary);
+  /* moved from utilities */
   border-radius: 9999px;
 }
 
@@ -569,12 +575,15 @@ body {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  font-size: 0.8125rem; /* Slightly smaller font for compactness */
-  padding: 0.375rem 0.5rem; /* Reduced padding: 6px 8px */
+  font-size: 0.8125rem;
+  /* Slightly smaller font for compactness */
+  padding: 0.375rem 0.5rem;
+  /* Reduced padding: 6px 8px */
   border-radius: 0.375rem;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   margin: 0;
-  gap: 0.375rem; /* Reduced gap between icon and text */
+  gap: 0.375rem;
+  /* Reduced gap between icon and text */
   /* Ensure minimum touch target on mobile */
   min-height: 44px;
   min-width: 44px;
@@ -600,9 +609,12 @@ body {
 @media (min-width: 672px) {
   .skill-tag-compact.cds--tag {
     /* Slightly reduce padding on larger screens for better density */
-    padding: 0.25rem 0.375rem; /* 4px 6px */
-    font-size: 0.75rem; /* 12px */
-    min-height: 32px; /* Can be smaller on desktop */
+    padding: 0.25rem 0.375rem;
+    /* 4px 6px */
+    font-size: 0.75rem;
+    /* 12px */
+    min-height: 32px;
+    /* Can be smaller on desktop */
     min-width: auto;
     transition: padding 0.3s ease, font-size 0.3s ease, min-height 0.3s ease;
   }
@@ -610,8 +622,10 @@ body {
 
 @media (min-width: 1056px) {
   .skill-tag-compact.cds--tag {
-    padding: 0.25rem 0.375rem; /* 4px 6px */
-    font-size: 0.75rem; /* 12px */
+    padding: 0.25rem 0.375rem;
+    /* 4px 6px */
+    font-size: 0.75rem;
+    /* 12px */
   }
 }
 
@@ -630,7 +644,8 @@ body {
   grid-template-rows: auto auto;
   gap: var(--hero-col-gap-sm);
   justify-items: center;
-  align-items: start;                /* top-align by default */
+  align-items: start;
+  /* top-align by default */
   transition: grid-template-columns 0.3s ease, gap 0.3s ease;
 }
 
@@ -639,7 +654,8 @@ body {
   padding-right: 0;
   transition: padding-right 0.3s ease, text-align 0.3s ease;
   width: 100%;
-  min-width: 0; /* Re-confirming the critical fix is here */
+  min-width: 0;
+  /* Re-confirming the critical fix is here */
 }
 
 .hero-image {
@@ -654,7 +670,8 @@ body {
 .headshot-container {
   width: var(--headshot-size);
   height: var(--headshot-size);
-  aspect-ratio: 1;                   /* keep the square box predictable */
+  aspect-ratio: 1;
+  /* keep the square box predictable */
   transition: width .3s ease, height .3s ease, margin-top .3s ease;
 }
 
@@ -679,46 +696,52 @@ body {
 
 /* Tablet breakpoint (672px+) */
 @media (min-width: 672px) {
+
   .hero-row,
   .hero-section .cds--row {
     grid-template-columns: 1fr auto;
     grid-template-rows: 1fr;
-    gap: 2rem;                       /* keep 2rem on tablet */
+    gap: 2rem;
+    /* keep 2rem on tablet */
     justify-items: start;
-    align-items: center;             /* ⟵ Vertically center for better balance */
+    align-items: center;
+    /* ⟵ Vertically center for better balance */
   }
-  
+
   .hero-content {
     grid-row: 1;
     grid-column: 1;
     width: 100%;
   }
-  
+
   .hero-image {
     grid-row: 1;
     grid-column: 2;
     justify-self: end;
-    align-self: center;              /* ⟵ Let the grid align it */
-    margin-top: 0; /* Reset the mobile margin */
+    align-self: center;
+    /* ⟵ Let the grid align it */
+    margin-top: 0;
+    /* Reset the mobile margin */
   }
 }
 
 /* Desktop breakpoint (1056px+) */
 @media (min-width: 1056px) {
+
   .hero-row,
   .hero-section .cds--row {
     gap: var(--hero-col-gap-lg);
     /* a little extra breathing room on lg */
   }
-  
+
   .hero-image {
     /* REVISED: Removed margin-top to respect vertical alignment */
     margin-top: 0;
     justify-self: end;
   }
-  
+
   /* REVISED: Removed the 3-column override for skills grid */
-  
+
   .hero-text-content {
     text-align: left !important;
   }
@@ -740,9 +763,11 @@ body {
     padding-right: 0;
     margin-bottom: 0;
   }
+
   .hero-text-content {
     text-align: center !important;
   }
+
   .skills-compact-container {
     max-width: 100%;
     margin-left: auto;
@@ -755,9 +780,11 @@ body {
     margin-bottom: 0;
     padding-right: 2rem;
   }
+
   .hero-text-content {
     text-align: left !important;
   }
+
   .skills-compact-container {
     max-width: 100%;
     margin-left: 0;
@@ -770,9 +797,11 @@ body {
     margin-bottom: 0;
     padding-right: 2rem;
   }
+
   .hero-text-content {
     text-align: left !important;
   }
+
   .skills-compact-container {
     max-width: 100%;
     margin-left: 0;
@@ -787,9 +816,11 @@ body {
 .identity-block {
   /* Create stronger visual grouping through proximity */
   position: relative;
-  margin-bottom: 1.5rem; /* Increased separation from skills section */
+  margin-bottom: 1.5rem;
+  /* Increased separation from skills section */
   /* Add subtle visual anchor for Z-pattern flow */
-  padding-left: 0.125rem; /* 2px subtle left alignment */
+  padding-left: 0.125rem;
+  /* 2px subtle left alignment */
   border-left: 3px solid transparent;
   transition: border-left-color 0.3s ease;
 }
@@ -797,27 +828,38 @@ body {
 /* Enhance visual hierarchy within identity block */
 .identity-block .hero-title {
   /* Primary focal point - strongest visual weight */
-  font-weight: 800; /* Increased from 700 for stronger hierarchy */
-  letter-spacing: -0.025em; /* Tighter letter spacing for impact */
-  line-height: 1.1; /* Tighter line height for compactness */
-  margin-bottom: 0.125rem; /* Micro spacing - 2px */
+  font-weight: 800;
+  /* Increased from 700 for stronger hierarchy */
+  letter-spacing: -0.025em;
+  /* Tighter letter spacing for impact */
+  line-height: 1.1;
+  /* Tighter line height for compactness */
+  margin-bottom: 0.125rem;
+  /* Micro spacing - 2px */
 }
 
 .identity-block .hero-subtitle {
   /* Secondary information - medium visual weight */
-  font-weight: 500; /* Slightly reduced weight for hierarchy */
-  opacity: 0.9; /* Subtle opacity reduction for hierarchy */
-  margin-bottom: 0.125rem; /* Micro spacing - 2px */
-  line-height: 1.3; /* Optimized for readability */
+  font-weight: 500;
+  /* Slightly reduced weight for hierarchy */
+  opacity: 0.9;
+  /* Subtle opacity reduction for hierarchy */
+  margin-bottom: 0.125rem;
+  /* Micro spacing - 2px */
+  line-height: 1.3;
+  /* Optimized for readability */
 }
 
 .identity-block .hero-education {
   /* Tertiary information - lightest visual weight */
   font-weight: 400;
-  opacity: 0.8; /* Further reduced opacity for clear hierarchy */
-  margin-bottom: 0; /* Remove bottom margin within block */
+  opacity: 0.8;
+  /* Further reduced opacity for clear hierarchy */
+  margin-bottom: 0;
+  /* Remove bottom margin within block */
   line-height: 1.4;
-  font-size: 0.95em; /* Slightly smaller for hierarchy */
+  font-size: 0.95em;
+  /* Slightly smaller for hierarchy */
 }
 
 /* Z-Pattern Visual Flow Enhancement */
@@ -834,13 +876,11 @@ body {
   left: 0;
   width: 100%;
   height: 2px;
-  background: linear-gradient(
-    90deg,
-    var(--primary) 0%,
-    transparent 30%,
-    transparent 70%,
-    var(--primary) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--primary) 0%,
+      transparent 30%,
+      transparent 70%,
+      var(--primary) 100%);
   opacity: 0.1;
   z-index: 0;
 }
@@ -852,14 +892,16 @@ body {
 }
 
 /* Create visual rhythm through consistent micro-spacing */
-.hero-text-content > * + * {
+.hero-text-content>*+* {
   /* Universal adjacent sibling spacing for consistent rhythm */
-  margin-top: 0.125rem; /* 2px micro spacing */
+  margin-top: 0.125rem;
+  /* 2px micro spacing */
 }
 
 /* Override for skills container to maintain proper separation */
 .hero-text-content .skills-compact-container {
-  margin-top: 1rem; /* 16px separation from identity block */
+  margin-top: 1rem;
+  /* 16px separation from identity block */
 }
 
 /* Enhanced Skills Section Visual Hierarchy */
@@ -868,8 +910,10 @@ body {
   position: relative;
   background-color: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 0.75rem; /* Slightly larger radius for visual prominence */
-  padding: 1rem; /* Increased padding for better visual weight */
+  border-radius: 0.75rem;
+  /* Slightly larger radius for visual prominence */
+  padding: 1rem;
+  /* Increased padding for better visual weight */
   box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
   /* Add subtle visual anchor */
   border-top: 2px solid var(--primary);
@@ -884,13 +928,15 @@ body {
 
 /* Skills Grid - Enhanced Visual Relationships */
 .skills-grid.group-separated {
-  gap: 0.5rem; /* 8px between columns for clear separation */
+  gap: 0.5rem;
+  /* 8px between columns for clear separation */
 }
 
 /* Apply tight grouping within restored columns */
 @media (min-width: 672px) {
   .skills-column.group-tight {
-    gap: 0.125rem; /* 2px between tags within columns for tight grouping */
+    gap: 0.125rem;
+    /* 2px between tags within columns for tight grouping */
   }
 }
 
@@ -902,31 +948,37 @@ body {
 
 /* Micro-spacing utilities for precise control */
 .micro-space-1 {
-  margin-bottom: 0.125rem; /* 2px */
+  margin-bottom: 0.125rem;
+  /* 2px */
 }
 
 .micro-space-2 {
-  margin-bottom: 0.1875rem; /* 3px */
+  margin-bottom: 0.1875rem;
+  /* 3px */
 }
 
 .micro-space-3 {
-  margin-bottom: 0.25rem; /* 4px */
+  margin-bottom: 0.25rem;
+  /* 4px */
 }
 
 /* Proximity-based grouping utilities */
 .group-tight {
   /* For tightly related elements */
-  gap: 0.125rem; /* 2px */
+  gap: 0.125rem;
+  /* 2px */
 }
 
 .group-related {
   /* For related but distinct elements */
-  gap: 0.25rem; /* 4px */
+  gap: 0.25rem;
+  /* 4px */
 }
 
 .group-separated {
   /* For separated but connected elements */
-  gap: 0.5rem; /* 8px */
+  gap: 0.5rem;
+  /* 8px */
 }
 
 /* Visual rhythm utilities */
@@ -969,16 +1021,17 @@ body {
 
 /* Enhanced responsive visual hierarchy */
 @media (min-width: 1056px) {
+
   /* Desktop-specific hierarchy enhancements */
   .identity-block {
     border-left-color: var(--primary);
     border-left-width: 3px;
   }
-  
+
   .headshot-container::after {
     opacity: 0.5;
   }
-  
+
   /* Stronger Z-pattern anchors on desktop */
   .hero-section::before {
     opacity: 0.15;
@@ -986,24 +1039,23 @@ body {
 }
 
 @media (max-width: 671px) {
+
   /* Mobile-specific hierarchy adjustments */
   .identity-block {
     text-align: center;
     border-left: none;
     padding-left: 0;
   }
-  
+
   .headshot-container::after {
     display: none;
   }
-  
+
   /* Center-focused hierarchy for mobile */
   .hero-section::before {
-    background: radial-gradient(
-      circle at center,
-      var(--primary) 0%,
-      transparent 50%
-    );
+    background: radial-gradient(circle at center,
+        var(--primary) 0%,
+        transparent 50%);
     height: 1px;
     opacity: 0.1;
   }
@@ -1112,8 +1164,8 @@ body {
   margin-bottom: 0.75rem;
   color: var(--text);
 }
-/
-* ==== Carbon Modal hardening (dark mode safe) ==== */
+
+/* ====Carbon Modal hardening (dark mode safe)====*/
 /* Backdrop uses overlay token */
 :where(.cds--modal, .bx--modal) {
   background-color: var(--cds-overlay) !important;
@@ -1132,6 +1184,7 @@ body {
 :where(.cds--modal-header, .bx--modal-header) {
   border-bottom: 1px solid var(--cds-border-subtle) !important;
 }
+
 :where(.cds--modal-footer, .bx--modal-footer) {
   border-top: 1px solid var(--cds-border-subtle) !important;
 }
