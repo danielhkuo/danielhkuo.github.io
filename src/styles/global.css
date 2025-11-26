@@ -717,7 +717,7 @@ body {
   .hero-image {
     grid-row: 1;
     grid-column: 2;
-    justify-self: end;
+    justify-self: center;
     align-self: center;
     /* ⟵ Let the grid align it */
     margin-top: 0;
@@ -737,7 +737,7 @@ body {
   .hero-image {
     /* REVISED: Removed margin-top to respect vertical alignment */
     margin-top: 0;
-    justify-self: end;
+    justify-self: center;
   }
 
   /* REVISED: Removed the 3-column override for skills grid */
