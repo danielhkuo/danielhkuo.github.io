@@ -45,11 +45,22 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
           ),
 
           // Paragraphs - Generous line height for readability
-          p: ({ children }) => (
-            <p className="text-lg leading-relaxed mb-6 text-ink/80">
-              {children}
-            </p>
-          ),
+          p: ({ children, node }: any) => {
+            // Check if paragraph contains only an image or code block
+            const hasOnlyImage = node?.children?.length === 1 && node?.children[0]?.tagName === 'img';
+            const hasOnlyCode = node?.children?.length === 1 && node?.children[0]?.tagName === 'code';
+
+            if (hasOnlyImage || hasOnlyCode) {
+              // Don't wrap in <p> if it only contains block-level content
+              return <>{children}</>;
+            }
+
+            return (
+              <p className="text-lg leading-relaxed mb-6 text-ink/80">
+                {children}
+              </p>
+            );
+          },
 
           // Images - Grayscale with color reveal on hover
           img: ({ src, alt }) => (
@@ -77,6 +88,13 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
             );
           },
 
+          // Pre blocks - Wrap code blocks
+          pre: ({ children }: any) => (
+            <div className="bg-ink/5 p-4 overflow-x-auto mb-6 font-mono text-sm text-ink">
+              {children}
+            </div>
+          ),
+
           // Code blocks - Monospace with paper background
           code: ({ className, children, inline, ...props }: any) => {
             if (inline) {
@@ -86,12 +104,11 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
                 </code>
               );
             }
+            // For block code, just return the code element (pre wrapper handled above)
             return (
-              <pre className="bg-ink/5 p-4 overflow-x-auto mb-6">
-                <code className={`font-mono text-sm block text-ink ${className || ''}`} {...props}>
-                  {children}
-                </code>
-              </pre>
+              <code className={`font-mono text-sm block text-ink ${className || ''}`} {...props}>
+                {children}
+              </code>
             );
           },
 
