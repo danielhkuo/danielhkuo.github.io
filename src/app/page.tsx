@@ -18,20 +18,22 @@ export default async function Home() {
       <main className="max-w-7xl mx-auto px-8 py-16">
 
         {/* The Bio Block */}
-        <section className="max-w-3xl mb-24">
+        <section className="mb-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             About
           </h2>
           <div className="border-t border-divider pt-6">
-            <p className="text-lg leading-relaxed text-ink/80 mb-4">
-              A brief narrative introduction about yourself. This section should be
-              personal yet professional, giving visitors a sense of who you are and
-              what drives your work.
-            </p>
-            <p className="text-lg leading-relaxed text-ink/80">
-              The typography is generous, mimicking book layout. The structure is
-              journalistic—facts first, personality second.
-            </p>
+            <div className="max-w-4xl">
+              <p className="text-lg leading-relaxed text-ink/80 mb-4">
+                A brief narrative introduction about yourself. This section should be
+                personal yet professional, giving visitors a sense of who you are and
+                what drives your work.
+              </p>
+              <p className="text-lg leading-relaxed text-ink/80">
+                The typography is generous, mimicking book layout. The structure is
+                journalistic—facts first, personality second.
+              </p>
+            </div>
           </div>
         </section>
 

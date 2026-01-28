@@ -18,7 +18,7 @@ interface EditorialReadmeProps {
  */
 export default function EditorialReadme({ content }: EditorialReadmeProps) {
   return (
-    <div className="editorial-content max-w-none">
+    <div className="editorial-content max-w-none" suppressHydrationWarning>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -78,9 +78,8 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
           },
 
           // Code blocks - Monospace with paper background
-          code: ({ className, children, ...props }) => {
-            const isInline = !className;
-            if (isInline) {
+          code: ({ className, children, inline, ...props }: any) => {
+            if (inline) {
               return (
                 <code className="font-mono text-sm bg-ink/5 px-2 py-0.5 text-ink">
                   {children}
@@ -88,12 +87,11 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
               );
             }
             return (
-              <code
-                className={`font-mono text-sm block bg-ink/5 p-4 overflow-x-auto ${className}`}
-                {...props}
-              >
-                {children}
-              </code>
+              <pre className="bg-ink/5 p-4 overflow-x-auto mb-6">
+                <code className={`font-mono text-sm block text-ink ${className || ''}`} {...props}>
+                  {children}
+                </code>
+              </pre>
             );
           },
 
