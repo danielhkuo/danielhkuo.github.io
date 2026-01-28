@@ -4,18 +4,18 @@ import LiveTime from "@/components/LiveTime";
 import LocationMap from "@/components/LocationMap";
 import { CopyableText } from "@/components/CopyButton";
 import ContactForm from "@/components/ContactForm";
-import { fetchPinnedReposWithReadmes } from "@/lib/github";
+import { fetchPinnedRepos } from "@/lib/github";
 
 export default async function Home() {
   // Fetch pinned repos at build time (SSG)
-  const projects = await fetchPinnedReposWithReadmes();
+  const projects = await fetchPinnedRepos();
   return (
     <div className="min-h-screen bg-paper">
       {/* The Masthead */}
       <Masthead />
 
       {/* Main Content Area - Single Column Vertical Stack */}
-      <main className="max-w-7xl mx-auto px-8 py-16">
+      <main className="max-w-5xl mx-auto px-8 py-16">
 
         {/* The Bio Block */}
         <section className="mb-24">
@@ -25,13 +25,13 @@ export default async function Home() {
           <div className="border-t border-divider pt-6">
             <div className="max-w-4xl">
               <p className="text-lg leading-relaxed text-ink/80 mb-4">
-                A brief narrative introduction about yourself. This section should be
-                personal yet professional, giving visitors a sense of who you are and
-                what drives your work.
+Hi! I&apos;m Daniel.
+              </p>
+              <p className="text-lg leading-relaxed text-ink/80 mb-4">
+My background lies primarily in software development and secondarily in business. I have extensive hands-on experience managing (and breaking) a homelab environment (Unraid), running startups, and teaching, guiding, and assisting software projects as a PM and dev. Current personal projects focus on building AI-powered mobile applications, self-hosted services, movie selection websites, and much more.
               </p>
               <p className="text-lg leading-relaxed text-ink/80">
-                The typography is generous, mimicking book layout. The structure is
-                journalistic—facts first, personality second.
+On a more serious note, I care deeply about building impactful products while leveraging technology in an ethical manner. I firmly support open source initiatives and awareness around the future of AI. Outside of tech, I enjoy reading, playing the cello, basketball, building mechanical keyboards, and following the competitive Apex Legends eSports scene. Currently thinking of picking up cycling again. (hit me up if u have bike recs!)
               </p>
             </div>
           </div>
@@ -43,17 +43,80 @@ export default async function Home() {
             Tools & Technologies
           </h2>
           <div className="border-t border-divider pt-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {["React", "TypeScript", "Next.js", "Tailwind", "Node.js", "Git", "Figma", "Python"].map((tool) => (
-                <div
-                  key={tool}
-                  className="border border-divider p-6 hover:border-ink/20 transition-colors"
-                >
-                  <span className="font-mono text-sm text-ink/70">
-                    {tool}
-                  </span>
-                </div>
-              ))}
+            {/* Languages */}
+            <div className="mb-8">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                Languages
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {["Java", "Python", "Go", "TypeScript", "JavaScript", "C", "C++"].map((tool) => (
+                  <div
+                    key={tool}
+                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
+                  >
+                    <span className="font-mono text-sm text-ink/70">
+                      {tool}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Frameworks & Libraries */}
+            <div className="mb-8">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                Frameworks & Libraries
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {["React", "React Native", "Node.js", "Next.js", "LangChain"].map((tool) => (
+                  <div
+                    key={tool}
+                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
+                  >
+                    <span className="font-mono text-sm text-ink/70">
+                      {tool}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Cloud & DevOps */}
+            <div className="mb-8">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                Cloud & Developer Tools
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {["AWS", "Azure", "Docker", "Git", "NGINX", "Postman", "Cloudflare", "Linux"].map((tool) => (
+                  <div
+                    key={tool}
+                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
+                  >
+                    <span className="font-mono text-sm text-ink/70">
+                      {tool}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Databases */}
+            <div>
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                Databases
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {["PostgreSQL", "MongoDB"].map((tool) => (
+                  <div
+                    key={tool}
+                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
+                  >
+                    <span className="font-mono text-sm text-ink/70">
+                      {tool}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -71,8 +134,8 @@ export default async function Home() {
                   Local Time
                 </h3>
                 <LiveTime
-                  timezone="America/Los_Angeles"
-                  location="San Francisco, CA"
+                  timezone="America/Chicago"
+                  location="Houston, TX"
                 />
               </div>
 
@@ -82,18 +145,18 @@ export default async function Home() {
                   Get in Touch
                 </h3>
                 <CopyableText
-                  text="your.email@example.com"
-                  displayText="your.email@example.com"
+                  text="danielhkuo@rice.edu"
+                  displayText="danielhkuo@rice.edu"
                 />
               </div>
             </div>
 
             {/* Location Map */}
             <LocationMap
-              city="San Francisco"
-              state="California"
+              city="Houston"
+              state="Texas"
               country="USA"
-              coordinates={{ lat: 37.7749, lng: -122.4194 }}
+              coordinates={{ lat: 29.7168, lng: -95.4036 }}
             />
           </div>
         </section>
@@ -130,7 +193,7 @@ export default async function Home() {
 
       {/* Footer */}
       <footer className="border-t border-divider mt-32">
-        <div className="max-w-7xl mx-auto px-8 py-12">
+        <div className="max-w-5xl mx-auto px-8 py-12">
           <p className="font-mono text-xs text-ink/40 uppercase tracking-wider">
             © {new Date().getFullYear()} — Digital Print Portfolio
           </p>

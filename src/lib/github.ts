@@ -19,13 +19,18 @@ export interface PinnedRepo {
   owner: {
     login: string;
   };
+  languages: {
+    name: string;
+    color: string;
+    percentage: number;
+  }[];
 }
 
 export interface RepoWithReadme extends PinnedRepo {
   readme: string;
 }
 
-// GraphQL query to fetch pinned repositories
+// GraphQL query to fetch pinned repositories with language breakdown
 const PINNED_REPOS_QUERY = `
   query($username: String!) {
     user(login: $username) {
@@ -39,6 +44,16 @@ const PINNED_REPOS_QUERY = `
             primaryLanguage {
               name
               color
+            }
+            languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+              edges {
+                size
+                node {
+                  name
+                  color
+                }
+              }
+              totalSize
             }
             stargazerCount
             forkCount
@@ -67,6 +82,11 @@ function getMockRepos(): PinnedRepo[] {
         name: "TypeScript",
         color: "#3178c6",
       },
+      languages: [
+        { name: "TypeScript", color: "#3178c6", percentage: 65.4 },
+        { name: "JavaScript", color: "#f1e05a", percentage: 20.3 },
+        { name: "CSS", color: "#563d7c", percentage: 14.3 },
+      ],
       stargazerCount: 42,
       forkCount: 7,
       updatedAt: new Date().toISOString(),
@@ -91,6 +111,11 @@ function getMockReposWithReadmes(): RepoWithReadme[] {
         name: "TypeScript",
         color: "#3178c6",
       },
+      languages: [
+        { name: "TypeScript", color: "#3178c6", percentage: 58.2 },
+        { name: "JavaScript", color: "#f1e05a", percentage: 25.1 },
+        { name: "CSS", color: "#563d7c", percentage: 16.7 },
+      ],
       stargazerCount: 42,
       forkCount: 7,
       updatedAt: new Date().toISOString(),
@@ -177,7 +202,39 @@ export async function fetchPinnedRepos(): Promise<PinnedRepo[]> {
       username: GITHUB_USERNAME,
     });
 
-    return response.user.pinnedItems.nodes;
+    // Process language data to calculate percentages
+    return response.user.pinnedItems.nodes.map((repo: {
+      name: string;
+      description: string;
+      url: string;
+      homepageUrl: string | null;
+      primaryLanguage: { name: string; color: string } | null;
+      languages: { totalSize: number; edges: { size: number; node: { name: string; color: string | null } }[] };
+      stargazerCount: number;
+      forkCount: number;
+      updatedAt: string;
+      owner: { login: string };
+    }) => {
+      const totalSize = repo.languages.totalSize;
+      const languages = repo.languages.edges.map((edge: { size: number; node: { name: string; color: string | null } }) => ({
+        name: edge.node.name,
+        color: edge.node.color || "#858585",
+        percentage: totalSize > 0 ? (edge.size / totalSize) * 100 : 0,
+      }));
+
+      return {
+        name: repo.name,
+        description: repo.description,
+        url: repo.url,
+        homepageUrl: repo.homepageUrl,
+        primaryLanguage: repo.primaryLanguage,
+        languages,
+        stargazerCount: repo.stargazerCount,
+        forkCount: repo.forkCount,
+        updatedAt: repo.updatedAt,
+        owner: repo.owner,
+      };
+    });
   } catch (error) {
     console.error("Error fetching pinned repos:", error);
     return getMockRepos();
