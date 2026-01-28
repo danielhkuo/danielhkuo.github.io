@@ -1,17 +1,29 @@
+import Image from "next/image";
+
 export default function Masthead() {
   return (
     <header className="border-b border-divider">
       <div className="max-w-7xl mx-auto px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-12">
           {/* Left Column - Portrait Photo */}
-          <div className="relative aspect-[3/4] bg-ink/10">
-            {/* Placeholder for profile photo */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="font-mono text-sm text-ink/40">
-                PORTRAIT
-              </span>
-            </div>
-            {/* Future: Add grayscale image with film grain filter */}
+          <div className="relative aspect-[3/4] bg-ink/10 overflow-hidden">
+            <Image
+              src="/headshot.webp"
+              alt="Daniel Kuo"
+              fill
+              className="object-cover"
+              style={{
+                filter: "grayscale(100%) contrast(1.1)",
+              }}
+              priority
+            />
+            {/* Film grain texture overlay */}
+            <div
+              className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              }}
+            />
           </div>
 
           {/* Right Column - Identity & Status */}
