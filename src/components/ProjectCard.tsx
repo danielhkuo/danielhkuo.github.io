@@ -1,67 +1,46 @@
 "use client";
 
-import { useState } from "react";
-import EditorialReadme from "./EditorialReadme";
-import { RepoWithReadme } from "@/lib/github";
+import { PinnedRepo } from "@/lib/github";
 
 interface ProjectCardProps {
-  project: RepoWithReadme;
+  project: PinnedRepo;
 }
 
 /**
- * ProjectCard - Compact project preview with expandable README
+ * ProjectCard - Visual project showcase with stats and language breakdown
  *
  * Features:
- * - Thumbnail view showing title, description, and metadata
- * - First ~300 characters of README as preview
- * - Expandable "Read Full Article" button
- * - Smooth accordion transition
+ * - Project metadata (name, description, dates)
+ * - Visual language breakdown bar chart
+ * - GitHub stats (stars, forks)
+ * - Links to repository and live demo
  */
 export default function ProjectCard({ project }: ProjectCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const updatedDate = new Date(project.updatedAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  // Extract preview text (first ~300 chars, but break at sentence)
-  const getPreview = (markdown: string) => {
-    // Remove markdown formatting for preview
-    const plainText = markdown
-      .replace(/#{1,6}\s/g, "") // Remove headers
-      .replace(/\*\*(.+?)\*\*/g, "$1") // Remove bold
-      .replace(/\*(.+?)\*/g, "$1") // Remove italic
-      .replace(/\[(.+?)\]\(.+?\)/g, "$1") // Remove links
-      .replace(/`(.+?)`/g, "$1") // Remove code
-      .replace(/>\s/g, "") // Remove blockquotes
-      .trim();
-
-    // Get first ~300 chars at sentence boundary
-    const preview = plainText.slice(0, 300);
-    const lastPeriod = preview.lastIndexOf(".");
-    const lastQuestion = preview.lastIndexOf("?");
-    const lastExclamation = preview.lastIndexOf("!");
-
-    const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclamation);
-
-    if (lastSentence > 150) {
-      return plainText.slice(0, lastSentence + 1);
-    }
-
-    return preview + "...";
-  };
-
-  const preview = getPreview(project.readme);
+  // Filter out languages with very small percentages for cleaner display
+  const significantLanguages = project.languages.filter(
+    (lang) => lang.percentage > 1
+  );
 
   return (
     <article className="mb-16 pb-16 border-b border-divider last:border-b-0 last:mb-0 last:pb-0">
-      {/* Compact Header */}
+      {/* Project Header */}
       <header className="mb-6">
         <div className="flex items-start justify-between gap-4 mb-3">
           <h3 className="font-serif text-3xl font-light text-ink leading-tight">
-            {project.name}
+            <a
+              href={project.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-ink/70 transition-colors"
+            >
+              {project.name}
+            </a>
           </h3>
 
           {project.primaryLanguage && (
@@ -79,72 +58,91 @@ export default function ProjectCard({ project }: ProjectCardProps) {
 
         {/* Description */}
         {project.description && (
-          <p className="text-lg text-ink/70 leading-relaxed mb-4">
+          <p className="text-lg text-ink/70 leading-relaxed mb-6">
             {project.description}
           </p>
         )}
+      </header>
 
-        {/* Metadata Row */}
-        <div className="flex items-center gap-6 font-mono text-xs uppercase tracking-wider text-ink/50">
-          <time dateTime={project.updatedAt}>{updatedDate}</time>
+      {/* Language Breakdown Bar Chart */}
+      {significantLanguages.length > 0 && (
+        <div className="mb-6">
+          <h4 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-3">
+            Language Breakdown
+          </h4>
 
-          {project.stargazerCount > 0 && (
-            <span>★ {project.stargazerCount}</span>
-          )}
+          {/* Horizontal Bar */}
+          <div className="flex h-2 mb-3 overflow-hidden">
+            {significantLanguages.map((lang, index) => (
+              <div
+                key={lang.name}
+                className="transition-all hover:opacity-80"
+                style={{
+                  width: `${lang.percentage}%`,
+                  backgroundColor: lang.color,
+                  marginLeft: index > 0 ? "1px" : "0",
+                }}
+                title={`${lang.name}: ${lang.percentage.toFixed(1)}%`}
+              />
+            ))}
+          </div>
 
+          {/* Language Legend */}
+          <div className="flex flex-wrap gap-4">
+            {significantLanguages.map((lang) => (
+              <div key={lang.name} className="flex items-center gap-2">
+                <div
+                  className="w-2 h-2"
+                  style={{ backgroundColor: lang.color }}
+                />
+                <span className="font-mono text-xs text-ink/60">
+                  {lang.name}
+                  <span className="text-ink/40 ml-1">
+                    {lang.percentage.toFixed(1)}%
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stats and Links */}
+      <footer className="flex flex-wrap items-center gap-6 font-mono text-xs uppercase tracking-wider text-ink/50">
+        <time dateTime={project.updatedAt}>Updated {updatedDate}</time>
+
+        {project.stargazerCount > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="text-ink/70">★</span> {project.stargazerCount}
+          </span>
+        )}
+
+        {project.forkCount > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="text-ink/70">⑂</span> {project.forkCount}
+          </span>
+        )}
+
+        <a
+          href={project.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-ink transition-colors"
+        >
+          View Repository ↗
+        </a>
+
+        {project.homepageUrl && (
           <a
-            href={project.url}
+            href={project.homepageUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-ink transition-colors"
           >
-            Repository ↗
+            Live Demo ↗
           </a>
-
-          {project.homepageUrl && (
-            <a
-              href={project.homepageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-ink transition-colors"
-            >
-              Live Demo ↗
-            </a>
-          )}
-        </div>
-      </header>
-
-      {/* Preview Text */}
-      <div className="mb-6">
-        <p className="text-base leading-relaxed text-ink/70">{preview}</p>
-      </div>
-
-      {/* Expand Button */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="group flex items-center gap-2 font-mono text-sm uppercase tracking-wider text-ink hover:text-ink/70 transition-colors"
-      >
-        <span>{isExpanded ? "Close Article" : "Read Full Article"}</span>
-        <span
-          className="transition-transform duration-300"
-          style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
-        >
-          →
-        </span>
-      </button>
-
-      {/* Expandable Full README */}
-      <div
-        className="overflow-hidden transition-all duration-500 ease-in-out"
-        style={{
-          maxHeight: isExpanded ? "10000px" : "0px",
-          opacity: isExpanded ? 1 : 0,
-        }}
-      >
-        <div className="border-t border-divider mt-8 pt-8">
-          <EditorialReadme content={project.readme} />
-        </div>
-      </div>
+        )}
+      </footer>
     </article>
   );
 }
