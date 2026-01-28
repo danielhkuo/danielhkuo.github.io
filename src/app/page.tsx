@@ -185,7 +185,7 @@ On a more serious note, I care deeply about building impactful products while le
             Get in Touch
           </h2>
           <div className="border-t border-divider pt-8">
-            <ContactForm formspreeId="your_formspree_id" />
+            <ContactForm />
           </div>
         </section>
 

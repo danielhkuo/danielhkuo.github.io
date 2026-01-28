@@ -2,47 +2,35 @@
 
 import { useState } from "react";
 
-interface ContactFormProps {
-  formspreeId?: string;
-}
-
 /**
  * ContactForm - Editorial-style form with underlined inputs
  *
  * Features:
  * - Paper-form aesthetic with underlined fields
- * - Integrates with Formspree for serverless submission
+ * - Integrates with Web3Forms for serverless submission
  * - Success/error state handling
  */
-export default function ContactForm({
-  formspreeId = "your_formspree_id",
-}: ContactFormProps) {
+export default function ContactForm() {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    message: "",
-  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setStatus("submitting");
 
     try {
-      const response = await fetch(
-        `https://formspree.io/f/${formspreeId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        }
-      );
+      const formData = new FormData(e.currentTarget);
+      formData.append("access_key", "166051ec-a006-47dd-abec-9be280b7432f");
 
-      if (response.ok) {
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
         setStatus("success");
-        setFormData({ name: "", email: "", message: "" });
+        e.currentTarget.reset();
       } else {
         setStatus("error");
       }
@@ -51,15 +39,6 @@ export default function ContactForm({
     }
 
     setTimeout(() => setStatus("idle"), 3000);
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
   };
 
   return (
@@ -76,8 +55,6 @@ export default function ContactForm({
           type="text"
           id="name"
           name="name"
-          value={formData.name}
-          onChange={handleChange}
           required
           className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors"
           placeholder="Your name"
@@ -96,8 +73,6 @@ export default function ContactForm({
           type="email"
           id="email"
           name="email"
-          value={formData.email}
-          onChange={handleChange}
           required
           className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors"
           placeholder="your@email.com"
@@ -115,8 +90,6 @@ export default function ContactForm({
         <textarea
           id="message"
           name="message"
-          value={formData.message}
-          onChange={handleChange}
           required
           rows={6}
           className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors resize-none"
