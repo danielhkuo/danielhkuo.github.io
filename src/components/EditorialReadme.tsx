@@ -53,7 +53,10 @@ export default function EditorialReadme({ content }: EditorialReadmeProps) {
 
           // Images - Grayscale with color reveal on hover
           img: ({ src, alt }) => (
-            <EditorialImage src={src} alt={alt} />
+            <EditorialImage
+              src={typeof src === 'string' ? src : undefined}
+              alt={typeof alt === 'string' ? alt : undefined}
+            />
           ),
 
           // Links - Styled with external indicators
