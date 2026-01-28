@@ -1,6 +1,10 @@
 import Masthead from "@/components/Masthead";
+import ProjectCard from "@/components/ProjectCard";
+import { fetchPinnedReposWithReadmes } from "@/lib/github";
 
-export default function Home() {
+export default async function Home() {
+  // Fetch pinned repos at build time (SSG)
+  const projects = await fetchPinnedReposWithReadmes();
   return (
     <div className="min-h-screen bg-paper">
       {/* The Masthead */}
@@ -48,15 +52,21 @@ export default function Home() {
           </div>
         </section>
 
-        {/* The Project Feed - Placeholder */}
+        {/* The Project Feed */}
         <section>
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             Selected Work
           </h2>
-          <div className="border-t border-divider pt-8">
-            <p className="font-mono text-sm text-ink/50">
-              Projects will be automatically populated from GitHub pinned repositories...
-            </p>
+          <div className="border-t border-divider pt-12">
+            {projects.length > 0 ? (
+              projects.map((project) => (
+                <ProjectCard key={project.name} project={project} />
+              ))
+            ) : (
+              <p className="font-mono text-sm text-ink/50">
+                No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
+              </p>
+            )}
           </div>
         </section>
 
