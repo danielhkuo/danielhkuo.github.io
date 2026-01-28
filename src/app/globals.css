@@ -1,26 +1,45 @@
 @import "tailwindcss";
 
+/* Editorial Design System - "Digital Print" Aesthetic */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* The Canvas - Warm off-white cream/bone simulating paper */
+  --background: #FDFBF7;
+  /* The Ink - Soft black/charcoal */
+  --foreground: #1A1A1A;
+  /* Semantic colors */
+  --available: #16a34a;
+  /* Divider color for hairlines */
+  --divider: #e5e5e5;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* Colors */
+  --color-paper: var(--background);
+  --color-ink: var(--foreground);
+  --color-available: var(--available);
+  --color-divider: var(--divider);
+
+  /* Typography */
+  --font-serif: var(--font-cormorant);
   --font-mono: var(--font-geist-mono);
+
+  /* Zero radius philosophy - all corners sharp */
+  --radius-none: 0px;
+  --default-border-radius: 0px;
+
+  /* Hairline dividers */
+  --border-width-hairline: 1px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Remove all default border radius */
+* {
+  border-radius: 0 !important;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
