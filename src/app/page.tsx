@@ -1,5 +1,9 @@
 import Masthead from "@/components/Masthead";
 import ProjectCard from "@/components/ProjectCard";
+import LiveTime from "@/components/LiveTime";
+import LocationMap from "@/components/LocationMap";
+import { CopyableText } from "@/components/CopyButton";
+import ContactForm from "@/components/ContactForm";
 import { fetchPinnedReposWithReadmes } from "@/lib/github";
 
 export default async function Home() {
@@ -52,6 +56,46 @@ export default async function Home() {
           </div>
         </section>
 
+        {/* Interactive Micro-Islands */}
+        <section className="mb-24">
+          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
+            Currently
+          </h2>
+          <div className="border-t border-divider pt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              {/* Live Time Widget */}
+              <div>
+                <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                  Local Time
+                </h3>
+                <LiveTime
+                  timezone="America/Los_Angeles"
+                  location="San Francisco, CA"
+                />
+              </div>
+
+              {/* Contact Info */}
+              <div>
+                <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                  Get in Touch
+                </h3>
+                <CopyableText
+                  text="your.email@example.com"
+                  displayText="your.email@example.com"
+                />
+              </div>
+            </div>
+
+            {/* Location Map */}
+            <LocationMap
+              city="San Francisco"
+              state="California"
+              country="USA"
+              coordinates={{ lat: 37.7749, lng: -122.4194 }}
+            />
+          </div>
+        </section>
+
         {/* The Project Feed */}
         <section>
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
@@ -67,6 +111,16 @@ export default async function Home() {
                 No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
               </p>
             )}
+          </div>
+        </section>
+
+        {/* Contact Section */}
+        <section className="mt-32">
+          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
+            Get in Touch
+          </h2>
+          <div className="border-t border-divider pt-8">
+            <ContactForm formspreeId="your_formspree_id" />
           </div>
         </section>
 
