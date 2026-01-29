@@ -1,10 +1,21 @@
+import dynamic from "next/dynamic";
 import Masthead from "@/components/Masthead";
 import ProjectCard from "@/components/ProjectCard";
 import LiveTime from "@/components/LiveTime";
-import LocationMap from "@/components/LocationMap";
 import { CopyableText } from "@/components/CopyButton";
-import ContactForm from "@/components/ContactForm";
 import { fetchPinnedRepos } from "@/lib/github";
+
+// Lazy load below-the-fold components
+const LocationMap = dynamic(() => import("@/components/LocationMap"), {
+  loading: () => (
+    <div className="border border-divider aspect-video bg-ink/5 animate-pulse" />
+  ),
+});
+const ContactForm = dynamic(() => import("@/components/ContactForm"), {
+  loading: () => (
+    <div className="border border-divider p-8 bg-ink/5 animate-pulse h-64" />
+  ),
+});
 
 export default async function Home() {
   // Fetch pinned repos at build time (SSG)
