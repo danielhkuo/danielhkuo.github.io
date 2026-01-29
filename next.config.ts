@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+
+  // Performance optimizations
+  compress: true,
+  poweredByHeader: false,
+
+  // Optimize production builds
+  experimental: {
+    optimizePackageImports: ['react-icons'],
+  },
 };
 
 export default nextConfig;
