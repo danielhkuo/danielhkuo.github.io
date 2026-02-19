@@ -60,7 +60,7 @@ On a more serious note, I care deeply about building impactful products while le
                 Languages
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["Java", "Python", "Go", "TypeScript", "JavaScript", "C", "C++"].map((tool) => (
+                {["Java", "Python", "Go", "TypeScript", "JavaScript", "C", "C++", "Haskell"].map((tool) => (
                   <div
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
@@ -79,7 +79,7 @@ On a more serious note, I care deeply about building impactful products while le
                 Frameworks & Libraries
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["React", "React Native", "Node.js", "Next.js", "LangChain"].map((tool) => (
+                {["React", "React Native", "Node.js", "Next.js", "LangChain", "Unity", "TanStack Query"].map((tool) => (
                   <div
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
@@ -98,7 +98,7 @@ On a more serious note, I care deeply about building impactful products while le
                 Cloud & Developer Tools
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["AWS", "Azure", "Docker", "Git", "NGINX", "Postman", "Cloudflare", "Linux"].map((tool) => (
+                {["AWS", "Microsoft Azure", "PostgreSQL", "MongoDB", "Docker", "Git", "NGINX", "Postman", "Cloudflare", "Linux"].map((tool) => (
                   <div
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
@@ -111,24 +111,6 @@ On a more serious note, I care deeply about building impactful products while le
               </div>
             </div>
 
-            {/* Databases */}
-            <div>
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
-                Databases
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["PostgreSQL", "MongoDB"].map((tool) => (
-                  <div
-                    key={tool}
-                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
-                  >
-                    <span className="font-mono text-sm text-ink/70">
-                      {tool}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
 
