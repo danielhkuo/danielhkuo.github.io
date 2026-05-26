@@ -1,24 +1,36 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Geist_Mono } from "next/font/google";
+import { Cormorant_Garamond, Cormorant_SC, EB_Garamond } from "next/font/google";
 import "./globals.css";
 
-// Serif font for headings and authority
 const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
   subsets: ["latin"],
-  weight: ["300", "400", "600", "700"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
-// Monospace font for utility and metadata
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const ebGaramond = EB_Garamond({
+  variable: "--font-eb",
   subsets: ["latin"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const cormorantSC = Cormorant_SC({
+  variable: "--font-cormorant-sc",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Daniel Kuo - Portfolio",
   description: "Digital print portfolio showcasing projects and work",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -35,7 +47,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
       </head>
       <body
-        className={`${cormorant.variable} ${geistMono.variable} antialiased`}
+        className={`${cormorant.variable} ${ebGaramond.variable} ${cormorantSC.variable} antialiased`}
       >
         {children}
       </body>
