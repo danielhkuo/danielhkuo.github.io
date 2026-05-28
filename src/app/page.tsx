@@ -1,9 +1,17 @@
+import type { Metadata } from "next";
 import dynamic from "next/dynamic";
+import HoverMenu from "@/components/HoverMenu";
 import Masthead from "@/components/Masthead";
 import ProjectCard from "@/components/ProjectCard";
 import LiveTime from "@/components/LiveTime";
 import { CopyableText } from "@/components/CopyButton";
 import { fetchPinnedRepos } from "@/lib/github";
+
+export const metadata: Metadata = {
+  title: "Daniel Kuo",
+  description:
+    "Software engineer and CS student at Rice University. Building impactful products with a focus on open source and ethical AI.",
+};
 
 // Lazy load below-the-fold components
 const LocationMap = dynamic(() => import("@/components/LocationMap"), {
@@ -22,6 +30,8 @@ export default async function Home() {
   const projects = await fetchPinnedRepos();
   return (
     <div className="min-h-screen bg-paper">
+      <HoverMenu />
+
       {/* The Masthead */}
       <Masthead />
 
@@ -29,19 +39,19 @@ export default async function Home() {
       <main className="max-w-5xl mx-auto px-8 py-16">
 
         {/* The Bio Block */}
-        <section className="mb-24">
+        <section id="about" className="mb-24 scroll-mt-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             About
           </h2>
           <div className="border-t border-divider pt-6">
             <div className="max-w-4xl">
-              <p className="text-lg leading-relaxed text-ink/80 mb-4">
+              <p className="text-lg leading-relaxed text-ink mb-4">
 Hi! I&apos;m Daniel.
               </p>
-              <p className="text-lg leading-relaxed text-ink/80 mb-4">
+              <p className="text-lg leading-relaxed text-ink mb-4">
 My background lies primarily in software development and secondarily in business. I have extensive hands-on experience managing (and breaking) a homelab environment (Unraid), running startups, and teaching, guiding, and assisting software projects as a PM and dev. Current personal projects focus on building AI-powered mobile applications, self-hosted services, movie selection websites, and much more.
               </p>
-              <p className="text-lg leading-relaxed text-ink/80">
+              <p className="text-lg leading-relaxed text-ink">
 On a more serious note, I care deeply about building impactful products while leveraging technology in an ethical manner. I firmly support open source initiatives and awareness around the future of AI. Outside of tech, I enjoy reading, playing the cello, basketball, building mechanical keyboards, and following the competitive Apex Legends eSports scene. Currently thinking of picking up cycling again. (hit me up if u have bike recs!)
               </p>
             </div>
@@ -49,14 +59,14 @@ On a more serious note, I care deeply about building impactful products while le
         </section>
 
         {/* The Stack Block */}
-        <section className="mb-24">
+        <section id="stack" className="mb-24 scroll-mt-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             Tools & Technologies
           </h2>
           <div className="border-t border-divider pt-8">
             {/* Languages */}
             <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
                 Languages
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -65,7 +75,7 @@ On a more serious note, I care deeply about building impactful products while le
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
                   >
-                    <span className="font-mono text-sm text-ink/70">
+                    <span className="font-mono text-sm text-ink">
                       {tool}
                     </span>
                   </div>
@@ -75,7 +85,7 @@ On a more serious note, I care deeply about building impactful products while le
 
             {/* Frameworks & Libraries */}
             <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
                 Frameworks & Libraries
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -84,7 +94,7 @@ On a more serious note, I care deeply about building impactful products while le
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
                   >
-                    <span className="font-mono text-sm text-ink/70">
+                    <span className="font-mono text-sm text-ink">
                       {tool}
                     </span>
                   </div>
@@ -94,7 +104,7 @@ On a more serious note, I care deeply about building impactful products while le
 
             {/* Cloud & DevOps */}
             <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
                 Cloud & Developer Tools
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -103,7 +113,7 @@ On a more serious note, I care deeply about building impactful products while le
                     key={tool}
                     className="border border-divider p-4 hover:border-ink/20 transition-colors"
                   >
-                    <span className="font-mono text-sm text-ink/70">
+                    <span className="font-mono text-sm text-ink">
                       {tool}
                     </span>
                   </div>
@@ -115,7 +125,7 @@ On a more serious note, I care deeply about building impactful products while le
         </section>
 
         {/* Interactive Micro-Islands */}
-        <section className="mb-24">
+        <section id="currently" className="mb-24 scroll-mt-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             Currently
           </h2>
@@ -123,7 +133,7 @@ On a more serious note, I care deeply about building impactful products while le
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               {/* Live Time Widget */}
               <div>
-                <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
                   Local Time
                 </h3>
                 <LiveTime
@@ -134,7 +144,7 @@ On a more serious note, I care deeply about building impactful products while le
 
               {/* Contact Info */}
               <div>
-                <h3 className="font-mono text-xs uppercase tracking-wider text-ink/50 mb-4">
+                <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
                   Get in Touch
                 </h3>
                 <CopyableText
@@ -155,7 +165,7 @@ On a more serious note, I care deeply about building impactful products while le
         </section>
 
         {/* The Project Feed */}
-        <section>
+        <section id="work" className="scroll-mt-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             Selected Work
           </h2>
@@ -165,7 +175,7 @@ On a more serious note, I care deeply about building impactful products while le
                 <ProjectCard key={project.name} project={project} />
               ))
             ) : (
-              <p className="font-mono text-sm text-ink/50">
+              <p className="font-mono text-sm text-ink">
                 No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
               </p>
             )}
@@ -173,7 +183,7 @@ On a more serious note, I care deeply about building impactful products while le
         </section>
 
         {/* Contact Section */}
-        <section className="mt-32">
+        <section id="contact" className="mt-32 scroll-mt-24">
           <h2 className="font-serif text-3xl font-light mb-6 text-ink">
             Get in Touch
           </h2>
@@ -187,8 +197,8 @@ On a more serious note, I care deeply about building impactful products while le
       {/* Footer */}
       <footer className="border-t border-divider mt-32">
         <div className="max-w-5xl mx-auto px-8 py-12">
-          <p className="font-mono text-xs text-ink/40 uppercase tracking-wider">
-            © {new Date().getFullYear()} — Digital Print Portfolio
+          <p className="font-mono text-xs text-ink uppercase tracking-wider" suppressHydrationWarning>
+            © {new Date().getFullYear()} · Digital Print Portfolio
           </p>
         </div>
       </footer>

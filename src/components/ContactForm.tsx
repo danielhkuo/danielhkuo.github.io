@@ -76,9 +76,8 @@ export default function ContactForm() {
       console.error(error);
       setResult("Something went wrong!");
       captchaRef.current?.resetCaptcha();
-    } finally {
-      setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   };
 
   return (
@@ -96,6 +95,7 @@ export default function ContactForm() {
       <input
         type="checkbox"
         name="botcheck"
+        aria-hidden="true"
         style={{ display: "none" }}
         tabIndex={-1}
       />
@@ -104,7 +104,7 @@ export default function ContactForm() {
       <div className="mb-8">
         <label
           htmlFor="name"
-          className="block font-mono text-xs uppercase tracking-wider text-ink/50 mb-2"
+          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
         >
           Name
         </label>
@@ -122,7 +122,7 @@ export default function ContactForm() {
       <div className="mb-8">
         <label
           htmlFor="email"
-          className="block font-mono text-xs uppercase tracking-wider text-ink/50 mb-2"
+          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
         >
           Email
         </label>
@@ -140,7 +140,7 @@ export default function ContactForm() {
       <div className="mb-8">
         <label
           htmlFor="message"
-          className="block font-mono text-xs uppercase tracking-wider text-ink/50 mb-2"
+          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
         >
           Message
         </label>
@@ -177,7 +177,7 @@ export default function ContactForm() {
 
       {/* Result Message */}
       {result && (
-        <p className="font-mono text-sm text-ink/70 mt-4">
+        <p className="font-mono text-sm text-ink mt-4">
           {result}
         </p>
       )}
