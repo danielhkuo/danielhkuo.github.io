@@ -11,6 +11,7 @@ export default function Masthead() {
               src="/headshot.webp"
               alt="Daniel Kuo"
               fill
+              sizes="(max-width: 768px) 100vw, 300px"
               className="object-cover"
               style={{
                 filter: "grayscale(100%) contrast(1.1)",
@@ -34,14 +35,14 @@ export default function Masthead() {
             </h1>
 
             {/* Role - Monospace Subtitle */}
-            <p className="font-mono text-sm uppercase tracking-wider text-ink/70 mb-6">
+            <p className="font-mono text-sm uppercase tracking-wider text-ink mb-6">
               Software Engineer
             </p>
 
             {/* Status Indicator */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-2 h-2 bg-available rounded-full animate-pulse" />
-              <span className="font-mono text-xs uppercase tracking-wider text-ink/70">
+              <div className="size-2 bg-available rounded-full animate-pulse" />
+              <span className="font-mono text-xs uppercase tracking-wider text-ink">
                 Available for work
               </span>
             </div>
@@ -49,19 +50,19 @@ export default function Masthead() {
             {/* Work Experience - Subtle */}
             <div className="mb-6 space-y-3">
               <div>
-                <p className="font-mono text-xs text-ink/35">
+                <p className="font-mono text-xs text-ink">
                   PROS Houston, TX
                 </p>
-                <p className="font-mono text-xs text-ink/35">
+                <p className="font-mono text-xs text-ink">
                   Software Engineering Intern, GSO Team • May 2025 - Aug. 2025
                 </p>
               </div>
               <div>
-                <p className="font-mono text-xs text-ink/35">
+                <p className="font-mono text-xs text-ink">
                   Labshare Houston, TX
                 </p>
-                <p className="font-mono text-xs text-ink/35">
-                  Co-founder & COO — Full-Stack Engineer / PM • Jan. 2025 – Present
+                <p className="font-mono text-xs text-ink">
+                  Co-founder & COO, Full-Stack Engineer / PM • Jan. 2025 – Present
                 </p>
               </div>
             </div>
@@ -71,7 +72,7 @@ export default function Masthead() {
               href="/Daniel-Kuo-Resume.pdf"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-ink/50 hover:text-ink transition-colors"
+              className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-ink hover:text-ink transition-colors"
             >
               <span>Download Resume</span>
               <span>↓</span>

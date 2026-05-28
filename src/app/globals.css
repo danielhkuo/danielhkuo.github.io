@@ -1,45 +1,68 @@
 @import "tailwindcss";
 
-/* Editorial Design System - "Digital Print" Aesthetic */
+/* Editorial Collage — Archival · Contemplative · Fragmented-but-Rooted
+   Tokens sourced from design.md. */
 :root {
-  /* The Canvas - Warm off-white cream/bone simulating paper */
-  --background: #FDFBF7;
-  /* The Ink - Soft black/charcoal */
-  --foreground: #1A1A1A;
-  /* Semantic colors */
-  --available: #16a34a;
-  /* Divider color for hairlines */
-  --divider: #e5e5e5;
+  --color-primary:   #555879;
+  --color-secondary: #98A1BC;
+  --color-tertiary:  #DED3C4;
+  --color-bg:        #F4EBD3;
+
+  /* Text tiers tuned to clear WCAG AA on the cream surface; verified by
+     `npm run contrast`. Hierarchy is carried by typography (size, weight,
+     small caps) rather than lightening the foreground further. */
+  --text-primary:   #555879;
+  --text-secondary: #555879;
+  --text-muted:     #65647B;
+
+  --shadow-sm: 0 2px 6px  color-mix(in srgb, #555879 15%, transparent);
+  --shadow-md: 0 6px 20px color-mix(in srgb, #555879 20%, transparent);
+  --shadow-lg: 0 16px 48px color-mix(in srgb, #555879 25%, transparent);
+
+  /* Legacy tokens — retained for one iteration so existing components keep rendering
+     while the broader page restyle happens in a follow-up. */
+  --background: #F4EBD3;
+  --foreground: #555879;
+  --available:  #16a34a;
+  --divider:    #98A1BC;
 }
 
 @theme inline {
-  /* Colors */
-  --color-paper: var(--background);
-  --color-ink: var(--foreground);
+  --color-bg:        var(--color-bg);
+  --color-primary:   var(--color-primary);
+  --color-secondary: var(--color-secondary);
+  --color-tertiary:  var(--color-tertiary);
+
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-muted);
+
+  --font-display: var(--font-cormorant);
+  --font-body:    var(--font-eb);
+  --font-caps:    var(--font-cormorant-sc);
+
+  /* Legacy aliases */
+  --color-paper:    var(--background);
+  --color-ink:      var(--foreground);
   --color-available: var(--available);
-  --color-divider: var(--divider);
-
-  /* Typography */
-  --font-serif: var(--font-cormorant);
-  --font-mono: var(--font-geist-mono);
-
-  /* Zero radius philosophy - all corners sharp */
-  --radius-none: 0px;
-  --default-border-radius: 0px;
-
-  /* Hairline dividers */
-  --border-width-hairline: 1px;
-}
-
-/* Remove all default border radius */
-* {
-  border-radius: 0 !important;
+  --color-divider:  var(--divider);
+  --font-serif:     var(--font-cormorant);
+  --font-mono:      var(--font-cormorant-sc);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Georgia, serif;
+  background: var(--color-bg);
+  color: var(--text-primary);
+  font-family: var(--font-eb), Georgia, serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hover-capability gating — used by HoverMenu to render the right trigger
+   variant without a JS state read that would trip react-hooks/set-state-in-effect. */
+@media (hover: none) {
+  .hover-only { display: none !important; }
+}
+@media (hover: hover) {
+  .touch-only { display: none !important; }
 }

@@ -49,13 +49,14 @@ export default function LocationMap({
               border: 0,
             }}
             title={`Map of ${fullLocation}`}
+            sandbox="allow-scripts"
           />
         ) : (
           // Fallback to static representation
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-3 h-3 bg-ink/40 mx-auto mb-2" />
-              <span className="font-mono text-xs text-ink/40 uppercase tracking-wider">
+              <div className="size-3 bg-ink/40 mx-auto mb-2" />
+              <span className="font-mono text-xs text-ink uppercase tracking-wider">
                 {city}
               </span>
             </div>
@@ -77,14 +78,14 @@ export default function LocationMap({
 
       {/* Location Text & Link */}
       <div className="flex items-center justify-between p-4 bg-paper">
-        <span className="font-mono text-xs uppercase tracking-wider text-ink/60">
+        <span className="font-mono text-xs uppercase tracking-wider text-ink">
           {fullLocation}
         </span>
         <a
           href={mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-mono text-xs uppercase tracking-wider text-ink hover:text-ink/70 transition-colors"
+          className="font-mono text-xs uppercase tracking-wider text-ink hover:text-ink transition-colors"
         >
           View Map ↗
         </a>
