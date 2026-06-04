@@ -1,115 +1,47 @@
-# Editorial Portfolio
+# danielhkuo.github.io
 
-This was build with the ITLTDAMWIR Framework- the "I'm Too Lazy To Do Any More Work In Recruiting". Are you honestly tired of updating the projects on your personal site? Here is a quick and easy solution.
+My personal site. I didn't want to hand-edit a projects page every time I shipped
+something, so it pulls my pinned repositories from GitHub at build time and
+rebuilds whenever I push. Built with Next.js and hosted on GitHub Pages.
 
 ## Features
 
-### 🤖 Automated GitHub Pipeline
+- Pinned GitHub repos, pulled at build time and shown with their language
+  breakdown, stars, and forks.
+- An interactive terminal for moving around the site and opening links, with
+  tab-completion and command history. Open it from the nav or with Cmd/Ctrl+K.
+- Light and dark modes, toggled from the nav or the terminal and remembered
+  between visits.
+- A contact form backed by Web3Forms, with hCaptcha for spam.
+- Static output — the whole site is pre-rendered, no server.
 
-The flagship feature: your portfolio updates automatically when you push code.
-
-- Fetches pinned repositories from your GitHub profile
-- Transforms README files into editorial-style articles
-- Sanitizes relative URLs to absolute GitHub paths
-- Applies grayscale filter to images (color reveals on hover)
-
-### 📱 Static Site Generation
-
-- Pre-rendered at build time for maximum performance
-- Deployed to GitHub Pages automatically via GitHub Actions
-- No server required — pure static HTML
-
-## Getting Started
-
-### 1. Install Dependencies
+## Getting started
 
 ```bash
 npm install
-```
-
-### 2. Configure Environment Variables
-
-Create a `.env.local` file:
-
-```bash
-# Your GitHub username (required)
-GITHUB_USERNAME=your_github_username
-
-# GitHub Personal Access Token (optional but recommended)
-# Get one at: https://github.com/settings/tokens
-# Required scopes: public_repo, read:user
-GITHUB_TOKEN=your_github_token_here
-```
-
-**Without a token:** The site will use mock data for development.
-**With a token:** The site will fetch your real pinned repositories.
-
-### 3. Run Development Server
-
-```bash
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000)
+To fetch real repositories, set `GITHUB_USERNAME` (and optionally `GITHUB_TOKEN`)
+in `.env.local`. Without a token the site uses mock data.
 
-### 4. Build for Production
+## Deployment
 
-```bash
-npm run build
+Pushing to `main` runs `.github/workflows/deploy.yml`, which builds the site and
+publishes it to GitHub Pages. The repo needs to be named `<username>.github.io`
+with Pages set to deploy from GitHub Actions.
+
+To build locally, run `npm run build`; the output goes to `out/`.
+
+## Structure
+
 ```
-
-The static site will be generated in the `out/` directory.
-
-To enable the contact form, use Web3Forms.
-
-## Deployment to GitHub Pages
-
-### Prerequisites
-
-1. Repository must be named `<username>.github.io`
-2. Enable GitHub Pages in repository settings:
-   - Go to Settings → Pages
-   - Source: GitHub Actions
-
-### Automatic Deployment
-
-The included GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically:
-
-1. Builds the site when you push to `main`
-2. Fetches your GitHub repositories using the built-in `GITHUB_TOKEN`
-3. Deploys to GitHub Pages
-
-### Manual Deployment
-
-```bash
-npm run build
-# Upload the 'out/' directory to your hosting provider
-```
-
-## Project Structure
-
-```plaintext
 src/
-├── app/
-│   ├── layout.tsx        # Root layout with fonts
-│   ├── page.tsx          # Home page
-│   └── globals.css       # Design system CSS
-├── components/
-│   ├── Masthead.tsx      # Header with photo/identity
-│   ├── ProjectCard.tsx   # Expandable project display
-│   ├── EditorialReadme.tsx  # Markdown → Editorial styling
-│   ├── LiveTime.tsx      # Real-time clock widget
-│   ├── LocationMap.tsx   # Location display
-│   ├── CopyButton.tsx    # Copy-to-clipboard
-│   └── ContactForm.tsx   # Paper-form inputs
-└── lib/
-    └── github.ts         # GitHub API integration
+├── app/          layout, home page, global styles
+├── components/   masthead, project cards, terminal, contact form, etc.
+└── lib/          GitHub fetching and theme helpers
 ```
 
 ## License
 
-MIT © Daniel Kuo
-
----
-
-Built with [Next.js](https://nextjs.org) · Deployed on [GitHub Pages](https://pages.github.com)
+MIT
