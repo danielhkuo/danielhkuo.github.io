@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const iconVersion = "2";
+
 export const metadata: Metadata = {
   title: "Daniel Kuo - Portfolio",
   description: "Kami-styled portfolio for Daniel Kuo, software engineer and product builder.",
   icons: {
     icon: [
-      { url: "/favicon.ico" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: `/favicon.ico?v=${iconVersion}` },
+      { url: `/favicon-16x16.png?v=${iconVersion}`, sizes: "16x16", type: "image/png" },
+      { url: `/favicon-32x32.png?v=${iconVersion}`, sizes: "32x32", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: `/apple-touch-icon.png?v=${iconVersion}`,
   },
-  manifest: "/site.webmanifest",
+  manifest: `/site.webmanifest?v=${iconVersion}`,
 };
 
 export default function RootLayout({
