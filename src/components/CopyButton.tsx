@@ -25,13 +25,13 @@ export function CopyableText({
     <button
       type="button"
       onClick={handleCopy}
-      className="group inline-flex items-center gap-2 font-mono text-sm text-ink hover:text-ink transition-colors"
+      className="group capsule-shell inline-flex items-center gap-3 px-4 py-3 text-sm text-text-primary hover:border-primary hover:shadow-md"
     >
-      <span className="underline decoration-1 underline-offset-4">
+      <span className="font-body">
         {displayText || text}
       </span>
-      <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-        {copied ? "✓" : "⎘"}
+      <span className="caps-label text-[0.68rem] text-text-muted opacity-70 group-hover:opacity-100">
+        {copied ? "Copied" : "Copy"}
       </span>
     </button>
   );

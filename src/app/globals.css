@@ -1,30 +1,106 @@
 @import "tailwindcss";
 
-/* Editorial Collage — Archival · Contemplative · Fragmented-but-Rooted
-   Tokens sourced from design.md. */
+/* kami Portfolio — warm parchment, ink-blue accent, serif-led hierarchy. */
 :root {
-  --color-primary:   #555879;
-  --color-secondary: #98A1BC;
-  --color-tertiary:  #DED3C4;
-  --color-bg:        #F4EBD3;
+  --bg: #f5f4ed;
+  --surface: #faf9f5;
+  --surface-warm: #e8e6dc;
 
-  /* Text tiers tuned to clear WCAG AA on the cream surface; verified by
-     `npm run contrast`. Hierarchy is carried by typography (size, weight,
-     small caps) rather than lightening the foreground further. */
-  --text-primary:   #555879;
-  --text-secondary: #555879;
-  --text-muted:     #65647B;
+  --fg: #141413;
+  --fg-2: #3d3d3a;
+  --muted: #504e49;
+  --meta: #6b6a64;
 
-  --shadow-sm: 0 2px 6px  color-mix(in srgb, #555879 15%, transparent);
-  --shadow-md: 0 6px 20px color-mix(in srgb, #555879 20%, transparent);
-  --shadow-lg: 0 16px 48px color-mix(in srgb, #555879 25%, transparent);
+  --border: #e8e6dc;
+  --border-soft: #e5e3d8;
 
-  /* Legacy tokens — retained for one iteration so existing components keep rendering
-     while the broader page restyle happens in a follow-up. */
-  --background: #F4EBD3;
-  --foreground: #555879;
-  --available:  #16a34a;
-  --divider:    #98A1BC;
+  --accent: #1b365d;
+  --accent-on: #faf9f5;
+  --accent-light: #2d5a8a;
+  --accent-hover: var(--accent);
+  --accent-active: #142a48;
+
+  --success: #4a6b3a;
+  --warn: #8a6b1f;
+  --danger: #8a3a30;
+
+  --font-display-family: Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-body-family: Charter, Georgia, Palatino, "Times New Roman", serif;
+  --font-mono-family:
+    "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
+    "TsangerJinKai02", "Source Han Serif SC", monospace;
+  --font-caps-family: var(--font-display-family);
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 96px;
+
+  --leading-display: 1.1;
+  --leading-tight: 1.25;
+  --leading-body: 1.55;
+  --leading-dense: 1.4;
+
+  --tracking-display: -1.2px;
+  --tracking-eyebrow: 1.2px;
+  --tracking-label: 0.4px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-18: 72px;
+  --space-22: 88px;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-ring-accent: 0 0 0 1px var(--accent);
+  --elev-raised: 0 4px 24px rgba(0, 0, 0, 0.05);
+  --focus-ring: 0 0 0 2px var(--accent-active);
+
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --tag-bg-faint: #eef2f7;
+  --tag-bg-soft: #e4ecf5;
+  --tag-bg-base: #d6e1ee;
+  --tag-bg-strong: #d0dce9;
+
+  /* Tailwind / legacy aliases used by the existing component tree. */
+  --color-primary: var(--accent);
+  --color-secondary: var(--tag-bg-base);
+  --color-tertiary: var(--surface-warm);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --text-primary: var(--fg);
+  --text-secondary: var(--fg-2);
+  --text-muted: var(--muted);
+  --shadow-sm: var(--elev-ring);
+  --shadow-md: var(--elev-raised);
+  --shadow-lg: var(--elev-raised);
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --available: var(--success);
+  --divider: var(--border);
 }
 
 @theme inline {
@@ -32,30 +108,112 @@
   --color-primary:   var(--color-primary);
   --color-secondary: var(--color-secondary);
   --color-tertiary:  var(--color-tertiary);
+  --color-surface:   var(--color-surface);
+  --color-accent:    var(--color-accent);
+  --color-accent-on: var(--accent-on);
 
   --color-text-primary:   var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted:     var(--text-muted);
 
-  --font-display: var(--font-cormorant);
-  --font-body:    var(--font-eb);
-  --font-caps:    var(--font-cormorant-sc);
+  --font-display: var(--font-display-family);
+  --font-body:    var(--font-body-family);
+  --font-caps:    var(--font-caps-family);
 
   /* Legacy aliases */
   --color-paper:    var(--background);
   --color-ink:      var(--foreground);
   --color-available: var(--available);
   --color-divider:  var(--divider);
-  --font-serif:     var(--font-cormorant);
-  --font-mono:      var(--font-cormorant-sc);
+  --font-serif:     var(--font-display-family);
+  --font-mono:      var(--font-mono-family);
 }
 
 body {
-  background: var(--color-bg);
+  background: var(--bg);
   color: var(--text-primary);
-  font-family: var(--font-eb), Georgia, serif;
+  font-family: var(--font-body-family);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: var(--tag-bg-soft);
+  color: var(--fg);
+}
+
+a,
+button,
+input,
+textarea {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.capsule-shell {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--elev-ring);
+}
+
+.caps-label {
+  font-family: var(--font-display-family);
+  font-weight: 500;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.paper-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--elev-ring);
+  transition: box-shadow var(--motion-base) var(--ease-standard);
+}
+
+.paper-panel:hover {
+  box-shadow: var(--elev-raised);
+}
+
+.kami-tag {
+  border-radius: var(--radius-sm);
+  background: var(--tag-bg-soft);
+  color: var(--accent);
+  font-family: var(--font-display-family);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  line-height: 1;
+}
+
+.kami-rule {
+  border-color: var(--border);
+}
+
+strong {
+  font-weight: 500;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 /* Hover-capability gating — used by HoverMenu to render the right trigger

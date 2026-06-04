@@ -81,7 +81,7 @@ export default function ContactForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl">
+    <form onSubmit={handleSubmit} className="w-full">
       <input
         type="hidden"
         name="access_key"
@@ -100,11 +100,10 @@ export default function ContactForm() {
         tabIndex={-1}
       />
 
-      {/* Name Field */}
-      <div className="mb-8">
+      <div className="mb-6">
         <label
           htmlFor="name"
-          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
+          className="caps-label mb-2 block text-xs text-text-muted"
         >
           Name
         </label>
@@ -113,16 +112,15 @@ export default function ContactForm() {
           id="name"
           name="name"
           required
-          className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors"
+          className="w-full rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="Your name"
         />
       </div>
 
-      {/* Email Field */}
-      <div className="mb-8">
+      <div className="mb-6">
         <label
           htmlFor="email"
-          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
+          className="caps-label mb-2 block text-xs text-text-muted"
         >
           Email
         </label>
@@ -131,16 +129,15 @@ export default function ContactForm() {
           id="email"
           name="email"
           required
-          className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors"
+          className="w-full rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="your@email.com"
         />
       </div>
 
-      {/* Message Field */}
-      <div className="mb-8">
+      <div className="mb-6">
         <label
           htmlFor="message"
-          className="block font-mono text-xs uppercase tracking-wider text-ink mb-2"
+          className="caps-label mb-2 block text-xs text-text-muted"
         >
           Message
         </label>
@@ -149,13 +146,12 @@ export default function ContactForm() {
           name="message"
           required
           rows={6}
-          className="w-full bg-transparent border-0 border-b border-divider pb-2 font-serif text-lg text-ink focus:outline-none focus:border-ink transition-colors resize-none"
-          placeholder="Your message..."
+          className="min-h-36 w-full resize-y rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          placeholder="What are you building, hiring for, or trying to untangle?"
         />
       </div>
 
-      {/* hCaptcha */}
-      <div className="mb-8">
+      <div className="mb-6 overflow-hidden rounded-2xl border border-divider bg-bg p-3">
         <HCaptcha
           ref={captchaRef}
           sitekey="50b2fe65-b00b-4b9e-ad62-3ba471098be2"
@@ -164,20 +160,18 @@ export default function ContactForm() {
         />
       </div>
 
-      {/* Submit Button */}
       <div className="mb-4">
         <button
           type="submit"
           disabled={isSubmitting || !captchaToken}
-          className="border border-ink px-8 py-3 font-mono text-xs uppercase tracking-wider text-ink hover:bg-ink hover:text-paper transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="rounded-full bg-primary px-7 py-3 font-caps text-xs tracking-[var(--tracking-label)] text-[var(--accent-on)] shadow-sm hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? "Sending..." : "Send Message"}
         </button>
       </div>
 
-      {/* Result Message */}
       {result && (
-        <p className="font-mono text-sm text-ink mt-4">
+        <p className="caps-label mt-4 text-xs text-text-secondary" role="status">
           {result}
         </p>
       )}

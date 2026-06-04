@@ -2,81 +2,62 @@ import Image from "next/image";
 
 export default function Masthead() {
   return (
-    <header className="border-b border-divider">
-      <div className="max-w-5xl mx-auto px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-12">
-          {/* Left Column - Portrait Photo */}
-          <div className="relative aspect-[3/4] bg-ink/10 overflow-hidden">
-            <Image
-              src="/headshot.webp"
-              alt="Daniel Kuo"
-              fill
-              sizes="(max-width: 768px) 100vw, 300px"
-              className="object-cover"
-              style={{
-                filter: "grayscale(100%) contrast(1.1)",
-              }}
-              priority
-            />
-            {/* Film grain texture overlay */}
-            <div
-              className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              }}
-            />
-          </div>
-
-          {/* Right Column - Identity & Status */}
-          <div className="flex flex-col justify-center gap-6">
-            {/* Name - Large Serif */}
-            <h1 className="font-serif text-6xl font-light tracking-tight text-ink mb-4">
-              Daniel Kuo
-            </h1>
-
-            {/* Role - Monospace Subtitle */}
-            <p className="font-mono text-sm uppercase tracking-wider text-ink mb-6">
-              Software Engineer
-            </p>
-
-            {/* Status Indicator */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="size-2 bg-available rounded-full animate-pulse" />
-              <span className="font-mono text-xs uppercase tracking-wider text-ink">
-                Available for work
-              </span>
+    <header className="px-5 pt-28 sm:px-8 lg:px-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="paper-panel overflow-hidden rounded-[2.25rem] p-3 sm:p-4">
+          <div className="grid gap-4 rounded-[1.75rem] bg-bg/70 p-4 sm:p-5 lg:grid-cols-[0.78fr_1.22fr] lg:items-stretch lg:p-6">
+            <div className="relative min-h-[420px] overflow-hidden rounded-[1.5rem] border border-divider bg-surface sm:min-h-[520px] lg:min-h-[540px]">
+              <Image
+                src="/headshot.webp"
+                alt="Daniel Kuo"
+                fill
+                sizes="(max-width: 1024px) 100vw, 420px"
+                className="object-cover object-center"
+                style={{ filter: "grayscale(100%) contrast(1.03) sepia(12%)" }}
+                priority
+              />
+              <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_55%,rgba(20,20,19,0.18)_100%)]" />
             </div>
 
-            {/* Work Experience - Subtle */}
-            <div className="mb-6 space-y-3">
+            <div className="flex min-h-[420px] flex-col justify-between rounded-[1.5rem] border border-divider bg-surface p-6 sm:min-h-[520px] sm:p-8 lg:min-h-[540px] lg:p-10">
               <div>
-                <p className="font-mono text-xs text-ink">
-                  PROS Houston, TX
-                </p>
-                <p className="font-mono text-xs text-ink">
-                  Software Engineering Intern, GSO Team • May 2025 - Aug. 2025
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="kami-tag px-3 py-2">Rice CS</span>
+                  <span className="kami-tag px-3 py-2">Houston</span>
+                  <span className="kami-tag px-3 py-2">Goldman Sachs AWM</span>
+                </div>
+
+                <div className="mt-10 max-w-2xl">
+                  <p className="caps-label text-xs text-accent">Daniel Kuo</p>
+                  <h1 className="mt-4 font-display text-5xl font-medium leading-[0.98] tracking-[var(--tracking-display)] text-text-primary sm:text-6xl lg:text-7xl">
+                    Software engineer.
+                  </h1>
+                  <p className="mt-6 max-w-xl text-lg leading-[1.45] text-text-muted">
+                    I build clean product surfaces, practical AI tools, and reliable systems.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-mono text-xs text-ink">
-                  Labshare Houston, TX
+
+              <div className="mt-10 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                <p className="text-sm leading-[1.45] text-text-secondary">
+                  AI products · self-hosted infrastructure · finance tooling
                 </p>
-                <p className="font-mono text-xs text-ink">
-                  Co-founder & COO, Full-Stack Engineer / PM • Jan. 2025 – Present
-                </p>
+                <a
+                  href="/Daniel-Kuo-Resume.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="capsule-shell inline-flex min-h-11 items-center justify-center px-5 py-3 font-caps text-xs tracking-[var(--tracking-label)] text-text-primary hover:border-primary hover:shadow-md"
+                >
+                  Resume
+                </a>
+                <a
+                  href="mailto:danielhkuo@rice.edu"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-5 py-3 font-caps text-xs tracking-[var(--tracking-label)] text-[var(--accent-on)] shadow-[var(--elev-ring-accent)] hover:shadow-md"
+                >
+                  Email
+                </a>
               </div>
             </div>
-
-            {/* Resume Link */}
-            <a
-              href="/Daniel-Kuo-Resume.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-ink hover:text-ink transition-colors"
-            >
-              <span>Download Resume</span>
-              <span>↓</span>
-            </a>
           </div>
         </div>
       </div>
