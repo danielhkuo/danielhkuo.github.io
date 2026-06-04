@@ -31,6 +31,16 @@ function SunIcon() {
   );
 }
 
+function TerminalIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="2.5" y="4" width="19" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M6.5 9.5l3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.5 15h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function HoverMenu() {
   const [active, setActive] = useState("about");
   const theme = useThemeMode();
@@ -62,13 +72,16 @@ export default function HoverMenu() {
   return (
     <div className="fixed inset-x-0 top-4 z-50 px-4">
       <div className="capsule-shell mx-auto flex max-w-4xl items-center justify-between gap-3 px-3 py-2">
-        <a
-          href="#"
-          className="rounded-full px-4 py-2 font-display text-lg font-medium text-text-primary hover:bg-bg"
-          aria-label="Back to top"
+        <button
+          type="button"
+          onClick={openTerminal}
+          data-terminal-trigger=""
+          aria-haspopup="dialog"
+          className="inline-flex items-center gap-2 rounded-full px-3 py-2 font-caps text-xs font-bold tracking-[var(--tracking-label)] text-accent hover:bg-[var(--tag-bg-soft)]"
         >
-          DK
-        </a>
+          <TerminalIcon />
+          Terminal
+        </button>
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
           {links.map((link) => (
             <a
@@ -83,13 +96,6 @@ export default function HoverMenu() {
               {link.label}
             </a>
           ))}
-          <button
-            type="button"
-            onClick={openTerminal}
-            className="rounded-full px-4 py-2 font-caps text-xs tracking-[var(--tracking-label)] text-text-muted hover:bg-bg hover:text-text-primary"
-          >
-            Terminal
-          </button>
         </nav>
         <div className="flex items-center gap-2">
           <button

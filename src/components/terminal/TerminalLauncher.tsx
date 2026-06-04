@@ -48,6 +48,13 @@ export default function TerminalLauncher({
   // Global shortcuts + external open requests.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Esc closes the terminal from anywhere while it's open, regardless of
+      // which element currently has focus.
+      if (e.key === "Escape" && openRef.current) {
+        e.preventDefault();
+        closeTerminal();
+        return;
+      }
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName ?? "";
       const typing =
@@ -73,7 +80,7 @@ export default function TerminalLauncher({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("terminal:open", onOpenRequest as EventListener);
     };
-  }, [toggle, openTerminal]);
+  }, [toggle, openTerminal, closeTerminal]);
 
   const api: TerminalApi = useMemo(
     () => ({
@@ -99,6 +106,7 @@ export default function TerminalLauncher({
         ref={launchBtnRef}
         type="button"
         className="term-launch"
+        data-terminal-trigger=""
         aria-haspopup="dialog"
         aria-expanded={open}
         title="Open terminal (⌘K)"

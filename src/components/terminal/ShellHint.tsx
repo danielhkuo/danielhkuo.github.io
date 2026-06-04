@@ -9,6 +9,7 @@ export default function ShellHint() {
   return (
     <button
       type="button"
+      data-terminal-trigger=""
       onClick={(e) =>
         window.dispatchEvent(
           new CustomEvent("terminal:open", {
