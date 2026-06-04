@@ -15,8 +15,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // The pre-paint script below toggles the `dark` class on <html>, so its
+    // className legitimately differs between server and client on first paint.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Apply the persisted (or system) theme before paint to avoid a flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
         {/* Preconnect to external domains for faster loading */}
         <link rel="preconnect" href="https://js.hcaptcha.com" />
         <link rel="preconnect" href="https://hcaptcha.com" />

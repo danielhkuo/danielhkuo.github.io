@@ -42,12 +42,9 @@ export default function LocationMap({
         {osmEmbedUrl ? (
           <iframe
             src={osmEmbedUrl}
-            className="absolute inset-0 h-full w-full"
+            className="map-embed absolute inset-0 h-full w-full"
             loading="lazy"
-            style={{
-              filter: "grayscale(100%) contrast(1.1) sepia(22%) saturate(0.85)",
-              border: 0,
-            }}
+            style={{ border: 0 }}
             title={`Map of ${fullLocation}`}
             sandbox="allow-scripts"
           />

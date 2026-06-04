@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { useThemeMode } from "@/lib/theme";
 
 /**
  * ContactForm - Editorial-style form with underlined inputs
@@ -16,6 +17,7 @@ export default function ContactForm() {
   const [result, setResult] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string>("");
+  const theme = useThemeMode();
   const captchaRef = useRef<HCaptcha>(null);
 
   const onCaptchaChange = (token: string) => {
@@ -156,6 +158,7 @@ export default function ContactForm() {
           ref={captchaRef}
           sitekey="50b2fe65-b00b-4b9e-ad62-3ba471098be2"
           reCaptchaCompat={false}
+          theme={theme}
           onVerify={onCaptchaChange}
         />
       </div>
