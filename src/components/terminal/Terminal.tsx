@@ -143,6 +143,22 @@ export default function Terminal({
     };
   }, [open]);
 
+  // close when clicking anywhere outside the window (but not on the buttons that
+  // open it, so a click on a trigger doesn't close-then-reopen). Attached only
+  // while open; the opening click has already finished before this runs.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (winRef.current?.contains(target)) return;
+      if (target.closest("[data-terminal-trigger]")) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open, onClose]);
+
   // focus the input whenever the terminal opens
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -232,11 +248,6 @@ export default function Terminal({
     if (e.key === "Enter") {
       e.preventDefault();
       submit();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
       return;
     }
     if (e.key === "ArrowUp") {
