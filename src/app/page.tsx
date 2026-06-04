@@ -5,6 +5,8 @@ import Masthead from "@/components/Masthead";
 import ProjectCard from "@/components/ProjectCard";
 import LiveTime from "@/components/LiveTime";
 import { CopyableText } from "@/components/CopyButton";
+import TerminalLauncher from "@/components/terminal/TerminalLauncher";
+import ShellHint from "@/components/terminal/ShellHint";
 import { fetchPinnedRepos } from "@/lib/github";
 
 export const metadata: Metadata = {
@@ -29,6 +31,14 @@ export default async function Home() {
   // Fetch pinned repos at build time (SSG)
   const projects = await fetchPinnedRepos();
 
+  // Slim, JSON-serializable slice for the client terminal.
+  const terminalProjects = projects.map((p) => ({
+    name: p.name,
+    description: p.description,
+    url: p.url,
+    homepageUrl: p.homepageUrl,
+  }));
+
   return (
     <div className="min-h-screen bg-bg text-text-primary">
       <HoverMenu />
@@ -50,14 +60,14 @@ export default async function Home() {
           </div>
 
           <div className="paper-panel overflow-hidden rounded-[2rem]">
-            <div className="bg-[var(--fg)] p-5 font-mono text-sm leading-[1.7] text-[var(--surface)] sm:p-7 lg:p-9">
-              <div className="mb-6 flex items-center justify-between gap-3 border-b border-[var(--fg-2)] pb-4">
+            <div className="bg-[var(--panel-ink)] p-5 font-mono text-sm leading-[1.7] text-[var(--panel-on)] sm:p-7 lg:p-9">
+              <div className="mb-6 flex items-center justify-between gap-3 border-b border-[var(--panel-ink-2)] pb-4">
                 <div className="flex gap-2" aria-hidden>
                   <span className="size-2.5 rounded-full bg-[var(--danger)]" />
                   <span className="size-2.5 rounded-full bg-[var(--warn)]" />
                   <span className="size-2.5 rounded-full bg-[var(--success)]" />
                 </div>
-                <p className="caps-label text-[0.62rem] text-[var(--tag-bg-base)]">
+                <p className="caps-label text-[0.62rem] text-[var(--panel-accent)]">
                   terminal
                 </p>
               </div>
@@ -65,24 +75,25 @@ export default async function Home() {
               <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
                 <div className="space-y-5">
                   <div>
-                    <p className="text-[var(--tag-bg-base)]">$ whoami</p>
+                    <p className="text-[var(--panel-accent)]">$ whoami</p>
                     <p>Daniel Kuo / Rice CS / Houston</p>
                   </div>
                   <div>
-                    <p className="text-[var(--tag-bg-base)]">$ current --role</p>
+                    <p className="text-[var(--panel-accent)]">$ current --role</p>
                     <p>Incoming Engineering Summer Analyst @ Goldman Sachs AWM</p>
                   </div>
                   <div>
-                    <p className="text-[var(--tag-bg-base)]">$ shipped --themes</p>
+                    <p className="text-[var(--panel-accent)]">$ shipped --themes</p>
                     <p>AI mobile apps / GitHub project surfaces / homelab services / Labshare ops</p>
                   </div>
                   <div>
-                    <p className="text-[var(--tag-bg-base)]">$ keep</p>
+                    <p className="text-[var(--panel-accent)]">$ keep</p>
                     <p>Useful products. Ethical AI. Open source. Clean systems. Fewer words.</p>
                   </div>
+                  <ShellHint />
                 </div>
 
-                <pre className="overflow-x-auto rounded-[1rem] border border-[var(--fg-2)] bg-[color-mix(in_srgb,var(--surface)_7%,transparent)] p-5 text-xs leading-[1.55] text-[var(--tag-bg-base)]">
+                <pre className="overflow-x-auto rounded-[1rem] border border-[var(--panel-ink-2)] bg-[color-mix(in_srgb,var(--panel-on)_7%,transparent)] p-5 text-xs leading-[1.55] text-[var(--panel-accent)]">
 {String.raw`  daniel@rice:~$ ./portfolio.sh
 
         o
@@ -117,7 +128,7 @@ export default async function Home() {
                 <CopyableText text="danielhkuo@rice.edu" displayText="danielhkuo@rice.edu" />
               </div>
 
-              <pre className="min-h-[360px] flex-1 overflow-auto bg-[var(--fg)] p-4 font-mono text-[0.45rem] leading-[1.08] text-[var(--tag-bg-base)] sm:p-6 sm:text-[0.56rem] md:text-[0.68rem] xl:text-[0.62rem] 2xl:text-[0.72rem]">
+              <pre className="min-h-[360px] flex-1 overflow-auto bg-[var(--panel-ink)] p-4 font-mono text-[0.45rem] leading-[1.08] text-[var(--panel-accent)] sm:p-6 sm:text-[0.56rem] md:text-[0.68rem] xl:text-[0.62rem] 2xl:text-[0.72rem]">
 {String.raw`⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⡟
@@ -195,6 +206,8 @@ export default async function Home() {
           </p>
         </div>
       </footer>
+
+      <TerminalLauncher projects={terminalProjects} />
     </div>
   );
 }

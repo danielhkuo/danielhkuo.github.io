@@ -30,7 +30,7 @@ export default function Masthead() {
                 <div className="mt-10 max-w-2xl">
                   <p className="caps-label text-xs text-accent">Daniel Kuo</p>
                   <h1 className="mt-4 font-display text-5xl font-medium leading-[0.98] tracking-[var(--tracking-display)] text-text-primary sm:text-6xl lg:text-7xl">
-                    Software engineer.
+                    Full-stack product builder &amp; team architect.
                   </h1>
                   <p className="mt-6 max-w-xl text-lg leading-[1.45] text-text-muted">
                     I build clean product surfaces, practical AI tools, and reliable systems.
