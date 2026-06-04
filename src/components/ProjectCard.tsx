@@ -1,16 +1,11 @@
 "use client";
 
 import { PinnedRepo } from "@/lib/github";
-import { generateTornPolygon, pickCardVariant } from "@/lib/tornEdge";
 
 interface ProjectCardProps {
   project: PinnedRepo;
 }
 
-/**
- * ProjectCard — torn-paper "fragment" silhouette per design.md.
- * The outer wrapper carries the unique clip-path; inner article holds content.
- */
 export default function ProjectCard({ project }: ProjectCardProps) {
   const updatedDate = new Date(project.updatedAt)
     .toLocaleDateString("en-US", {
@@ -24,156 +19,119 @@ export default function ProjectCard({ project }: ProjectCardProps) {
     (lang) => lang.percentage > 1,
   );
 
-  const clipPath = generateTornPolygon(project.name);
-  const variant = pickCardVariant(project.name);
-
   return (
-    <div
-      className="mb-16 last:mb-0"
-      style={{
-        transform: `rotate(${variant.rotation.toFixed(3)}deg)`,
-        filter:
-          "drop-shadow(0 6px 20px color-mix(in srgb, #555879 20%, transparent))",
-      }}
-    >
-      <div
-        style={{
-          clipPath,
-          backgroundColor: `var(${variant.surface})`,
-          padding: "3.5rem 3rem",
-        }}
-      >
-        <article>
-          <header className="mb-6">
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <h3
-                className="text-3xl leading-tight"
-                style={{
-                  fontFamily: "var(--font-cormorant), serif",
-                  fontWeight: 500,
-                  color: "var(--text-primary)",
-                }}
-              >
-                <a
-                  href={project.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="transition-opacity duration-200 ease-out hover:opacity-70"
-                >
-                  {project.name}
-                </a>
-              </h3>
-
+    <article className="group paper-panel overflow-hidden rounded-[2rem] p-6 hover:shadow-md sm:p-8">
+      <div className="grid gap-8 lg:grid-cols-[1.12fr_0.88fr]">
+        <div>
+          <header>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <span className="caps-label rounded-full border border-divider bg-bg px-3 py-1.5 text-[0.68rem] text-text-muted">
+                Updated {updatedDate}
+              </span>
               {project.primaryLanguage && (
-                <div className="flex items-center gap-2 shrink-0">
+                <span className="caps-label inline-flex items-center gap-2 rounded-full border border-divider bg-bg px-3 py-1.5 text-[0.68rem] text-text-primary">
                   <span
-                    className="size-2.5"
+                    className="size-2 rounded-full"
                     style={{ backgroundColor: project.primaryLanguage.color }}
                     aria-hidden
                   />
-                  <span
-                    className="text-xs uppercase"
-                    style={{
-                      fontFamily: "var(--font-cormorant-sc), serif",
-                      letterSpacing: "0.15em",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    [ {project.primaryLanguage.name} ]
-                  </span>
-                </div>
+                  {project.primaryLanguage.name}
+                </span>
               )}
             </div>
 
-            <div
-              className="text-xs uppercase mb-4"
-              style={{
-                fontFamily: "var(--font-cormorant-sc), serif",
-                letterSpacing: "0.25em",
-                color: "var(--text-muted)",
-              }}
-            >
-              [ UPDATED {updatedDate} ]
-            </div>
+            <h3 className="font-display text-4xl font-medium leading-tight text-text-primary md:text-5xl">
+              <a
+                href={project.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="decoration-primary/30 underline-offset-8 hover:text-accent hover:underline"
+              >
+                {project.name}
+              </a>
+            </h3>
 
             {project.description && (
-              <p
-                className="text-lg"
-                style={{
-                  fontFamily: "var(--font-eb), Georgia, serif",
-                  lineHeight: 1.7,
-                  color: "var(--text-secondary)",
-                }}
-              >
+              <p className="mt-5 max-w-2xl text-lg leading-[1.55] text-text-secondary">
                 {project.description}
               </p>
             )}
           </header>
 
-          {significantLanguages.length > 0 && (
-            <div className="mb-6 flex flex-wrap gap-x-5 gap-y-2">
-              {significantLanguages.map((lang) => (
-                <span
-                  key={lang.name}
-                  className="inline-flex items-center gap-2"
-                >
-                  <span
-                    className="size-1.5"
-                    style={{ backgroundColor: lang.color }}
-                    aria-hidden
-                  />
-                  <span
-                    className="text-xs uppercase"
-                    style={{
-                      fontFamily: "var(--font-cormorant-sc), serif",
-                      letterSpacing: "0.2em",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    [ {lang.name} ]
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <footer
-            className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs uppercase"
-            style={{
-              fontFamily: "var(--font-cormorant-sc), serif",
-              letterSpacing: "0.2em",
-              color: "var(--text-muted)",
-            }}
-          >
+          <footer className="mt-8 flex flex-wrap items-center gap-3">
             {project.stargazerCount > 0 && (
-              <span>[ ★ {project.stargazerCount} ]</span>
+              <span className="caps-label rounded-full border border-divider bg-bg px-3 py-1.5 text-[0.68rem] text-text-muted">
+                Stars {project.stargazerCount}
+              </span>
             )}
             {project.forkCount > 0 && (
-              <span>[ ⑂ {project.forkCount} ]</span>
+              <span className="caps-label rounded-full border border-divider bg-bg px-3 py-1.5 text-[0.68rem] text-text-muted">
+                Forks {project.forkCount}
+              </span>
             )}
             <a
               href={project.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors duration-200 ease-out"
-              style={{ color: "var(--text-secondary)" }}
+              className="capsule-shell inline-flex items-center rounded-full px-4 py-2 font-caps text-xs tracking-[var(--tracking-label)] text-text-primary hover:border-primary hover:shadow-md"
             >
-              [ REPOSITORY ↗ ]
+              Repository ↗
             </a>
             {project.homepageUrl && (
               <a
                 href={project.homepageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="transition-colors duration-200 ease-out"
-                style={{ color: "var(--text-secondary)" }}
+                className="inline-flex rounded-full bg-primary px-4 py-2 font-caps text-xs tracking-[var(--tracking-label)] text-[var(--accent-on)] shadow-sm hover:shadow-md"
               >
-                [ LIVE ↗ ]
+                Live ↗
               </a>
             )}
           </footer>
-        </article>
+        </div>
+
+        <div className="rounded-[1.5rem] border border-divider bg-bg/60 p-5">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <p className="caps-label text-xs text-text-muted">Language mix</p>
+            <p className="caps-label text-[0.68rem] text-text-muted">GitHub API</p>
+          </div>
+
+          {significantLanguages.length > 0 ? (
+            <div className="space-y-4">
+              {significantLanguages.map((lang) => (
+                <div key={lang.name}>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2 text-text-primary">
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: lang.color }}
+                        aria-hidden
+                      />
+                      {lang.name}
+                    </span>
+                    <span className="tabular-nums text-text-muted">
+                      {lang.percentage.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full border border-divider bg-surface">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(lang.percentage, 4)}%`,
+                        backgroundColor: lang.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed text-text-muted">
+              No significant language breakdown reported for this repository.
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </article>
   );
 }

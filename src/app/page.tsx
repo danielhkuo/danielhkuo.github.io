@@ -10,166 +10,155 @@ import { fetchPinnedRepos } from "@/lib/github";
 export const metadata: Metadata = {
   title: "Daniel Kuo",
   description:
-    "Software engineer and CS student at Rice University. Building impactful products with a focus on open source and ethical AI.",
+    "Software engineer and Rice CS student building AI products, self-hosted systems, and practical developer tools.",
 };
 
 // Lazy load below-the-fold components
 const LocationMap = dynamic(() => import("@/components/LocationMap"), {
   loading: () => (
-    <div className="border border-divider aspect-video bg-ink/5 animate-pulse" />
+    <div className="aspect-video animate-pulse rounded-[1.5rem] border border-divider bg-surface" />
   ),
 });
 const ContactForm = dynamic(() => import("@/components/ContactForm"), {
   loading: () => (
-    <div className="border border-divider p-8 bg-ink/5 animate-pulse h-64" />
+    <div className="h-64 animate-pulse rounded-[1.5rem] border border-divider bg-surface p-8" />
   ),
 });
 
 export default async function Home() {
   // Fetch pinned repos at build time (SSG)
   const projects = await fetchPinnedRepos();
+
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-bg text-text-primary">
       <HoverMenu />
 
-      {/* The Masthead */}
       <Masthead />
 
-      {/* Main Content Area - Single Column Vertical Stack */}
-      <main className="max-w-5xl mx-auto px-8 py-16">
+      <main className="mx-auto max-w-6xl px-5 pb-20 sm:px-8 lg:px-10">
+        <section id="about" className="scroll-mt-28 py-14 md:py-24">
+          <div className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div>
+              <p className="caps-label text-xs text-accent">Terminal · 01</p>
+              <h2 className="mt-3 font-display text-4xl font-medium leading-tight text-text-primary md:text-5xl">
+                /daniel-kuo
+              </h2>
+            </div>
+            <p className="font-mono text-xs leading-relaxed text-text-muted">
+              chmod +x portfolio.sh
+            </p>
+          </div>
 
-        {/* The Bio Block */}
-        <section id="about" className="mb-24 scroll-mt-24">
-          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
-            About
-          </h2>
-          <div className="border-t border-divider pt-6">
-            <div className="max-w-4xl">
-              <p className="text-lg leading-relaxed text-ink mb-4">
-Hi! I&apos;m Daniel.
-              </p>
-              <p className="text-lg leading-relaxed text-ink mb-4">
-My background lies primarily in software development and secondarily in business. I have extensive hands-on experience managing (and breaking) a homelab environment (Unraid), running startups, and teaching, guiding, and assisting software projects as a PM and dev. Current personal projects focus on building AI-powered mobile applications, self-hosted services, movie selection websites, and much more.
-              </p>
-              <p className="text-lg leading-relaxed text-ink">
-On a more serious note, I care deeply about building impactful products while leveraging technology in an ethical manner. I firmly support open source initiatives and awareness around the future of AI. Outside of tech, I enjoy reading, playing the cello, basketball, building mechanical keyboards, and following the competitive Apex Legends eSports scene. Currently thinking of picking up cycling again. (hit me up if u have bike recs!)
-              </p>
+          <div className="paper-panel overflow-hidden rounded-[2rem]">
+            <div className="bg-[var(--fg)] p-5 font-mono text-sm leading-[1.7] text-[var(--surface)] sm:p-7 lg:p-9">
+              <div className="mb-6 flex items-center justify-between gap-3 border-b border-[var(--fg-2)] pb-4">
+                <div className="flex gap-2" aria-hidden>
+                  <span className="size-2.5 rounded-full bg-[var(--danger)]" />
+                  <span className="size-2.5 rounded-full bg-[var(--warn)]" />
+                  <span className="size-2.5 rounded-full bg-[var(--success)]" />
+                </div>
+                <p className="caps-label text-[0.62rem] text-[var(--tag-bg-base)]">
+                  terminal
+                </p>
+              </div>
+
+              <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+                <div className="space-y-5">
+                  <div>
+                    <p className="text-[var(--tag-bg-base)]">$ whoami</p>
+                    <p>Daniel Kuo / Rice CS / Houston</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--tag-bg-base)]">$ current --role</p>
+                    <p>Incoming Engineering Summer Analyst @ Goldman Sachs AWM</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--tag-bg-base)]">$ shipped --themes</p>
+                    <p>AI mobile apps / GitHub project surfaces / homelab services / Labshare ops</p>
+                  </div>
+                  <div>
+                    <p className="text-[var(--tag-bg-base)]">$ keep</p>
+                    <p>Useful products. Ethical AI. Open source. Clean systems. Fewer words.</p>
+                  </div>
+                </div>
+
+                <pre className="overflow-x-auto rounded-[1rem] border border-[var(--fg-2)] bg-[color-mix(in_srgb,var(--surface)_7%,transparent)] p-5 text-xs leading-[1.55] text-[var(--tag-bg-base)]">
+{String.raw`  daniel@rice:~$ ./portfolio.sh
+
+        o
+       /|\      build
+       / \   =========>   ship
+
+  ping: github.com ........ ok
+  ping: houston.local ..... ok
+  ping: inbox ............. open
+
+  status: ready`}
+                </pre>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* The Stack Block */}
-        <section id="stack" className="mb-24 scroll-mt-24">
-          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
-            Tools & Technologies
-          </h2>
-          <div className="border-t border-divider pt-8">
-            {/* Languages */}
-            <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
-                Languages
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["Java", "Python", "Go", "TypeScript", "JavaScript", "C", "C++", "Haskell"].map((tool) => (
-                  <div
-                    key={tool}
-                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
-                  >
-                    <span className="font-mono text-sm text-ink">
-                      {tool}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <section id="currently" className="scroll-mt-28 border-t border-divider py-16">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] xl:items-stretch">
+            <div className="paper-panel min-w-0 overflow-hidden rounded-[2.25rem] p-3 sm:p-4">
+              <LocationMap
+                city="Houston"
+                state="Texas"
+                country="USA"
+                coordinates={{ lat: 29.7168, lng: -95.4036 }}
+              />
             </div>
 
-            {/* Frameworks & Libraries */}
-            <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
-                Frameworks & Libraries
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["React", "React Native", "Node.js", "Next.js", "LangChain", "Unity", "TanStack Query"].map((tool) => (
-                  <div
-                    key={tool}
-                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
-                  >
-                    <span className="font-mono text-sm text-ink">
-                      {tool}
-                    </span>
-                  </div>
-                ))}
+            <aside className="paper-panel flex min-w-0 flex-col overflow-hidden rounded-[2.25rem]">
+              <div className="flex flex-wrap items-center gap-3 border-b border-divider p-5 sm:p-6">
+                <LiveTime timezone="America/Chicago" location="" />
+                <CopyableText text="danielhkuo@rice.edu" displayText="danielhkuo@rice.edu" />
               </div>
-            </div>
 
-            {/* Cloud & DevOps */}
-            <div className="mb-8">
-              <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
-                Cloud & Developer Tools
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {["AWS", "Microsoft Azure", "PostgreSQL", "MongoDB", "Docker", "Git", "NGINX", "Postman", "Cloudflare", "Linux"].map((tool) => (
-                  <div
-                    key={tool}
-                    className="border border-divider p-4 hover:border-ink/20 transition-colors"
-                  >
-                    <span className="font-mono text-sm text-ink">
-                      {tool}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+              <pre className="min-h-[360px] flex-1 overflow-auto bg-[var(--fg)] p-4 font-mono text-[0.45rem] leading-[1.08] text-[var(--tag-bg-base)] sm:p-6 sm:text-[0.56rem] md:text-[0.68rem] xl:text-[0.62rem] 2xl:text-[0.72rem]">
+{String.raw`⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⡟
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⢟⣝⣿⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⡟⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⣴⣭⣝⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣾⡿⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣴⡞⣛⣿⣿⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⣴⣮⣽⣯⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⢷⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⠃⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠴⣖⣋⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⣻⡷⢦⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣾⣿⡿⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⣀⣠⣶⣿⣷⢾⣿⣿⣿⣿⣿⣛⣿⢿⣿⣿⣿⣿⣿⣿⣽⣿⣿⠛⣿⣿⣿⣿⣿⣿⣷⡄⠉⢳⣦⣀⠀⠀⠀⠀⢀⡄⠀⠀⠀⢀⣾⣟⣿⠁⠀⠀⠀⠀
+⠀⠀⢀⣠⣴⣾⣿⢿⣭⣉⣿⣿⣿⣿⣿⡿⠿⠿⠿⠿⢿⣿⠿⣿⢿⢻⣿⣿⣿⣷⣿⣿⡀⣯⢙⡻⣿⣿⣦⡈⣙⣿⣶⣤⣀⣤⣾⡁⠀⢀⣀⣾⣿⣿⡏⠀⠀⠀⠀⠀
+⠰⠿⣿⡿⠿⣟⠻⣶⠉⠿⠟⠉⢉⣉⣤⠤⠶⠶⢤⠀⡀⠙⢀⡈⠎⠊⠃⢻⣿⣿⣿⣿⣿⣿⣾⣿⣿⣿⣿⣧⣼⡿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠃⢻⠀⠀⠀⠀⠀⠀
+⠀⠀⠈⠻⠛⠛⠿⠥⠤⠶⠖⠊⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠈⠀⠀⢿⠛⠿⣿⣿⣿⢿⡇⠀⠈⠉⠉⠻⠿⣷⣿⣿⣉⠻⡿⢛⣹⠟⠛⠳⣤⣿⣄⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠓⠒⠲⠶⠶⠤⠤⠤⣤⠀⠀⠀⠀⠀⠀⠀⠈⠛⠷⣶⡾⣿⣿⣾⣻⣦⡀⠤⢄⣰⣂⣈⣿⣿⣿⣦⡙⠻⢧⠀⠀⠀⠉⡻⢿⠤⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠂⠰⢦⣤⠽⠦⢤⣄⣀⣀⣀⣀⣲⣿⣿⣷⣹⣧⡙⠿⠿⣿⣿⠋⠛⠺⣿⡿⢷⣾⣇⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⠀⠀⡼⠃⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⢹⣿⣿⣿⣧⡀⠀⠈⠛⠀⠀⠀⣽⣿⣿⣏⣿⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣤⣾⠇⢀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣿⣿⣿⣧⠀⠀⠀⠀⠀⠺⢻⣿⣿⣧⣽⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣾⡿⣿⣾⣰⢿⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣿⣟⣿⠂⠀⠀⠀⠾⢿⣿⣿⡿⠿⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⡀⢈⣿⡿⣫⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⣿⣿⣧⣤⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣿⠟⢹⡇⠻⣫⣽⡿⢟⣛⣻⡀⠀⠀⠀⠀⠀⠀⣼⣿⠛⠻⢿⣿⣿⣿⡿⢷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⣤⡾⠛⠁⣠⣼⢿⣿⣵⡤⠴⠚⠋⠉⠀⠀⠀⠀⠀⢀⡴⠯⣌⠻⠿⢮⡭⣸⣿⣧⢾⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠘⠿⢿⣿⣿⣿⡿⠭⠚⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⠛⠀⣀⠀⢀⣼⣿⣿⣿⠟⣡⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⡟⠀⠀⠀⠀⠀⣼⠃⠛⠛⣡⣾⠟⢛⡁⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⠞⣹⡇⢀⠉⠀⠀⠀⢸⣷⣴⠞⠉⢀⣠⡿⠟⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣄⣾⡿⠷⠟⠋⠀⠀⢀⣀⣠⣶⠾⣋⣡⡶⠞⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣿⣶⣶⣶⣶⣶⣛⣋⣉⣩⠶⠟⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠉⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀`}
+              </pre>
+            </aside>
           </div>
         </section>
 
-        {/* Interactive Micro-Islands */}
-        <section id="currently" className="mb-24 scroll-mt-24">
-          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
-            Currently
-          </h2>
-          <div className="border-t border-divider pt-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-              {/* Live Time Widget */}
-              <div>
-                <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
-                  Local Time
-                </h3>
-                <LiveTime
-                  timezone="America/Chicago"
-                  location="Houston, TX"
-                />
-              </div>
-
-              {/* Contact Info */}
-              <div>
-                <h3 className="font-mono text-xs uppercase tracking-wider text-ink mb-4">
-                  Get in Touch
-                </h3>
-                <CopyableText
-                  text="danielhkuo@rice.edu"
-                  displayText="danielhkuo@rice.edu"
-                />
-              </div>
+        <section id="work" className="scroll-mt-28 border-t border-divider py-16">
+          <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+            <div>
+              <p className="caps-label text-xs text-accent">Selected work · 03</p>
+              <h2 className="mt-3 font-display text-4xl font-medium leading-tight text-text-primary md:text-5xl">
+                Pinned repositories from GitHub.
+              </h2>
             </div>
-
-            {/* Location Map */}
-            <LocationMap
-              city="Houston"
-              state="Texas"
-              country="USA"
-              coordinates={{ lat: 29.7168, lng: -95.4036 }}
-            />
           </div>
-        </section>
-
-        {/* The Project Feed */}
-        <section id="work" className="scroll-mt-24">
-          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
-            Selected Work
-          </h2>
-          <div className="border-t border-divider pt-12">
+          <div className="grid gap-6">
             {projects.length > 0 ? (
               projects.map((project) => (
                 <ProjectCard key={project.name} project={project} />
@@ -182,23 +171,27 @@ On a more serious note, I care deeply about building impactful products while le
           </div>
         </section>
 
-        {/* Contact Section */}
-        <section id="contact" className="mt-32 scroll-mt-24">
-          <h2 className="font-serif text-3xl font-light mb-6 text-ink">
-            Get in Touch
-          </h2>
-          <div className="border-t border-divider pt-8">
+        <section id="contact" className="scroll-mt-28 border-t border-divider py-16">
+          <div className="paper-panel grid gap-8 rounded-[2.25rem] p-6 sm:p-8 lg:grid-cols-[0.85fr_1.15fr] lg:p-10">
+            <div>
+              <p className="caps-label text-xs text-accent">Contact · 04</p>
+              <h2 className="mt-3 font-display text-4xl font-medium leading-tight text-text-primary md:text-5xl">
+                Send a note.
+              </h2>
+            </div>
             <ContactForm />
           </div>
         </section>
 
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-divider mt-32">
-        <div className="max-w-5xl mx-auto px-8 py-12">
-          <p className="font-mono text-xs text-ink uppercase tracking-wider" suppressHydrationWarning>
-            © {new Date().getFullYear()} · Digital Print Portfolio
+        <div className="mx-auto flex max-w-6xl flex-col justify-between gap-3 px-5 py-10 sm:px-8 md:flex-row lg:px-10">
+          <p className="caps-label text-xs text-text-muted" suppressHydrationWarning>
+            © {new Date().getFullYear()} · Daniel Kuo
+          </p>
+          <p className="caps-label text-xs text-text-muted">
+            Houston TX · Rice CS
           </p>
         </div>
       </footer>
