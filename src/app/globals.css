@@ -1,4 +1,8 @@
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-chocolate/theme.css";
 @import "tailwindcss";
+@import "@astryxdesign/core/tailwind-theme.css";
 
 /* kami Portfolio — warm parchment, ink-blue accent, serif-led hierarchy. */
 :root {
