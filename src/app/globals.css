@@ -485,3 +485,13 @@ h3 {
 html.dark .map-embed {
   filter: grayscale(100%) contrast(0.95) brightness(0.9) invert(0.92) hue-rotate(180deg);
 }
+
+/* Astryx chocolate theme font-family bridge: point the theme's font tokens at
+   the next/font-loaded typefaces. Astryx's actual token names (confirmed via
+   `npm run astryx -- docs typography` and node_modules/@astryxdesign/theme-chocolate)
+   are --font-family-heading / --font-family-body, not the "-display" naming
+   used in early drafts of this task. */
+:root {
+  --font-family-heading: var(--font-fraunces), Georgia, serif;
+  --font-family-body: var(--font-albert-sans), system-ui, sans-serif;
+}

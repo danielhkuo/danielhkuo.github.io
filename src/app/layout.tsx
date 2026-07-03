@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { fraunces, albertSans } from "./fonts";
 
 const iconVersion = "2";
 
@@ -38,7 +39,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://hcaptcha.com" />
         <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
       </head>
-      <body className="antialiased">
+      <body className={`${fraunces.variable} ${albertSans.variable} antialiased`}>
         {children}
       </body>
     </html>
