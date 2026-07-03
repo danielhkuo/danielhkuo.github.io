@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent } from "react";
+import { Card, HStack, Button, IconButton } from "@astryxdesign/core";
 import { setTheme, useThemeMode } from "@/lib/theme";
 
 const links = [
@@ -71,49 +72,51 @@ export default function HoverMenu() {
 
   return (
     <div className="fixed inset-x-0 top-4 z-50 px-4">
-      <div className="capsule-shell mx-auto flex max-w-4xl items-center justify-between gap-3 px-3 py-2">
-        <button
-          type="button"
-          onClick={openTerminal}
-          data-terminal-trigger=""
-          aria-haspopup="dialog"
-          className="inline-flex items-center gap-2 rounded-full px-3 py-2 font-caps text-xs font-bold tracking-[var(--tracking-label)] text-accent hover:bg-[var(--tag-bg-soft)]"
-        >
-          <TerminalIcon />
-          Terminal
-        </button>
-        <nav className="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-          {links.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className={`rounded-full px-4 py-2 font-caps text-xs tracking-[var(--tracking-label)] ${
-                active === link.href.slice(1)
-                  ? "bg-primary text-[var(--accent-on)] shadow-[var(--elev-ring-accent)]"
-                  : "text-text-muted hover:bg-bg hover:text-text-primary"
-              }`}
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTheme("toggle")}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="rounded-full p-2 text-text-muted hover:bg-bg hover:text-text-primary"
+      <Card padding={1.5} className="mx-auto max-w-4xl rounded-full">
+        <HStack gap={2} hAlign="between" vAlign="center">
+          <Button
+            label="Terminal"
+            variant="ghost"
+            icon={<TerminalIcon />}
+            onClick={openTerminal}
+            data-terminal-trigger=""
+            aria-haspopup="dialog"
+            className="rounded-full"
+          />
+          <HStack
+            as="nav"
+            gap={1}
+            vAlign="center"
+            className="hidden sm:flex"
+            aria-label="Primary navigation"
           >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </button>
-          <a
-            href="mailto:danielhkuo@rice.edu"
-            className="rounded-full border border-primary bg-bg px-4 py-2 font-caps text-xs tracking-[var(--tracking-label)] text-primary hover:bg-primary hover:text-[var(--accent-on)]"
-          >
-            Email
-          </a>
-        </div>
-      </div>
+            {links.map((link) => (
+              <Button
+                key={link.href}
+                label={link.label}
+                href={link.href}
+                variant={active === link.href.slice(1) ? "primary" : "ghost"}
+                className="rounded-full"
+              />
+            ))}
+          </HStack>
+          <HStack gap={2} vAlign="center">
+            <IconButton
+              label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              icon={theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              variant="ghost"
+              onClick={() => setTheme("toggle")}
+              className="rounded-full"
+            />
+            <Button
+              label="Email"
+              href="mailto:danielhkuo@rice.edu"
+              variant="secondary"
+              className="rounded-full"
+            />
+          </HStack>
+        </HStack>
+      </Card>
     </div>
   );
 }
