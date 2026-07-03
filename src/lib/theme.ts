@@ -1,23 +1,32 @@
-// Shared light/dark theme control. The `.dark` class on <html> drives the
-// site-wide CSS-variable overrides in globals.css. A blocking inline script in
+// Shared light/dark theme control. `data-astryx-media` on <html> drives the
+// Astryx chocolate theme's unqualified `[data-astryx-media="dark"]` /
+// `[data-astryx-media="light"]` selectors. A blocking inline script in
 // layout.tsx applies the persisted choice before paint (no FOUC); this module
-// is the runtime toggle used by the terminal and the HoverMenu.
+// is the runtime toggle used by the terminal and the HoverMenu, and also
+// feeds `AstryxThemeProvider` (which manages the `<Theme mode>` wrapper).
 
 import { useSyncExternalStore } from "react";
 
 export type ThemeMode = "dark" | "light";
 
 const STORAGE_KEY = "theme";
+const ATTR = "data-astryx-media";
 export const THEME_EVENT = "themechange";
+
+function systemPref(): ThemeMode {
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 export function getTheme(): ThemeMode {
   if (typeof document === "undefined") return "light";
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  const attr = document.documentElement.getAttribute(ATTR);
+  return attr === "dark" ? "dark" : "light";
 }
 
 export function applyTheme(mode: ThemeMode): ThemeMode {
   if (typeof document === "undefined") return mode;
-  document.documentElement.classList.toggle("dark", mode === "dark");
+  document.documentElement.setAttribute(ATTR, mode);
   try {
     localStorage.setItem(STORAGE_KEY, mode);
   } catch {
@@ -28,8 +37,7 @@ export function applyTheme(mode: ThemeMode): ThemeMode {
 }
 
 export function setTheme(mode: ThemeMode | "toggle"): ThemeMode {
-  const next =
-    mode === "toggle" ? (getTheme() === "dark" ? "light" : "dark") : mode;
+  const next = mode === "toggle" ? (getTheme() === "dark" ? "light" : "dark") : mode;
   return applyTheme(next);
 }
 
@@ -48,4 +56,16 @@ const getServerTheme = (): ThemeMode => "light";
 /** Current theme as reactive state. `light` on the server, real value on client. */
 export function useThemeMode(): ThemeMode {
   return useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+}
+
+/** Read the persisted concrete mode (localStorage, else OS). Client-only. */
+export function readStoredMode(): ThemeMode {
+  if (typeof window === "undefined") return "light";
+  try {
+    const t = localStorage.getItem(STORAGE_KEY);
+    if (t === "dark" || t === "light") return t;
+  } catch {
+    /* ignore */
+  }
+  return systemPref();
 }

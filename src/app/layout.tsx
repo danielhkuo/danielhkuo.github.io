@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { fraunces, albertSans } from "./fonts";
+import AstryxThemeProvider from "@/components/AstryxThemeProvider";
 
 const iconVersion = "2";
 
@@ -24,14 +25,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // The pre-paint script below toggles the `dark` class on <html>, so its
-    // className legitimately differs between server and client on first paint.
+    // The pre-paint script below sets the `data-astryx-media` attribute on
+    // <html>, so its attributes legitimately differ between server and
+    // client on first paint.
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Apply the persisted (or system) theme before paint to avoid a flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-astryx-media',d?'dark':'light')}catch(e){}`,
           }}
         />
         {/* Preconnect to external domains for faster loading */}
@@ -40,7 +42,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
       </head>
       <body className={`${fraunces.variable} ${albertSans.variable} antialiased`}>
-        {children}
+        <AstryxThemeProvider>{children}</AstryxThemeProvider>
       </body>
     </html>
   );
