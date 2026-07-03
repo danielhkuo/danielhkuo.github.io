@@ -9,7 +9,8 @@
     "lint": "eslint",
     "contrast": "node scripts/check-contrast.mjs",
     "a11y": "node scripts/run-axe.mjs",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "npx react-doctor@latest",
+    "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.2",
