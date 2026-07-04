@@ -42,7 +42,7 @@ export default function Masthead() {
                     <Heading
                       level={1}
                       type="display-1"
-                      className="mt-4 font-display leading-[0.98] tracking-[var(--tracking-display)]"
+                      className="mt-4 font-display text-[clamp(38px,5vw,60px)] font-medium leading-[0.98] tracking-[-1.5px] text-text-primary"
                     >
                       Full-stack product builder &amp; team architect.
                     </Heading>

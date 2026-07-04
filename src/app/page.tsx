@@ -54,7 +54,7 @@ export default async function Home() {
                 <Text type="label" className="caps-label text-xs text-accent">
                   Terminal · 01
                 </Text>
-                <Heading level={2} type="display-2" className="mt-3 font-display leading-tight text-text-primary">
+                <Heading level={2} type="display-2" className="mt-3 font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
                   /daniel-kuo
                 </Heading>
               </VStack>
@@ -169,7 +169,7 @@ export default async function Home() {
               <Text type="label" className="caps-label text-xs text-accent">
                 Selected work · 03
               </Text>
-              <Heading level={2} type="display-2" className="mt-3 font-display leading-tight text-text-primary">
+              <Heading level={2} type="display-2" className="mt-3 font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
                 Pinned repositories from GitHub.
               </Heading>
             </VStack>
@@ -192,7 +192,7 @@ export default async function Home() {
                 <Text type="label" className="caps-label text-xs text-accent">
                   Contact · 04
                 </Text>
-                <Heading level={2} type="display-2" className="mt-3 font-display leading-tight text-text-primary">
+                <Heading level={2} type="display-2" className="mt-3 font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
                   Send a note.
                 </Heading>
               </VStack>
