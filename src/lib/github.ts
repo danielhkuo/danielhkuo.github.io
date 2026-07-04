@@ -107,7 +107,7 @@ function getMockRepos(): PinnedRepo[] {
       name: "example-project",
       description: "A sample project showcasing modern web development",
       url: "https://github.com/danielhkuo/example-project",
-      homepageUrl: null,
+      homepageUrl: "https://example.com",
       primaryLanguage: {
         name: "TypeScript",
         color: "#3178c6",
@@ -119,6 +119,20 @@ function getMockRepos(): PinnedRepo[] {
       ],
       stargazerCount: 42,
       forkCount: 7,
+      updatedAt: new Date().toISOString(),
+      owner: {
+        login: "danielhkuo",
+      },
+    },
+    {
+      name: "empty-state-repo",
+      description: "TEMP DEBUG: verifies the empty-state path, no stars/forks",
+      url: "https://github.com/danielhkuo/empty-state-repo",
+      homepageUrl: null,
+      primaryLanguage: null,
+      languages: [],
+      stargazerCount: 0,
+      forkCount: 0,
       updatedAt: new Date().toISOString(),
       owner: {
         login: "danielhkuo",
