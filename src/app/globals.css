@@ -1,35 +1,52 @@
-@import "tailwindcss";
+@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-chocolate/theme.css";
+/* Tailwind WITHOUT preflight. Astryx ships its own reset (reset.css + the
+   :where(*) rules in astryx.css); Tailwind's preflight `@layer base` was
+   ordered after Astryx's layers and clobbered every Astryx component default —
+   heading sizes/weights (h1 collapsed to 14px), Button/Badge padding (pills
+   became clipped ovals), heading font-family. Importing theme + utilities only
+   drops preflight and lets Astryx's component styles apply. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@astryxdesign/core/tailwind-theme.css";
 
-/* kami Portfolio — warm parchment, ink-blue accent, serif-led hierarchy. */
+/* Portfolio — warm chocolate/terracotta palette, Fraunces display + Albert Sans
+   body. Values mirror the Portfolio.dc.html design tokens 1:1 so the hand-rolled
+   panels match the Astryx chocolate-theme components. */
 :root {
-  --bg: #f5f4ed;
-  --surface: #faf9f5;
-  --surface-warm: #e8e6dc;
+  --bg: #ece2d0;
+  --surface: #f8f2e7;
+  --surface-warm: #efe4d1;
 
-  --fg: #141413;
-  --fg-2: #3d3d3a;
-  --muted: #504e49;
-  --meta: #6b6a64;
+  --fg: #2a201a;
+  --fg-2: #5c4c3d;
+  --muted: #8b7a66;
+  --meta: #9a8871;
 
-  --border: #e8e6dc;
-  --border-soft: #e5e3d8;
+  --border: #dcccb2;
+  --border-soft: #e2d5bf;
 
-  --accent: #1b365d;
-  --accent-on: #faf9f5;
-  --accent-light: #2d5a8a;
+  --accent: #a25c2b;
+  --accent-on: #fbf5ea;
+  --accent-light: #b56a37;
   --accent-hover: var(--accent);
-  --accent-active: #142a48;
+  --accent-active: #8a4a22;
 
-  --success: #4a6b3a;
-  --warn: #8a6b1f;
-  --danger: #8a3a30;
+  --success: #7a9146;
+  --warn: #c08a2e;
+  --danger: #b5482f;
 
-  --font-display-family: Charter, Georgia, Palatino, "Times New Roman", serif;
-  --font-body-family: Charter, Georgia, Palatino, "Times New Roman", serif;
+  /* The next/font vars (--font-fraunces / --font-albert-sans) are attached to
+     <body>, so they're undefined at :root. Give each a literal fallback inside
+     var() — otherwise --font-display-family computes to guaranteed-invalid at
+     :root and the .font-display utility silently forces headings to inherit. */
+  --font-display-family: var(--font-fraunces, Fraunces), Georgia, "Times New Roman", serif;
+  --font-body-family: var(--font-albert-sans, "Albert Sans"), system-ui, -apple-system, sans-serif;
   --font-mono-family:
     "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
     "TsangerJinKai02", "Source Han Serif SC", monospace;
-  --font-caps-family: var(--font-display-family);
+  --font-caps-family: var(--font-body-family);
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -72,17 +89,17 @@
   --elev-flat: none;
   --elev-ring: 0 0 0 1px var(--border);
   --elev-ring-accent: 0 0 0 1px var(--accent);
-  --elev-raised: 0 4px 24px rgba(0, 0, 0, 0.05);
+  --elev-raised: 0 1px 2px rgba(42, 28, 18, 0.05), 0 10px 30px rgba(42, 28, 18, 0.06);
   --focus-ring: 0 0 0 2px var(--accent-active);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-  --tag-bg-faint: #eef2f7;
-  --tag-bg-soft: #e4ecf5;
-  --tag-bg-base: #d6e1ee;
-  --tag-bg-strong: #d0dce9;
+  --tag-bg-faint: #f2e9d8;
+  --tag-bg-soft: #efe4d1;
+  --tag-bg-base: #e8dcc4;
+  --tag-bg-strong: #e0d1b6;
 
   /* Tailwind / legacy aliases used by the existing component tree. */
   --color-primary: var(--accent);
@@ -102,48 +119,55 @@
   --available: var(--success);
   --divider: var(--border);
 
-  /* "Ink" panel tokens — decorative terminal/ASCII panels that must stay dark
-     in BOTH themes. Intentionally NOT overridden in html.dark. */
-  --panel-ink: #141413;
-  --panel-ink-2: #3d3d3a;
-  --panel-on: #faf9f5;
-  --panel-accent: #d6e1ee;
+  /* "Ink" panel tokens — the warm-brown terminal/ASCII panels that stay dark in
+     BOTH themes. Only --panel-ink/-ink-2 deepen under
+     [data-astryx-media="dark"]; --panel-on/-accent are shared across themes. */
+  --panel-ink: #221812;
+  --panel-ink-2: #3a2b21;
+  --panel-on: #f3e9da;
+  --panel-accent: #d9b48a;
 }
 
 /* Site-wide dark theme. Every component derives its colors from these tokens,
    so overriding the base palette here cascades everywhere via var() resolution.
-   Toggled by adding `.dark` to <html> (terminal `theme` command / HoverMenu). */
-html.dark {
-  --bg: #121211;
-  --surface: #1b1a17;
-  --surface-warm: #24221d;
+   Dark is driven by `data-astryx-media="dark"` on <html> (set by the pre-paint
+   script in layout.tsx and lib/theme.ts), the same attribute the Astryx
+   chocolate theme keys off — NOT a `.dark` class. */
+[data-astryx-media="dark"] {
+  --bg: #171009;
+  --surface: #241a12;
+  --surface-warm: #2e2118;
 
-  --fg: #f3f1ea;
-  --fg-2: #d4d2c8;
-  --muted: #a8a59b;
-  --meta: #807d73;
+  --fg: #f0e6d5;
+  --fg-2: #cab89f;
+  --muted: #9a8871;
+  --meta: #837259;
 
-  --border: #2c2a26;
-  --border-soft: #26241f;
+  --border: #3a2c20;
+  --border-soft: #33261c;
 
-  --accent: #8fb3e0;
-  --accent-on: #12110f;
-  --accent-light: #a9c6ec;
-  --accent-active: #b9d0ef;
+  --accent: #dd9b57;
+  --accent-on: #231910;
+  --accent-light: #e7ab68;
+  --accent-active: #e7ab68;
 
   --success: #8fc06f;
   --warn: #d6b25a;
   --danger: #e08a7a;
 
-  --tag-bg-faint: #1f2630;
-  --tag-bg-soft: #243040;
-  --tag-bg-base: #2b3a4d;
-  --tag-bg-strong: #324456;
+  --tag-bg-faint: #241a12;
+  --tag-bg-soft: #2e2118;
+  --tag-bg-base: #3a2c20;
+  --tag-bg-strong: #46372a;
 
-  --elev-raised: 0 4px 24px rgba(0, 0, 0, 0.45);
+  /* Panels sit even darker than surfaces in dark mode (design tokens). */
+  --panel-ink: #120c07;
+  --panel-ink-2: #33261c;
+
+  --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 34px rgba(0, 0, 0, 0.4);
 }
 
-html.dark body {
+[data-astryx-media="dark"] body {
   color-scheme: dark;
 }
 
@@ -189,7 +213,7 @@ html {
 }
 
 ::selection {
-  background: var(--tag-bg-soft);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
   color: var(--fg);
 }
 
@@ -213,8 +237,8 @@ textarea {
 }
 
 .caps-label {
-  font-family: var(--font-display-family);
-  font-weight: 500;
+  font-family: var(--font-body-family);
+  font-weight: 600;
   letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
@@ -258,6 +282,13 @@ h1,
 h2,
 h3 {
   text-wrap: balance;
+}
+
+/* The design's Fraunces display headings are weight 500. Astryx's atomic
+   font-weight class (var(--text-display-*-weight) → normal/400) is unlayered and
+   out-specifies our utilities, so force medium on the display-heading marker. */
+.font-display {
+  font-weight: 500 !important;
 }
 
 /* Hover-capability gating — used by HoverMenu to render the right trigger
@@ -478,6 +509,16 @@ h3 {
    tiles aren't a bright rectangle) in dark. Filter lives here, not inline, so
    the dark override can win. */
 .map-embed { filter: grayscale(100%) contrast(1.1) sepia(22%) saturate(0.85); }
-html.dark .map-embed {
+[data-astryx-media="dark"] .map-embed {
   filter: grayscale(100%) contrast(0.95) brightness(0.9) invert(0.92) hue-rotate(180deg);
+}
+
+/* Astryx chocolate theme font-family bridge: point the theme's font tokens at
+   the next/font-loaded typefaces. Astryx's actual token names (confirmed via
+   `npm run astryx -- docs typography` and node_modules/@astryxdesign/theme-chocolate)
+   are --font-family-heading / --font-family-body, not the "-display" naming
+   used in early drafts of this task. */
+:root {
+  --font-family-heading: var(--font-fraunces), Georgia, serif;
+  --font-family-body: var(--font-albert-sans), system-ui, sans-serif;
 }
