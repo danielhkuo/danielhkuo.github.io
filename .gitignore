@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# agent tooling scratch
+.od-skills/
+
+# Upstream font downloads — .ufo/.glyphs sources and backups, tens of MB. The
+# only file the site needs is vendored into src/app/fonts/ (committed).
+# Delete these folders freely; nothing builds from them.
+/aujournuit-main
+/sneaky-times-main

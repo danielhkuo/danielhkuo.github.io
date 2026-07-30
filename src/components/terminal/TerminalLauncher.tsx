@@ -21,9 +21,43 @@ export default function TerminalLauncher({
   const openRef = useRef(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const launchBtnRef = useRef<HTMLButtonElement>(null);
+  // Scroll position the background is pinned at while the mobile fullscreen
+  // terminal is open. `cd` updates it so we land on the navigated section once
+  // the terminal closes and the lock is released.
+  const scrollLockRef = useRef(0);
 
   useEffect(() => {
     openRef.current = open;
+  }, [open]);
+
+  // Mobile: lock the background from scrolling behind the fullscreen terminal.
+  // overflow:hidden alone doesn't stop touch-scroll on iOS, so pin the body with
+  // position:fixed and restore the (possibly `cd`-navigated) scroll on close.
+  useEffect(() => {
+    if (!open) return;
+    if (!window.matchMedia("(max-width: 760px)").matches) return;
+    const body = document.body;
+    scrollLockRef.current = window.scrollY;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollLockRef.current}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      window.scrollTo(0, scrollLockRef.current);
+    };
   }, [open]);
 
   const openTerminal = useCallback((trigger?: HTMLElement | null) => {
@@ -86,6 +120,20 @@ export default function TerminalLauncher({
     () => ({
       scrollToSection: (id) => {
         const el = id ? document.getElementById(id) : null;
+        // While the mobile scroll-lock pins the body (position:fixed),
+        // scrollIntoView is a no-op — translate the element's viewport rect back
+        // into a document offset and record it so we land there when the
+        // terminal closes and the lock lifts. Derive the pin distance from
+        // body.style.top (constant while open) rather than the mutable restore
+        // target, so repeated `cd`s each resolve correctly.
+        if (document.body.style.position === "fixed") {
+          const HEADER_OFFSET = 112; // matches the sections' scroll-mt-28
+          const pinned = -parseFloat(document.body.style.top || "0");
+          scrollLockRef.current = el
+            ? Math.max(0, el.getBoundingClientRect().top + pinned - HEADER_OFFSET)
+            : 0;
+          return;
+        }
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         else window.scrollTo({ top: 0, behavior: "smooth" });
       },

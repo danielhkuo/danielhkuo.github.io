@@ -10,13 +10,15 @@
     "contrast": "node scripts/check-contrast.mjs",
     "a11y": "node scripts/run-axe.mjs",
     "doctor": "npx react-doctor@latest",
-    "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs"
+    "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs",
+    "theme:build": "npm run astryx -- theme build src/theme/atomOneTheme.ts --out src/theme/theme.css",
+    "favicons": "node scripts/recolor-favicon.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.2",
-    "@astryxdesign/theme-chocolate": "^0.1.2",
     "@hcaptcha/react-hcaptcha": "^2.0.2",
     "@octokit/graphql": "^9.0.3",
+    "lucide-react": "^1.18.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"

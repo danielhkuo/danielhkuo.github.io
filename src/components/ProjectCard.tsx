@@ -21,7 +21,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   );
 
   return (
-    <Card padding={6} className="overflow-hidden rounded-[2rem] sm:p-8">
+    <Card padding={6} className="overflow-hidden sm:p-8">
       <Grid columns={{ minWidth: 320, max: 2 }} gap={8}>
         <VStack gap={0}>
           <HStack gap={2} wrap="wrap" className="mb-4">
@@ -32,7 +32,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 label={
                   <HStack gap={2} vAlign="center" as="span">
                     <span
-                      className="size-2 rounded-full"
+                      className="size-2"
                       style={{ backgroundColor: project.primaryLanguage.color }}
                       aria-hidden
                     />
@@ -73,7 +73,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
               href={project.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full"
+              className=""
             />
             {project.homepageUrl && (
               <Button
@@ -82,13 +82,13 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 href={project.homepageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full"
+                className=""
               />
             )}
           </HStack>
         </VStack>
 
-        <Card variant="muted" padding={5} className="rounded-[1.5rem]">
+        <Card variant="muted" padding={5} className="">
           <HStack gap={4} hAlign="between" vAlign="center" className="mb-5">
             <Text type="label" color="secondary" className="text-xs">
               Language mix
@@ -105,7 +105,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                   <HStack gap={3} hAlign="between" vAlign="center" className="mb-2 text-sm">
                     <HStack gap={2} vAlign="center" as="span">
                       <span
-                        className="size-2 rounded-full"
+                        className="size-2"
                         style={{ backgroundColor: lang.color }}
                         aria-hidden
                       />
@@ -117,9 +117,9 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                       {lang.percentage.toFixed(1)}%
                     </Text>
                   </HStack>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-2 overflow-hidden bg-muted">
                     <div
-                      className="h-full rounded-full"
+                      className="h-full"
                       style={{
                         width: `${Math.max(lang.percentage, 4)}%`,
                         backgroundColor: lang.color,

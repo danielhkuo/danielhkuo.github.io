@@ -49,7 +49,7 @@ export function onThemeChange(cb: (mode: ThemeMode) => void): () => void {
 }
 
 // --- React binding (useSyncExternalStore — no setState-in-effect, no
-//     hydration mismatch; mirrors the LiveTime.tsx pattern) ---
+//     hydration mismatch) ---
 const subscribeTheme = (notify: () => void) => onThemeChange(() => notify());
 const getServerTheme = (): ThemeMode => "light";
 

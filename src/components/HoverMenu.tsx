@@ -72,7 +72,7 @@ export default function HoverMenu() {
 
   return (
     <div className="fixed inset-x-0 top-4 z-50 px-4">
-      <Card padding={1.5} className="mx-auto max-w-4xl rounded-full">
+      <Card padding={1.5} className="mx-auto max-w-4xl">
         <HStack gap={2} hAlign="between" vAlign="center">
           <Button
             label="Terminal"
@@ -81,7 +81,7 @@ export default function HoverMenu() {
             onClick={openTerminal}
             data-terminal-trigger=""
             aria-haspopup="dialog"
-            className="rounded-full"
+            className=""
           />
           <HStack
             as="nav"
@@ -96,7 +96,7 @@ export default function HoverMenu() {
                 label={link.label}
                 href={link.href}
                 variant={active === link.href.slice(1) ? "primary" : "ghost"}
-                className="rounded-full"
+                className=""
               />
             ))}
           </HStack>
@@ -106,13 +106,13 @@ export default function HoverMenu() {
               icon={theme === "dark" ? <SunIcon /> : <MoonIcon />}
               variant="ghost"
               onClick={() => setTheme("toggle")}
-              className="rounded-full"
+              className=""
             />
             <Button
               label="Email"
               href="mailto:danielhkuo@rice.edu"
               variant="secondary"
-              className="rounded-full"
+              className=""
             />
           </HStack>
         </HStack>

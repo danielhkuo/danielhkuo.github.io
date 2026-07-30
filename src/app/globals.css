@@ -1,6 +1,6 @@
 @import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-chocolate/theme.css";
+@import "../theme/theme.css";
 /* Tailwind WITHOUT preflight. Astryx ships its own reset (reset.css + the
    :where(*) rules in astryx.css); Tailwind's preflight `@layer base` was
    ordered after Astryx's layers and clobbered every Astryx component default —
@@ -11,42 +11,62 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "@astryxdesign/core/tailwind-theme.css";
 
-/* Portfolio — warm chocolate/terracotta palette, Fraunces display + Albert Sans
-   body. Values mirror the Portfolio.dc.html design tokens 1:1 so the hand-rolled
-   panels match the Astryx chocolate-theme components. */
+/* Portfolio — Atom One Light palette, Sneaky Times display + IBM Plex Sans body.
+   Mirrors src/theme/atomOneTheme.ts so the hand-rolled panels below match the
+   Astryx atom-one components. Canonical One Light values are noted per line;
+   the mid greys are interpolated along the same ramp to hold WCAG AA on body
+   copy (One's mono-3 is a comment colour, too dim for UI text). */
 :root {
-  --bg: #ece2d0;
-  --surface: #f8f2e7;
-  --surface-warm: #efe4d1;
+  --bg: #fafafa;            /* One Light editor background */
+  --surface: #ffffff;       /* cards / panels, one step up from the page */
+  --surface-sunken: #f0f0f1;
 
-  --fg: #2a201a;
-  --fg-2: #5c4c3d;
-  --muted: #8b7a66;
-  --meta: #9a8871;
+  --fg: #383a42;            /* mono-1 */
+  --fg-2: #50535d;
+  --muted: #696c77;         /* mono-2 */
+  --meta: #a0a1a7;          /* mono-3 (comments) */
 
-  --border: #dcccb2;
-  --border-soft: #e2d5bf;
+  --border: #d4d5d9;
+  --border-soft: #e4e4e7;
 
-  --accent: #a25c2b;
-  --accent-on: #fbf5ea;
-  --accent-light: #b56a37;
+  /* Accent is One's blue rather than the cursor blue (#526fff) — it reads as
+     "Atom One" and holds contrast far better as link/label text. Deepened one
+     step from the canonical #4078f2: the accent paints 10px eyebrow labels and
+     the nav pill behind white text, and #4078f2 lands at 3.9–4.1:1 there (the
+     chocolate accent it replaces passed at 4.6). #3768d8 clears 4.5:1 on both
+     --bg and --surface; the canonical value lives on as --accent-light. */
+  --accent: #3768d8;
+  --accent-on: #ffffff;
+  --accent-light: #4078f2;
   --accent-hover: var(--accent);
-  --accent-active: #8a4a22;
+  --accent-active: #2f5bbd;
 
-  --success: #7a9146;
-  --warn: #c08a2e;
-  --danger: #b5482f;
+  --success: #50a14f;       /* green */
+  --warn: #c18401;          /* orange 2 */
+  --danger: #e45649;        /* red 1 */
 
-  /* The next/font vars (--font-fraunces / --font-albert-sans) are attached to
-     <body>, so they're undefined at :root. Give each a literal fallback inside
-     var() — otherwise --font-display-family computes to guaranteed-invalid at
-     :root and the .font-display utility silently forces headings to inherit. */
-  --font-display-family: var(--font-fraunces, Fraunces), Georgia, "Times New Roman", serif;
-  --font-body-family: var(--font-albert-sans, "Albert Sans"), system-ui, -apple-system, sans-serif;
+  /* The next/font vars (--font-sneaky-times / --font-ibm-plex-sans) are applied
+     to <html> in layout.tsx, so they resolve here at :root. They must stay on
+     <html>: from <body> these var()s fall through to whatever literal follows
+     the comma, and next/font registers LOCAL fonts under a GENERATED family
+     name — a human-readable literal like "Sneaky Times" never matches it, and
+     headings silently render Georgia instead. Deliberately no literal fallback
+     now, so that failure mode is loud rather than silent. */
+  --font-display-family: var(--font-sneaky-times), Georgia, "Times New Roman", serif;
+  --font-body-family: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  /* macOS Terminal.app's font, reached without shipping anything: `ui-monospace`
+     resolves to SF Mono on macOS Safari/Chrome, and the two explicit names cover
+     older engines. SF Mono and Menlo are Apple-licensed and cannot be served as
+     webfonts, so the tail is per-platform system metal — Consolas on Windows,
+     DejaVu Sans Mono (which Menlo itself derives from) on Linux. Nothing here
+     downloads: browsers only fetch a family they actually need. */
   --font-mono-family:
-    "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco,
-    "TsangerJinKai02", "Source Han Serif SC", monospace;
-  --font-caps-family: var(--font-body-family);
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+    "DejaVu Sans Mono", "Liberation Mono", monospace;
+  /* "Caps" means the label face, which is the display serif — same as
+     .caps-label. Not for button text: a thin high-contrast serif reversed out
+     of a filled block at 12px is hard to read, so buttons use font-body. */
+  --font-caps-family: var(--font-display-family);
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -79,32 +99,36 @@
   --space-18: 72px;
   --space-22: 88px;
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-pill: 9999px;
+  /* Boxy by default — Carbon-style square corners. The scale is kept (rather
+     than the tokens deleted) so call sites don't have to change and a future
+     softening is a one-line edit here. The only radius left on the site is the
+     macOS Terminal replica, which is deliberately not site chrome. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-pill: 0;
 
   --elev-flat: none;
   --elev-ring: 0 0 0 1px var(--border);
   --elev-ring-accent: 0 0 0 1px var(--accent);
-  --elev-raised: 0 1px 2px rgba(42, 28, 18, 0.05), 0 10px 30px rgba(42, 28, 18, 0.06);
+  --elev-raised: 0 1px 2px rgba(56, 58, 66, 0.05), 0 10px 30px rgba(56, 58, 66, 0.07);
   --focus-ring: 0 0 0 2px var(--accent-active);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-  --tag-bg-faint: #f2e9d8;
-  --tag-bg-soft: #efe4d1;
-  --tag-bg-base: #e8dcc4;
-  --tag-bg-strong: #e0d1b6;
+  --tag-bg-faint: #f4f4f5;
+  --tag-bg-soft: #eeeef0;
+  --tag-bg-base: #e6e6e9;
+  --tag-bg-strong: #dcdde1;
 
   /* Tailwind / legacy aliases used by the existing component tree. */
   --color-primary: var(--accent);
   --color-secondary: var(--tag-bg-base);
-  --color-tertiary: var(--surface-warm);
+  --color-tertiary: var(--surface-sunken);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-accent: var(--accent);
@@ -119,13 +143,14 @@
   --available: var(--success);
   --divider: var(--border);
 
-  /* "Ink" panel tokens — the warm-brown terminal/ASCII panels that stay dark in
-     BOTH themes. Only --panel-ink/-ink-2 deepen under
-     [data-astryx-media="dark"]; --panel-on/-accent are shared across themes. */
-  --panel-ink: #221812;
-  --panel-ink-2: #3a2b21;
-  --panel-on: #f3e9da;
-  --panel-accent: #d9b48a;
+  /* "Ink" panel tokens — the terminal/ASCII panels that stay dark in BOTH
+     themes, so they are Atom One Dark even while the page is One Light. Only
+     --panel-ink/-ink-2 deepen under [data-astryx-media="dark"];
+     --panel-on/-accent are shared across themes. */
+  --panel-ink: #282c34;     /* One Dark editor background */
+  --panel-ink-2: #3e4451;   /* One Dark selection — rules on the panel */
+  --panel-on: #abb2bf;      /* One Dark mono-1 */
+  --panel-accent: #61afef;  /* One Dark blue */
 }
 
 /* Site-wide dark theme. Every component derives its colors from these tokens,
@@ -133,36 +158,42 @@
    Dark is driven by `data-astryx-media="dark"` on <html> (set by the pre-paint
    script in layout.tsx and lib/theme.ts), the same attribute the Astryx
    chocolate theme keys off — NOT a `.dark` class. */
+/* Atom One Dark. --fg and --meta are One Dark's canonical mono-1 / mono-2;
+   --fg-2 and --muted are interpolated along the same grey ramp. One's greys are
+   tuned for code on #282c34, where mono-2 is deliberately de-emphasised — on a
+   content page it carries real prose, so the content tiers (--fg, --fg-2,
+   --muted) are lifted to clear 4.5:1 against --surface, the lightest ground
+   they land on. --meta stays canonical mono-2 as the hint tier (>3:1). */
 [data-astryx-media="dark"] {
-  --bg: #171009;
-  --surface: #241a12;
-  --surface-warm: #2e2118;
+  --bg: #282c34;            /* One Dark editor background */
+  --surface: #2c313a;
+  --surface-sunken: #21252b;
 
-  --fg: #f0e6d5;
-  --fg-2: #cab89f;
-  --muted: #9a8871;
-  --meta: #837259;
+  --fg: #abb2bf;            /* mono-1 */
+  --fg-2: #9da5b4;
+  --muted: #939bab;
+  --meta: #828997;          /* mono-2 */
 
-  --border: #3a2c20;
-  --border-soft: #33261c;
+  --border: #3e4451;        /* One Dark selection */
+  --border-soft: #353b45;
 
-  --accent: #dd9b57;
-  --accent-on: #231910;
-  --accent-light: #e7ab68;
-  --accent-active: #e7ab68;
+  --accent: #61afef;        /* blue */
+  --accent-on: #282c34;
+  --accent-light: #7cbef2;
+  --accent-active: #7cbef2;
 
-  --success: #8fc06f;
-  --warn: #d6b25a;
-  --danger: #e08a7a;
+  --success: #98c379;       /* green */
+  --warn: #e5c07b;          /* orange 2 */
+  --danger: #e06c75;        /* red 1 */
 
-  --tag-bg-faint: #241a12;
-  --tag-bg-soft: #2e2118;
-  --tag-bg-base: #3a2c20;
-  --tag-bg-strong: #46372a;
+  --tag-bg-faint: #2c313a;
+  --tag-bg-soft: #333842;
+  --tag-bg-base: #3a404b;
+  --tag-bg-strong: #434a57;
 
   /* Panels sit even darker than surfaces in dark mode (design tokens). */
-  --panel-ink: #120c07;
-  --panel-ink-2: #33261c;
+  --panel-ink: #21252b;
+  --panel-ink-2: #333842;
 
   --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 34px rgba(0, 0, 0, 0.4);
 }
@@ -229,17 +260,28 @@ textarea {
     box-shadow var(--motion-base) var(--ease-standard);
 }
 
+/* Name is historical — squared off with everything else, so it reads as a
+   bordered slab rather than a capsule. */
 .capsule-shell {
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   box-shadow: var(--elev-ring);
 }
 
+/* Small-caps labels are set in the display face, not the body face. In the body
+   sans this treatment (10px, uppercase, letterspaced) flattens every grotesque
+   into the same shape — uppercase hides the letterforms that distinguish them —
+   so the labels read as generic. The serif's caps carry at this size.
+
+   Weight is 400, not the 600 it was: Sneaky Times has a single weight, and
+   asking for 600 makes the browser synthesise a bold that thickens the thin
+   strokes unevenly. Tracking is opened up a little to compensate for the
+   lighter colour that costs. */
 .caps-label {
-  font-family: var(--font-body-family);
-  font-weight: 600;
-  letter-spacing: var(--tracking-eyebrow);
+  font-family: var(--font-display-family);
+  font-weight: 400;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
@@ -253,6 +295,19 @@ textarea {
 
 .paper-panel:hover {
   box-shadow: var(--elev-raised);
+}
+
+/* Ink panels are a fixed dark surface in BOTH themes, so everything inside must
+   take its colour from --panel-on rather than the page's text tokens. The
+   Astryx theme reset paints `:where(p)` with --color-text-primary, and that
+   beats plain inheritance from this wrapper — in light mode it put #383a42 body
+   copy on the #282c34 panel (2.7:1). Rebinding the token here re-points that
+   reset at the panel's own foreground without a specificity fight, so the
+   explicit text-[var(--panel-accent)] utilities on the prompt lines still win. */
+.ink-panel {
+  --color-text-primary: var(--panel-on);
+  --color-text-secondary: var(--panel-on);
+  color: var(--panel-on);
 }
 
 .kami-tag {
@@ -284,11 +339,68 @@ h3 {
   text-wrap: balance;
 }
 
-/* The design's Fraunces display headings are weight 500. Astryx's atomic
-   font-weight class (var(--text-display-*-weight) → normal/400) is unlayered and
-   out-specifies our utilities, so force medium on the display-heading marker. */
+/* Sneaky Times ships ONE weight, so the display-heading marker pins 400 —
+   asking for 500+ makes the browser synthesise a bold, which smears a face this
+   high-contrast. !important because Astryx's atomic font-weight class is
+   unlayered and out-specifies our utilities. (The font-stretch that lived here
+   was for Aujournuit's width axis; Sneaky Times is static and doesn't need it.) */
 .font-display {
-  font-weight: 500 !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.01em;
+}
+
+/* hCaptcha injects its own iframe with a 4px radius. It's the only element on
+   the page we don't author, so square it here rather than leave one soft
+   rectangle sitting inside the contact form. */
+.h-captcha iframe,
+iframe[src*="hcaptcha"] {
+  border-radius: 0 !important;
+}
+
+/* Astryx's Grid writes `repeat(auto-fill, minmax(<minWidth>px, …))` as an inline
+   style. A fixed px floor in minmax() cannot shrink below itself, so once the
+   container is narrower than that floor the track overflows it and drags a
+   horizontal scrollbar onto the whole page. Every grid on the site hit this on
+   a 320px phone: ProjectCard's floor is 320px, the contact panel's and the
+   masthead's are 280px, against columns of ~230–280px.
+
+   Fixing it per-grid would mean threading each floor through min(floor, 100%).
+   Not worth it: none of these floors can fit two tracks below 480px anyway, so
+   one column is already the intended layout there and collapsing the track
+   list says so directly. !important is required to beat the inline style. */
+@media (max-width: 480px) {
+  .astryx-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* hCaptcha's checkbox is a fixed 302x76 iframe. The contact panel's inner
+   column is narrower than that below ~392px viewport (viewport − 40 page
+   gutter − 48 panel padding − 2 border), so on phones the widget was being
+   clipped at its right edge by the row's overflow-hidden. Scale it down to fit
+   instead, and reserve the SCALED footprint on the wrapper — transforms don't
+   affect layout, so without that the flex row would still reserve 302px.
+
+   Transforming is safe here specifically because hCaptcha appends its
+   challenge overlay to <body>, not inside this container: the containing block
+   a transform establishes never reaches it. Verified in the DOM — do not move
+   the widget's popup under this element. */
+.captcha-fit {
+  --captcha-scale: 1;
+  flex: none;
+  width: calc(302px * var(--captcha-scale));
+  height: calc(76px * var(--captcha-scale));
+}
+.captcha-fit > * {
+  transform: scale(var(--captcha-scale));
+  transform-origin: 0 0;
+}
+/* 0.86 → 260px wide, fits from 350px viewport up; 0.72 → 217px, covers 320px. */
+@media (max-width: 400px) {
+  .captcha-fit { --captcha-scale: 0.86; }
+}
+@media (max-width: 350px) {
+  .captcha-fit { --captcha-scale: 0.72; }
 }
 
 /* Hover-capability gating — used by HoverMenu to render the right trigger
@@ -301,18 +413,37 @@ h3 {
 }
 
 /* =========================================================================
-   Terminal — interactive shell popup. Ported from the reference and remapped
-   onto kami tokens (--fg-dim→--meta, --fg-muted→--muted, --line→--border).
-   Colors derive from the theme tokens, so it follows light/dark automatically.
+   Terminal — interactive shell popup, built to read as a real macOS
+   Terminal.app window.
+
+   What makes Terminal.app recognisable is the chrome, so that part is
+   measured rather than approximated: 10px window radius, a 28px title bar
+   with the title CENTRED (not left-aligned beside the lights, which is the
+   usual web tell), 12px traffic lights spaced 8px starting 13px from the
+   left, each with the darker rim macOS draws, and the deep window shadow.
+
+   The chrome is fixed macOS grey in both themes because Terminal.app's own
+   title bar follows the system, not the profile. The content area follows the
+   site's Atom One palette — the same way a real Terminal window shows whatever
+   colour profile you picked inside Apple's chrome.
+
+   Type is --font-mono-family, which resolves to SF Mono on macOS.
    ========================================================================= */
 .term-win {
   position: fixed;
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  border: 1px solid var(--fg);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  /* The one radius left on the site. Everything else is squared off, but this
+     window and its round traffic lights are a macOS quotation, not site chrome
+     — squaring them stops it reading as Terminal.app. Set to 0 if the boxy
+     language should win here too. */
+  border-radius: 10px;
+  /* macOS active-window shadow: a tight contact shadow plus a wide soft one. */
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.28),
+    0 12px 24px rgba(0, 0, 0, 0.22),
+    0 28px 76px rgba(0, 0, 0, 0.36);
   z-index: 1000;
   resize: both;
   overflow: hidden;
@@ -331,52 +462,90 @@ h3 {
    doesn't fight the termpop animation) and without reading window size at render. */
 .term-win.term-centered { inset: 0; margin: auto; }
 
+/* Title bar. Grid rather than flex so the title is centred against the WINDOW,
+   not against the leftover space between the lights and the hint — the lights
+   and hint columns are the same width, which is what keeps it honest. */
 .term-bar {
-  display: flex;
+  --term-chrome: #e4e4e4;
+  --term-chrome-edge: #c8c8c8;
+  --term-chrome-text: #4d4d4d;
+
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 8px;
-  padding: 9px 13px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--meta);
-  letter-spacing: 0.04em;
+  height: 28px;
+  padding: 0 13px;
+  background: var(--term-chrome);
+  border-bottom: 0.5px solid var(--term-chrome-edge);
+  color: var(--term-chrome-text);
+  /* Terminal.app sets the title in the UI font, never the monospace one. */
+  font-family: var(--font-body-family);
+  font-size: 13px;
+  letter-spacing: 0;
   cursor: grab;
   flex-shrink: 0;
   user-select: none;
 }
+[data-astryx-media="dark"] .term-bar {
+  --term-chrome: #2c2c2c;
+  --term-chrome-edge: #1a1a1a;
+  --term-chrome-text: #b8b8b8;
+}
 .term-bar.dragging { cursor: grabbing; }
-.term-bar .lights { display: flex; gap: 6px; margin-right: 4px; }
-.term-bar .lights span { width: 9px; height: 9px; border-radius: 50%; }
-.term-bar .lights span:nth-child(1) { background: var(--danger); }
-.term-bar .lights span:nth-child(2) { background: var(--warn); }
-.term-bar .lights span:nth-child(3) { background: var(--success); }
-.term-bar .title { flex: 1; }
-.term-bar .hint { color: var(--meta); }
+
+/* Shared by the interactive window and the decorative panel in #about. */
+.term-bar .lights,
+.term-lights { display: flex; gap: 8px; }
+.term-bar .lights span,
+.term-lights span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  /* macOS draws each light with a slightly darker rim of its own hue. */
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+}
+.term-bar .lights span:nth-child(1),
+.term-lights span:nth-child(1) { background: #ff5f57; }
+.term-bar .lights span:nth-child(2),
+.term-lights span:nth-child(2) { background: #febc2e; }
+.term-bar .lights span:nth-child(3),
+.term-lights span:nth-child(3) { background: #28c840; }
+
+.term-bar .title {
+  justify-self: center;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.term-bar .hint { justify-self: end; color: inherit; opacity: 0.75; font-size: 11px; }
 .term-bar .hint .kbd {
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  border: 1px solid currentColor;
+  border-radius: 0;
   padding: 0 5px;
   margin-left: 4px;
   cursor: pointer;
+  opacity: 0.8;
 }
 .term-close {
   display: none; /* desktop uses the "esc" hint; shown on mobile */
-  margin-left: 4px;
+  justify-self: end;
   font-size: 16px;
   line-height: 1;
-  color: var(--fg);
+  color: inherit;
   padding: 4px 6px;
   background: none;
   border: none;
   cursor: pointer;
 }
 
+/* Terminal.app sets its grid tight — roughly 1.2 line height at SF Mono 11pt.
+   1.3 keeps that density without making long output hard to scan on the web. */
 .term-body {
   flex: 1 1 0;
   overflow-y: auto;
-  padding: 14px 16px;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.3;
 }
 .term-line { white-space: pre-wrap; word-break: break-word; }
 .term-line.cmd { color: var(--fg); }
@@ -400,13 +569,15 @@ h3 {
 .term-cols .k { color: var(--fg); white-space: nowrap; }
 .term-cols .v { color: var(--muted); }
 
+/* No rule above the prompt — a real shell's input line is just the next row of
+   the buffer, and the divider was the other big "this is a web widget" tell. */
 .term-inputrow {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  padding: 0 12px 12px;
   position: relative;
   flex-shrink: 0;
+  line-height: 1.3;
 }
 .term-inputrow .ps { color: var(--accent); margin-right: 8px; user-select: none; font-weight: 600; }
 .term-inputwrap { position: relative; flex: 1; display: flex; }
@@ -418,6 +589,9 @@ h3 {
   color: var(--fg);
   font: inherit;
   caret-color: var(--accent);
+  /* Terminal draws a block cursor. Progressive enhancement — engines without
+     caret-shape keep the standard bar, which is a fine degradation. */
+  caret-shape: block;
   position: relative;
   z-index: 2;
 }
@@ -434,7 +608,7 @@ h3 {
 .term-ghost .tabhint {
   margin-left: 10px;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 0 5px;
   font-size: 10px;
   color: var(--meta);
@@ -468,7 +642,7 @@ h3 {
 .term-launch .glyph { font-weight: 700; color: var(--accent); }
 .term-launch .kbd {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 1px 6px;
   font-size: 10px;
   color: var(--meta);
@@ -478,15 +652,16 @@ h3 {
   .term-launch .kbd,
   .term-launch .label { display: none; }
 
-  /* Fixed full-screen panel on phones (no dragging/resizing). Height tracks the
-     *visual* viewport (--term-h) so the on-screen keyboard can't cover the input
-     row; --term-top compensates for iOS visual-viewport offset. inset !important
-     overrides the inline left/top used for desktop positioning. */
+  /* Fixed full-screen panel on phones (no dragging/resizing). Anchored to the
+     top-left and spanning left:0→right:0 so it always fills the viewport width
+     regardless of any page overflow. Height falls back to 100dvh; while the
+     on-screen keyboard is open the JS sets --term-h (visual viewport height) and
+     --term-top (its offset) so the input row stays above the keyboard. inset
+     !important overrides the inline left/top used for desktop positioning. */
   .term-win {
-    inset: 0 !important;
-    width: 100% !important;
-    height: var(--term-h, 100%) !important;
-    transform: translateY(var(--term-top, 0px));
+    inset: var(--term-top, 0) 0 auto 0 !important;
+    width: auto !important;
+    height: var(--term-h, 100dvh) !important;
     min-width: 0;
     min-height: 0;
     max-width: none;
@@ -494,6 +669,7 @@ h3 {
     border-width: 0;
     border-radius: 0;
     box-shadow: none;
+    overscroll-behavior: contain;
   }
   .term-bar { cursor: default; }
   .term-bar .hint { display: none; }
@@ -505,20 +681,20 @@ h3 {
   .term-win { animation: none; }
 }
 
-/* Embedded map: editorial grayscale in light, darkened (invert + hue-rotate so
-   tiles aren't a bright rectangle) in dark. Filter lives here, not inline, so
-   the dark override can win. */
-.map-embed { filter: grayscale(100%) contrast(1.1) sepia(22%) saturate(0.85); }
-[data-astryx-media="dark"] .map-embed {
-  filter: grayscale(100%) contrast(0.95) brightness(0.9) invert(0.92) hue-rotate(180deg);
-}
-
-/* Astryx chocolate theme font-family bridge: point the theme's font tokens at
+/* Astryx atom-one theme font-family bridge: point the theme's font tokens at
    the next/font-loaded typefaces. Astryx's actual token names (confirmed via
-   `npm run astryx -- docs typography` and node_modules/@astryxdesign/theme-chocolate)
+   `npm run astryx -- docs typography` and the generated src/theme/theme.css)
    are --font-family-heading / --font-family-body, not the "-display" naming
    used in early drafts of this task. */
 :root {
-  --font-family-heading: var(--font-fraunces), Georgia, serif;
-  --font-family-body: var(--font-albert-sans), system-ui, sans-serif;
+  --font-family-heading: var(--font-display-family);
+  --font-family-body: var(--font-body-family);
+  --font-family-code: var(--font-mono-family);
+}
+
+/* Astryx's scoped reset styles bare headings, so they need the same weight
+   pinning as .font-display — otherwise any heading not carrying the utility
+   renders synthetically bold. */
+:where(h1, h2, h3, h4, h5, h6) {
+  font-weight: 400;
 }

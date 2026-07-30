@@ -1,9 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { fraunces, albertSans } from "./fonts";
+import { sneakyTimes, ibmPlexSans } from "./fonts";
 import AstryxThemeProvider from "@/components/AstryxThemeProvider";
 
-const iconVersion = "2";
+// Bump on every favicon change — browsers cache icons aggressively and the
+// query string is what forces a refetch. Keep in sync with site.webmanifest.
+const iconVersion = "4";
 
 export const metadata: Metadata = {
   title: "Daniel Kuo - Portfolio",
@@ -19,6 +21,16 @@ export const metadata: Metadata = {
   manifest: `/site.webmanifest?v=${iconVersion}`,
 };
 
+// Mobile browser chrome (Android address bar, iOS Safari toolbar). The
+// manifest's theme_color can only carry one value, so scheme-scoped meta tags
+// are what actually let the chrome track light/dark. Values are --bg.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#282c34" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -28,7 +40,18 @@ export default function RootLayout({
     // The pre-paint script below sets the `data-astryx-media` attribute on
     // <html>, so its attributes legitimately differ between server and
     // client on first paint.
-    <html lang="en" suppressHydrationWarning>
+    // The next/font variable classes go on <html>, not <body>: globals.css
+    // declares --font-display-family / --font-body-family at :root, and a
+    // var() there can only see custom properties defined on <html> itself.
+    // On <body> they resolved to the literal fallbacks instead — and next/font
+    // registers LOCAL fonts under a generated family name, so a human-readable
+    // fallback like "Sneaky Times" never matches it and headings silently fell
+    // through to Georgia.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${sneakyTimes.variable} ${ibmPlexSans.variable}`}
+    >
       <head>
         {/* Apply the persisted (or system) theme before paint to avoid a flash. */}
         <script
@@ -39,9 +62,8 @@ export default function RootLayout({
         {/* Preconnect to external domains for faster loading */}
         <link rel="preconnect" href="https://js.hcaptcha.com" />
         <link rel="preconnect" href="https://hcaptcha.com" />
-        <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
       </head>
-      <body className={`${fraunces.variable} ${albertSans.variable} antialiased`}>
+      <body className="antialiased">
         <AstryxThemeProvider>{children}</AstryxThemeProvider>
       </body>
     </html>

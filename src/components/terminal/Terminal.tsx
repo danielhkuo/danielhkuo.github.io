@@ -129,7 +129,12 @@ export default function Terminal({
     if (!view) return;
     const mq = window.matchMedia("(max-width: 760px)");
     const update = () => {
-      if (mq.matches) setVv({ h: view.height, top: view.offsetTop });
+      // Only override the panel geometry while the on-screen keyboard is
+      // actually open (visual viewport meaningfully shorter than the layout
+      // viewport). Otherwise fall back to CSS (100dvh, top:0) so a stray
+      // visualViewport offsetTop can't shift the panel down and clip the input.
+      const keyboardOpen = window.innerHeight - view.height > 120;
+      if (mq.matches && keyboardOpen) setVv({ h: view.height, top: view.offsetTop });
       else setVv(null);
     };
     update();
@@ -312,7 +317,9 @@ export default function Terminal({
           <span />
           <span />
         </div>
-        <div className="title">daniel_kuo — zsh</div>
+        {/* Terminal.app's own title format — the leading dash is a login
+            shell's argv[0], which is what it actually displays. */}
+        <div className="title">daniel_kuo — -zsh</div>
         <div className="hint">
           close
           <span className="kbd" onClick={onClose}>

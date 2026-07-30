@@ -114,7 +114,7 @@ export default function ContactForm() {
           id="name"
           name="name"
           required
-          className="w-full rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="Your name"
         />
       </div>
@@ -131,7 +131,7 @@ export default function ContactForm() {
           id="email"
           name="email"
           required
-          className="w-full rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="your@email.com"
         />
       </div>
@@ -148,28 +148,38 @@ export default function ContactForm() {
           name="message"
           required
           rows={6}
-          className="min-h-36 w-full resize-y rounded-2xl border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="min-h-36 w-full resize-y border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="What are you building, hiring for, or trying to untangle?"
         />
       </div>
 
-      <div className="mb-6 overflow-hidden rounded-2xl border border-divider bg-bg p-3">
-        <HCaptcha
-          ref={captchaRef}
-          sitekey="50b2fe65-b00b-4b9e-ad62-3ba471098be2"
-          reCaptchaCompat={false}
-          theme={theme}
-          onVerify={onCaptchaChange}
-        />
-      </div>
+      {/* hCaptcha already renders its own bordered widget, so the wrapper this
+          replaces was drawing a second box around it. Now the widget and the
+          submit button sit in one flush band: the button stretches to the
+          captcha's height and takes the remaining width, so the two read as a
+          single control strip rather than two stacked objects.
 
-      <div className="mb-4">
+          The widget's iframe is a fixed 302px and this form lands in a ~285px
+          column on phones; .captcha-fit scales it down to fit there (see
+          globals.css). overflow-hidden stays as a backstop so no width can ever
+          push a horizontal scrollbar onto the page. */}
+      <div className="mb-4 flex flex-wrap items-stretch gap-3 overflow-hidden">
+        <div className="captcha-fit">
+          <HCaptcha
+            ref={captchaRef}
+            sitekey="50b2fe65-b00b-4b9e-ad62-3ba471098be2"
+            reCaptchaCompat={false}
+            theme={theme}
+            onVerify={onCaptchaChange}
+          />
+        </div>
+
         <button
           type="submit"
           disabled={isSubmitting || !captchaToken}
-          className="rounded-full bg-primary px-7 py-3 font-caps text-xs tracking-[var(--tracking-label)] text-[var(--accent-on)] shadow-sm hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-[78px] flex-1 basis-28 whitespace-nowrap bg-primary px-4 font-body text-xs font-medium tracking-[var(--tracking-label)] text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-active)] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isSubmitting ? "Sending..." : "Send Message"}
+          {isSubmitting ? "Sending…" : "Send Message"}
         </button>
       </div>
 

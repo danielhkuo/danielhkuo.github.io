@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Theme } from "@astryxdesign/core";
-import { chocolateTheme } from "@astryxdesign/theme-chocolate/built";
+import { atomOneTheme } from "@/theme/atom-one";
 import { readStoredMode, onThemeChange, type ThemeMode } from "@/lib/theme";
 
 export default function AstryxThemeProvider({
@@ -21,7 +21,7 @@ export default function AstryxThemeProvider({
   }, []);
 
   return (
-    <Theme theme={chocolateTheme} mode={mode}>
+    <Theme theme={atomOneTheme} mode={mode}>
       {children}
     </Theme>
   );
