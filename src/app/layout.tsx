@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { sneakyTimes, ibmPlexSans } from "./fonts";
 import AstryxThemeProvider from "@/components/AstryxThemeProvider";
+import { atomOneTheme } from "@/theme/atom-one";
+import { ATTR, STORAGE_KEY, THEME_COLOR } from "@/lib/theme-constants";
 
 // Bump on every favicon change — browsers cache icons aggressively and the
 // query string is what forces a refetch. Keep in sync with site.webmanifest.
@@ -21,15 +23,11 @@ export const metadata: Metadata = {
   manifest: `/site.webmanifest?v=${iconVersion}`,
 };
 
-// Mobile browser chrome (Android address bar, iOS Safari toolbar). The
-// manifest's theme_color can only carry one value, so scheme-scoped meta tags
-// are what actually let the chrome track light/dark. Values are --bg.
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#282c34" },
-  ],
-};
+// No themeColor here on purpose. Scheme-scoped meta tags track the OS, so a
+// visitor whose stored choice disagrees with their OS got an address bar in the
+// other theme — permanently, not just for a frame. A single meta is rendered in
+// <head> below instead, and THEME_COLOR/applyTheme keep its content on the mode.
+export const viewport: Viewport = {};
 
 export default function RootLayout({
   children,
@@ -53,10 +51,32 @@ export default function RootLayout({
       className={`${sneakyTimes.variable} ${ibmPlexSans.variable}`}
     >
       <head>
-        {/* Apply the persisted (or system) theme before paint to avoid a flash. */}
+        {/* The meta the script below rewrites. Must precede it: the script looks
+            it up by name and a <head> is parsed in order. */}
+        <meta name="theme-color" content={THEME_COLOR.light} />
+        {/* Resolve the theme before first paint. Everything downstream — the
+            globals.css color-scheme pin, this site's palette, and getTheme() in
+            lib/theme.ts — reads the attribute this writes, so it is the single
+            place the mode is decided.
+            - data-astryx-media carries the mode.
+            - data-astryx-theme makes <html> a scope root before paint, so the
+              theme's @scope'd CSS also covers anything rendered outside the
+              <Theme> wrapper. Astryx re-stamps it after hydration anyway; doing
+              it here just closes the gap before that.
+            No data-theme: reset.css does map it to color-scheme, but theme.css
+            outranks that with an unscoped `:root { color-scheme: light dark }`
+            in a later layer, so the write was inert — <html> is covered by the
+            globals.css pin instead. Astryx's <Theme> owns that attribute after
+            hydration and removes it while the mode is still 'system'.
+            Both reads are guarded separately, and the mode starts at a real
+            value: neither a storage-disabled browser nor a matchMedia throw can
+            leave <html> with no attribute at all, which would drop the page back
+            to following the OS. The key, the attribute name and the theme name
+            are interpolated from lib/theme-constants.ts and the built theme, so
+            this string cannot drift from the runtime toggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-astryx-media',d?'dark':'light')}catch(e){}`,
+            __html: `(function(){var e=document.documentElement,c=document.querySelector('meta[name="theme-color"]'),m='light';try{if(window.matchMedia('(prefers-color-scheme:dark)').matches)m='dark'}catch(_){}try{var t=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});if(t==='dark'||t==='light')m=t}catch(_){}e.setAttribute(${JSON.stringify(ATTR)},m);e.setAttribute('data-astryx-theme',${JSON.stringify(atomOneTheme.name)});if(c)c.content=${JSON.stringify(THEME_COLOR)}[m]})()`,
           }}
         />
         {/* Preconnect to external domains for faster loading */}

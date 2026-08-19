@@ -198,8 +198,48 @@
   --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 34px rgba(0, 0, 0, 0.4);
 }
 
-[data-astryx-media="dark"] body {
+/* Pre-paint color-scheme for the Astryx <Theme> wrapper.
+   Every Astryx token is a `light-dark()` pair resolved by `color-scheme`, and
+   <Theme mode> paints that on its own wrapper div. The provider can only learn
+   the persisted mode after hydration, so the statically exported HTML ships the
+   wrapper as `color-scheme: light dark` — meaning the masthead and hover menu
+   render in the OS scheme for one frame before React corrects them. That is the
+   dark flash on a light-mode reload (and the reverse).
+   The pre-paint script in layout.tsx already knows the answer, so pin the
+   wrapper to <html>'s attribute. Unlayered, so it outranks the stylex class
+   (`color-scheme: light dark`) that lives in @layer astryx-base. Once mounted,
+   the provider agrees with this rule — lib/theme.ts writes the attribute and
+   the React mode together.
+
+   The bare selector covers <html> itself, which nothing else reaches.
+   reset.css does map both data-theme and data-astryx-media to color-scheme,
+   but only through zero-specificity `:where()` rules, and theme.css outranks
+   those with an UNSCOPED `@layer astryx-theme { :root { color-scheme: light
+   dark } }` in a later layer. theme.css's own [data-astryx-media] rules cannot
+   correct it either: they sit inside `@scope (...) to (...)`, where a bare
+   compound is implicitly `:scope [data-astryx-media=...]` — a DESCENDANT
+   relation — so they never match the scope root, which <html> becomes once the
+   pre-paint script stamps data-astryx-theme on it. (Verified in the browser:
+   under that scope `:scope` and `:scope[data-astryx-media]` both match <html>
+   while the bare selector does not. Matching the scope's own limit does NOT
+   exclude the root — the wrapper matches it too, and the wrapper's :scope
+   block is what declares every token the app paints.) Without this, native
+   chrome — scrollbars and the UA canvas — tracks the OS, not the chosen theme.
+
+   `:not([data-theme])` keeps this off any NESTED <Theme mode="light|dark">.
+   <Theme> omits data-theme only for mode='system', so that attribute is
+   exactly "this wrapper has an explicit mode" — the case where the wrapper
+   already knows better than we do. Without the :not(), a nested dark panel
+   inside a light page (a documented Astryx pattern) would be forced light,
+   because unlayered beats the mode's own class in @layer astryx-base. */
+[data-astryx-media="dark"],
+[data-astryx-media="dark"] [data-astryx-theme]:not([data-theme]) {
   color-scheme: dark;
+}
+
+[data-astryx-media="light"],
+[data-astryx-media="light"] [data-astryx-theme]:not([data-theme]) {
+  color-scheme: light;
 }
 
 @theme inline {

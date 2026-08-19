@@ -1,24 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Theme } from "@astryxdesign/core";
 import { atomOneTheme } from "@/theme/atom-one";
-import { readStoredMode, onThemeChange, type ThemeMode } from "@/lib/theme";
+import { useThemeProviderMode } from "@/lib/theme";
 
 export default function AstryxThemeProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // 'system' on server + first client render → no hydration mismatch.
-  const [mode, setMode] = useState<ThemeMode | "system">("system");
-
-  useEffect(() => {
-    // After mount, adopt the persisted/OS concrete mode and keep in sync with
-    // the nav/terminal toggle (which call setTheme in lib/theme.ts).
-    setMode(readStoredMode());
-    return onThemeChange((m) => setMode(m));
-  }, []);
+  // Reads the mode straight from <html data-astryx-media> (set before paint in
+  // layout.tsx) and re-renders on toggle, via the same external store HoverMenu
+  // and ContactForm use. 'system' on the server + hydration render, so the
+  // markup matches the static export.
+  const mode = useThemeProviderMode();
 
   return (
     <Theme theme={atomOneTheme} mode={mode}>

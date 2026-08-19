@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "contrast": "node scripts/check-contrast.mjs",
+    "theme:check": "node scripts/check-theme.mjs",
     "a11y": "node scripts/run-axe.mjs",
     "doctor": "npx react-doctor@latest",
     "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs",

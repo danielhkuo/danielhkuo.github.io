@@ -6,17 +6,12 @@
 // feeds `AstryxThemeProvider` (which manages the `<Theme mode>` wrapper).
 
 import { useSyncExternalStore } from "react";
+import { ATTR, STORAGE_KEY, THEME_COLOR, type ThemeMode } from "./theme-constants";
 
-export type ThemeMode = "dark" | "light";
+export type { ThemeMode };
 
-const STORAGE_KEY = "theme";
-const ATTR = "data-astryx-media";
-export const THEME_EVENT = "themechange";
-
-function systemPref(): ThemeMode {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+// Not exported: onThemeChange is the only supported way to observe this.
+const THEME_EVENT = "themechange";
 
 export function getTheme(): ThemeMode {
   if (typeof document === "undefined") return "light";
@@ -27,6 +22,7 @@ export function getTheme(): ThemeMode {
 export function applyTheme(mode: ThemeMode): ThemeMode {
   if (typeof document === "undefined") return mode;
   document.documentElement.setAttribute(ATTR, mode);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[mode]);
   try {
     localStorage.setItem(STORAGE_KEY, mode);
   } catch {
@@ -52,20 +48,23 @@ export function onThemeChange(cb: (mode: ThemeMode) => void): () => void {
 //     hydration mismatch) ---
 const subscribeTheme = (notify: () => void) => onThemeChange(() => notify());
 const getServerTheme = (): ThemeMode => "light";
+const getServerProviderMode = (): ThemeMode | "system" => "system";
 
 /** Current theme as reactive state. `light` on the server, real value on client. */
 export function useThemeMode(): ThemeMode {
   return useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
 }
 
-/** Read the persisted concrete mode (localStorage, else OS). Client-only. */
-export function readStoredMode(): ThemeMode {
-  if (typeof window === "undefined") return "light";
-  try {
-    const t = localStorage.getItem(STORAGE_KEY);
-    if (t === "dark" || t === "light") return t;
-  } catch {
-    /* ignore */
-  }
-  return systemPref();
+/** `<Theme mode>` for AstryxThemeProvider. Same store as `useThemeMode`, but the
+    server snapshot is `system` — that is what `<Theme>` renders without a mode,
+    so the hydrating markup matches the static HTML exactly.
+    The pin in globals.css covers the CSS side (every `light-dark()` token) from
+    the pre-paint attribute, so the palette does not wait on this. The concrete
+    value is still load-bearing for the JS side: Astryx's own `useTheme()`
+    resolves `system` through a media query, not through our attribute, so any
+    component reading tokens in JS (Spinner, Toast, Markdown) follows the OS
+    until this lands. None are used here today — that is why the residual gap is
+    theoretical rather than visible. */
+export function useThemeProviderMode(): ThemeMode | "system" {
+  return useSyncExternalStore(subscribeTheme, getTheme, getServerProviderMode);
 }
