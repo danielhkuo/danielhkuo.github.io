@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type PointerEvent } from "react";
-import { xtermToCss } from "./cbonsai/colors";
-import { DEFAULT_FG, type CellRun, type Screen } from "./cbonsai/screen";
+import { useEffect, useLayoutEffect, useRef, type PointerEvent } from "react";
+import type { CellRun, Screen } from "./cbonsai/screen";
+import { isPlain, rowHtml, runClass, runStyle, trimRuns } from "./screenHtml";
 import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
 
 /**
@@ -14,66 +14,24 @@ import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
  * recolours a growing tree without a repaint.
  */
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function isPlainBlank(run: CellRun): boolean {
-  return run.fg === DEFAULT_FG && !run.bold && /^ *$/.test(run.text);
-}
-
-function runClass(run: CellRun): string {
-  const parts: string[] = [];
-  if (run.bold) parts.push("tb");
-  if (run.fg >= 0 && run.fg < 16) parts.push(`tf${run.fg}`);
-  return parts.join(" ");
-}
-
-function runStyle(run: CellRun): CSSProperties | undefined {
-  return run.fg >= 16 ? { color: xtermToCss(run.fg) } : undefined;
-}
-
-/** One row as HTML, trailing blank runs dropped. */
-export function rowHtml(runs: CellRun[]): string {
-  let end = runs.length;
-  while (end > 0 && isPlainBlank(runs[end - 1])) end--;
-  let html = "";
-  for (let i = 0; i < end; i++) {
-    const run = runs[i];
-    const text = escapeHtml(run.text);
-    if (run.fg === DEFAULT_FG && !run.bold) {
-      html += text;
-      continue;
-    }
-    const cls = runClass(run);
-    const style = run.fg >= 16 ? ` style="color:${xtermToCss(run.fg)}"` : "";
-    html += `<span class="${cls}"${style}>${text}</span>`;
-  }
-  return html;
-}
-
 /** A finished screen in the scrollback (what `-p` prints). */
 export function ScreenLine({ rows }: { rows: CellRun[][] }) {
   return (
     <div className="term-block">
       <pre className="term-grid" aria-label="cbonsai tree">
-        {rows.map((runs, y) => {
-          let end = runs.length;
-          while (end > 0 && isPlainBlank(runs[end - 1])) end--;
-          return (
-            <div key={y} className="term-grid-row">
-              {runs.slice(0, end).map((run, i) =>
-                run.fg === DEFAULT_FG && !run.bold ? (
-                  run.text
-                ) : (
-                  <span key={i} className={runClass(run)} style={runStyle(run)}>
-                    {run.text}
-                  </span>
-                ),
-              )}
-            </div>
-          );
-        })}
+        {rows.map((runs, y) => (
+          <div key={y} className="term-grid-row">
+            {trimRuns(runs).map((run, i) =>
+              isPlain(run) ? (
+                run.text
+              ) : (
+                <span key={i} className={runClass(run)} style={runStyle(run)}>
+                  {run.text}
+                </span>
+              ),
+            )}
+          </div>
+        ))}
       </pre>
     </div>
   );

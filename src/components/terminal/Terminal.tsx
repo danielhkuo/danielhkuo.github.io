@@ -105,10 +105,12 @@ export default function Terminal({
   );
 
   // The program ended: restore the scrollback and append whatever it printed.
-  const onProgramExit = useCallback((output?: TerminalLine[]) => {
+  // (Stable across renders under the React Compiler; ScreenView reads it
+  // through a ref anyway.)
+  const onProgramExit = (output?: TerminalLine[]) => {
     setProgram(null);
     if (output && output.length) setLines((ls) => [...ls, ...output]);
-  }, []);
+  };
 
   // While a program runs, keys go to it, not the page. Capture phase so the
   // launcher's backtick toggle does not fire; Escape and ⌘K are left alone so
