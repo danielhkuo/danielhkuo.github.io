@@ -48,6 +48,7 @@ export function buildCommands(
           { name: "info", names: ["whoami", "contact", "resume", "projects"] },
           { name: "open", names: ["open", "github", "linkedin", "email"] },
           { name: "settings", names: ["theme"] },
+          { name: "fun", names: ["cbonsai"] },
           { name: "misc", names: ["echo", "clear", "exit"] },
         ];
         for (const g of groups) {
@@ -215,6 +216,32 @@ export function buildCommands(
       },
     },
 
+    cbonsai: {
+      desc: "grow a bonsai tree · `-l` live · `-i` infinite · `-h` help",
+      usage: "[options]",
+      args: [
+        "--live",
+        "--infinite",
+        "--screensaver",
+        "--message",
+        "--seed",
+        "--life",
+        "--multiplier",
+        "--base",
+        "--leaf",
+        "--colors",
+        "--time",
+        "--wait",
+        "--help",
+        "-p",
+      ],
+      run: (args, ctx) => {
+        // Loaded on first use so the tree generator stays out of the page bundle.
+        void import("./cbonsai/program")
+          .then((m) => m.runCbonsai(args, ctx))
+          .catch(() => ctx.err("cbonsai: failed to load"));
+      },
+    },
     echo: {
       desc: "print text",
       usage: "<text>",

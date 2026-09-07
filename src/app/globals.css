@@ -688,6 +688,86 @@ iframe[src*="hcaptcha"] {
   color: var(--meta);
 }
 
+/* Full-screen programs (cbonsai). The body becomes a fixed character grid:
+   one block per row, sized from a measured cell so nothing wraps or scrolls,
+   the way an ncurses program owns the whole terminal until it exits. Colours
+   are the 16 ANSI slots as CSS variables so the live theme toggle recolours a
+   growing tree; 16–255 are inline xterm cube/grey values. */
+.term-screen {
+  overflow: hidden;
+  cursor: default;
+}
+.term-grid {
+  margin: 0;
+  font: inherit;
+  color: var(--fg);
+  white-space: pre;
+  overflow: hidden;
+  outline: none;
+}
+.term-grid-row {
+  white-space: pre;
+  overflow: hidden;
+  min-height: 1.3em;
+}
+.term-grid .tb { font-weight: 700; }
+.term-grid .tf0 { color: var(--ansi-0); }
+.term-grid .tf1 { color: var(--ansi-1); }
+.term-grid .tf2 { color: var(--ansi-2); }
+.term-grid .tf3 { color: var(--ansi-3); }
+.term-grid .tf4 { color: var(--ansi-4); }
+.term-grid .tf5 { color: var(--ansi-5); }
+.term-grid .tf6 { color: var(--ansi-6); }
+.term-grid .tf7 { color: var(--ansi-7); }
+.term-grid .tf8 { color: var(--ansi-8); }
+.term-grid .tf9 { color: var(--ansi-9); }
+.term-grid .tf10 { color: var(--ansi-10); }
+.term-grid .tf11 { color: var(--ansi-11); }
+.term-grid .tf12 { color: var(--ansi-12); }
+.term-grid .tf13 { color: var(--ansi-13); }
+.term-grid .tf14 { color: var(--ansi-14); }
+.term-grid .tf15 { color: var(--ansi-15); }
+
+/* ANSI palette — Atom One Light. cbonsai draws with 2/10 (leaves), 3/11
+   (wood) and 8 (pot), so those pairs are kept visibly apart. */
+.term-win {
+  --ansi-0: #383a42;
+  --ansi-1: #e45649;
+  --ansi-2: #50a14f;
+  --ansi-3: #986801;
+  --ansi-4: #4078f2;
+  --ansi-5: #a626a4;
+  --ansi-6: #0184bc;
+  --ansi-7: #696c77;
+  --ansi-8: #a0a1a7;
+  --ansi-9: #ca1243;
+  --ansi-10: #7cb342;
+  --ansi-11: #c18401;
+  --ansi-12: #526fff;
+  --ansi-13: #c678dd;
+  --ansi-14: #0997b3;
+  --ansi-15: #fafafa;
+}
+/* Atom One Dark. */
+[data-astryx-media="dark"] .term-win {
+  --ansi-0: #282c34;
+  --ansi-1: #e06c75;
+  --ansi-2: #98c379;
+  --ansi-3: #d19a66;
+  --ansi-4: #61afef;
+  --ansi-5: #c678dd;
+  --ansi-6: #56b6c2;
+  --ansi-7: #abb2bf;
+  --ansi-8: #5c6370;
+  --ansi-9: #e88088;
+  --ansi-10: #c3e88d;
+  --ansi-11: #e5c07b;
+  --ansi-12: #7cbef2;
+  --ansi-13: #d48be6;
+  --ansi-14: #6fc9d4;
+  --ansi-15: #ffffff;
+}
+
 @media (max-width: 760px) {
   .term-launch .kbd,
   .term-launch .label { display: none; }

@@ -12,7 +12,27 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { buildCommands, welcomeLines } from "./commands";
-import type { CommandContext, TerminalApi, TerminalLine } from "./types";
+import ScreenView, { ScreenLine } from "./ScreenView";
+import { tokenize } from "./shell";
+import type { CommandContext, ScreenProgram, TerminalApi, TerminalLine } from "./types";
+
+/** Key names that are modifiers on their own, never a key press to a program. */
+const MODIFIER_KEYS = new Set([
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+  "CapsLock",
+  "NumLock",
+  "ScrollLock",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Super",
+  "Symbol",
+  "Dead",
+  "Unidentified",
+]);
 
 /** Render text with `backtick` spans highlighted as accents. */
 function renderRich(text: string) {
@@ -44,6 +64,8 @@ export default function Terminal({
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [navPath, setNavPath] = useState<string[]>([]);
+  // A full-screen program (cbonsai) that has taken over the body, if any.
+  const [program, setProgram] = useState<ScreenProgram | null>(null);
   // On phones, track the visual viewport so the input row stays above the
   // on-screen keyboard instead of being pushed off the bottom of the screen.
   const [vv, setVv] = useState<{ h: number; top: number } | null>(null);
@@ -77,9 +99,37 @@ export default function Terminal({
       rows: (rows, title) => pushLine({ kind: "rows", rows: [...rows], title }),
       clear: () => setLines([]),
       close: () => window.setTimeout(onClose, 120),
+      program: (p) => setProgram(p),
     }),
     [pushLine, onClose],
   );
+
+  // The program ended: restore the scrollback and append whatever it printed.
+  const onProgramExit = useCallback((output?: TerminalLine[]) => {
+    setProgram(null);
+    if (output && output.length) setLines((ls) => [...ls, ...output]);
+  }, []);
+
+  // While a program runs, keys go to it, not the page. Capture phase so the
+  // launcher's backtick toggle does not fire; Escape and ⌘K are left alone so
+  // the terminal can still be closed. Browser shortcuts (⌘R, ⌘W, ⌘C…) pass
+  // through; Ctrl-C is the program's interrupt, as in a terminal.
+  useEffect(() => {
+    if (!program) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") return;
+      if (e.metaKey) return;
+      if (e.ctrlKey && e.key.toLowerCase() !== "c") return;
+      if (e.altKey) return;
+      if (MODIFIER_KEYS.has(e.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      program.key(e.key, e.ctrlKey);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [program]);
 
   // ---- drag (desktop) ----
   useEffect(() => {
@@ -164,10 +214,10 @@ export default function Terminal({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open, onClose]);
 
-  // focus the input whenever the terminal opens
+  // focus the input whenever the terminal opens or a program hands it back
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+    if (open && !program) inputRef.current?.focus();
+  }, [open, program]);
 
   // keep the latest output in view
   useEffect(() => {
@@ -219,8 +269,8 @@ export default function Terminal({
     if (raw) {
       setHistory((h) => [...h, raw]);
       setHistIdx(-1);
-      const tokens = raw.split(/\s+/);
-      const name = tokens[0].toLowerCase();
+      const tokens = tokenize(raw);
+      const name = (tokens[0] ?? "").toLowerCase();
       const cmd = commands[name];
       const ctx = makeCtx();
       if (cmd) {
@@ -336,6 +386,9 @@ export default function Terminal({
         </button>
       </div>
 
+      {program ? (
+        <ScreenView program={program} onExit={onProgramExit} />
+      ) : (
       <div
         className="term-body"
         ref={bodyRef}
@@ -346,6 +399,9 @@ export default function Terminal({
         }}
       >
         {lines.map((l, i) => {
+          if (l.kind === "screen") {
+            return <ScreenLine key={i} rows={l.rows} />;
+          }
           if (l.kind === "cmd") {
             return (
               <div key={i} className="term-line cmd">
@@ -375,7 +431,9 @@ export default function Terminal({
           );
         })}
       </div>
+      )}
 
+      {!program && (
       <div className="term-inputrow">
         <span className="ps">{`${promptPath} $`}</span>
         <div className="term-inputwrap">
@@ -402,6 +460,7 @@ export default function Terminal({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

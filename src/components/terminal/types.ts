@@ -1,5 +1,7 @@
 // Shared types for the interactive terminal. No React, no `any`.
 
+import type { CellRun, Screen } from "./cbonsai/screen";
+
 /** A serializable slice of a pinned GitHub repo, passed from the server page. */
 export interface SlimProject {
   name: string;
@@ -23,7 +25,31 @@ export type TerminalLine =
   | { kind: "out"; text: string }
   | { kind: "ok"; text: string }
   | { kind: "err"; text: string }
-  | { kind: "rows"; title?: string; rows: TerminalRow[] };
+  | { kind: "rows"; title?: string; rows: TerminalRow[] }
+  /** A finished character grid, as a full-screen program prints on exit. */
+  | { kind: "screen"; rows: CellRun[][] };
+
+/** What a full-screen program can ask of the terminal that hosts it. */
+export interface ProgramHost {
+  /** The screen changed; repaint its dirty rows on the next frame. */
+  paint(): void;
+  /** The program has ended. Any output is appended to the scrollback. */
+  exit(output?: TerminalLine[]): void;
+}
+
+/**
+ * A program that takes over the terminal body the way an ncurses program
+ * takes over a real terminal: it draws on a fixed character grid and reads
+ * keys until it exits, then the scrollback and prompt return.
+ */
+export interface ScreenProgram {
+  /** Called once the grid has been measured. Returns the screen to render. */
+  start(size: { rows: number; cols: number }, host: ProgramHost): Screen;
+  /** A key press: `KeyboardEvent.key`, or "tap" for a touch on the screen. */
+  key(key: string, ctrl: boolean): void;
+  /** The terminal is going away; release timers. May run after `exit`. */
+  stop(): void;
+}
 
 /** Sink a command writes its output to. */
 export interface CommandContext {
@@ -33,6 +59,8 @@ export interface CommandContext {
   rows(rows: readonly TerminalRow[], title?: string): void;
   clear(): void;
   close(): void;
+  /** Hand the terminal body to a full-screen program until it exits. */
+  program(program: ScreenProgram): void;
 }
 
 /** Argument options for autocomplete: a fixed list or a lazy getter. */

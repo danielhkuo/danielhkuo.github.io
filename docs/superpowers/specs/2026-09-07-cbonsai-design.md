@@ -114,8 +114,9 @@ string of `<span>`s grouped by (colour, bold) runs and assigned via
   microseconds. Paints coalesce to one per animation frame.
 
 `-p` output is a `screen` line: the final grid as `CellRun[][]`, rendered by
-React once, leading blank rows trimmed (a real terminal clears then prints the
-full screen, which in a scrollback would be a screenful of empty lines).
+React once, blank rows above and below the tree trimmed (a real terminal
+clears then prints the full screen, which in a scrollback would be a
+screenful of empty lines).
 
 ### Colours
 
@@ -140,10 +141,13 @@ infinite mode reseeds with the clock after each tree, as the C does.
 
 ### Scheduling (program.ts)
 
-- Non-live: run the growth generator to completion synchronously, paint once.
-- Live: a `setTimeout` loop. Each tick runs every step whose due time has
-  passed (capped at 8 ms of work per tick so a backgrounded tab catches up
-  without a long task), then asks the host to paint. Step period is `-t`.
+- One `setTimeout` loop for both modes. Each tick runs every step whose due
+  time has passed, capped at 8 ms of work per tick, then asks the host to
+  paint. In live mode a visible step is followed by a `-t` sleep; a stalled
+  clock (background tab) catches up in 8 ms slices. Non-live growth is all
+  hidden steps: an ordinary tree completes inside the first synchronous
+  tick, a huge one (`-L 200 -M 20` is 1.7 M steps) is sliced and paints only
+  once complete, so it never stalls the page.
 - After growth: non-infinite waits for any key. Infinite waits `-w` seconds;
   `q` (any key in screensaver) quits; any other key ends the wait early,
   as `timeout()` + `wgetch` does in C. Then reseed, clear, redraw base and
@@ -190,9 +194,14 @@ uses explicit `.ts` import specifiers and `allowImportingTsExtensions`):
 - `args.test.ts`: every flag, clustering, quirks, error strings, help.
 - `screen.test.ts`: wrapping writes, clipping, wide characters, dirty rows,
   overlay mask.
-- `bonsai.test.ts`: a fixed seed on 80×24 renders to a golden text file
-  captured from the Linux binary; branch counts; base placement; message
-  wrapping against known layouts.
+- `bonsai.test.ts`: 38 golden cases (seeds, sizes, bases, multipliers,
+  leaves, messages, colours, verbosity) captured from the real program via
+  `scripts/cbonsai-goldens.mjs`, compared cell by cell with attributes.
+  Wide-glyph leaves are checked by a direct unit test instead: the macOS
+  ncurses the goldens are built with echoes stale half-cells through `-p`.
+- `program.test.ts`: the `main()` loop under mocked timers — live pacing,
+  catch-up after a stalled clock, sliced non-live growth, key handling per
+  phase, infinite reseeding, `-p`, save/load.
 
 Performance:
 
@@ -208,6 +217,9 @@ Performance:
 
 1. cbonsai lives in the existing terminal, not elsewhere on the page.
 2. Parity target is the Linux (glibc) binary. macOS `rand()` differs.
-3. `-p` output drops leading blank rows.
+3. `-p` output drops blank rows above and below the tree.
 4. Save/load use `localStorage`.
 5. `-vv` does not sleep per character.
+6. A touch on the screen counts as `q`; a mouse click does nothing.
+7. Parity for wide-glyph leaves is asserted by unit test, not against the
+   reference binary (see Testing).
