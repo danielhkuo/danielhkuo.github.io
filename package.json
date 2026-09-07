@@ -13,7 +13,10 @@
     "doctor": "npx react-doctor@latest",
     "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs",
     "theme:build": "npm run astryx -- theme build src/theme/atomOneTheme.ts --out src/theme/theme.css",
-    "favicons": "node scripts/recolor-favicon.mjs"
+    "favicons": "node scripts/recolor-favicon.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "bench:cbonsai": "node scripts/bench-cbonsai.mjs",
+    "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.2",
