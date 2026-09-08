@@ -9,10 +9,10 @@
  * without generators or threads.
  */
 import type { Config } from "./args.ts";
-import { TEXT_COLOR } from "./colors.ts";
+import { TEXT_COLOR } from "../tty/colors.ts";
 import type { GlibcRandom } from "./rand.ts";
-import { Screen, Win } from "./screen.ts";
-import { wcwidth } from "./wcwidth.ts";
+import { Screen, Win } from "../tty/screen.ts";
+import { wcwidth } from "../tty/wcwidth.ts";
 
 export const TRUNK = 0;
 export const SHOOT_LEFT = 1;

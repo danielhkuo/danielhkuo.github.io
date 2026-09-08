@@ -16,7 +16,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { packRow } from "../src/components/terminal/cbonsai/screen.ts";
+import { packRow } from "../src/components/terminal/tty/screen.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "..", "src", "components", "terminal", "cbonsai", "__fixtures__", "goldens.json");

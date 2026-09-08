@@ -8,7 +8,7 @@ import type { CommandContext, ProgramHost, ScreenProgram, TerminalLine } from ".
 import { HELP_LINES, parseArgs, strtolExact, type Config } from "./args.ts";
 import { Bonsai, STEP_DONE, STEP_VISIBLE } from "./bonsai.ts";
 import { GlibcRandom } from "./rand.ts";
-import { DEFAULT_FG, Screen, type CellRun } from "./screen.ts";
+import { DEFAULT_FG, Screen, type CellRun } from "../tty/screen.ts";
 
 /** The "file system" behind -W/-C: a key per path. */
 export type SaveStore = Pick<Storage, "getItem" | "setItem">;

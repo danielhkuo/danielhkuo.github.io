@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type PointerEvent } from "react";
-import type { CellRun, Screen } from "./cbonsai/screen";
+import type { CellRun, Screen } from "./tty/screen";
 import { isPlain, rowHtml, runClass, runStyle, trimRuns } from "./screenHtml";
 import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
 

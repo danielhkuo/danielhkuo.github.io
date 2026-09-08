@@ -4,7 +4,7 @@
  * `--print` declares a required argument), prefix-matched long options,
  * clustered short flags, and the same validation and error strings.
  */
-import { DEFAULT_COLORS } from "./colors.ts";
+import { DEFAULT_COLORS } from "../tty/colors.ts";
 
 export interface Config {
   live: boolean;

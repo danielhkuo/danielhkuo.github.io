@@ -3,7 +3,7 @@ import { afterEach, beforeEach, mock, test } from "node:test";
 import type { CommandContext, ProgramHost, ScreenProgram, TerminalLine, TerminalRow } from "../types";
 import { CbonsaiProgram, loadFromFile, runCbonsai, saveToFile, trimBlankRows, type SaveStore } from "./program.ts";
 import { parseArgs } from "./args.ts";
-import { DEFAULT_FG, type Screen } from "./screen.ts";
+import { DEFAULT_FG, type Screen } from "../tty/screen.ts";
 
 class MemoryStore implements SaveStore {
   readonly map = new Map<string, string>();

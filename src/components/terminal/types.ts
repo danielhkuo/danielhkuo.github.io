@@ -1,6 +1,6 @@
 // Shared types for the interactive terminal. No React, no `any`.
 
-import type { CellRun, Screen } from "./cbonsai/screen";
+import type { CellRun, Screen } from "./tty/screen";
 
 /** A serializable slice of a pinned GitHub repo, passed from the server page. */
 export interface SlimProject {

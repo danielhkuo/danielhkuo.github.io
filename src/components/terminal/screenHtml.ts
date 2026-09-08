@@ -4,8 +4,8 @@
 // 16–255 are inline xterm cube/grey values.
 
 import type { CSSProperties } from "react";
-import { xtermToCss } from "./cbonsai/colors";
-import { DEFAULT_FG, type CellRun } from "./cbonsai/screen";
+import { xtermToCss } from "./tty/colors";
+import { DEFAULT_FG, type CellRun } from "./tty/screen";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

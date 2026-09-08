@@ -12,7 +12,7 @@
 import { parseArgs } from "../src/components/terminal/cbonsai/args.ts";
 import { Bonsai, STEP_DONE } from "../src/components/terminal/cbonsai/bonsai.ts";
 import { GlibcRandom } from "../src/components/terminal/cbonsai/rand.ts";
-import { Screen } from "../src/components/terminal/cbonsai/screen.ts";
+import { Screen } from "../src/components/terminal/tty/screen.ts";
 
 function growOne(conf, screen, seed) {
   const bonsai = new Bonsai(conf, new GlibcRandom(seed), screen);

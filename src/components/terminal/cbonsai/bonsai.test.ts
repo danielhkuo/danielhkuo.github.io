@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "./args.ts";
 import { Bonsai, STEP_DONE, STEP_HIDDEN, STEP_VISIBLE } from "./bonsai.ts";
 import { GlibcRandom } from "./rand.ts";
-import { packRow, Screen, type PackedRow } from "./screen.ts";
+import { packRow, Screen, type PackedRow } from "../tty/screen.ts";
 
 interface GoldenCase {
   rows: number;
