@@ -119,15 +119,18 @@ export default function Terminal({
   useEffect(() => {
     if (!program) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return;
+      if (e.key === "Escape" && !program.captureEscape) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") return;
       if (e.metaKey) return;
-      if (e.ctrlKey && e.key.toLowerCase() !== "c") return;
+      // Programs that read text get the usual line-editing control keys;
+      // everything else stays with the browser except Ctrl-C.
+      const ctrlOk = program.textInput ? "acdeklruw" : "c";
+      if (e.ctrlKey && !ctrlOk.includes(e.key.toLowerCase())) return;
       if (e.altKey) return;
       if (MODIFIER_KEYS.has(e.key)) return;
       e.preventDefault();
       e.stopPropagation();
-      program.key(e.key, e.ctrlKey);
+      program.key(e.key, e.ctrlKey, e.shiftKey);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

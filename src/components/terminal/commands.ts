@@ -48,7 +48,7 @@ export function buildCommands(
           { name: "info", names: ["whoami", "contact", "resume", "projects"] },
           { name: "open", names: ["open", "github", "linkedin", "email"] },
           { name: "settings", names: ["theme"] },
-          { name: "fun", names: ["cbonsai"] },
+          { name: "fun", names: ["cbonsai", "claude"] },
           { name: "misc", names: ["echo", "clear", "exit"] },
         ];
         for (const g of groups) {
@@ -240,6 +240,14 @@ export function buildCommands(
         void import("./cbonsai/program")
           .then((m) => m.runCbonsai(args, ctx))
           .catch(() => ctx.err("cbonsai: failed to load"));
+      },
+    },
+    claude: {
+      desc: "start claude code (results may vary · `/exit` or ctrl-c twice to leave)",
+      run: (_args, ctx) => {
+        void import("./claude/program")
+          .then((m) => ctx.program(m.createClaudeProgram()))
+          .catch(() => ctx.err("claude: failed to load"));
       },
     },
     echo: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type PointerEvent, type WheelEvent } from "react";
 import type { CellRun, Screen } from "./tty/screen";
 import { isPlain, rowHtml, runClass, runStyle, trimRuns } from "./screenHtml";
 import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
@@ -121,8 +121,40 @@ export default function ScreenView({
     };
   }, [program]);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Programs that read text keep a real (invisible) input focused so phones
+  // show their keyboard. Desktop keys arrive through the window listener and
+  // are cancelled there; on-screen keyboards often report "Unidentified" keys,
+  // so their text is taken from beforeinput instead.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!program.textInput || !el) return;
+    el.focus({ preventScroll: true });
+    // Native listener: React's onBeforeInput is synthesised from legacy
+    // textInput events and misses what on-screen keyboards actually send.
+    const onBeforeInput = (ev: InputEvent) => {
+      if (ev.inputType === "insertText" && ev.data) {
+        for (const ch of ev.data) program.key(ch, false, false);
+      } else if (ev.inputType === "insertLineBreak" || ev.inputType === "insertParagraph") {
+        program.key("Enter", false, false);
+      } else if (ev.inputType === "deleteContentBackward") {
+        program.key("Backspace", false, false);
+      }
+      ev.preventDefault();
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, [program]);
+
   const onPointerDown = (e: PointerEvent<HTMLPreElement>) => {
-    if (e.pointerType === "touch") program.key("tap", false);
+    if (program.textInput) inputRef.current?.focus({ preventScroll: true });
+    else if (e.pointerType === "touch") program.key("tap", false);
+  };
+
+  const onWheel = (e: WheelEvent<HTMLPreElement>) => {
+    if (!program.wheel) return;
+    program.wheel(e.deltaY > 0 ? 3 : -3);
   };
 
   return (
@@ -131,10 +163,24 @@ export default function ScreenView({
         ref={preRef}
         className="term-grid term-grid-live"
         tabIndex={-1}
-        role="img"
-        aria-label="cbonsai bonsai tree"
+        role={program.textInput ? "application" : "img"}
+        aria-label={program.textInput ? "terminal program" : "cbonsai bonsai tree"}
         onPointerDown={onPointerDown}
+        onWheel={onWheel}
       />
+      {program.textInput && (
+        <input
+          ref={inputRef}
+          className="term-hidden-input"
+          aria-label="program input"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={() => undefined}
+          value=""
+        />
+      )}
     </div>
   );
 }

@@ -694,8 +694,22 @@ iframe[src*="hcaptcha"] {
    are the 16 ANSI slots as CSS variables so the live theme toggle recolours a
    growing tree; 16–255 are inline xterm cube/grey values. */
 .term-screen {
+  position: relative;
   overflow: hidden;
   cursor: default;
+}
+/* Present so on-screen keyboards open; never seen. 16px keeps iOS from zooming. */
+.term-hidden-input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  font-size: 16px;
+  border: 0;
+  padding: 0;
+  pointer-events: none;
 }
 .term-grid {
   margin: 0;
@@ -711,22 +725,26 @@ iframe[src*="hcaptcha"] {
   min-height: 1.3em;
 }
 .term-grid .tb { font-weight: 700; }
-.term-grid .tf0 { color: var(--ansi-0); }
-.term-grid .tf1 { color: var(--ansi-1); }
-.term-grid .tf2 { color: var(--ansi-2); }
-.term-grid .tf3 { color: var(--ansi-3); }
-.term-grid .tf4 { color: var(--ansi-4); }
-.term-grid .tf5 { color: var(--ansi-5); }
-.term-grid .tf6 { color: var(--ansi-6); }
-.term-grid .tf7 { color: var(--ansi-7); }
-.term-grid .tf8 { color: var(--ansi-8); }
-.term-grid .tf9 { color: var(--ansi-9); }
-.term-grid .tf10 { color: var(--ansi-10); }
-.term-grid .tf11 { color: var(--ansi-11); }
-.term-grid .tf12 { color: var(--ansi-12); }
-.term-grid .tf13 { color: var(--ansi-13); }
-.term-grid .tf14 { color: var(--ansi-14); }
-.term-grid .tf15 { color: var(--ansi-15); }
+.term-grid .tf0 { --c: var(--ansi-0); color: var(--c); }
+.term-grid .tf1 { --c: var(--ansi-1); color: var(--c); }
+.term-grid .tf2 { --c: var(--ansi-2); color: var(--c); }
+.term-grid .tf3 { --c: var(--ansi-3); color: var(--c); }
+.term-grid .tf4 { --c: var(--ansi-4); color: var(--c); }
+.term-grid .tf5 { --c: var(--ansi-5); color: var(--c); }
+.term-grid .tf6 { --c: var(--ansi-6); color: var(--c); }
+.term-grid .tf7 { --c: var(--ansi-7); color: var(--c); }
+.term-grid .tf8 { --c: var(--ansi-8); color: var(--c); }
+.term-grid .tf9 { --c: var(--ansi-9); color: var(--c); }
+.term-grid .tf10 { --c: var(--ansi-10); color: var(--c); }
+.term-grid .tf11 { --c: var(--ansi-11); color: var(--c); }
+.term-grid .tf12 { --c: var(--ansi-12); color: var(--c); }
+.term-grid .tf13 { --c: var(--ansi-13); color: var(--c); }
+.term-grid .tf14 { --c: var(--ansi-14); color: var(--c); }
+.term-grid .tf15 { --c: var(--ansi-15); color: var(--c); }
+/* Inverse video: the run's colour (or the default foreground) becomes the
+   background and the terminal background becomes the text — a block cursor,
+   a highlighted menu row. */
+.term-grid .ti { background: var(--c, var(--fg)); color: var(--bg); }
 
 /* ANSI palette — Atom One Light. cbonsai draws with 2/10 (leaves), 3/11
    (wood) and 8 (pot), so those pairs are kept visibly apart. */

@@ -16,18 +16,28 @@ export function isPlainBlank(run: CellRun): boolean {
 }
 
 export function isPlain(run: CellRun): boolean {
-  return run.fg === DEFAULT_FG && !run.bold;
+  return run.fg === DEFAULT_FG && !run.bold && !run.inverse;
 }
 
 export function runClass(run: CellRun): string {
   const parts: string[] = [];
   if (run.bold) parts.push("tb");
+  if (run.inverse) parts.push("ti");
   if (run.fg >= 0 && run.fg < 16) parts.push(`tf${run.fg}`);
   return parts.join(" ");
 }
 
+/** Inline colour for 16–255. Inverse runs set `--c` only, so the `.ti` rule can paint it as the background. */
 export function runStyle(run: CellRun): CSSProperties | undefined {
-  return run.fg >= 16 ? { color: xtermToCss(run.fg) } : undefined;
+  if (run.fg < 16) return undefined;
+  const c = xtermToCss(run.fg);
+  return run.inverse ? ({ "--c": c } as CSSProperties) : { color: c };
+}
+
+function runStyleAttr(run: CellRun): string {
+  if (run.fg < 16) return "";
+  const c = xtermToCss(run.fg);
+  return run.inverse ? ` style="--c:${c}"` : ` style="color:${c}"`;
 }
 
 /** Runs without the trailing blank ones. */
@@ -46,8 +56,7 @@ export function rowHtml(runs: CellRun[]): string {
       html += text;
       continue;
     }
-    const style = run.fg >= 16 ? ` style="color:${xtermToCss(run.fg)}"` : "";
-    html += `<span class="${runClass(run)}"${style}>${text}</span>`;
+    html += `<span class="${runClass(run)}"${runStyleAttr(run)}>${text}</span>`;
   }
   return html;
 }

@@ -46,9 +46,15 @@ export interface ScreenProgram {
   /** Called once the grid has been measured. Returns the screen to render. */
   start(size: { rows: number; cols: number }, host: ProgramHost): Screen;
   /** A key press: `KeyboardEvent.key`, or "tap" for a touch on the screen. */
-  key(key: string, ctrl: boolean): void;
+  key(key: string, ctrl: boolean, shift?: boolean): void;
   /** The terminal is going away; release timers. May run after `exit`. */
   stop(): void;
+  /** Take Escape for itself instead of letting it close the terminal. */
+  readonly captureEscape?: boolean;
+  /** Reads typed text, so the host keeps a focused input for on-screen keyboards. */
+  readonly textInput?: boolean;
+  /** Mouse wheel over the screen, in rows (positive = content moves up). */
+  wheel?(rows: number): void;
 }
 
 /** Sink a command writes its output to. */

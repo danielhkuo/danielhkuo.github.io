@@ -13,11 +13,12 @@ import { wcwidth } from "./wcwidth.ts";
 /** Colour index meaning "the terminal's default foreground". */
 export const DEFAULT_FG = -1;
 
-/** A stretch of cells sharing one colour and weight. */
+/** A stretch of cells sharing one colour and weight. `inverse` swaps foreground and background (a block cursor, a highlighted menu row). */
 export interface CellRun {
   text: string;
   fg: number;
   bold: boolean;
+  inverse?: boolean;
 }
 
 /** One cell as `printstdscr` would emit it: glyph, colour, bold. */
@@ -43,6 +44,7 @@ export class Screen {
   readonly chars: string[];
   readonly fg: Int16Array;
   readonly bold: Uint8Array;
+  readonly inverse: Uint8Array;
   private readonly dirty: Uint8Array;
   private dirtyCount = 0;
   /** Cells only `top` windows may write — the message panels sit above the tree panel. */
@@ -55,6 +57,7 @@ export class Screen {
     this.chars = new Array<string>(n).fill(" ");
     this.fg = new Int16Array(n).fill(DEFAULT_FG);
     this.bold = new Uint8Array(n);
+    this.inverse = new Uint8Array(n);
     this.dirty = new Uint8Array(this.rows).fill(1);
     this.dirtyCount = this.rows;
   }
@@ -64,6 +67,7 @@ export class Screen {
     this.chars.fill(" ");
     this.fg.fill(DEFAULT_FG);
     this.bold.fill(0);
+    this.inverse.fill(0);
     this.dirty.fill(1);
     this.dirtyCount = this.rows;
     this.masks = [];
@@ -92,13 +96,14 @@ export class Screen {
     this.chars[idx] = " ";
     this.fg[idx] = DEFAULT_FG;
     this.bold[idx] = 0;
+    this.inverse[idx] = 0;
   }
 
   /**
    * Write one glyph of `width` cells at (y, x). Out-of-range cells are
    * dropped; a glyph landing on half of a wide glyph blanks the other half.
    */
-  put(y: number, x: number, ch: string, width: 1 | 2, fg: number, bold: boolean, top: boolean): void {
+  put(y: number, x: number, ch: string, width: 1 | 2, fg: number, bold: boolean, top: boolean, inverse = false): void {
     if (y < 0 || y >= this.rows || x < 0 || x >= this.cols) return;
     if (!top && this.masked(y, x)) return;
     const row = y * this.cols;
@@ -111,12 +116,14 @@ export class Screen {
     chars[idx] = ch;
     this.fg[idx] = fg;
     this.bold[idx] = bold ? 1 : 0;
+    this.inverse[idx] = inverse ? 1 : 0;
     if (width === 2 && x + 1 < this.cols && (top || !this.masked(y, x + 1))) {
       const tail = idx + 1;
       if (x + 2 < this.cols && chars[tail + 1] === "") this.blank(tail + 1);
       chars[tail] = "";
       this.fg[tail] = fg;
       this.bold[tail] = bold ? 1 : 0;
+      this.inverse[tail] = inverse ? 1 : 0;
     }
     this.touch(y);
   }
@@ -139,9 +146,15 @@ export class Screen {
     return out;
   }
 
-  cell(y: number, x: number): { ch: string; fg: number; bold: boolean } {
+  cell(y: number, x: number): { ch: string; fg: number; bold: boolean; inverse?: boolean } {
     const idx = y * this.cols + x;
-    return { ch: this.chars[idx], fg: this.fg[idx], bold: this.bold[idx] === 1 };
+    const out: { ch: string; fg: number; bold: boolean; inverse?: boolean } = {
+      ch: this.chars[idx],
+      fg: this.fg[idx],
+      bold: this.bold[idx] === 1,
+    };
+    if (this.inverse[idx] === 1) out.inverse = true;
+    return out;
   }
 
   /** Row `y` as runs of equal attributes, wide tails folded into their head. */
@@ -151,24 +164,28 @@ export class Screen {
     let text = "";
     let fg = 0;
     let bold = false;
+    let inverse = false;
     let open = false;
+    const push = () => runs.push(inverse ? { text, fg, bold, inverse } : { text, fg, bold });
     for (let x = 0; x < this.cols; x++) {
       const idx = row + x;
       const ch = this.chars[idx];
       if (ch === "") continue;
       const cfg = this.fg[idx];
       const cbold = this.bold[idx] === 1;
-      if (open && cfg === fg && cbold === bold) {
+      const cinv = this.inverse[idx] === 1;
+      if (open && cfg === fg && cbold === bold && cinv === inverse) {
         text += ch;
         continue;
       }
-      if (open) runs.push({ text, fg, bold });
+      if (open) push();
       text = ch;
       fg = cfg;
       bold = cbold;
+      inverse = cinv;
       open = true;
     }
-    if (open) runs.push({ text, fg, bold });
+    if (open) push();
     return runs;
   }
 
@@ -226,6 +243,7 @@ export class Win {
   cx = 0;
   fg: number = DEFAULT_FG;
   bold = false;
+  inverse = false;
 
   private readonly screen: Screen;
   readonly y0: number;
@@ -292,7 +310,7 @@ export class Win {
   }
 
   private cell(y: number, x: number, ch: string, width: 1 | 2): void {
-    this.screen.put(this.y0 + y, this.x0 + x, ch, width, this.fg, this.bold, this.top);
+    this.screen.put(this.y0 + y, this.x0 + x, ch, width, this.fg, this.bold, this.top, this.inverse);
   }
 
   /** `waddch` for one code point. Returns false once output is refused. */

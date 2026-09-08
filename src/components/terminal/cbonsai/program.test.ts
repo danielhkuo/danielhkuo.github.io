@@ -262,3 +262,13 @@ test("a huge non-live tree grows in slices and paints only when complete", () =>
   assert.equal(p.state, "waitKey");
   assert.equal(h.paints, 1);
 });
+
+test("start() after stop() grows again (StrictMode double mount)", () => {
+  const p = new CbonsaiProgram(config(["-s", "42"]), null);
+  const h = host();
+  p.start({ rows: 24, cols: 80 }, h.h);
+  p.stop();
+  const screen = p.start({ rows: 24, cols: 80 }, h.h);
+  assert.equal(p.state, "waitKey");
+  assert.match(text(screen), /&/);
+});
