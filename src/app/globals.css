@@ -150,7 +150,31 @@
   --panel-ink: #282c34;     /* One Dark editor background */
   --panel-ink-2: #3e4451;   /* One Dark selection — rules on the panel */
   --panel-on: #abb2bf;      /* One Dark mono-1 */
+  --panel-meta: #828997;    /* One Dark mono-2 — hints on the panel */
   --panel-accent: #61afef;  /* One Dark blue */
+  --panel-yellow: #e5c07b;  /* One Dark orange 2 — neofetch's key column */
+  --panel-green: #98c379;   /* One Dark green — the command just run */
+  --panel-purple: #c678dd;  /* One Dark magenta — the prompt's $ */
+
+  /* The 16 ANSI slots of the ink panel's One Dark. The live terminal maps
+     these onto --ansi-* in dark mode, and the header's neofetch colour blocks
+     paint them directly, so the two never drift apart. */
+  --ink-ansi-0: #282c34;
+  --ink-ansi-1: #e06c75;
+  --ink-ansi-2: #98c379;
+  --ink-ansi-3: #d19a66;
+  --ink-ansi-4: #61afef;
+  --ink-ansi-5: #c678dd;
+  --ink-ansi-6: #56b6c2;
+  --ink-ansi-7: #abb2bf;
+  --ink-ansi-8: #5c6370;
+  --ink-ansi-9: #e88088;
+  --ink-ansi-10: #c3e88d;
+  --ink-ansi-11: #e5c07b;
+  --ink-ansi-12: #7cbef2;
+  --ink-ansi-13: #d48be6;
+  --ink-ansi-14: #6fc9d4;
+  --ink-ansi-15: #ffffff;
 }
 
 /* Site-wide dark theme. Every component derives its colors from these tokens,
@@ -532,31 +556,37 @@ iframe[src*="hcaptcha"] {
   --term-chrome-text: #b8b8b8;
 }
 .term-bar.dragging { cursor: grabbing; }
+/* The header's window is not draggable. */
+.term-bar.static { cursor: default; }
 
-/* Shared by the interactive window and the decorative panel in #about. */
-.term-bar .lights,
-.term-lights { display: flex; gap: 8px; }
-.term-bar .lights span,
-.term-lights span {
+/* Shared by the interactive window and the neofetch header. */
+.term-bar .lights { display: flex; gap: 8px; }
+.term-bar .lights span {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   /* macOS draws each light with a slightly darker rim of its own hue. */
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
 }
-.term-bar .lights span:nth-child(1),
-.term-lights span:nth-child(1) { background: #ff5f57; }
-.term-bar .lights span:nth-child(2),
-.term-lights span:nth-child(2) { background: #febc2e; }
-.term-bar .lights span:nth-child(3),
-.term-lights span:nth-child(3) { background: #28c840; }
+.term-bar .lights span:nth-child(1) { background: #ff5f57; }
+.term-bar .lights span:nth-child(2) { background: #febc2e; }
+.term-bar .lights span:nth-child(3) { background: #28c840; }
 
 .term-bar .title {
   justify-self: center;
   white-space: nowrap;
   font-weight: 500;
 }
-.term-bar .hint { justify-self: end; color: inherit; opacity: 0.75; font-size: 11px; }
+.term-bar .hint {
+  justify-self: end;
+  color: inherit;
+  opacity: 0.75;
+  font-size: 11px;
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
 .term-bar .hint .kbd {
   border: 1px solid currentColor;
   border-radius: 0;
@@ -766,27 +796,254 @@ iframe[src*="hcaptcha"] {
   --ansi-14: #0997b3;
   --ansi-15: #fafafa;
 }
-/* Atom One Dark. */
+/* Atom One Dark — the ink panel's palette, declared once at :root. */
 [data-astryx-media="dark"] .term-win {
-  --ansi-0: #282c34;
-  --ansi-1: #e06c75;
-  --ansi-2: #98c379;
-  --ansi-3: #d19a66;
-  --ansi-4: #61afef;
-  --ansi-5: #c678dd;
-  --ansi-6: #56b6c2;
-  --ansi-7: #abb2bf;
-  --ansi-8: #5c6370;
-  --ansi-9: #e88088;
-  --ansi-10: #c3e88d;
-  --ansi-11: #e5c07b;
-  --ansi-12: #7cbef2;
-  --ansi-13: #d48be6;
-  --ansi-14: #6fc9d4;
-  --ansi-15: #ffffff;
+  --ansi-0: var(--ink-ansi-0);
+  --ansi-1: var(--ink-ansi-1);
+  --ansi-2: var(--ink-ansi-2);
+  --ansi-3: var(--ink-ansi-3);
+  --ansi-4: var(--ink-ansi-4);
+  --ansi-5: var(--ink-ansi-5);
+  --ansi-6: var(--ink-ansi-6);
+  --ansi-7: var(--ink-ansi-7);
+  --ansi-8: var(--ink-ansi-8);
+  --ansi-9: var(--ink-ansi-9);
+  --ansi-10: var(--ink-ansi-10);
+  --ansi-11: var(--ink-ansi-11);
+  --ansi-12: var(--ink-ansi-12);
+  --ansi-13: var(--ink-ansi-13);
+  --ansi-14: var(--ink-ansi-14);
+  --ansi-15: var(--ink-ansi-15);
+}
+
+/* =========================================================================
+   neofetch header — the page's masthead is a Terminal window that has just
+   run `neofetch`: headshot as the logo block, the bio as the spec table, the
+   16 colour blocks underneath. It borrows the live window's title bar
+   (.term-bar) so the two read as the same app; the body is an ink panel, so
+   it stays One Dark in both themes.
+   ========================================================================= */
+.nf-frame {
+  max-width: 896px;
+  margin: 0 auto;
+  /* Same macOS window shadow as .term-win, a touch lighter for a resting window. */
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.28),
+    0 12px 24px rgba(0, 0, 0, 0.12),
+    0 28px 76px rgba(0, 0, 0, 0.18);
+}
+.nf-body {
+  background: var(--panel-ink);
+  padding: 34px 40px 30px;
+  font-family: var(--font-mono-family);
+  font-size: 13.5px;
+  line-height: 1.7;
+  cursor: pointer;
+}
+.nf-body p { text-wrap: initial; }
+.nf-cmd { color: var(--panel-on); }
+.nf-cmd.nf-idle { margin-top: 26px; }
+.nf-path { color: var(--panel-accent); }
+.nf-dollar { color: var(--panel-purple); }
+.nf-exec { color: var(--panel-green); }
+.nf-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--panel-on);
+  vertical-align: -3px;
+  animation: nf-blink 1.06s steps(1) infinite;
+}
+@keyframes nf-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.nf-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 34px;
+  align-items: start;
+  margin-top: 18px;
+}
+.nf-face img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  object-position: center;
+  filter: grayscale(100%) contrast(1.03);
+  border: 1px solid var(--panel-ink-2);
+}
+.nf-face-path {
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--panel-meta);
+}
+.nf-info { min-width: 0; }
+.nf-host { color: var(--panel-accent); font-weight: 600; }
+.nf-host .nf-at { color: var(--panel-on); }
+.nf-rule {
+  border: 0;
+  border-top: 1px solid var(--panel-ink-2);
+  margin: 6px 0 8px;
+}
+.nf-table {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 1px 18px;
+  margin: 0;
+}
+.nf-table dt { color: var(--panel-yellow); }
+.nf-table dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.nf-link {
+  color: var(--panel-accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 4px;
+}
+.nf-link:hover { color: var(--ink-ansi-12); }
+
+/* Pinned repos: language · name · stars/forks, as three aligned columns. */
+.nf-pins {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  gap: 1px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nf-pin { display: contents; }
+.nf-pin-lang { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.nf-pin-dot { width: 8px; height: 8px; flex: none; background: var(--panel-ink-2); }
+.nf-pin-stats {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.nf-pin-stats .nf-stat { min-width: 4ch; }
+
+/* neofetch's colour blocks: two rows of eight. */
+.nf-swatches { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
+.nf-swatches > div { display: flex; }
+.nf-swatches span { width: 26px; height: 13px; }
+
+/* Mobile only: the Contact row as tappable prompt lines. */
+.nf-actions { display: none; }
+
+.nf-caption {
+  display: block;
+  max-width: 896px;
+  margin: 14px auto 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: var(--font-mono-family);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--meta);
+  cursor: pointer;
+}
+.nf-caption:hover { color: var(--muted); }
+
+/* Narrow terminal: logo block above the table, every row stacked — what
+   neofetch itself does when the columns will not fit. */
+@media (max-width: 639px) {
+  .nf-frame {
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.24),
+      0 10px 26px rgba(0, 0, 0, 0.14);
+  }
+  .nf .term-bar { height: 28px; padding: 0 11px; font-size: 12px; }
+  .nf .term-bar .lights { gap: 7px; }
+  .nf .term-bar .lights span { width: 11px; height: 11px; }
+  .nf-title-dims { display: none; }
+
+  .nf-body { padding: 20px 16px 22px; font-size: 13px; line-height: 1.6; }
+  .nf-grid { display: block; margin-top: 16px; }
+  .nf-face img { width: 128px; height: 128px; }
+  .nf-face-path { margin-top: 8px; }
+  .nf-host { margin-top: 18px; }
+  .nf-rule { margin: 4px 0 10px; }
+
+  .nf-table { display: flex; flex-direction: column; gap: 0; }
+  .nf-table dd { margin-bottom: 11px; }
+  .nf-table dd:last-of-type { margin-bottom: 0; }
+  .nf-contact { display: none; }
+
+  /* Name on its own line, then "lang · ★ n · ⑂ n" as one 12px meta row. */
+  .nf-pins { display: flex; flex-direction: column; gap: 9px; margin-top: 3px; }
+  .nf-pin { display: flex; flex-wrap: wrap; align-items: center; }
+  .nf-pin-name { order: -1; flex-basis: 100%; align-self: flex-start; }
+  .nf-pin-lang,
+  .nf-pin-stats { font-size: 12px; gap: 0; }
+  .nf-pin-dot { margin-right: 7px; }
+  .nf-pin-lang::after,
+  .nf-pin-stats .nf-stat:first-child::after { content: " · "; white-space: pre; }
+  .nf-pin-stats .nf-stat { min-width: 0; }
+
+  .nf-swatches span { flex: 1; width: auto; height: 14px; }
+
+  .nf-cmd.nf-idle,
+  .nf-caption { display: none; }
+
+  .nf-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--panel-ink-2);
+  }
+  .nf-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    text-align: left;
+  }
+  .nf-shell {
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--panel-purple);
+    cursor: pointer;
+  }
+  .nf-shell-name {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 4px;
+  }
+  .nf-shell .nf-cursor { height: 15px; vertical-align: 0; }
+}
+
+/* Under sm the nav card loses its section links (HoverMenu hides them), and
+   what is left — Terminal, the theme toggle, Email — grows to 44pt rows. */
+@media (max-width: 639px) {
+  .site-nav button,
+  .site-nav a {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  .site-nav button[aria-label] { min-width: 44px; }
 }
 
 @media (max-width: 760px) {
+  /* A 52pt square showing only >_ — the desktop pill is 33pt tall, under the
+     touch minimum. Lifted off the home indicator by the safe-area inset. */
+  .term-launch {
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    font-size: 17px;
+    box-shadow: var(--elev-raised);
+  }
   .term-launch .kbd,
   .term-launch .label { display: none; }
 
@@ -809,14 +1066,43 @@ iframe[src*="hcaptcha"] {
     box-shadow: none;
     overscroll-behavior: contain;
   }
-  .term-bar { cursor: default; }
+  /* The strip behind the status bar takes the chrome grey, not the ink, so
+     the notch and the dark status glyphs stay legible. The bar itself is 32pt
+     and the close control a 44pt target. */
+  .term-win .term-bar {
+    height: calc(32px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 0 0 11px;
+    cursor: default;
+  }
+  .term-bar .lights { gap: 7px; }
+  .term-bar .lights span { width: 11px; height: 11px; }
   .term-bar .hint { display: none; }
-  .term-close { display: block; }
+  .term-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 32px;
+    padding: 0;
+    font-size: 19px;
+  }
+  /* Scrollback anchors to the bottom, so when the keyboard opens the last
+     output stays against the input row instead of the top of the buffer. */
+  .term-body { display: flex; flex-direction: column; }
+  .term-body > :first-child { margin-top: auto; }
+  /* 16px is the threshold below which iOS zooms the page on focus. The row
+     clears the home indicator when no keyboard is up. */
+  .term-inputrow {
+    font-size: 16px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .term-ghost .tabhint { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .term-win { animation: none; }
+  .nf-cursor { animation: none; }
 }
 
 /* Astryx atom-one theme font-family bridge: point the theme's font tokens at
