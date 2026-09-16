@@ -11,7 +11,7 @@
     "theme:check": "node scripts/check-theme.mjs",
     "a11y": "node scripts/run-axe.mjs",
     "doctor": "npx react-doctor@latest",
-    "astryx": "node node_modules/@astryxdesign/cli/bin/astryx.mjs",
+    "astryx": "astryx",
     "theme:build": "npm run astryx -- theme build src/theme/atomOneTheme.ts --out src/theme/theme.css",
     "favicons": "node scripts/recolor-favicon.mjs",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
@@ -19,7 +19,7 @@
     "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs"
   },
   "dependencies": {
-    "@astryxdesign/core": "^0.1.2",
+    "@astryxdesign/core": "^0.6.2",
     "@hcaptcha/react-hcaptcha": "^2.0.2",
     "@octokit/graphql": "^9.0.3",
     "lucide-react": "^1.18.0",
@@ -28,7 +28,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "^0.1.2",
+    "@astryxdesign/cli": "^0.6.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
