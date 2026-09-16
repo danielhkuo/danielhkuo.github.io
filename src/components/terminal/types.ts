@@ -8,6 +8,13 @@ export interface SlimProject {
   description: string;
   url: string;
   homepageUrl: string | null;
+  primaryLanguage: { name: string; color: string } | null;
+  /** Largest first, as GitHub reports them. */
+  languages: { name: string; percentage: number }[];
+  stargazerCount: number;
+  forkCount: number;
+  /** ISO 8601. */
+  updatedAt: string;
 }
 
 /** A key/value pair rendered as a two-column row (help, contact, ls). */
