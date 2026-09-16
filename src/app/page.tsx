@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import HoverMenu from "@/components/HoverMenu";
-import Masthead from "@/components/Masthead";
+import NeofetchHeader from "@/components/NeofetchHeader";
 import ProjectCard from "@/components/ProjectCard";
 import TerminalLauncher from "@/components/terminal/TerminalLauncher";
-import ShellHint from "@/components/terminal/ShellHint";
 import { fetchPinnedRepos } from "@/lib/github";
 import { VStack, HStack, Grid, Heading, Text } from "@astryxdesign/core";
 
@@ -33,63 +32,27 @@ export default async function Home() {
     homepageUrl: p.homepageUrl,
   }));
 
+  // What the header's `neofetch` prints under Pinned.
+  const headerProjects = projects.map((p) => ({
+    name: p.name,
+    url: p.url,
+    language: p.primaryLanguage,
+    stars: p.stargazerCount,
+    forks: p.forkCount,
+  }));
+
   return (
     <VStack gap={0} width="100%" height="100%" className="min-h-screen bg-bg text-text-primary">
       <HoverMenu />
 
-      <Masthead />
+      <NeofetchHeader projects={headerProjects} />
 
       <main className="mx-auto w-full max-w-6xl px-5 pb-20 sm:px-8 lg:px-10">
         <VStack gap={0}>
-          <section id="about" className="scroll-mt-28 py-14 md:py-24">
-            <HStack gap={3} vAlign="end" wrap="wrap" className="mb-6 justify-between">
-              <Heading level={2} type="display-2" className="font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
-                /daniel-kuo
-              </Heading>
-              <Text type="supporting" className="font-mono text-xs leading-relaxed text-text-muted">
-                chmod +x portfolio.sh
-              </Text>
-            </HStack>
-
-            <div className="paper-panel overflow-hidden">
-              <div className="ink-panel bg-[var(--panel-ink)] p-5 font-mono text-sm leading-[1.7] sm:p-7 lg:p-9">
-                {/* Same macOS traffic lights as the interactive window — real
-                    Apple hues, not the theme's danger/warn/success. */}
-                <div className="mb-6 flex items-center justify-between gap-3 border-b border-[var(--panel-ink-2)] pb-4">
-                  <div className="term-lights flex gap-2" aria-hidden>
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                  <p className="caps-label text-[0.62rem] text-[var(--panel-accent)]">
-                    terminal
-                  </p>
-                </div>
-
-                <div className="space-y-5">
-                  <div>
-                    <p className="text-[var(--panel-accent)]">$ whoami</p>
-                    <p>Daniel Kuo / Rice CS / Houston</p>
-                  </div>
-                  <div>
-                    <p className="text-[var(--panel-accent)]">$ current --role</p>
-                    <p>Incoming Engineering Summer Analyst @ Goldman Sachs AWM</p>
-                  </div>
-                  <div>
-                    <p className="text-[var(--panel-accent)]">$ shipped --themes</p>
-                    <p>AI mobile apps / GitHub project surfaces / homelab services / Labshare ops</p>
-                  </div>
-                  <div>
-                    <p className="text-[var(--panel-accent)]">$ keep</p>
-                    <p>Useful products. Ethical AI. Open source. Clean systems. Fewer words.</p>
-                  </div>
-                  <ShellHint />
-                </div>
-              </div>
-            </div>
-          </section>
-
           <section id="work" className="scroll-mt-28 border-t border-divider py-16">
+            <Text type="supporting" as="p" className="mb-2.5 font-mono text-[13px] text-accent">
+              $ ls ./work
+            </Text>
             <Heading level={2} type="display-2" className="mb-10 font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
               Pinned repositories from GitHub.
             </Heading>
