@@ -12,6 +12,12 @@ import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
  * once per animation frame, so React never reconciles the grid. Colours are
  * CSS classes bound to the theme's `--ansi-*` palette, so a theme switch
  * recolours a growing tree without a repaint.
+ *
+ * The grid follows the body: a ResizeObserver re-measures when the window is
+ * dragged or a phone keyboard changes the height, and when the row or column
+ * COUNT changes the program gets its SIGWINCH (`resize`) and the row elements
+ * are added or dropped to match. Pixel changes that do not cross a cell
+ * boundary cost nothing.
  */
 
 /** A finished screen in the scrollback (what `-p` prints). */
@@ -57,7 +63,7 @@ export default function ScreenView({
     const pre = preRef.current;
     if (!body || !pre) return;
 
-    // Measure one cell and the body's content box; the grid is fixed from here on.
+    // Measure one cell; the grid is however many fit in the body's content box.
     const probe = document.createElement("div");
     probe.className = "term-grid-row";
     probe.style.position = "absolute";
@@ -68,11 +74,16 @@ export default function ScreenView({
     pre.removeChild(probe);
     const cellW = rect.width / 10 || 8;
     const lineH = rect.height || 17;
-    const cs = getComputedStyle(body);
-    const innerW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    const innerH = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const cols = Math.max(1, Math.floor(innerW / cellW));
-    const rows = Math.max(1, Math.floor(innerH / lineH));
+    const measure = () => {
+      const cs = getComputedStyle(body);
+      const innerW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const innerH = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      return {
+        cols: Math.max(1, Math.floor(innerW / cellW)),
+        rows: Math.max(1, Math.floor(innerH / lineH)),
+      };
+    };
+    let { rows, cols } = measure();
 
     let raf = 0;
     let exited = false;
@@ -84,6 +95,40 @@ export default function ScreenView({
       if (!screen || rowEls.length === 0) return;
       for (const y of screen.takeDirty()) rowEls[y].innerHTML = rowHtml(screen.rowRuns(y));
     };
+
+    const addRow = () => {
+      const el = document.createElement("div");
+      el.className = "term-grid-row";
+      el.style.height = `${lineH}px`;
+      rowEls.push(el);
+      pre.appendChild(el);
+    };
+
+    // The body changed size. Only a change in the cell COUNT reaches the
+    // program; the observer fires for every pixel while dragging, so this is
+    // what keeps a resize cheap. Coalesced to a frame like a paint.
+    let resizeRaf = 0;
+    const onResize = () => {
+      resizeRaf = 0;
+      if (exited || !screen) return;
+      const next = measure();
+      if (next.rows === rows && next.cols === cols) return;
+      ({ rows, cols } = next);
+      if (program.resize) screen = program.resize(next);
+      else screen.resize(rows, cols);
+      if (exited) return;
+      while (rowEls.length > rows) (rowEls.pop() as HTMLDivElement).remove();
+      while (rowEls.length < rows) addRow();
+      // The new screen is fully dirty, so this repaints every row.
+      if (raf !== 0) cancelAnimationFrame(raf);
+      flush();
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            if (resizeRaf === 0) resizeRaf = requestAnimationFrame(onResize);
+          });
 
     const host: ProgramHost = {
       paint: () => {
@@ -102,18 +147,15 @@ export default function ScreenView({
     // A program can finish inside start() (`-p` without `-l`): nothing to show.
     if (exited) return;
 
-    for (let y = 0; y < rows; y++) {
-      const el = document.createElement("div");
-      el.className = "term-grid-row";
-      el.style.height = `${lineH}px`;
-      rowEls.push(el);
-      pre.appendChild(el);
-    }
+    for (let y = 0; y < rows; y++) addRow();
     flush();
     pre.focus({ preventScroll: true });
+    observer?.observe(body);
 
     return () => {
       exited = true;
+      observer?.disconnect();
+      if (resizeRaf !== 0) cancelAnimationFrame(resizeRaf);
       if (raf !== 0) cancelAnimationFrame(raf);
       raf = 0;
       program.stop();

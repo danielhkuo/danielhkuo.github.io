@@ -42,6 +42,9 @@ const R = (text: string, fg: number = DEFAULT_FG, bold = false, inverse = false)
 
 type Phase = "idle" | "busy" | "exited";
 
+/** One unwrapped transcript entry. The welcome box is laid out per width, so it is kept as itself. */
+type Para = { kind: "say"; runs: CellRun[]; indent: number } | { kind: "blank" } | { kind: "welcome" };
+
 const CTRL_ARM_MS = 2000;
 const SPINNER_FRAME_MS = 120;
 const STREAM_TICK_MS = 28;
@@ -67,7 +70,12 @@ export class ClaudeProgram implements ScreenProgram {
   private host: ProgramHost | null = null;
   private phase: Phase = "idle";
 
-  /** Committed, already wrapped transcript rows. */
+  /**
+   * What has been said, unwrapped: the source the transcript is wrapped from,
+   * kept so a resize can wrap it again at the new width.
+   */
+  private source: Para[] = [];
+  /** Committed transcript rows, `source` wrapped at the current width. */
   private transcript: CellRun[][] = [];
   /** The `⏺` paragraph currently streaming. */
   private live: CellRun[][] = [];
@@ -123,6 +131,7 @@ export class ClaudeProgram implements ScreenProgram {
   start(size: { rows: number; cols: number }, host: ProgramHost): Screen {
     this.clearTimers();
     this.phase = "idle";
+    this.source = [];
     this.transcript = [];
     this.live = [];
     this.spinning = false;
@@ -131,6 +140,18 @@ export class ClaudeProgram implements ScreenProgram {
     this.win = Win.open(this.screen, size.rows, size.cols, 0, 0);
     this.placeholder = PLACEHOLDERS[Math.floor(this.rand() * PLACEHOLDERS.length)];
     this.printWelcome();
+    this.render();
+    return this.screen;
+  }
+
+  /** SIGWINCH: wrap everything again at the new width and redraw. Nothing in flight is lost. */
+  resize(size: { rows: number; cols: number }): Screen {
+    this.screen = new Screen(size.rows, size.cols);
+    this.win = Win.open(this.screen, size.rows, size.cols, 0, 0);
+    if (this.phase === "exited") return this.screen;
+    this.reflow();
+    if (this.live.length) this.live = this.wrapLive();
+    this.scroll = Math.min(this.scroll, Math.max(0, this.allRows().length - this.transcriptArea()));
     this.render();
     return this.screen;
   }
@@ -171,12 +192,29 @@ export class ClaudeProgram implements ScreenProgram {
   }
 
   private say(runs: CellRun[], indent = 0): void {
+    this.source.push({ kind: "say", runs, indent });
     for (const row of wrapRuns(runs, this.cols, indent)) this.transcript.push(row);
     this.scroll = 0;
   }
 
   private blank(): void {
+    this.source.push({ kind: "blank" });
     this.transcript.push([]);
+  }
+
+  /** Rebuild the wrapped transcript from `source` at the current width. */
+  private reflow(): void {
+    this.transcript = [];
+    for (const para of this.source) {
+      if (para.kind === "blank") this.transcript.push([]);
+      else if (para.kind === "welcome") this.transcript.push(...this.welcomeRows());
+      else this.transcript.push(...wrapRuns(para.runs, this.cols, para.indent));
+    }
+  }
+
+  /** The streaming `⏺` paragraph as shown so far, wrapped at the current width. */
+  private wrapLive(): CellRun[][] {
+    return wrapRuns([R("⏺ "), R(this.streamText.slice(0, this.streamPos))], this.cols, 2);
   }
 
   private text(lines: readonly string[], fg: number = DEFAULT_FG): void {
@@ -188,6 +226,7 @@ export class ClaudeProgram implements ScreenProgram {
 
   private commitLive(): void {
     if (this.live.length) {
+      this.source.push({ kind: "say", runs: [R("⏺ "), R(this.streamText.slice(0, this.streamPos))], indent: 2 });
       this.transcript.push(...this.live);
       this.live = [];
     }
@@ -195,7 +234,8 @@ export class ClaudeProgram implements ScreenProgram {
     this.streamPos = 0;
   }
 
-  private printWelcome(): void {
+  /** The welcome box, laid out for the current width. */
+  private welcomeRows(): CellRun[][] {
     const lines: CellRun[][] = [
       [R("✻ ", CLAUDE_ORANGE, true), R("Welcome to Claude Code!", DEFAULT_FG, true)],
       [],
@@ -207,13 +247,19 @@ export class ClaudeProgram implements ScreenProgram {
     const width = Math.min(this.cols, inner + 2);
     const bar = "─".repeat(Math.max(0, width - 2));
     const border = (t: string) => R(t, CLAUDE_ORANGE);
-    this.transcript.push([border(`╭${bar}╮`)]);
+    const rows: CellRun[][] = [[border(`╭${bar}╮`)]];
     for (const l of lines) {
       const w = textWidth(l.map((r) => r.text).join(""));
       const pad = Math.max(0, width - 4 - w);
-      this.transcript.push([border("│ "), ...l, R(" ".repeat(pad)), border(" │")]);
+      rows.push([border("│ "), ...l, R(" ".repeat(pad)), border(" │")]);
     }
-    this.transcript.push([border(`╰${bar}╯`)]);
+    rows.push([border(`╰${bar}╯`)]);
+    return rows;
+  }
+
+  private printWelcome(): void {
+    this.source.push({ kind: "welcome" });
+    this.transcript.push(...this.welcomeRows());
     this.blank();
     this.say([R(" Tips for getting started:")]);
     this.blank();
@@ -238,7 +284,8 @@ export class ClaudeProgram implements ScreenProgram {
           this.onQuitKey("D", busy);
           return;
         case "l":
-          this.transcript = [];
+          this.source = [];
+        this.transcript = [];
           this.live = [];
           this.scroll = 0;
           this.render();
@@ -439,6 +486,7 @@ export class ClaudeProgram implements ScreenProgram {
         this.text(costText((Date.now() - this.startedAt) / 1000), GRAY);
         break;
       case "/clear":
+        this.source = [];
         this.transcript = [];
         this.live = [];
         this.scroll = 0;
@@ -542,8 +590,7 @@ export class ClaudeProgram implements ScreenProgram {
   private streamTick = (): void => {
     if (this.phase !== "busy") return;
     this.streamPos = Math.min(this.streamText.length, this.streamPos + 2 + Math.floor(this.rand() * 4));
-    const partial = this.streamText.slice(0, this.streamPos);
-    this.live = wrapRuns([R("⏺ "), R(partial)], this.cols, 2);
+    this.live = this.wrapLive();
     this.scroll = 0;
     this.render();
     if (this.streamPos < this.streamText.length) this.after(STREAM_TICK_MS, this.streamTick);

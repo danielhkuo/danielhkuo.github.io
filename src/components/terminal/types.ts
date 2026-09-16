@@ -51,6 +51,13 @@ export interface ScreenProgram {
    * (an unused Escape closes the window). Anything else means consumed.
    */
   key(key: string, ctrl: boolean, shift?: boolean): boolean | void;
+  /**
+   * The grid changed size (the window was resized, a phone keyboard came up):
+   * the program's SIGWINCH. Returns the screen to render from now on — a
+   * fresh one it has redrawn into. A program without this has its screen
+   * resized in place, old cells kept top-left anchored and clipped.
+   */
+  resize?(size: { rows: number; cols: number }): Screen;
   /** The terminal is going away; release timers. May run after `exit`. */
   stop(): void;
   /** Take Escape for itself instead of letting it close the terminal. */

@@ -102,6 +102,14 @@ export class CbonsaiProgram implements ScreenProgram {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Wall-clock time the next visible step is allowed to run. */
   private due = 0;
+  /** The seed the tree on screen grew from — `resize` regrows it from here. */
+  private treeSeed = 0;
+  /**
+   * After a resize, growth steps are hidden until the branch count reaches
+   * this, the same fast-forward a loaded tree gets: the regrown tree catches
+   * up to where the old one was, then carries on live.
+   */
+  private catchUpTo = 0;
 
   constructor(conf: Config, store: SaveStore | null = defaultStore()) {
     this.conf = conf;
@@ -115,7 +123,26 @@ export class CbonsaiProgram implements ScreenProgram {
 
   start(size: { rows: number; cols: number }, host: ProgramHost): Screen {
     this.host = host;
+    this.treeSeed = this.conf.seed;
     this.screen = new Screen(size.rows, size.cols);
+    this.bonsai = new Bonsai(this.conf, this.rng, this.screen);
+    this.startTree();
+    return this.screen;
+  }
+
+  /**
+   * SIGWINCH: cbonsai has no reflow — the tree is cells — so it is regrown
+   * into the new grid from the same seed, the way running it again in the
+   * resized terminal would. A finished tree comes back finished; a growing
+   * one is fast-forwarded to its branch count and keeps growing live.
+   */
+  resize(size: { rows: number; cols: number }): Screen {
+    this.screen = new Screen(size.rows, size.cols);
+    if (this.phase === "exited" || this.phase === "idle" || !this.bonsai) return this.screen;
+    const wasGrowing = this.phase === "growing";
+    this.catchUpTo = wasGrowing ? this.bonsai.counters.branches : Infinity;
+    this.clearTimer();
+    this.rng.seed(this.treeSeed);
     this.bonsai = new Bonsai(this.conf, this.rng, this.screen);
     this.startTree();
     return this.screen;
@@ -152,7 +179,7 @@ export class CbonsaiProgram implements ScreenProgram {
         this.onTreeGrown();
         return;
       }
-      if (r === STEP_VISIBLE) {
+      if (r === STEP_VISIBLE && bonsai.counters.branches >= this.catchUpTo) {
         this.due += stepMs;
         if (this.due > Date.now()) break;
       }
@@ -184,7 +211,9 @@ export class CbonsaiProgram implements ScreenProgram {
   private nextTree = (): void => {
     this.timer = null;
     if (this.phase !== "waitTree") return;
-    this.rng.seed(unixTime()); // srand(time(NULL))
+    this.treeSeed = unixTime();
+    this.rng.seed(this.treeSeed); // srand(time(NULL))
+    this.catchUpTo = 0;
     this.startTree();
   };
 

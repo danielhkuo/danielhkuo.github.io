@@ -38,14 +38,14 @@ interface Rect {
 }
 
 export class Screen {
-  readonly rows: number;
-  readonly cols: number;
+  rows: number;
+  cols: number;
   /** Glyph per cell. "" marks the right half of a wide glyph. */
-  readonly chars: string[];
-  readonly fg: Int16Array;
-  readonly bold: Uint8Array;
-  readonly inverse: Uint8Array;
-  private readonly dirty: Uint8Array;
+  chars: string[];
+  fg: Int16Array;
+  bold: Uint8Array;
+  inverse: Uint8Array;
+  private dirty: Uint8Array;
   private dirtyCount = 0;
   /** Cells only `top` windows may write — the message panels sit above the tree panel. */
   private masks: Rect[] = [];
@@ -60,6 +60,41 @@ export class Screen {
     this.inverse = new Uint8Array(n);
     this.dirty = new Uint8Array(this.rows).fill(1);
     this.dirtyCount = this.rows;
+  }
+
+  /**
+   * Change size in place, keeping what was showing anchored at the top-left
+   * and clipped — what a real terminal does when the window is resized under
+   * a program that does not redraw. The program's reference stays valid and
+   * its windows keep writing, clipped to the new bounds. A wide glyph whose
+   * tail would fall off the right edge is dropped whole. Masks are dropped;
+   * the program that set them will redraw. Every row ends up dirty.
+   */
+  resize(rows: number, cols: number): void {
+    const from = { rows: this.rows, cols: this.cols, chars: this.chars, fg: this.fg, bold: this.bold, inverse: this.inverse };
+    const next = new Screen(rows, cols);
+    const h = Math.min(from.rows, next.rows);
+    const w = Math.min(from.cols, next.cols);
+    for (let y = 0; y < h; y++) {
+      const row = y * from.cols;
+      for (let x = 0; x < w; x++) {
+        const idx = row + x;
+        const ch = from.chars[idx];
+        if (ch === "") continue;
+        const wide = x + 1 < from.cols && from.chars[idx + 1] === "";
+        if (wide && x + 1 >= w) continue;
+        next.put(y, x, ch, wide ? 2 : 1, from.fg[idx], from.bold[idx] === 1, true, from.inverse[idx] === 1);
+      }
+    }
+    this.rows = next.rows;
+    this.cols = next.cols;
+    this.chars = next.chars;
+    this.fg = next.fg;
+    this.bold = next.bold;
+    this.inverse = next.inverse;
+    this.dirty = new Uint8Array(this.rows).fill(1);
+    this.dirtyCount = this.rows;
+    this.masks = [];
   }
 
   /** Blank every cell, drop the mask and mark everything dirty. */
