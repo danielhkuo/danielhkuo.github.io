@@ -190,24 +190,30 @@ test("packRow normalises spaces and trims the tail", () => {
   });
 });
 
-test("resized copies cells top-left anchored, clipping what no longer fits", () => {
+test("resize keeps cells top-left anchored in place, clipping what no longer fits", () => {
   const s = new Screen(3, 6);
   s.put(0, 0, "a", 1, 2, true, false);
   s.put(1, 4, "木", 2, 3, false, false);
   s.put(2, 5, "z", 1, 1, false, false);
   s.takeDirty();
-  const bigger = Screen.resized(s, 4, 8);
-  assert.equal(bigger.rows, 4);
-  assert.equal(bigger.cols, 8);
-  assert.deepEqual(bigger.cell(0, 0), { ch: "a", fg: 2, bold: true });
-  assert.equal(bigger.chars[1 * 8 + 4], "木");
-  assert.equal(bigger.chars[1 * 8 + 5], "");
-  assert.equal(bigger.cell(2, 5).ch, "z");
-  assert.equal(text(bigger, 3), "        ");
-  assert.deepEqual(bigger.takeDirty(), [0, 1, 2, 3]);
+  const w = Win.open(s, 0, 0, 0, 0) as Win;
+  s.resize(4, 8);
+  assert.equal(s.rows, 4);
+  assert.equal(s.cols, 8);
+  assert.deepEqual(s.cell(0, 0), { ch: "a", fg: 2, bold: true });
+  assert.equal(s.chars[1 * 8 + 4], "木");
+  assert.equal(s.chars[1 * 8 + 5], "");
+  assert.equal(s.cell(2, 5).ch, "z");
+  assert.equal(text(s, 3), "        ");
+  assert.deepEqual(s.takeDirty(), [0, 1, 2, 3]);
 
-  const smaller = Screen.resized(s, 2, 5);
-  assert.equal(text(smaller, 0), "a    ");
+  // A window opened before the resize keeps writing through its old bounds
+  // (3×6), as ncurses windows do: the "!" past column 6 is clipped.
+  w.mvaddstr(2, 4, "ok!");
+  assert.equal(text(s, 2), "    ok  ");
+
+  s.resize(2, 5);
+  assert.equal(text(s, 0), "a    ");
   // The wide glyph's tail fell off the right edge, so its head goes too.
-  assert.equal(text(smaller, 1), "     ");
+  assert.equal(text(s, 1), "     ");
 });
