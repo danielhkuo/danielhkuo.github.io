@@ -378,8 +378,9 @@ export default function Terminal({
           <span />
         </div>
         {/* Terminal.app's own title format — the leading dash is a login
-            shell's argv[0], which is what it actually displays. */}
-        <div className="title">daniel_kuo — -zsh</div>
+            shell's argv[0], which is what it actually displays. A running
+            program can put its own name there, as a real one would. */}
+        <div className="title">daniel_kuo — {program?.title ?? "-zsh"}</div>
         <div className="hint">
           close
           <span className="kbd" onClick={onClose}>
