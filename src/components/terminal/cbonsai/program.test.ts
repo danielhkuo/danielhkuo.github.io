@@ -272,3 +272,32 @@ test("start() after stop() grows again (StrictMode double mount)", () => {
   assert.equal(p.state, "waitKey");
   assert.match(text(screen), /&/);
 });
+
+test("resize regrows the finished tree into the new grid from the same seed", () => {
+  const p = new CbonsaiProgram(config(["-s", "42"]), null);
+  const h = host();
+  p.start({ rows: 24, cols: 80 }, h.h);
+  assert.equal(p.state, "waitKey");
+  const next = p.resize({ rows: 40, cols: 120 });
+  assert.equal(next.rows, 40);
+  assert.equal(next.cols, 120);
+  assert.equal(p.state, "waitKey");
+  const rows = text(next).split("\n");
+  // The base sits on the new bottom row, centred in the new width.
+  assert.match(rows[39], /\(_\)/);
+  assert.ok(rows[39].indexOf("(_)") > 30, rows[39]);
+  assert.ok(rows.some((r) => /[&~\\|/]/.test(r)), "tree drawn");
+});
+
+test("resize while growing keeps growing in the new grid, caught up to where it was", () => {
+  const p = new CbonsaiProgram(config(["-s", "42", "-l", "-t", "0.01"]), null);
+  const h = host();
+  p.start({ rows: 24, cols: 80 }, h.h);
+  for (let i = 0; i < 12; i++) mock.timers.tick(10);
+  assert.equal(p.state, "growing");
+  const next = p.resize({ rows: 30, cols: 100 });
+  assert.equal(p.state, "growing");
+  assert.ok(text(next).split("\n").some((r) => /[&~\\|/]/.test(r)), "caught-up tree drawn");
+  for (let i = 0; i < 2000 && p.state === "growing"; i++) mock.timers.tick(10);
+  assert.equal(p.state, "waitKey");
+});

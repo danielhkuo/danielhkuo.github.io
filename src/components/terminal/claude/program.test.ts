@@ -288,3 +288,26 @@ test("Escape on an idle, empty prompt is declined so the host can close the wind
   assert.notEqual(p.key("Escape", false), false);
   assert.equal(p.state, "idle");
 });
+
+test("resize re-wraps the transcript, the welcome box and the input box to the new width", () => {
+  const { p, h } = boot();
+  type(p, "explain " + "everything ".repeat(12));
+  p.key("Enter", false);
+  advance(4000);
+  type(p, "draft");
+  const narrow = p.resize({ rows: 20, cols: 50 });
+  assert.equal(narrow.cols, 50);
+  assert.equal(narrow.rows, 20);
+  const rows = screenText(narrow);
+  for (const r of rows) assert.ok(r.length <= 50, r);
+  assert.ok(rows.some((r) => r.startsWith("│ > draft")), "input kept");
+  assert.ok(rows.some((r) => r === "╰" + "─".repeat(48) + "╯"), "box spans the new width");
+  // The box itself has scrolled off a 20-row screen; check the wrapped transcript.
+  const welcome = p.transcriptText.split("\n").find((r) => r.includes("Welcome to Claude Code!"));
+  assert.ok(welcome && welcome.endsWith("│") && welcome.length <= 50, welcome);
+  assert.ok(h.paints > 0);
+
+  // Growing again re-flows the same content wider, nothing is lost.
+  const wide = p.resize({ rows: 30, cols: 90 });
+  assert.match(screenText(wide).join("\n"), /explain everything everything/);
+});

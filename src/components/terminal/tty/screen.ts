@@ -62,6 +62,31 @@ export class Screen {
     this.dirtyCount = this.rows;
   }
 
+  /**
+   * A new screen of another size holding what `from` showed, anchored at the
+   * top-left and clipped — what a real terminal does when the window is
+   * resized under a program that does not redraw. A wide glyph whose tail
+   * would fall off the right edge is dropped whole. Masks are not carried
+   * over; the program that set them will redraw. The result is fully dirty.
+   */
+  static resized(from: Screen, rows: number, cols: number): Screen {
+    const next = new Screen(rows, cols);
+    const h = Math.min(from.rows, next.rows);
+    const w = Math.min(from.cols, next.cols);
+    for (let y = 0; y < h; y++) {
+      const row = y * from.cols;
+      for (let x = 0; x < w; x++) {
+        const idx = row + x;
+        const ch = from.chars[idx];
+        if (ch === "") continue;
+        const wide = x + 1 < from.cols && from.chars[idx + 1] === "";
+        if (wide && x + 1 >= w) continue;
+        next.put(y, x, ch, wide ? 2 : 1, from.fg[idx], from.bold[idx] === 1, true, from.inverse[idx] === 1);
+      }
+    }
+    return next;
+  }
+
   /** Blank every cell, drop the mask and mark everything dirty. */
   clear(): void {
     this.chars.fill(" ");
