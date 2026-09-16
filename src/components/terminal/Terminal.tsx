@@ -66,9 +66,6 @@ export default function Terminal({
   const [navPath, setNavPath] = useState<string[]>([]);
   // A full-screen program (cbonsai) that has taken over the body, if any.
   const [program, setProgram] = useState<ScreenProgram | null>(null);
-  // On phones, track the visual viewport so the input row stays above the
-  // on-screen keyboard instead of being pushed off the bottom of the screen.
-  const [vv, setVv] = useState<{ h: number; top: number } | null>(null);
 
   const dragOffset = useRef({ active: false, dx: 0, dy: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -182,20 +179,39 @@ export default function Terminal({
     document.body.style.userSelect = "none";
   };
 
-  // ---- mobile: pin height to the visual viewport so the keyboard can't hide input ----
+  // ---- mobile: follow the visual viewport ----
+  // iOS Safari does not shrink the layout viewport for the on-screen keyboard
+  // (it ignores `interactive-widget`); it shrinks the VISUAL viewport and lets
+  // the user pan it across the layout viewport, so anything position:fixed
+  // slides under the keyboard and out the top. Two things keep that from
+  // showing: the window itself covers the whole layout viewport (CSS, so a
+  // pan only ever reveals more window), and the frame inside it — title bar,
+  // body, input row — is placed at the visual viewport's offset and height.
+  // The geometry is written straight to the element from the viewport's own
+  // events, not through React state: that saves the render round trip, so
+  // the frame is where the viewport is on the same frame it moved.
   useEffect(() => {
     if (!open) return;
     const view = window.visualViewport;
-    if (!view) return;
+    const win = winRef.current;
+    if (!view || !win) return;
     const mq = window.matchMedia("(max-width: 760px)");
     const update = () => {
-      // Only override the panel geometry while the on-screen keyboard is
-      // actually open (visual viewport meaningfully shorter than the layout
-      // viewport). Otherwise fall back to CSS (100dvh, top:0) so a stray
-      // visualViewport offsetTop can't shift the panel down and clip the input.
-      const keyboardOpen = window.innerHeight - view.height > 120;
-      if (mq.matches && keyboardOpen) setVv({ h: view.height, top: view.offsetTop });
-      else setVv(null);
+      if (mq.matches) {
+        win.style.setProperty("--term-top", `${Math.max(0, view.offsetTop)}px`);
+        win.style.setProperty("--term-h", `${view.height}px`);
+        // The keyboard covers the home indicator, so the input row can drop
+        // its safe-area padding and sit right on the keyboard.
+        const keyboardOpen = window.innerHeight - view.height > 120;
+        if (keyboardOpen) win.dataset.keyboard = "";
+        else delete win.dataset.keyboard;
+      } else {
+        win.style.removeProperty("--term-top");
+        win.style.removeProperty("--term-h");
+        delete win.dataset.keyboard;
+      }
+      // The body just changed height: keep the latest output against the input row.
+      if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     };
     update();
     view.addEventListener("resize", update);
@@ -232,7 +248,7 @@ export default function Terminal({
   // keep the latest output in view
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [lines, open, vv]);
+  }, [lines, open]);
 
   // ---- autocomplete ----
   const completion = useMemo(() => {
@@ -355,9 +371,6 @@ export default function Terminal({
   const positionStyle: CSSProperties = pos
     ? { left: pos.x, top: pos.y }
     : {};
-  const viewportStyle = vv
-    ? ({ "--term-h": `${vv.h}px`, "--term-top": `${vv.top}px` } as CSSProperties)
-    : {};
 
   return (
     <div
@@ -366,8 +379,11 @@ export default function Terminal({
       role="dialog"
       aria-modal="true"
       aria-label="interactive terminal"
-      style={{ ...positionStyle, ...viewportStyle }}
+      style={positionStyle}
     >
+      {/* On desktop the frame is display:contents — the window IS the frame.
+          On phones it is the part of the window inside the visual viewport. */}
+      <div className="term-frame">
       <div
         className={`term-bar${isDragging ? " dragging" : ""}`}
         onMouseDown={onBarMouseDown}
@@ -472,6 +488,7 @@ export default function Terminal({
         </div>
       </div>
       )}
+      </div>
     </div>
   );
 }

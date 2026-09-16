@@ -525,15 +525,25 @@ iframe[src*="hcaptcha"] {
 /* Initial placement before the user drags — centered without transform (so it
    doesn't fight the termpop animation) and without reading window size at render. */
 .term-win.term-centered { inset: 0; margin: auto; }
+/* Title bar, body and input row. On desktop the window is the frame. */
+.term-frame { display: contents; }
 
 /* Title bar. Grid rather than flex so the title is centred against the WINDOW,
    not against the leftover space between the lights and the hint — the lights
    and hint columns are the same width, which is what keeps it honest. */
-.term-bar {
+/* macOS window chrome. On :root rather than the bar because on phones the
+   window's backdrop (the strip behind the status bar) takes it too. */
+:root {
   --term-chrome: #e4e4e4;
   --term-chrome-edge: #c8c8c8;
   --term-chrome-text: #4d4d4d;
-
+}
+[data-astryx-media="dark"] {
+  --term-chrome: #2c2c2c;
+  --term-chrome-edge: #1a1a1a;
+  --term-chrome-text: #b8b8b8;
+}
+.term-bar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -549,11 +559,6 @@ iframe[src*="hcaptcha"] {
   cursor: grab;
   flex-shrink: 0;
   user-select: none;
-}
-[data-astryx-media="dark"] .term-bar {
-  --term-chrome: #2c2c2c;
-  --term-chrome-edge: #1a1a1a;
-  --term-chrome-text: #b8b8b8;
 }
 .term-bar.dragging { cursor: grabbing; }
 /* The header's window is not draggable. */
@@ -1047,16 +1052,17 @@ iframe[src*="hcaptcha"] {
   .term-launch .kbd,
   .term-launch .label { display: none; }
 
-  /* Fixed full-screen panel on phones (no dragging/resizing). Anchored to the
-     top-left and spanning left:0→right:0 so it always fills the viewport width
-     regardless of any page overflow. Height falls back to 100dvh; while the
-     on-screen keyboard is open the JS sets --term-h (visual viewport height) and
-     --term-top (its offset) so the input row stays above the keyboard. inset
-     !important overrides the inline left/top used for desktop positioning. */
+  /* Full-screen on phones (no dragging/resizing). The window covers the
+     ENTIRE layout viewport, in chrome grey: iOS Safari does not shrink the
+     layout viewport for the keyboard, it shrinks the visual viewport and lets
+     it pan, so a fixed box sized to the keyboard-less area slides around and
+     shows the page behind it. With the window covering everything, a pan only
+     ever reveals more window. inset !important overrides the inline left/top
+     used for desktop positioning. */
   .term-win {
-    inset: var(--term-top, 0) 0 auto 0 !important;
+    inset: 0 !important;
     width: auto !important;
-    height: var(--term-h, 100dvh) !important;
+    height: auto !important;
     min-width: 0;
     min-height: 0;
     max-width: none;
@@ -1064,14 +1070,31 @@ iframe[src*="hcaptcha"] {
     border-width: 0;
     border-radius: 0;
     box-shadow: none;
+    background: var(--term-chrome);
     overscroll-behavior: contain;
   }
+  /* The frame is the part of the window inside the visual viewport: the JS
+     writes its offset and height from visualViewport events, so the input
+     row sits on the keyboard and the title bar at the visible top. Without
+     the keyboard the variables are unset and it is the whole window. */
+  .term-frame {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: var(--term-top, 0px);
+    left: 0;
+    right: 0;
+    height: var(--term-h, 100%);
+    background: var(--bg);
+  }
   /* The strip behind the status bar takes the chrome grey, not the ink, so
-     the notch and the dark status glyphs stay legible. The bar itself is 32pt
-     and the close control a 44pt target. */
+     the notch and the dark status glyphs stay legible. It shrinks as the
+     frame is panned down under the status bar. The bar itself is 32pt and
+     the close control a 44pt target. */
   .term-win .term-bar {
-    height: calc(32px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 0 0 11px;
+    --term-status: max(0px, calc(env(safe-area-inset-top) - var(--term-top, 0px)));
+    height: calc(32px + var(--term-status));
+    padding: var(--term-status) 0 0 11px;
     cursor: default;
   }
   .term-bar .lights { gap: 7px; }
@@ -1096,6 +1119,8 @@ iframe[src*="hcaptcha"] {
     font-size: 16px;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
+  /* The keyboard covers the home indicator: the row sits right on the keyboard. */
+  .term-win[data-keyboard] .term-inputrow { padding-bottom: 10px; }
   .term-ghost .tabhint { font-size: 11px; }
 }
 
