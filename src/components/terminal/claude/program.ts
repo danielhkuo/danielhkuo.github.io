@@ -225,7 +225,7 @@ export class ClaudeProgram implements ScreenProgram {
 
   // ---- input handling ---------------------------------------------------------
 
-  key(key: string, ctrl: boolean, shift = false): void {
+  key(key: string, ctrl: boolean, shift = false): boolean | void {
     if (this.phase === "exited") return;
     const busy = this.phase === "busy";
 
@@ -272,10 +272,14 @@ export class ClaudeProgram implements ScreenProgram {
     switch (key) {
       case "Escape":
         if (busy) this.interrupt();
-        else {
+        else if (this.input) {
           this.input = "";
           this.cursor = 0;
           this.render();
+        } else {
+          // Nothing to interrupt or clear: Claude Code ignores this Escape,
+          // so hand it back and let the terminal window close on it.
+          return false;
         }
         return;
       case "Enter":

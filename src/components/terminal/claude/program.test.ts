@@ -275,3 +275,16 @@ test("start() after stop() gives a fresh session (StrictMode double mount)", () 
   p.key("Enter", false);
   assert.equal(p.state, "busy");
 });
+
+test("Escape on an idle, empty prompt is declined so the host can close the window", () => {
+  const { p } = boot();
+  assert.equal(p.key("Escape", false), false);
+  type(p, "draft");
+  assert.notEqual(p.key("Escape", false), false);
+  assert.equal(p.inputText, "");
+  type(p, "explain everything");
+  p.key("Enter", false);
+  mock.timers.tick(300);
+  assert.notEqual(p.key("Escape", false), false);
+  assert.equal(p.state, "idle");
+});
