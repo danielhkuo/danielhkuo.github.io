@@ -4,8 +4,9 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { Card, HStack, Button, IconButton } from "@astryxdesign/core";
 import { setTheme, useThemeMode } from "@/lib/theme";
 
+// No About link: the neofetch header IS the about section, and it is the top
+// of the page — there is nowhere to scroll to.
 const links = [
-  { href: "#about", label: "About" },
   { href: "#work", label: "Work" },
   { href: "#contact", label: "Contact" },
 ];
@@ -43,7 +44,9 @@ function TerminalIcon() {
 }
 
 export default function HoverMenu() {
-  const [active, setActive] = useState("about");
+  // Nothing is active until a section scrolls into view — at rest the header
+  // is on screen and it has no nav entry.
+  const [active, setActive] = useState("");
   const theme = useThemeMode();
 
   useEffect(() => {
@@ -71,7 +74,10 @@ export default function HoverMenu() {
     );
 
   return (
-    <div className="fixed inset-x-0 top-4 z-50 px-4">
+    // top-4 plus the notch inset, so the card clears the status bar on phones
+    // that report one (needs viewport-fit=cover, set in layout.tsx). .site-nav
+    // lifts every control to a 44pt row under sm.
+    <div className="site-nav fixed inset-x-0 z-50 px-4 top-[calc(1rem+env(safe-area-inset-top))]">
       <Card padding={1.5} className="mx-auto max-w-4xl">
         <HStack gap={2} hAlign="between" vAlign="center">
           <Button

@@ -27,7 +27,10 @@ export const metadata: Metadata = {
 // visitor whose stored choice disagrees with their OS got an address bar in the
 // other theme — permanently, not just for a frame. A single meta is rendered in
 // <head> below instead, and THEME_COLOR/applyTheme keep its content on the mode.
-export const viewport: Viewport = {};
+// viewport-fit=cover lets the page extend under the notch and home indicator,
+// which is what makes env(safe-area-inset-*) non-zero: the nav card and the
+// full-screen terminal pad themselves by it.
+export const viewport: Viewport = { viewportFit: "cover" };
 
 export default function RootLayout({
   children,
