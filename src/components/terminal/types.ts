@@ -8,6 +8,13 @@ export interface SlimProject {
   description: string;
   url: string;
   homepageUrl: string | null;
+  primaryLanguage: { name: string; color: string } | null;
+  /** Largest first, as GitHub reports them. */
+  languages: { name: string; percentage: number }[];
+  stargazerCount: number;
+  forkCount: number;
+  /** ISO 8601. */
+  updatedAt: string;
 }
 
 /** A key/value pair rendered as a two-column row (help, contact, ls). */
@@ -62,10 +69,21 @@ export interface ScreenProgram {
   stop(): void;
   /** Take Escape for itself instead of letting it close the terminal. */
   readonly captureEscape?: boolean;
-  /** Reads typed text, so the host keeps a focused input for on-screen keyboards. */
+  /**
+   * Reads typed text, so the host keeps a focused input for on-screen
+   * keyboards. Re-read after every paint, so a program may turn it on only
+   * while it has a text field open (a filter prompt) and off again after.
+   */
   readonly textInput?: boolean;
+  /** What the window's title bar shows after "daniel_kuo — " while this runs. */
+  readonly title?: string;
   /** Mouse wheel over the screen, in rows (positive = content moves up). */
   wheel?(rows: number): void;
+  /**
+   * A click or touch on the grid at a cell. Programs without this get a
+   * "tap" key for a touch instead, and nothing for a mouse click.
+   */
+  tap?(y: number, x: number): void;
 }
 
 /** Sink a command writes its output to. */

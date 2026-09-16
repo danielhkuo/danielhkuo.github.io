@@ -45,7 +45,7 @@ export function buildCommands(
         );
         const groups: { name: string; names: string[] }[] = [
           { name: "navigation", names: ["cd", "ls", "pwd"] },
-          { name: "info", names: ["whoami", "contact", "resume", "projects"] },
+          { name: "info", names: ["whoami", "work", "contact", "resume", "projects"] },
           { name: "open", names: ["open", "github", "linkedin", "email"] },
           { name: "settings", names: ["theme"] },
           { name: "fun", names: ["cbonsai", "claude"] },
@@ -240,6 +240,19 @@ export function buildCommands(
         void import("./cbonsai/program")
           .then((m) => m.runCbonsai(args, ctx))
           .catch(() => ctx.err("cbonsai: failed to load"));
+      },
+    },
+    work: {
+      desc: "browse pinned repos · `↑↓` move · `⏎` open · `/` filter · `q` quit",
+      run: (_args, ctx) => {
+        const projects = api.getProjects();
+        if (!projects.length) {
+          ctx.out("no pinned repositories found.");
+          return;
+        }
+        void import("./work/program")
+          .then((m) => ctx.program(m.createWorkProgram(projects, api)))
+          .catch(() => ctx.err("work: failed to load"));
       },
     },
     claude: {

@@ -24,12 +24,18 @@ export default async function Home() {
   // Fetch pinned repos at build time (SSG)
   const projects = await fetchPinnedRepos();
 
-  // Slim, JSON-serializable slice for the client terminal.
+  // Slim, JSON-serializable slice for the client terminal (`ls projects`,
+  // `open`, and the `work` TUI's detail pane).
   const terminalProjects = projects.map((p) => ({
     name: p.name,
     description: p.description,
     url: p.url,
     homepageUrl: p.homepageUrl,
+    primaryLanguage: p.primaryLanguage,
+    languages: p.languages.map((l) => ({ name: l.name, percentage: l.percentage })),
+    stargazerCount: p.stargazerCount,
+    forkCount: p.forkCount,
+    updatedAt: p.updatedAt,
   }));
 
   // What the header's `neofetch` prints under Pinned.
@@ -49,24 +55,21 @@ export default async function Home() {
 
       <main className="mx-auto w-full max-w-6xl px-5 pb-20 sm:px-8 lg:px-10">
         <VStack gap={0}>
-          <section id="work" className="scroll-mt-28 border-t border-divider py-16">
-            <Text type="supporting" as="p" className="mb-2.5 font-mono text-[13px] text-accent">
-              $ ls ./work
-            </Text>
-            <Heading level={2} type="display-2" className="mb-10 font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
-              Pinned repositories from GitHub.
-            </Heading>
-            <VStack gap={6}>
-              {projects.length > 0 ? (
-                projects.map((project) => (
+          {/* No heading: the repos announce themselves. Three compact cards
+              to a row; the full language breakdown lives in the shell's
+              `work` view. */}
+          <section id="work" className="scroll-mt-28 border-t border-divider pt-10 pb-16">
+            {projects.length > 0 ? (
+              <Grid columns={{ minWidth: 276 }} gap={5} className="items-stretch">
+                {projects.map((project) => (
                   <ProjectCard key={project.name} project={project} />
-                ))
-              ) : (
-                <Text type="body" className="font-mono text-sm text-ink">
-                  No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
-                </Text>
-              )}
-            </VStack>
+                ))}
+              </Grid>
+            ) : (
+              <Text type="body" className="font-mono text-sm text-ink">
+                No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
+              </Text>
+            )}
           </section>
 
           <section id="contact" className="scroll-mt-28 border-t border-divider py-16">

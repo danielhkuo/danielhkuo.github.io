@@ -52,7 +52,12 @@ export default function ScreenView({
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const onExitRef = useRef(onExit);
+  /** One cell's size, measured when the grid is built; taps map through it. */
+  const cellRef = useRef({ w: 8, h: 17 });
+  /** Focuses or blurs the hidden input to match `program.textInput`; set up with the grid. */
+  const syncInputRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     onExitRef.current = onExit;
@@ -74,6 +79,7 @@ export default function ScreenView({
     pre.removeChild(probe);
     const cellW = rect.width / 10 || 8;
     const lineH = rect.height || 17;
+    cellRef.current = { w: cellW, h: lineH };
     const measure = () => {
       const cs = getComputedStyle(body);
       const innerW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -90,10 +96,26 @@ export default function ScreenView({
     let screen: Screen | null = null;
     const rowEls: HTMLDivElement[] = [];
 
+    // Programs that read text keep a real (invisible) input focused so phones
+    // show their keyboard. A program may want that only while a text field is
+    // open, so this is re-checked after every paint and on every tap.
+    const syncInput = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      if (program.textInput) {
+        if (document.activeElement !== el) el.focus({ preventScroll: true });
+      } else if (document.activeElement === el) {
+        el.blur();
+        pre.focus({ preventScroll: true });
+      }
+    };
+    syncInputRef.current = syncInput;
+
     const flush = () => {
       raf = 0;
       if (!screen || rowEls.length === 0) return;
       for (const y of screen.takeDirty()) rowEls[y].innerHTML = rowHtml(screen.rowRuns(y));
+      syncInput();
     };
 
     const addRow = () => {
@@ -163,16 +185,13 @@ export default function ScreenView({
     };
   }, [program]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Programs that read text keep a real (invisible) input focused so phones
-  // show their keyboard. Desktop keys arrive through the window listener and
-  // are cancelled there; on-screen keyboards often report "Unidentified" keys,
-  // so their text is taken from beforeinput instead.
+  // Desktop keys arrive through the window listener and are cancelled there;
+  // on-screen keyboards often report "Unidentified" keys, so their text is
+  // taken from the hidden input's beforeinput instead.
   useEffect(() => {
     const el = inputRef.current;
-    if (!program.textInput || !el) return;
-    el.focus({ preventScroll: true });
+    if (!el) return;
+    if (program.textInput) el.focus({ preventScroll: true });
     // Native listener: React's onBeforeInput is synthesised from legacy
     // textInput events and misses what on-screen keyboards actually send.
     const onBeforeInput = (ev: InputEvent) => {
@@ -190,6 +209,14 @@ export default function ScreenView({
   }, [program]);
 
   const onPointerDown = (e: PointerEvent<HTMLPreElement>) => {
+    if (program.tap) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const { w, h } = cellRef.current;
+      program.tap(Math.floor((e.clientY - rect.top) / h), Math.floor((e.clientX - rect.left) / w));
+      // Inside the gesture, so a phone keyboard may open if the tap asked for text.
+      syncInputRef.current();
+      return;
+    }
     if (program.textInput) inputRef.current?.focus({ preventScroll: true });
     else if (e.pointerType === "touch") program.key("tap", false);
   };
@@ -210,19 +237,18 @@ export default function ScreenView({
         onPointerDown={onPointerDown}
         onWheel={onWheel}
       />
-      {program.textInput && (
-        <input
-          ref={inputRef}
-          className="term-hidden-input"
-          aria-label="program input"
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          onChange={() => undefined}
-          value=""
-        />
-      )}
+      <input
+        ref={inputRef}
+        className="term-hidden-input"
+        aria-label="program input"
+        tabIndex={-1}
+        autoComplete="off"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        onChange={() => undefined}
+        value=""
+      />
     </div>
   );
 }

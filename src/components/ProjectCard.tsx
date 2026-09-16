@@ -1,141 +1,82 @@
-"use client";
-
-import { Card, Grid, VStack, HStack, Badge, Heading, Text, Button } from "@astryxdesign/core";
-import { PinnedRepo } from "@/lib/github";
+import { Card, VStack, HStack, Heading, Text } from "@astryxdesign/core";
+import type { PinnedRepo } from "@/lib/github";
 
 interface ProjectCardProps {
   project: PinnedRepo;
 }
 
-export default function ProjectCard({ project }: ProjectCardProps) {
-  const updatedDate = new Date(project.updatedAt)
-    .toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-    .toUpperCase();
+/** "Sep 8" — the corner date. Year is implied; the full date lives in the shell's `work` view. */
+function shortDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()}`;
+}
 
-  const significantLanguages = project.languages.filter(
-    (lang) => lang.percentage > 1,
-  );
+/**
+ * A compact repo card: language and date, the name as the loudest thing,
+ * two lines of description, the language mix as one segmented rule, then
+ * stars/forks and the links as plain text. Three fit in a row.
+ */
+export default function ProjectCard({ project }: ProjectCardProps) {
+  const languages = project.languages.filter((lang) => lang.percentage > 1);
+  const hasCounts = project.stargazerCount > 0 || project.forkCount > 0;
 
   return (
-    <Card padding={6} className="overflow-hidden sm:p-8">
-      <Grid columns={{ minWidth: 320, max: 2 }} gap={8}>
-        <VStack gap={0}>
-          <HStack gap={2} wrap="wrap" className="mb-4">
-            <Badge variant="neutral" label={`Updated ${updatedDate}`} />
-            {project.primaryLanguage && (
-              <Badge
-                variant="neutral"
-                label={
-                  <HStack gap={2} vAlign="center" as="span">
-                    <span
-                      className="size-2"
-                      style={{ backgroundColor: project.primaryLanguage.color }}
-                      aria-hidden
-                    />
-                    {project.primaryLanguage.name}
-                  </HStack>
-                }
+    <Card padding={5} className="h-full">
+      <VStack gap={3} height="100%">
+        <HStack gap={2} hAlign="between" vAlign="center">
+          <Text type="supporting" as="span" color="secondary" className="text-[13px]">
+            <HStack gap={1.5} vAlign="center" as="span">
+              <span
+                className="size-2 shrink-0 bg-[var(--border)]"
+                style={project.primaryLanguage ? { backgroundColor: project.primaryLanguage.color } : undefined}
+                aria-hidden
               />
-            )}
-          </HStack>
+              {project.primaryLanguage?.name ?? "No language data"}
+            </HStack>
+          </Text>
+          <Text type="label" as="span" color="secondary" className="caps-label whitespace-nowrap text-[10px]">
+            {shortDate(project.updatedAt)}
+          </Text>
+        </HStack>
 
-          <Heading level={3} className="font-display text-[clamp(30px,3.5vw,44px)] font-medium leading-[1.05]">
-            <a
-              href={project.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="decoration-accent/30 underline-offset-8 hover:underline"
-            >
-              {project.name}
+        <Heading level={3} className="font-display text-[26px] leading-[1.1] tracking-[-0.01em] [overflow-wrap:anywhere]">
+          <a
+            href={project.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-text-primary decoration-accent/30 underline-offset-4 hover:underline"
+          >
+            {project.name}
+          </a>
+        </Heading>
+
+        <Text type="body" as="p" color="secondary" className="line-clamp-2 min-h-[42px] text-sm leading-[1.5]">
+          {project.description}
+        </Text>
+
+        {/* The language mix as proportion: one 4px rule, one segment per language. */}
+        <HStack gap={0} className="mt-0.5 h-1 bg-tertiary" aria-hidden>
+          {languages.map((lang) => (
+            <span key={lang.name} className="h-full" style={{ flex: lang.percentage, backgroundColor: lang.color }} />
+          ))}
+        </HStack>
+
+        <HStack gap={2} hAlign="between" vAlign="center" className="mt-auto text-[13px]">
+          <Text type="supporting" as="span" color="secondary" hasTabularNumbers className="text-[13px]">
+            {hasCounts ? `★ ${project.stargazerCount} · ⑂ ${project.forkCount}` : "—"}
+          </Text>
+          <HStack gap={3} as="span">
+            <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              Repo ↗
             </a>
-          </Heading>
-
-          {project.description && (
-            <Text type="large" as="p" color="secondary" className="mt-5 max-w-2xl leading-[1.55]">
-              {project.description}
-            </Text>
-          )}
-
-          <HStack gap={3} wrap="wrap" vAlign="center" className="mt-8">
-            {project.stargazerCount > 0 && (
-              <Badge variant="neutral" label={`Stars ${project.stargazerCount}`} />
-            )}
-            {project.forkCount > 0 && (
-              <Badge variant="neutral" label={`Forks ${project.forkCount}`} />
-            )}
-            <Button
-              label="Repository ↗"
-              variant="secondary"
-              href={project.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className=""
-            />
             {project.homepageUrl && (
-              <Button
-                label="Live ↗"
-                variant="primary"
-                href={project.homepageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className=""
-              />
+              <a href={project.homepageUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                Live ↗
+              </a>
             )}
           </HStack>
-        </VStack>
-
-        <Card variant="muted" padding={5} className="">
-          <HStack gap={4} hAlign="between" vAlign="center" className="mb-5">
-            <Text type="label" color="secondary" className="text-xs">
-              Language mix
-            </Text>
-            <Text type="label" color="secondary" className="text-[0.68rem]">
-              GitHub API
-            </Text>
-          </HStack>
-
-          {significantLanguages.length > 0 ? (
-            <VStack gap={4}>
-              {significantLanguages.map((lang) => (
-                <VStack gap={0} key={lang.name}>
-                  <HStack gap={3} hAlign="between" vAlign="center" className="mb-2 text-sm">
-                    <HStack gap={2} vAlign="center" as="span">
-                      <span
-                        className="size-2"
-                        style={{ backgroundColor: lang.color }}
-                        aria-hidden
-                      />
-                      <Text type="body" color="primary">
-                        {lang.name}
-                      </Text>
-                    </HStack>
-                    <Text type="body" color="secondary" hasTabularNumbers>
-                      {lang.percentage.toFixed(1)}%
-                    </Text>
-                  </HStack>
-                  <div className="h-2 overflow-hidden bg-muted">
-                    <div
-                      className="h-full"
-                      style={{
-                        width: `${Math.max(lang.percentage, 4)}%`,
-                        backgroundColor: lang.color,
-                      }}
-                    />
-                  </div>
-                </VStack>
-              ))}
-            </VStack>
-          ) : (
-            <Text type="body" color="secondary" as="p" className="leading-relaxed">
-              No significant language breakdown reported for this repository.
-            </Text>
-          )}
-        </Card>
-      </Grid>
+        </HStack>
+      </VStack>
     </Card>
   );
 }
