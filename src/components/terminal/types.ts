@@ -45,8 +45,12 @@ export interface ProgramHost {
 export interface ScreenProgram {
   /** Called once the grid has been measured. Returns the screen to render. */
   start(size: { rows: number; cols: number }, host: ProgramHost): Screen;
-  /** A key press: `KeyboardEvent.key`, or "tap" for a touch on the screen. */
-  key(key: string, ctrl: boolean, shift?: boolean): void;
+  /**
+   * A key press: `KeyboardEvent.key`, or "tap" for a touch on the screen.
+   * Returns `false` to decline the key — the host then treats it as its own
+   * (an unused Escape closes the window). Anything else means consumed.
+   */
+  key(key: string, ctrl: boolean, shift?: boolean): boolean | void;
   /** The terminal is going away; release timers. May run after `exit`. */
   stop(): void;
   /** Take Escape for itself instead of letting it close the terminal. */

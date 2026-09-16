@@ -114,8 +114,12 @@ export default function Terminal({
 
   // While a program runs, keys go to it, not the page. Capture phase so the
   // launcher's backtick toggle does not fire; Escape and ⌘K are left alone so
-  // the terminal can still be closed. Browser shortcuts (⌘R, ⌘W, ⌘C…) pass
-  // through; Ctrl-C is the program's interrupt, as in a terminal.
+  // the terminal can still be closed. A program that captures Escape gets it
+  // first, and closes the window only by declining it (returning false) —
+  // so the fake claude can interrupt and clear input with it while an Escape
+  // on an idle prompt still closes the terminal, as the title bar promises.
+  // Browser shortcuts (⌘R, ⌘W, ⌘C…) pass through; Ctrl-C is the program's
+  // interrupt, as in a terminal.
   useEffect(() => {
     if (!program) return;
     const onKey = (e: KeyboardEvent) => {
@@ -130,11 +134,12 @@ export default function Terminal({
       if (MODIFIER_KEYS.has(e.key)) return;
       e.preventDefault();
       e.stopPropagation();
-      program.key(e.key, e.ctrlKey, e.shiftKey);
+      const consumed = program.key(e.key, e.ctrlKey, e.shiftKey);
+      if (e.key === "Escape" && consumed === false) onClose();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [program]);
+  }, [program, onClose]);
 
   // ---- drag (desktop) ----
   useEffect(() => {
