@@ -974,14 +974,15 @@ iframe[src*="hcaptcha"] {
   .nf-table dd:last-of-type { margin-bottom: 0; }
   .nf-contact { display: none; }
 
+  /* Name on its own line, then "lang · ★ n · ⑂ n" as one 12px meta row. */
   .nf-pins { display: flex; flex-direction: column; gap: 9px; margin-top: 3px; }
-  .nf-pin { display: flex; flex-direction: column; }
-  .nf-pin-name { order: -1; align-self: flex-start; }
+  .nf-pin { display: flex; flex-wrap: wrap; align-items: center; }
+  .nf-pin-name { order: -1; flex-basis: 100%; align-self: flex-start; }
   .nf-pin-lang,
-  .nf-pin-stats { display: inline; font-size: 12px; white-space: normal; }
-  .nf-pin-dot { display: inline-block; vertical-align: 0; margin-right: 7px; }
+  .nf-pin-stats { font-size: 12px; gap: 0; }
+  .nf-pin-dot { margin-right: 7px; }
   .nf-pin-lang::after,
-  .nf-pin-stats .nf-stat:first-child::after { content: " · "; }
+  .nf-pin-stats .nf-stat:first-child::after { content: " · "; white-space: pre; }
   .nf-pin-stats .nf-stat { min-width: 0; }
 
   .nf-swatches span { flex: 1; width: auto; height: 14px; }
@@ -1020,7 +1021,29 @@ iframe[src*="hcaptcha"] {
   .nf-shell .nf-cursor { height: 15px; vertical-align: 0; }
 }
 
+/* Under sm the nav card loses its section links (HoverMenu hides them), and
+   what is left — Terminal, the theme toggle, Email — grows to 44pt rows. */
+@media (max-width: 639px) {
+  .site-nav button,
+  .site-nav a {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  .site-nav button[aria-label] { min-width: 44px; }
+}
+
 @media (max-width: 760px) {
+  /* A 52pt square showing only >_ — the desktop pill is 33pt tall, under the
+     touch minimum. Lifted off the home indicator by the safe-area inset. */
+  .term-launch {
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    font-size: 17px;
+    box-shadow: var(--elev-raised);
+  }
   .term-launch .kbd,
   .term-launch .label { display: none; }
 
@@ -1043,9 +1066,37 @@ iframe[src*="hcaptcha"] {
     box-shadow: none;
     overscroll-behavior: contain;
   }
-  .term-bar { cursor: default; }
+  /* The strip behind the status bar takes the chrome grey, not the ink, so
+     the notch and the dark status glyphs stay legible. The bar itself is 32pt
+     and the close control a 44pt target. */
+  .term-win .term-bar {
+    height: calc(32px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 0 0 11px;
+    cursor: default;
+  }
+  .term-bar .lights { gap: 7px; }
+  .term-bar .lights span { width: 11px; height: 11px; }
   .term-bar .hint { display: none; }
-  .term-close { display: block; }
+  .term-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 32px;
+    padding: 0;
+    font-size: 19px;
+  }
+  /* Scrollback anchors to the bottom, so when the keyboard opens the last
+     output stays against the input row instead of the top of the buffer. */
+  .term-body { display: flex; flex-direction: column; }
+  .term-body > :first-child { margin-top: auto; }
+  /* 16px is the threshold below which iOS zooms the page on focus. The row
+     clears the home indicator when no keyboard is up. */
+  .term-inputrow {
+    font-size: 16px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .term-ghost .tabhint { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
