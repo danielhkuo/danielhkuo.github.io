@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent } from "react";
+import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
 
 /** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
 export interface HeaderProject {
@@ -22,13 +23,9 @@ function openShell(trigger: HTMLElement | null) {
   );
 }
 
-/** `~ $` — the prompt as the site's zsh theme prints it. */
+/** zsh's stock prompt, `%n@%m %1~ %# ` — uncoloured, as in a fresh Terminal. */
 function Prompt() {
-  return (
-    <>
-      <span className="nf-path">~</span> <span className="nf-dollar">$</span>{" "}
-    </>
-  );
+  return <>daniel@portfolio ~ %{" "}</>;
 }
 
 function Cursor() {
@@ -58,32 +55,18 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
     <header id="about" className="nf scroll-mt-28 px-5 pt-24 pb-16 sm:px-8 sm:pt-40 lg:px-10">
       <div className="nf-frame">
         <div className="term-bar static">
-          <div className="lights" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </div>
+          <Lights />
+          <ProxyIcon />
           <div className="title">
             daniel — -zsh<span className="nf-title-dims"> — 132×38</span>
           </div>
-          <button
-            type="button"
-            className="hint nf-hint"
-            data-terminal-trigger=""
-            aria-haspopup="dialog"
-            aria-label="Open the live shell (⌘K)"
-            onClick={(e) => openShell(e.currentTarget)}
-          >
-            ⌘K
-          </button>
         </div>
-
-        {/* The body is not itself a control — the ⌘K hint, the caption and
-            the mobile `./shell` row are the accessible triggers. */}
+        {/* The body is not itself a control — the nav's Terminal button, the
+            mobile `./shell` row and ⌘K are the accessible triggers. */}
         <div className="nf-body ink-panel" onClick={onBodyClick}>
           <p className="nf-cmd">
             <Prompt />
-            <span className="nf-exec">neofetch</span>
+            neofetch
           </p>
 
           <div className="nf-grid">
@@ -163,16 +146,16 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
                 </dd>
               </dl>
 
-              {/* neofetch's colour blocks — the 16 ANSI slots of the panel's One Dark. */}
+              {/* neofetch's colour blocks — Terminal.app's 16 built-in ANSI colours. */}
               <div className="nf-swatches" aria-hidden>
                 <div>
                   {Array.from({ length: 8 }, (_, i) => (
-                    <span key={i} style={{ background: `var(--ink-ansi-${i})` }} />
+                    <span key={i} style={{ background: `var(--term-ansi-${i})` }} />
                   ))}
                 </div>
                 <div>
                   {Array.from({ length: 8 }, (_, i) => (
-                    <span key={i} style={{ background: `var(--ink-ansi-${i + 8})` }} />
+                    <span key={i} style={{ background: `var(--term-ansi-${i + 8})` }} />
                   ))}
                 </div>
               </div>
@@ -186,10 +169,10 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
 
           <div className="nf-actions">
             <a className="nf-action nf-link" href={`mailto:${EMAIL}`}>
-              $ mail {EMAIL}
+              % mail {EMAIL}
             </a>
             <a className="nf-action nf-link" href={RESUME} target="_blank" rel="noopener noreferrer">
-              $ open resume.pdf
+              % open resume.pdf
             </a>
             <button
               type="button"
@@ -199,7 +182,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
               onClick={(e) => openShell(e.currentTarget)}
             >
               <span>
-                $ <span className="nf-exec nf-shell-name">./shell</span>
+                % <span className="nf-shell-name">./shell</span>
               </span>
               <Cursor />
             </button>
@@ -207,15 +190,6 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
         </div>
       </div>
 
-      <button
-        type="button"
-        className="nf-caption"
-        data-terminal-trigger=""
-        aria-haspopup="dialog"
-        onClick={(e) => openShell(e.currentTarget)}
-      >
-        Click any line to open the live shell
-      </button>
     </header>
   );
 }

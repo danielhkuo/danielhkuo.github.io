@@ -1,7 +1,7 @@
 "use client";
 
 import { Theme } from "@astryxdesign/core";
-import { atomOneTheme } from "@/theme/atom-one";
+import { flexokiTheme } from "@/theme/flexoki";
 import { useThemeProviderMode } from "@/lib/theme";
 
 export default function AstryxThemeProvider({
@@ -16,7 +16,7 @@ export default function AstryxThemeProvider({
   const mode = useThemeProviderMode();
 
   return (
-    <Theme theme={atomOneTheme} mode={mode}>
+    <Theme theme={flexokiTheme} mode={mode}>
       {children}
     </Theme>
   );

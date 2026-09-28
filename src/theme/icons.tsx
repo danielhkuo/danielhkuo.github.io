@@ -1,8 +1,8 @@
 /**
  * @file icons.tsx
  * @input Uses lucide-react icon components, IconRegistry type
- * @output Exports atomOneIconRegistry for the Atom One theme
- * @position Icon configuration for the Atom One theme; consumed by atomOneTheme.ts
+ * @output Exports flexokiIconRegistry for the Flexoki theme
+ * @position Icon configuration for the Flexoki theme; consumed by flexokiTheme.ts
  *
  * Maps semantic icon names to Lucide icon components.
  * These icons are bundled with the theme, not with @astryxdesign/core.
@@ -47,7 +47,7 @@ const iconProps = {
   'aria-hidden': true as const,
 };
 
-export const atomOneIconRegistry: IconRegistry = {
+export const flexokiIconRegistry: IconRegistry = {
   close: <X {...iconProps} />,
   chevronDown: <ChevronDown {...iconProps} />,
   chevronLeft: <ChevronLeft {...iconProps} />,

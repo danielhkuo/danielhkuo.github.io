@@ -1,5 +1,5 @@
 /**
- * Recolour the 郭 favicon set onto the Atom One Dark palette.
+ * Recolour the 郭 favicon set onto the Flexoki palette.
  *
  * The source art is three regions: a near-white square, a rounded warm-cream
  * tile with paper grain, and the navy glyph. Rather than redraw the mark (which
@@ -26,10 +26,11 @@
 import sharp from "sharp";
 import { writeFile } from "node:fs/promises";
 
-// Atom One Dark: --bg for both the tile and the region outside it, and the One
-// blue for the glyph. Outer == tile flattens the source art's rounded-rect into
-// a full-bleed square, matching the site's squared-off corners.
-const DEFAULTS = ["#282c34", "#282c34", "#61afef"];
+// Flexoki: paper for both the tile and the region outside it, and blue 600 for
+// the glyph — the source art's own cream-and-navy, in Flexoki's inks. Outer ==
+// tile flattens the rounded-rect into a full-bleed square, matching the
+// site's squared-off corners.
+const DEFAULTS = ["#FFFCF0", "#FFFCF0", "#205EA6"];
 
 const SRC_DIR = "assets/favicon-src";
 const NAMES = [

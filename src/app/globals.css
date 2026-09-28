@@ -11,39 +11,35 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "@astryxdesign/core/tailwind-theme.css";
 
-/* Portfolio — Atom One Light palette, Sneaky Times display + IBM Plex Sans body.
-   Mirrors src/theme/atomOneTheme.ts so the hand-rolled panels below match the
-   Astryx atom-one components. Canonical One Light values are noted per line;
-   the mid greys are interpolated along the same ramp to hold WCAG AA on body
-   copy (One's mono-3 is a comment colour, too dim for UI text). */
+/* Portfolio — Flexoki (stephango.com/flexoki), Sneaky Times display + IBM
+   Plex Sans body. Mirrors src/theme/flexokiTheme.ts so the hand-rolled panels
+   below match the Astryx components. Flexoki names each role once and fills
+   it from opposite ends of one warm-grey ramp; the role is noted per line.
+   Page and cards share the paper: cards are drawn by their border, the way
+   Flexoki separates panes, and bg-2 is the recessed step. */
 :root {
-  --bg: #fafafa;            /* One Light editor background */
-  --surface: #ffffff;       /* cards / panels, one step up from the page */
-  --surface-sunken: #f0f0f1;
+  --bg: #FFFCF0;            /* bg (paper) */
+  --surface: #FFFCF0;       /* bg — cards are their ui-2 border */
+  --surface-sunken: #F2F0E5; /* bg-2 */
 
-  --fg: #383a42;            /* mono-1 */
-  --fg-2: #50535d;
-  --muted: #696c77;         /* mono-2 */
-  --meta: #a0a1a7;          /* mono-3 (comments) */
+  --fg: #100F0F;            /* tx (black) */
+  --fg-2: #403E3C;          /* base-800 — secondary prose */
+  --muted: #6F6E69;         /* tx-2 */
+  --meta: #878580;          /* base-500 — hints; tx-3 is too faint for text */
 
-  --border: #d4d5d9;
-  --border-soft: #e4e4e7;
+  --border: #DAD8CE;        /* ui-2 */
+  --border-soft: #E6E4D9;   /* ui */
 
-  /* Accent is One's blue rather than the cursor blue (#526fff) — it reads as
-     "Atom One" and holds contrast far better as link/label text. Deepened one
-     step from the canonical #4078f2: the accent paints 10px eyebrow labels and
-     the nav pill behind white text, and #4078f2 lands at 3.9–4.1:1 there (the
-     chocolate accent it replaces passed at 4.6). #3768d8 clears 4.5:1 on both
-     --bg and --surface; the canonical value lives on as --accent-light. */
-  --accent: #3768d8;
-  --accent-on: #ffffff;
-  --accent-light: #4078f2;
+  /* Flexoki blue: 600 on paper (6.3:1), and 700 when pressed. */
+  --accent: #205EA6;
+  --accent-on: #FFFCF0;
+  --accent-light: #4385BE;
   --accent-hover: var(--accent);
-  --accent-active: #2f5bbd;
+  --accent-active: #1A4F8C;
 
-  --success: #50a14f;       /* green */
-  --warn: #c18401;          /* orange 2 */
-  --danger: #e45649;        /* red 1 */
+  --success: #66800B;       /* green 600 */
+  --warn: #AD8301;          /* yellow 600 */
+  --danger: #AF3029;        /* red 600 */
 
   /* The next/font vars (--font-sneaky-times / --font-ibm-plex-sans) are applied
      to <html> in layout.tsx, so they resolve here at :root. They must stay on
@@ -54,6 +50,8 @@
      now, so that failure mode is loud rather than silent. */
   --font-display-family: var(--font-sneaky-times), Georgia, "Times New Roman", serif;
   --font-body-family: var(--font-ibm-plex-sans), system-ui, -apple-system, sans-serif;
+  /* macOS UI font, for Terminal.app's title bar. */
+  --font-ui-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   /* macOS Terminal.app's font, reached without shipping anything: `ui-monospace`
      resolves to SF Mono on macOS Safari/Chrome, and the two explicit names cover
      older engines. SF Mono and Menlo are Apple-licensed and cannot be served as
@@ -113,17 +111,17 @@
   --elev-flat: none;
   --elev-ring: 0 0 0 1px var(--border);
   --elev-ring-accent: 0 0 0 1px var(--accent);
-  --elev-raised: 0 1px 2px rgba(56, 58, 66, 0.05), 0 10px 30px rgba(56, 58, 66, 0.07);
+  --elev-raised: 0 1px 2px rgba(16, 15, 15, 0.05), 0 10px 30px rgba(16, 15, 15, 0.07);
   --focus-ring: 0 0 0 2px var(--accent-active);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-  --tag-bg-faint: #f4f4f5;
-  --tag-bg-soft: #eeeef0;
-  --tag-bg-base: #e6e6e9;
-  --tag-bg-strong: #dcdde1;
+  --tag-bg-faint: #F2F0E5;  /* bg-2 */
+  --tag-bg-soft: #E6E4D9;   /* ui */
+  --tag-bg-base: #DAD8CE;   /* ui-2 */
+  --tag-bg-strong: #CECDC3; /* ui-3 */
 
   /* Tailwind / legacy aliases used by the existing component tree. */
   --color-primary: var(--accent);
@@ -143,81 +141,53 @@
   --available: var(--success);
   --divider: var(--border);
 
-  /* "Ink" panel tokens — the terminal/ASCII panels that stay dark in BOTH
-     themes, so they are Atom One Dark even while the page is One Light. Only
-     --panel-ink/-ink-2 deepen under [data-astryx-media="dark"];
-     --panel-on/-accent are shared across themes. */
-  --panel-ink: #282c34;     /* One Dark editor background */
-  --panel-ink-2: #3e4451;   /* One Dark selection — rules on the panel */
-  --panel-on: #abb2bf;      /* One Dark mono-1 */
-  --panel-meta: #828997;    /* One Dark mono-2 — hints on the panel */
-  --panel-accent: #61afef;  /* One Dark blue */
-  --panel-yellow: #e5c07b;  /* One Dark orange 2 — neofetch's key column */
-  --panel-green: #98c379;   /* One Dark green — the command just run */
-  --panel-purple: #c678dd;  /* One Dark magenta — the prompt's $ */
-
-  /* The 16 ANSI slots of the ink panel's One Dark. The live terminal maps
-     these onto --ansi-* in dark mode, and the header's neofetch colour blocks
-     paint them directly, so the two never drift apart. */
-  --ink-ansi-0: #282c34;
-  --ink-ansi-1: #e06c75;
-  --ink-ansi-2: #98c379;
-  --ink-ansi-3: #d19a66;
-  --ink-ansi-4: #61afef;
-  --ink-ansi-5: #c678dd;
-  --ink-ansi-6: #56b6c2;
-  --ink-ansi-7: #abb2bf;
-  --ink-ansi-8: #5c6370;
-  --ink-ansi-9: #e88088;
-  --ink-ansi-10: #c3e88d;
-  --ink-ansi-11: #e5c07b;
-  --ink-ansi-12: #7cbef2;
-  --ink-ansi-13: #d48be6;
-  --ink-ansi-14: #6fc9d4;
-  --ink-ansi-15: #ffffff;
+  /* "Ink" panel tokens — the neofetch header's body. It is a stock macOS
+     Terminal (Basic profile, dark appearance) in BOTH site themes, like the
+     live window; see the Terminal section. neofetch prints its title and keys
+     in colour; here they are Apple's system cyan and system grey (dark). */
+  --panel-ink: #1e1e1e;
+  --panel-ink-2: #3a3a3a;   /* rules on the panel */
+  --panel-on: #ffffff;
+  --panel-meta: #98989d;    /* systemGray */
+  --panel-accent: #ffffff;  /* links: plain, underlined */
+  --nf-title: #64d2ff;      /* systemCyan — user@host */
+  --nf-key: #98989d;        /* systemGray — the key column */
 }
 
 /* Site-wide dark theme. Every component derives its colors from these tokens,
    so overriding the base palette here cascades everywhere via var() resolution.
    Dark is driven by `data-astryx-media="dark"` on <html> (set by the pre-paint
-   script in layout.tsx and lib/theme.ts), the same attribute the Astryx
-   chocolate theme keys off — NOT a `.dark` class. */
-/* Atom One Dark. --fg and --meta are One Dark's canonical mono-1 / mono-2;
-   --fg-2 and --muted are interpolated along the same grey ramp. One's greys are
-   tuned for code on #282c34, where mono-2 is deliberately de-emphasised — on a
-   content page it carries real prose, so the content tiers (--fg, --fg-2,
-   --muted) are lifted to clear 4.5:1 against --surface, the lightest ground
-   they land on. --meta stays canonical mono-2 as the hint tier (>3:1). */
+   script in layout.tsx and lib/theme.ts) — NOT a `.dark` class. */
+/* Flexoki dark: the same roles from the other end of the ramp. Cards step up
+   to bg-2 here so they lift off the black, and accents move to the 400s. */
 [data-astryx-media="dark"] {
-  --bg: #282c34;            /* One Dark editor background */
-  --surface: #2c313a;
-  --surface-sunken: #21252b;
+  --bg: #100F0F;            /* bg (black) */
+  --surface: #1C1B1A;       /* bg-2 */
+  --surface-sunken: #100F0F;
 
-  --fg: #abb2bf;            /* mono-1 */
-  --fg-2: #9da5b4;
-  --muted: #939bab;
-  --meta: #828997;          /* mono-2 */
+  --fg: #CECDC3;            /* tx */
+  --fg-2: #B7B5AC;          /* base-300 */
+  --muted: #878580;         /* tx-2 — 4.7:1 on bg-2 */
+  --meta: #6F6E69;          /* base-600 — hints (>3:1) */
 
-  --border: #3e4451;        /* One Dark selection */
-  --border-soft: #353b45;
+  --border: #343331;        /* ui-2 */
+  --border-soft: #282726;   /* ui */
 
-  --accent: #61afef;        /* blue */
-  --accent-on: #282c34;
-  --accent-light: #7cbef2;
-  --accent-active: #7cbef2;
+  /* Blue 300, not Flexoki's 400: the accent is link text on cards, and 400
+     reaches only 4.4:1 on bg-2 (300: 6.1:1). */
+  --accent: #66A0C8;
+  --accent-on: #100F0F;
+  --accent-light: #92BFDB;
+  --accent-active: #92BFDB;
 
-  --success: #98c379;       /* green */
-  --warn: #e5c07b;          /* orange 2 */
-  --danger: #e06c75;        /* red 1 */
+  --success: #879A39;       /* green 400 */
+  --warn: #D0A215;          /* yellow 400 */
+  --danger: #D14D41;        /* red 400 */
 
-  --tag-bg-faint: #2c313a;
-  --tag-bg-soft: #333842;
-  --tag-bg-base: #3a404b;
-  --tag-bg-strong: #434a57;
-
-  /* Panels sit even darker than surfaces in dark mode (design tokens). */
-  --panel-ink: #21252b;
-  --panel-ink-2: #333842;
+  --tag-bg-faint: #1C1B1A;
+  --tag-bg-soft: #282726;
+  --tag-bg-base: #343331;
+  --tag-bg-strong: #403E3C;
 
   --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 34px rgba(0, 0, 0, 0.4);
 }
@@ -477,35 +447,92 @@ iframe[src*="hcaptcha"] {
 }
 
 /* =========================================================================
-   Terminal — interactive shell popup, built to read as a real macOS
-   Terminal.app window.
+   Terminal — interactive shell popup, a replica of macOS 26 Terminal.app
+   with the stock "Basic" profile in the dark appearance.
 
-   What makes Terminal.app recognisable is the chrome, so that part is
-   measured rather than approximated: 10px window radius, a 28px title bar
-   with the title CENTRED (not left-aligned beside the lights, which is the
-   usual web tell), 12px traffic lights spaced 8px starting 13px from the
-   left, each with the darker rim macOS draws, and the deep window shadow.
+   Everything here is measured off real Terminal windows (2x captures):
+     - continuous-curvature corners (see --term-radius), 32pt title bar,
+       no separator under it
+     - 14pt traffic lights on a 23pt pitch, first centred at (16, 16)
+     - LEADING title: the cwd proxy icon (14×12 folder) at x 83, then
+       "user — process — cols×rows" in 13pt bold, baseline 20.5pt
+     - Basic: SF Mono 11pt on a 7pt × 14pt cell grid inset 10pt / 8.5pt —
+       so 80×24 is exactly 580 × 385
+     - #1e1e1e ground, white text, a #9d9d9d full-cell block cursor (hollow
+       when the window is inactive)
+   Inactive windows grey the lights, title and icon, as macOS does.
 
-   The chrome is fixed macOS grey in both themes because Terminal.app's own
-   title bar follows the system, not the profile. The content area follows the
-   site's Atom One palette — the same way a real Terminal window shows whatever
-   colour profile you picked inside Apple's chrome.
+   None of it follows the site theme: this is a stock Terminal on a Mac in
+   dark mode, and only the page around it is themed. The 16 ANSI colours are
+   Terminal.app's own built-in palette.
 
-   Type is --font-mono-family, which resolves to SF Mono on macOS.
+   Type: SF Mono is only reachable through `ui-monospace`, which only Safari
+   supports, and Apple's license does not allow serving it. Chromium and
+   Firefox get Menlo — Terminal's previous default — and `letter-spacing:
+   calc(7px - 1ch)` pulls either face onto Terminal's 7pt cell.
    ========================================================================= */
+/* Terminal.app's built-in ANSI palette, shared by both windows. */
+.term-win,
+.nf-frame {
+  --term-ansi-0: #000000;
+  --term-ansi-1: #c23621;
+  --term-ansi-2: #25bc24;
+  --term-ansi-3: #adad27;
+  --term-ansi-4: #492ee1;
+  --term-ansi-5: #d338d3;
+  --term-ansi-6: #33bbc8;
+  --term-ansi-7: #cbcccd;
+  --term-ansi-8: #818383;
+  --term-ansi-9: #fc391f;
+  --term-ansi-10: #31e722;
+  --term-ansi-11: #eaec23;
+  --term-ansi-12: #5833ff;
+  --term-ansi-13: #f935f8;
+  --term-ansi-14: #14f0f0;
+  --term-ansi-15: #e9ebeb;
+}
 .term-win {
+  --term-cell: 7px;
+  --term-line: 14px;
+  /* Basic, dark appearance */
+  --bg: #1e1e1e;
+  --fg: #ffffff;
+  --muted: #ffffff;
+  --meta: var(--term-ansi-8);
+  --accent: #ffffff;
+  --success: var(--term-ansi-2);
+  --danger: var(--term-ansi-1);
+  --border: var(--term-ansi-8);
+  --term-cursor: #9d9d9d;
+  --term-selection: #3f638b;
+  --ansi-0: var(--term-ansi-0);
+  --ansi-1: var(--term-ansi-1);
+  --ansi-2: var(--term-ansi-2);
+  --ansi-3: var(--term-ansi-3);
+  --ansi-4: var(--term-ansi-4);
+  --ansi-5: var(--term-ansi-5);
+  --ansi-6: var(--term-ansi-6);
+  --ansi-7: var(--term-ansi-7);
+  --ansi-8: var(--term-ansi-8);
+  --ansi-9: var(--term-ansi-9);
+  --ansi-10: var(--term-ansi-10);
+  --ansi-11: var(--term-ansi-11);
+  --ansi-12: var(--term-ansi-12);
+  --ansi-13: var(--term-ansi-13);
+  --ansi-14: var(--term-ansi-14);
+  --ansi-15: var(--term-ansi-15);
+
   position: fixed;
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  /* The one radius left on the site. Everything else is squared off, but this
-     window and its round traffic lights are a macOS quotation, not site chrome
-     — squaring them stops it reading as Terminal.app. Set to 0 if the boxy
-     language should win here too. */
-  border-radius: 10px;
-  /* macOS active-window shadow: a tight contact shadow plus a wide soft one. */
+  color: var(--fg);
+  color-scheme: dark;
+  /* The one radius left on the site: this is a macOS quotation, not chrome. */
+  border-radius: var(--term-radius);
+  corner-shape: var(--term-corner);
   box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.28),
+    0 0 0 0.5px rgba(0, 0, 0, 0.45),
     0 12px 24px rgba(0, 0, 0, 0.22),
     0 28px 76px rgba(0, 0, 0, 0.36);
   z-index: 1000;
@@ -514,10 +541,18 @@ iframe[src*="hcaptcha"] {
   min-width: 320px;
   min-height: 200px;
   width: 580px;
-  height: 380px;
+  height: 385px;
   font-family: var(--font-mono-family);
+  font-size: 11px;
+  line-height: var(--term-line);
+  letter-spacing: calc(var(--term-cell) - 1ch);
+  font-variant-ligatures: none;
   animation: termpop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+/* The drag handle Chromium paints for `resize` is a web tell; the corner
+   still resizes. */
+.term-win::-webkit-resizer { background: transparent; }
+.term-win ::selection { background: var(--term-selection); color: inherit; }
 @keyframes termpop {
   from { transform: translateY(-8px) scale(0.985); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -525,36 +560,61 @@ iframe[src*="hcaptcha"] {
 /* Initial placement before the user drags — centered without transform (so it
    doesn't fight the termpop animation) and without reading window size at render. */
 .term-win.term-centered { inset: 0; margin: auto; }
+/* Green light: fill the viewport, like a zoomed window. */
+.term-win.term-zoomed {
+  inset: 12px !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0;
+  resize: none;
+}
 /* Title bar, body and input row. On desktop the window is the frame. */
 .term-frame { display: contents; }
 
-/* Title bar. Grid rather than flex so the title is centred against the WINDOW,
-   not against the leftover space between the lights and the hint — the lights
-   and hint columns are the same width, which is what keeps it honest. */
-/* macOS window chrome. On :root rather than the bar because on phones the
-   window's backdrop (the strip behind the status bar) takes it too. */
+/* macOS window corners are not circular: they ease into the edges (continuous
+   curvature). Fitted to the real window's edge profile, the corner is a
+   superellipse with exponent 2.65 over 20pt — `superellipse(K)` takes
+   log2 of the exponent. Engines without corner-shape (Safari, Firefox) get
+   the closest plain circle, 16pt, which is within ~1px through the middle
+   of the curve but meets the edges too early. */
 :root {
-  --term-chrome: #e4e4e4;
-  --term-chrome-edge: #c8c8c8;
-  --term-chrome-text: #4d4d4d;
+  --term-radius: 16px;
+  --term-corner: round;
 }
-[data-astryx-media="dark"] {
-  --term-chrome: #2c2c2c;
-  --term-chrome-edge: #1a1a1a;
-  --term-chrome-text: #b8b8b8;
+@supports (corner-shape: superellipse(2)) {
+  :root {
+    --term-radius: 20px;
+    --term-corner: superellipse(1.406);
+  }
+}
+
+/* macOS window chrome, dark appearance, in both site themes. On :root
+   rather than the bar because on phones the window's backdrop (the strip
+   behind the status bar) takes it too. */
+:root {
+  --term-chrome: #202020;
+  --term-chrome-text: #a5a5a5;
+  --term-chrome-text-inactive: #6b6b6b;
+  --term-chrome-rim: rgba(255, 255, 255, 0.18);
+  --term-light-inactive: #434343;
+  --term-folder: #5fbfee;
+  --term-folder-inactive: #959595;
 }
 .term-bar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  height: 28px;
-  padding: 0 13px;
+  height: 32px;
+  padding: 0 0 0 9px;
   background: var(--term-chrome);
-  border-bottom: 0.5px solid var(--term-chrome-edge);
+  /* The hairline highlight macOS draws along a window's top edge. */
+  box-shadow: inset 0 0.5px 0 var(--term-chrome-rim);
   color: var(--term-chrome-text);
-  /* Terminal.app sets the title in the UI font, never the monospace one. */
-  font-family: var(--font-body-family);
+  /* Terminal.app sets the title in the system UI font, never the monospace
+     one — and not the site's body face either. */
+  font-family: var(--font-ui-family);
   font-size: 13px;
+  font-weight: 700;
+  line-height: 32px;
   letter-spacing: 0;
   cursor: grab;
   flex-shrink: 0;
@@ -565,44 +625,55 @@ iframe[src*="hcaptcha"] {
 .term-bar.static { cursor: default; }
 
 /* Shared by the interactive window and the neofetch header. */
-.term-bar .lights { display: flex; gap: 8px; }
-.term-bar .lights span {
-  width: 12px;
-  height: 12px;
+.term-bar .lights { display: flex; gap: 9px; flex: none; }
+.term-bar .lights > * {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   /* macOS draws each light with a slightly darker rim of its own hue. */
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.55);
+  cursor: default;
 }
-.term-bar .lights span:nth-child(1) { background: #ff5f57; }
-.term-bar .lights span:nth-child(2) { background: #febc2e; }
-.term-bar .lights span:nth-child(3) { background: #28c840; }
+.term-bar .lights > :nth-child(1) { background: #fd5c61; }
+.term-bar .lights > :nth-child(2) { background: #fac806; }
+.term-bar .lights > :nth-child(3) { background: #34c75a; }
+/* The ×, − and ⤢ glyphs appear when the pointer is over the group. */
+.term-bar .lights svg { position: absolute; inset: 0; margin: auto; opacity: 0; }
+.term-bar .lights:hover svg { opacity: 1; }
 
+.term-bar .proxy {
+  flex: none;
+  width: 14px;
+  height: 12px;
+  margin: 0 5px 0 14px;
+  position: relative;
+  top: -1px;
+  color: var(--term-folder);
+}
 .term-bar .title {
-  justify-self: center;
   white-space: nowrap;
-  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
-.term-bar .hint {
-  justify-self: end;
-  color: inherit;
-  opacity: 0.75;
-  font-size: 11px;
-  font-family: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-}
-.term-bar .hint .kbd {
-  border: 1px solid currentColor;
-  border-radius: 0;
-  padding: 0 5px;
-  margin-left: 4px;
-  cursor: pointer;
-  opacity: 0.8;
-}
+
+/* Inactive window (the browser window lost focus — the page can't know about
+   other apps' windows): macOS greys the lights, dims the title and the proxy
+   icon, and Terminal hollows the cursor. */
+.term-win[data-inactive] .term-bar { color: var(--term-chrome-text-inactive); }
+.term-win[data-inactive] .lights > * { background: var(--term-light-inactive); box-shadow: none; }
+.term-win[data-inactive] .lights:hover > :nth-child(1) { background: #fd5c61; }
+.term-win[data-inactive] .lights:hover > :nth-child(2) { background: #fac806; }
+.term-win[data-inactive] .lights:hover > :nth-child(3) { background: #34c75a; }
+.term-win[data-inactive] .proxy { color: var(--term-folder-inactive); }
+
 .term-close {
-  display: none; /* desktop uses the "esc" hint; shown on mobile */
-  justify-self: end;
+  display: none; /* the red light closes on desktop; shown on mobile */
+  margin-left: auto;
   font-size: 16px;
   line-height: 1;
   color: inherit;
@@ -612,61 +683,49 @@ iframe[src*="hcaptcha"] {
   cursor: pointer;
 }
 
-/* Terminal.app sets its grid tight — roughly 1.2 line height at SF Mono 11pt.
-   1.3 keeps that density without making long output hard to scan on the web. */
+/* The scrollback AND the prompt: a real shell's input line is just the next
+   row of the buffer, directly under the last output — not a row pinned to the
+   window's bottom edge. 8.5pt top/bottom + 10pt sides is Terminal's inset. */
 .term-body {
   flex: 1 1 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px 12px;
-  font-size: 13px;
-  line-height: 1.3;
+  padding: 8.5px 10px;
 }
 .term-line { white-space: pre-wrap; word-break: break-word; }
 .term-line.cmd { color: var(--fg); }
-.term-line.cmd .ps { color: var(--meta); margin-right: 8px; user-select: none; }
-.term-line.out { color: var(--muted); }
 .term-line.ok { color: var(--fg); }
 .term-line.ok::before { content: "✓ "; color: var(--success); }
 .term-line.err { color: var(--fg); }
 .term-line.err::before { content: "✗ "; color: var(--danger); }
-.term-line .term-accent { color: var(--accent); font-weight: 600; }
+.term-line .term-accent { color: var(--accent); font-weight: 700; }
 
-.term-block { margin: 4px 0 10px; }
-.term-block .term-cols-title {
-  color: var(--meta);
-  margin-bottom: 4px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-size: 11px;
-}
-.term-cols { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
+/* Blocks stay on the character grid: whole blank lines, whole cells. */
+.term-block { margin: 0 0 var(--term-line); }
+.term-block .term-cols-title { color: var(--meta); text-transform: uppercase; }
+.term-cols { display: grid; grid-template-columns: max-content 1fr; gap: 0 calc(2 * var(--term-cell)); }
 .term-cols .k { color: var(--fg); white-space: nowrap; }
 .term-cols .v { color: var(--muted); }
 
-/* No rule above the prompt — a real shell's input line is just the next row of
-   the buffer, and the divider was the other big "this is a web widget" tell. */
 .term-inputrow {
   display: flex;
-  align-items: center;
-  padding: 0 12px 12px;
   position: relative;
-  flex-shrink: 0;
-  line-height: 1.3;
 }
-.term-inputrow .ps { color: var(--accent); margin-right: 8px; user-select: none; font-weight: 600; }
-.term-inputwrap { position: relative; flex: 1; display: flex; }
+/* zsh's default prompt, `%n@%m %1~ %# `, in the plain foreground. */
+.term-ps { white-space: pre; user-select: none; }
+.term-inputwrap { position: relative; flex: 1; display: flex; min-width: 0; }
 .term-input {
   width: 100%;
+  padding: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--fg);
   font: inherit;
-  caret-color: var(--accent);
-  /* Terminal draws a block cursor. Progressive enhancement — engines without
-     caret-shape keep the standard bar, which is a fine degradation. */
-  caret-shape: block;
+  letter-spacing: inherit;
+  /* The block cursor is drawn by .term-cursor; the native caret would sit
+     beside it. */
+  caret-color: transparent;
   position: relative;
   z-index: 2;
 }
@@ -680,13 +739,22 @@ iframe[src*="hcaptcha"] {
   white-space: pre;
 }
 .term-ghost .typed { color: transparent; }
-.term-ghost .tabhint {
-  margin-left: 10px;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0 5px;
-  font-size: 10px;
-  color: var(--meta);
+.term-ghost .tabhint { margin-left: var(--term-cell); }
+/* Full-cell block; the character under it is drawn in the background colour.
+   Above the input (z 3) so it covers the real glyph it inverts. */
+.term-cursor {
+  position: relative;
+  z-index: 3;
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: var(--term-cursor);
+  color: var(--bg);
+}
+.term-win[data-inactive] .term-cursor {
+  background: transparent;
+  color: transparent;
+  box-shadow: inset 0 0 0 1px var(--term-cursor);
 }
 
 /* Floating launcher button */
@@ -757,7 +825,7 @@ iframe[src*="hcaptcha"] {
 .term-grid-row {
   white-space: pre;
   overflow: hidden;
-  min-height: 1.3em;
+  min-height: var(--term-line);
 }
 .term-grid .tb { font-weight: 700; }
 .term-grid .tf0 { --c: var(--ansi-0); color: var(--c); }
@@ -781,56 +849,21 @@ iframe[src*="hcaptcha"] {
    a highlighted menu row. */
 .term-grid .ti { background: var(--c, var(--fg)); color: var(--bg); }
 
-/* ANSI palette — Atom One Light. cbonsai draws with 2/10 (leaves), 3/11
-   (wood) and 8 (pot), so those pairs are kept visibly apart. */
-.term-win {
-  --ansi-0: #383a42;
-  --ansi-1: #e45649;
-  --ansi-2: #50a14f;
-  --ansi-3: #986801;
-  --ansi-4: #4078f2;
-  --ansi-5: #a626a4;
-  --ansi-6: #0184bc;
-  --ansi-7: #696c77;
-  --ansi-8: #a0a1a7;
-  --ansi-9: #ca1243;
-  --ansi-10: #7cb342;
-  --ansi-11: #c18401;
-  --ansi-12: #526fff;
-  --ansi-13: #c678dd;
-  --ansi-14: #0997b3;
-  --ansi-15: #fafafa;
-}
-/* Atom One Dark — the ink panel's palette, declared once at :root. */
-[data-astryx-media="dark"] .term-win {
-  --ansi-0: var(--ink-ansi-0);
-  --ansi-1: var(--ink-ansi-1);
-  --ansi-2: var(--ink-ansi-2);
-  --ansi-3: var(--ink-ansi-3);
-  --ansi-4: var(--ink-ansi-4);
-  --ansi-5: var(--ink-ansi-5);
-  --ansi-6: var(--ink-ansi-6);
-  --ansi-7: var(--ink-ansi-7);
-  --ansi-8: var(--ink-ansi-8);
-  --ansi-9: var(--ink-ansi-9);
-  --ansi-10: var(--ink-ansi-10);
-  --ansi-11: var(--ink-ansi-11);
-  --ansi-12: var(--ink-ansi-12);
-  --ansi-13: var(--ink-ansi-13);
-  --ansi-14: var(--ink-ansi-14);
-  --ansi-15: var(--ink-ansi-15);
-}
-
 /* =========================================================================
    neofetch header — the page's masthead is a Terminal window that has just
    run `neofetch`: headshot as the logo block, the bio as the spec table, the
    16 colour blocks underneath. It borrows the live window's title bar
    (.term-bar) so the two read as the same app; the body is an ink panel, so
-   it stays One Dark in both themes.
+   it stays a stock dark Terminal in both themes.
    ========================================================================= */
 .nf-frame {
   max-width: 896px;
   margin: 0 auto;
+  /* A Terminal window like the live one, so the same corners — square
+     corners under a macOS title bar read as a web panel, not a window. */
+  border-radius: var(--term-radius);
+  corner-shape: var(--term-corner);
+  overflow: hidden;
   /* Same macOS window shadow as .term-win, a touch lighter for a resting window. */
   box-shadow:
     0 0 0 0.5px rgba(0, 0, 0, 0.28),
@@ -848,9 +881,6 @@ iframe[src*="hcaptcha"] {
 .nf-body p { text-wrap: initial; }
 .nf-cmd { color: var(--panel-on); }
 .nf-cmd.nf-idle { margin-top: 26px; }
-.nf-path { color: var(--panel-accent); }
-.nf-dollar { color: var(--panel-purple); }
-.nf-exec { color: var(--panel-green); }
 .nf-cursor {
   display: inline-block;
   width: 8px;
@@ -887,7 +917,7 @@ iframe[src*="hcaptcha"] {
   color: var(--panel-meta);
 }
 .nf-info { min-width: 0; }
-.nf-host { color: var(--panel-accent); font-weight: 600; }
+.nf-host { color: var(--nf-title); font-weight: 700; }
 .nf-host .nf-at { color: var(--panel-on); }
 .nf-rule {
   border: 0;
@@ -900,7 +930,7 @@ iframe[src*="hcaptcha"] {
   gap: 1px 18px;
   margin: 0;
 }
-.nf-table dt { color: var(--panel-yellow); }
+.nf-table dt { color: var(--nf-key); font-weight: 700; }
 .nf-table dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .nf-link {
   color: var(--panel-accent);
@@ -908,7 +938,7 @@ iframe[src*="hcaptcha"] {
   text-decoration-style: dotted;
   text-underline-offset: 4px;
 }
-.nf-link:hover { color: var(--ink-ansi-12); }
+.nf-link:hover { color: var(--term-ansi-7); }
 
 /* Pinned repos: language · name · stars/forks, as three aligned columns. */
 .nf-pins {
@@ -938,21 +968,6 @@ iframe[src*="hcaptcha"] {
 /* Mobile only: the Contact row as tappable prompt lines. */
 .nf-actions { display: none; }
 
-.nf-caption {
-  display: block;
-  max-width: 896px;
-  margin: 14px auto 0;
-  padding: 0;
-  background: none;
-  border: none;
-  font-family: var(--font-mono-family);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--meta);
-  cursor: pointer;
-}
-.nf-caption:hover { color: var(--muted); }
 
 /* Narrow terminal: logo block above the table, every row stacked — what
    neofetch itself does when the columns will not fit. */
@@ -962,9 +977,6 @@ iframe[src*="hcaptcha"] {
       0 0 0 0.5px rgba(0, 0, 0, 0.24),
       0 10px 26px rgba(0, 0, 0, 0.14);
   }
-  .nf .term-bar { height: 28px; padding: 0 11px; font-size: 12px; }
-  .nf .term-bar .lights { gap: 7px; }
-  .nf .term-bar .lights span { width: 11px; height: 11px; }
   .nf-title-dims { display: none; }
 
   .nf-body { padding: 20px 16px 22px; font-size: 13px; line-height: 1.6; }
@@ -992,8 +1004,7 @@ iframe[src*="hcaptcha"] {
 
   .nf-swatches span { flex: 1; width: auto; height: 14px; }
 
-  .nf-cmd.nf-idle,
-  .nf-caption { display: none; }
+  .nf-cmd.nf-idle { display: none; }
 
   .nf-actions {
     display: flex;
@@ -1015,7 +1026,7 @@ iframe[src*="hcaptcha"] {
     background: none;
     border: none;
     font: inherit;
-    color: var(--panel-purple);
+    color: var(--panel-on);
     cursor: pointer;
   }
   .nf-shell-name {
@@ -1097,9 +1108,6 @@ iframe[src*="hcaptcha"] {
     padding: var(--term-status) 0 0 11px;
     cursor: default;
   }
-  .term-bar .lights { gap: 7px; }
-  .term-bar .lights span { width: 11px; height: 11px; }
-  .term-bar .hint { display: none; }
   .term-close {
     display: flex;
     align-items: center;
@@ -1117,6 +1125,7 @@ iframe[src*="hcaptcha"] {
      clears the home indicator when no keyboard is up. */
   .term-inputrow {
     font-size: 16px;
+    line-height: 20px;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
   /* The keyboard covers the home indicator: the row sits right on the keyboard. */
@@ -1134,11 +1143,25 @@ iframe[src*="hcaptcha"] {
    the next/font-loaded typefaces. Astryx's actual token names (confirmed via
    `npm run astryx -- docs typography` and the generated src/theme/theme.css)
    are --font-family-heading / --font-family-body, not the "-display" naming
-   used in early drafts of this task. */
-:root {
+   used in early drafts of this task. The theme re-declares them (layered) on
+   every [data-astryx-theme] root — including the <Theme> wrapper inside
+   <body> — so the bridge sits on those roots too; unlayered, it wins there.
+   On :root alone, everything inside the wrapper got the theme's literal
+   "IBM Plex Sans", which never matches next/font's generated family name. */
+:root,
+[data-astryx-theme] {
   --font-family-heading: var(--font-display-family);
   --font-family-body: var(--font-body-family);
   --font-family-code: var(--font-mono-family);
+}
+
+/* The terminal and the neofetch header keep Terminal.app's type: the theme
+   reset paints `:where(p)` with --font-family-body, so rebind it to the mono
+   stack inside them (the same retargeting .ink-panel does for colour). */
+.term-win,
+.nf-body {
+  --font-family-body: var(--font-mono-family);
+  --font-family-heading: var(--font-mono-family);
 }
 
 /* Astryx's scoped reset styles bare headings, so they need the same weight

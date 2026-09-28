@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { sneakyTimes, ibmPlexSans } from "./fonts";
 import AstryxThemeProvider from "@/components/AstryxThemeProvider";
-import { atomOneTheme } from "@/theme/atom-one";
+import { flexokiTheme } from "@/theme/flexoki";
 import { ATTR, STORAGE_KEY, THEME_COLOR } from "@/lib/theme-constants";
 
 // Bump on every favicon change — browsers cache icons aggressively and the
 // query string is what forces a refetch. Keep in sync with site.webmanifest.
-const iconVersion = "4";
+const iconVersion = "5";
 
 export const metadata: Metadata = {
   title: "Daniel Kuo - Portfolio",
@@ -79,7 +79,7 @@ export default function RootLayout({
             this string cannot drift from the runtime toggle. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var e=document.documentElement,c=document.querySelector('meta[name="theme-color"]'),m='light';try{if(window.matchMedia('(prefers-color-scheme:dark)').matches)m='dark'}catch(_){}try{var t=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});if(t==='dark'||t==='light')m=t}catch(_){}e.setAttribute(${JSON.stringify(ATTR)},m);e.setAttribute('data-astryx-theme',${JSON.stringify(atomOneTheme.name)});if(c)c.content=${JSON.stringify(THEME_COLOR)}[m]})()`,
+            __html: `(function(){var e=document.documentElement,c=document.querySelector('meta[name="theme-color"]'),m='light';try{if(window.matchMedia('(prefers-color-scheme:dark)').matches)m='dark'}catch(_){}try{var t=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});if(t==='dark'||t==='light')m=t}catch(_){}e.setAttribute(${JSON.stringify(ATTR)},m);e.setAttribute('data-astryx-theme',${JSON.stringify(flexokiTheme.name)});if(c)c.content=${JSON.stringify(THEME_COLOR)}[m]})()`,
           }}
         />
         {/* Preconnect to external domains for faster loading */}

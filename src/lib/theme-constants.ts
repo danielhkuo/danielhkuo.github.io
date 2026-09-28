@@ -23,6 +23,6 @@ export const ATTR = "data-astryx-media";
  * visitor whose stored choice disagrees with their OS permanently mismatched.
  */
 export const THEME_COLOR: Record<ThemeMode, string> = {
-  light: "#fafafa",
-  dark: "#282c34",
+  light: "#FFFCF0",
+  dark: "#100F0F",
 };

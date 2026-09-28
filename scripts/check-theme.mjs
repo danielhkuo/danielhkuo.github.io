@@ -35,11 +35,11 @@ import puppeteer from "puppeteer";
 
 const ROOT = "out";
 
-// Atom One, from src/app/globals.css and src/theme/atomOneTheme.ts. Written as
+// Flexoki, from src/app/globals.css and src/theme/flexokiTheme.ts. Written as
 // rgb() because that is what getComputedStyle returns.
 const PALETTE = {
-  light: { bg: "rgb(250, 250, 250)", fg: "rgb(56, 58, 66)" }, // #fafafa / #383a42
-  dark: { bg: "rgb(40, 44, 52)", fg: "rgb(171, 178, 191)" }, // #282c34 / #abb2bf
+  light: { bg: "rgb(255, 252, 240)", fg: "rgb(16, 15, 15)" }, // #FFFCF0 / #100F0F
+  dark: { bg: "rgb(16, 15, 15)", fg: "rgb(206, 205, 195)" }, // #100F0F / #CECDC3
 };
 
 /**
