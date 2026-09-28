@@ -14,7 +14,7 @@ import {
 import { buildCommands, welcomeLines } from "./commands";
 import ScreenView, { ScreenLine } from "./ScreenView";
 import { tokenize } from "./shell";
-import { Lights, ProxyIcon } from "./WindowChrome";
+import { Lights, ProxyIcon, useTermSize, useWindowInactive } from "./WindowChrome";
 import type { CommandContext, ScreenProgram, TerminalApi, TerminalLine } from "./types";
 
 /** Key names that are modifiers on their own, never a key press to a program. */
@@ -35,13 +35,6 @@ const MODIFIER_KEYS = new Set([
   "Unidentified",
 ]);
 
-// Terminal.app's Basic grid (see globals.css): a 7pt × 14pt cell, 10pt side and
-// 8.5pt top/bottom insets — what the title's cols×rows is computed from.
-const CELL_W = 7;
-const LINE_H = 14;
-const INSET_X = 20;
-const INSET_Y = 17;
-
 /** zsh's `%n@%m %1~ %# `: the cwd's last component, `~` at home. */
 function prompt(path: string) {
   const dir = path.replace(/\/$/, "").split("/").pop() || "~";
@@ -59,6 +52,60 @@ function renderRich(text: string) {
     ) : (
       <Fragment key={i}>{part}</Fragment>
     ),
+  );
+}
+
+/** One scrollback entry. */
+function LogLine({ line: l }: { line: TerminalLine }) {
+  if (l.kind === "screen") return <ScreenLine rows={l.rows} />;
+  if (l.kind === "cmd") {
+    return (
+      <div className="term-line cmd">
+        <span className="term-ps">{prompt(l.path)}</span>
+        {l.text}
+      </div>
+    );
+  }
+  if (l.kind === "rows") {
+    return (
+      <div className="term-block">
+        {l.title && <div className="term-cols-title">{l.title}</div>}
+        <div className="term-cols">
+          {l.rows.map((r, j) => (
+            <Fragment key={j}>
+              <div className="k">{r.k}</div>
+              <div className="v">{renderRich(r.v)}</div>
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return <div className={`term-line ${l.kind}`}>{renderRich(l.text)}</div>;
+}
+
+/**
+ * Drawn over the input: the block cursor on the character at the caret, and
+ * the completion suggestion after the text. Typed characters are transparent
+ * here — the input itself shows them.
+ */
+function InputGhost({ input, caret, suffix }: { input: string; caret: number; suffix?: string }) {
+  const at = Math.min(caret, input.length);
+  const suggest = at === input.length ? suffix : undefined;
+  return (
+    <div className="term-ghost" aria-hidden>
+      <span className="typed">{input.slice(0, at)}</span>
+      {/* At the end of the line the cursor sits on the suggestion's first
+          character, as zsh-autosuggestions draws it. */}
+      <span className="term-cursor">{input[at] ?? (suggest ? suggest[0] : " ")}</span>
+      <span className="typed">{input.slice(at + 1)}</span>
+      {suggest && (
+        <>
+          <span>{suggest.slice(1)}</span>
+          <span className="tabhint">tab</span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -82,17 +129,14 @@ export default function Terminal({
   const [program, setProgram] = useState<ScreenProgram | null>(null);
   // Caret index in the input, for the drawn block cursor.
   const [caret, setCaret] = useState(0);
-  // The title's cols×rows, from the window's live size.
-  const [dims, setDims] = useState({ cols: 80, rows: 24 });
   const [zoomed, setZoomed] = useState(false);
-  // macOS greys an inactive window; the nearest a page gets is its own
-  // browser window losing focus.
-  const [inactive, setInactive] = useState(false);
 
   const dragOffset = useRef({ active: false, dx: 0, dy: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const winRef = useRef<HTMLDivElement>(null);
+  const dims = useTermSize(winRef, open);
+  const inactive = useWindowInactive();
 
   // Rebuild the registry when the cwd changes (cheap; `cd` is rare) so command
   // closures always read the current path without touching a ref during render.
@@ -246,34 +290,6 @@ export default function Terminal({
     };
   }, [open]);
 
-  // cols×rows for the title, the way Terminal reports its size.
-  useEffect(() => {
-    if (!open) return;
-    const win = winRef.current;
-    if (!win) return;
-    const ro = new ResizeObserver(() => {
-      const bar = win.querySelector<HTMLElement>(".term-bar")?.offsetHeight ?? 32;
-      const frame = win.querySelector<HTMLElement>(".term-frame");
-      const h = frame && frame.offsetHeight ? frame.offsetHeight : win.clientHeight;
-      const cols = Math.max(1, Math.floor((win.clientWidth - INSET_X) / CELL_W));
-      const rows = Math.max(1, Math.floor((h - bar - INSET_Y) / LINE_H));
-      setDims((d) => (d.cols === cols && d.rows === rows ? d : { cols, rows }));
-    });
-    ro.observe(win);
-    return () => ro.disconnect();
-  }, [open]);
-
-  useEffect(() => {
-    const sync = () => setInactive(!document.hasFocus());
-    sync();
-    window.addEventListener("focus", sync);
-    window.addEventListener("blur", sync);
-    return () => {
-      window.removeEventListener("focus", sync);
-      window.removeEventListener("blur", sync);
-    };
-  }, []);
-
   // close when clicking anywhere outside the window (but not on the buttons that
   // open it, so a click on a trigger doesn't close-then-reopen). Attached only
   // while open; the opening click has already finished before this runs.
@@ -419,8 +435,6 @@ export default function Terminal({
 
   const promptPath = navPath.length ? `~/${navPath.join("/")}` : "~/";
   const syncCaret = () => setCaret(inputRef.current?.selectionStart ?? input.length);
-  const cursorAt = Math.min(caret, input.length);
-  const suggest = completion && cursorAt === input.length ? completion : null;
   const positionStyle: CSSProperties = pos
     ? { left: pos.x, top: pos.y }
     : {};
@@ -472,38 +486,9 @@ export default function Terminal({
         }}
       >
         <div className="term-log" aria-live="polite">
-        {lines.map((l, i) => {
-          if (l.kind === "screen") {
-            return <ScreenLine key={i} rows={l.rows} />;
-          }
-          if (l.kind === "cmd") {
-            return (
-              <div key={i} className="term-line cmd">
-                <span className="term-ps">{prompt(l.path)}</span>{l.text}
-              </div>
-            );
-          }
-          if (l.kind === "rows") {
-            return (
-              <div key={i} className="term-block">
-                {l.title && <div className="term-cols-title">{l.title}</div>}
-                <div className="term-cols">
-                  {l.rows.map((r, j) => (
-                    <Fragment key={j}>
-                      <div className="k">{r.k}</div>
-                      <div className="v">{renderRich(r.v)}</div>
-                    </Fragment>
-                  ))}
-                </div>
-              </div>
-            );
-          }
-          return (
-            <div key={i} className={`term-line ${l.kind}`}>
-              {renderRich(l.text)}
-            </div>
-          );
-        })}
+        {lines.map((l, i) => (
+          <LogLine key={i} line={l} />
+        ))}
         </div>
         <div className="term-inputrow">
           <span className="term-ps">{prompt(promptPath)}</span>
@@ -527,21 +512,7 @@ export default function Terminal({
                 focusEnd();
               }}
             />
-            <div className="term-ghost" aria-hidden>
-              <span className="typed">{input.slice(0, cursorAt)}</span>
-              {/* At the end of the line the cursor sits on the suggestion's
-                  first character, as zsh-autosuggestions draws it. */}
-              <span className="term-cursor">
-                {input[cursorAt] ?? (suggest ? suggest.suffix[0] : " ")}
-              </span>
-              <span className="typed">{input.slice(cursorAt + 1)}</span>
-              {suggest && (
-                <>
-                  <span>{suggest.suffix.slice(1)}</span>
-                  <span className="tabhint">tab</span>
-                </>
-              )}
-            </div>
+            <InputGhost input={input} caret={caret} suffix={completion?.suffix} />
           </div>
         </div>
       </div>

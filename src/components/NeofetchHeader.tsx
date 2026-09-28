@@ -94,7 +94,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
                 <dt>Title</dt>
                 <dd>Full-stack product builder &amp; team architect</dd>
                 <dt>Previously</dt>
-                <dd>SWE Intern @ Goldman Sachs AWM</dd>
+                <dd>Summer Analyst @ Goldman Sachs AWM</dd>
                 <dt>School</dt>
                 <dd>Rice University · CS</dd>
                 <dt>Location</dt>

@@ -14,7 +14,7 @@ export const LINKS = {
 export const WHOAMI_LINES: readonly string[] = [
   "`Daniel Kuo` — full-stack product builder & team architect",
   "Rice University · CS · Houston, TX",
-  "prev: swe intern @ Goldman Sachs AWM",
+  "prev: summer analyst @ Goldman Sachs AWM",
   "building: AI products · self-hosted systems · developer tools",
 ];
 
