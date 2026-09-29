@@ -522,7 +522,14 @@ iframe[src*="hcaptcha"] {
   --ansi-14: var(--term-ansi-14);
   --ansi-15: var(--term-ansi-15);
 
+  /* It is a <dialog>: clear the UA's dialog box (auto margins, padding,
+     border, inline insets), which would otherwise re-centre a dragged window
+     between its left edge and the viewport's. */
   position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg);

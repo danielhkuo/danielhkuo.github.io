@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type PointerEvent, type WheelEvent } from "react";
-import type { CellRun, Screen } from "./tty/screen";
-import { isPlain, rowHtml, runClass, runStyle, trimRuns } from "./screenHtml";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  type PointerEvent,
+  type WheelEvent,
+} from "react";
+import { gridSize, type Cell } from "./grid";
+import { rowHtml } from "./screenHtml";
+import type { Screen } from "./tty/screen";
 import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
 
 /**
@@ -18,57 +26,54 @@ import type { ProgramHost, ScreenProgram, TerminalLine } from "./types";
  * COUNT changes the program gets its SIGWINCH (`resize`) and the row elements
  * are added or dropped to match. Pixel changes that do not cross a cell
  * boundary cost nothing.
+ *
+ * All of the program's input arrives here: desktop keys, taps, the wheel, and
+ * text from on-screen keyboards.
  */
 
-/** A finished screen in the scrollback (what `-p` prints). */
-export function ScreenLine({ rows }: { rows: CellRun[][] }) {
-  return (
-    <div className="term-block">
-      <pre className="term-grid" aria-label="cbonsai tree">
-        {rows.map((runs, y) => (
-          <div key={y} className="term-grid-row">
-            {trimRuns(runs).map((run, i) =>
-              isPlain(run) ? (
-                run.text
-              ) : (
-                <span key={i} className={runClass(run)} style={runStyle(run)}>
-                  {run.text}
-                </span>
-              ),
-            )}
-          </div>
-        ))}
-      </pre>
-    </div>
-  );
-}
+/** Key names that are modifiers on their own, never a key press to a program. */
+const MODIFIER_KEYS = new Set([
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+  "CapsLock",
+  "NumLock",
+  "ScrollLock",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Super",
+  "Symbol",
+  "Dead",
+  "Unidentified",
+]);
 
 export default function ScreenView({
   program,
   onExit,
+  onClose,
 }: {
   program: ScreenProgram;
   onExit: (output?: TerminalLine[]) => void;
+  /** Close the terminal window: what an Escape the program declines does. */
+  onClose: () => void;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const onExitRef = useRef(onExit);
   /** One cell's size, measured when the grid is built; taps map through it. */
-  const cellRef = useRef({ w: 8, h: 17 });
+  const cellRef = useRef<Cell>({ width: 8, height: 17 });
   /** Focuses or blurs the hidden input to match `program.textInput`; set up with the grid. */
   const syncInputRef = useRef<() => void>(() => undefined);
-
-  useEffect(() => {
-    onExitRef.current = onExit;
-  }, [onExit]);
+  const exitProgram = useEffectEvent(onExit);
 
   useLayoutEffect(() => {
     const body = bodyRef.current;
     const pre = preRef.current;
     if (!body || !pre) return;
 
-    // Measure one cell; the grid is however many fit in the body's content box.
+    // Measure one cell as drawn; the grid is however many fit in the body.
     const probe = document.createElement("div");
     probe.className = "term-grid-row";
     probe.style.position = "absolute";
@@ -77,18 +82,9 @@ export default function ScreenView({
     pre.appendChild(probe);
     const rect = probe.getBoundingClientRect();
     pre.removeChild(probe);
-    const cellW = rect.width / 10 || 8;
-    const lineH = rect.height || 17;
-    cellRef.current = { w: cellW, h: lineH };
-    const measure = () => {
-      const cs = getComputedStyle(body);
-      const innerW = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      const innerH = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      return {
-        cols: Math.max(1, Math.floor(innerW / cellW)),
-        rows: Math.max(1, Math.floor(innerH / lineH)),
-      };
-    };
+    const cell: Cell = { width: rect.width / 10 || 8, height: rect.height || 17 };
+    cellRef.current = cell;
+    const measure = () => gridSize(body, cell);
     let { rows, cols } = measure();
 
     let raf = 0;
@@ -121,7 +117,7 @@ export default function ScreenView({
     const addRow = () => {
       const el = document.createElement("div");
       el.className = "term-grid-row";
-      el.style.height = `${lineH}px`;
+      el.style.height = `${cell.height}px`;
       rowEls.push(el);
       pre.appendChild(el);
     };
@@ -161,7 +157,7 @@ export default function ScreenView({
         exited = true;
         if (raf !== 0) cancelAnimationFrame(raf);
         raf = 0;
-        onExitRef.current(output);
+        exitProgram(output);
       },
     };
 
@@ -185,9 +181,38 @@ export default function ScreenView({
     };
   }, [program]);
 
-  // Desktop keys arrive through the window listener and are cancelled there;
-  // on-screen keyboards often report "Unidentified" keys, so their text is
-  // taken from the hidden input's beforeinput instead.
+  // While a program runs, keys go to it, not the page. Capture phase so the
+  // launcher's backtick toggle does not fire; Escape and ⌘K are left alone so
+  // the terminal can still be closed. A program that captures Escape gets it
+  // first, and closes the window only by declining it (returning false) —
+  // so the fake claude can interrupt and clear input with it while an Escape
+  // on an idle prompt still closes the terminal.
+  // Browser shortcuts (⌘R, ⌘W, ⌘C…) pass through; Ctrl-C is the program's
+  // interrupt, as in a terminal.
+  const closeWindow = useEffectEvent(onClose);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !program.captureEscape) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") return;
+      if (e.metaKey) return;
+      // Programs that read text get the usual line-editing control keys;
+      // everything else stays with the browser except Ctrl-C.
+      const ctrlOk = program.textInput ? "acdeklruw" : "c";
+      if (e.ctrlKey && !ctrlOk.includes(e.key.toLowerCase())) return;
+      if (e.altKey) return;
+      if (MODIFIER_KEYS.has(e.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const consumed = program.key(e.key, e.ctrlKey, e.shiftKey);
+      if (e.key === "Escape" && consumed === false) closeWindow();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [program]);
+
+  // Desktop keys arrive through the window listener above and are cancelled
+  // there; on-screen keyboards often report "Unidentified" keys, so their
+  // text is taken from the hidden input's beforeinput instead.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -211,8 +236,11 @@ export default function ScreenView({
   const onPointerDown = (e: PointerEvent<HTMLPreElement>) => {
     if (program.tap) {
       const rect = e.currentTarget.getBoundingClientRect();
-      const { w, h } = cellRef.current;
-      program.tap(Math.floor((e.clientY - rect.top) / h), Math.floor((e.clientX - rect.left) / w));
+      const { width, height } = cellRef.current;
+      program.tap(
+        Math.floor((e.clientY - rect.top) / height),
+        Math.floor((e.clientX - rect.left) / width),
+      );
       // Inside the gesture, so a phone keyboard may open if the tap asked for text.
       syncInputRef.current();
       return;

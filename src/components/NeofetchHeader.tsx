@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent } from "react";
+import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
 
 /** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
@@ -23,9 +24,9 @@ function openShell(trigger: HTMLElement | null) {
   );
 }
 
-/** zsh's stock prompt, `%n@%m %1~ %# ` — uncoloured, as in a fresh Terminal. */
+/** zsh's stock prompt at home — uncoloured, as in a fresh Terminal. */
 function Prompt() {
-  return <>daniel@portfolio ~ %{" "}</>;
+  return promptFor("~/");
 }
 
 function Cursor() {
@@ -61,9 +62,10 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
             daniel — -zsh<span className="nf-title-dims"> — 132×38</span>
           </div>
         </div>
-        {/* The body is not itself a control — the nav's Terminal button, the
-            mobile `./shell` row and ⌘K are the accessible triggers. */}
-        <div className="nf-body ink-panel" onClick={onBodyClick}>
+        {/* role=presentation: the body is not itself a control. The nav's
+            Terminal button, the mobile `./shell` row and ⌘K are the
+            accessible triggers; a click here is a pointer shortcut. */}
+        <div className="nf-body ink-panel" role="presentation" onClick={onBodyClick}>
           <p className="nf-cmd">
             <Prompt />
             neofetch

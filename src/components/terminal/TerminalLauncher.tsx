@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Terminal from "./Terminal";
 import type { SlimProject, TerminalApi } from "./types";
 import { getTheme, setTheme } from "@/lib/theme";
@@ -18,17 +18,12 @@ export default function TerminalLauncher({
   projects: SlimProject[];
 }) {
   const [open, setOpen] = useState(false);
-  const openRef = useRef(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const launchBtnRef = useRef<HTMLButtonElement>(null);
   // Scroll position the background is pinned at while the mobile fullscreen
   // terminal is open. `cd` updates it so we land on the navigated section once
   // the terminal closes and the lock is released.
   const scrollLockRef = useRef(0);
-
-  useEffect(() => {
-    openRef.current = open;
-  }, [open]);
 
   // Mobile: lock the background from scrolling behind the fullscreen terminal.
   // overflow:hidden alone doesn't stop touch-scroll on iOS, so pin the body with
@@ -60,61 +55,61 @@ export default function TerminalLauncher({
     };
   }, [open]);
 
-  const openTerminal = useCallback((trigger?: HTMLElement | null) => {
-    triggerRef.current = trigger ?? null;
+  const openTerminal = (trigger: HTMLElement | null) => {
+    triggerRef.current = trigger;
     setOpen(true);
-  }, []);
+  };
 
-  const closeTerminal = useCallback(() => {
+  const closeTerminal = () => {
     setOpen(false);
     const trigger = triggerRef.current;
     if (trigger) window.setTimeout(() => trigger.focus(), 0);
-  }, []);
+  };
 
-  const toggle = useCallback(
-    (trigger?: HTMLElement | null) => {
-      if (openRef.current) closeTerminal();
-      else openTerminal(trigger);
-    },
-    [openTerminal, closeTerminal],
-  );
+  const toggle = (trigger: HTMLElement | null) => {
+    if (open) closeTerminal();
+    else openTerminal(trigger);
+  };
 
-  // Global shortcuts + external open requests.
+  // Global shortcuts + external open requests. Effect Events, so the
+  // listeners are attached once and still see the current `open`.
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    // Esc closes the terminal from anywhere while it's open, regardless of
+    // which element currently has focus.
+    if (e.key === "Escape" && open) {
+      e.preventDefault();
+      closeTerminal();
+      return;
+    }
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName ?? "";
+    const typing =
+      tag === "INPUT" || tag === "TEXTAREA" || !!target?.isContentEditable;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      toggle((document.activeElement as HTMLElement) ?? null);
+      return;
+    }
+    // backtick is a normal character while typing — only toggle otherwise.
+    if (e.key === "`" && !typing) {
+      e.preventDefault();
+      toggle((document.activeElement as HTMLElement) ?? null);
+    }
+  });
+  const onOpenRequest = useEffectEvent((e: Event) => {
+    const detail = (e as CustomEvent<{ trigger?: HTMLElement }>).detail;
+    openTerminal(detail?.trigger ?? null);
+  });
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Esc closes the terminal from anywhere while it's open, regardless of
-      // which element currently has focus.
-      if (e.key === "Escape" && openRef.current) {
-        e.preventDefault();
-        closeTerminal();
-        return;
-      }
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName ?? "";
-      const typing =
-        tag === "INPUT" || tag === "TEXTAREA" || !!target?.isContentEditable;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        toggle((document.activeElement as HTMLElement) ?? null);
-        return;
-      }
-      // backtick is a normal character while typing — only toggle otherwise.
-      if (e.key === "`" && !typing) {
-        e.preventDefault();
-        toggle((document.activeElement as HTMLElement) ?? null);
-      }
-    };
-    const onOpenRequest = (e: Event) => {
-      const detail = (e as CustomEvent<{ trigger?: HTMLElement }>).detail;
-      openTerminal(detail?.trigger ?? null);
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("terminal:open", onOpenRequest as EventListener);
+    const handleKey = (e: KeyboardEvent) => onKey(e);
+    const handleOpenRequest = (e: Event) => onOpenRequest(e);
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("terminal:open", handleOpenRequest);
     return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("terminal:open", onOpenRequest as EventListener);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("terminal:open", handleOpenRequest);
     };
-  }, [toggle, openTerminal, closeTerminal]);
+  }, []);
 
   const api: TerminalApi = useMemo(
     () => ({

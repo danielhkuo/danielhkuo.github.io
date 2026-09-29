@@ -75,7 +75,7 @@ export interface ScreenProgram {
    * while it has a text field open (a filter prompt) and off again after.
    */
   readonly textInput?: boolean;
-  /** What the window's title bar shows after "daniel_kuo — " while this runs. */
+  /** What the window's title shows in place of "-zsh" while this runs. */
   readonly title?: string;
   /** Mouse wheel over the screen, in rows (positive = content moves up). */
   wheel?(rows: number): void;
