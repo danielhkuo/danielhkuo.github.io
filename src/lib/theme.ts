@@ -1,17 +1,23 @@
 // Shared light/dark theme control. `data-astryx-media` on <html> drives the
 // Astryx chocolate theme's unqualified `[data-astryx-media="dark"]` /
 // `[data-astryx-media="light"]` selectors. A blocking inline script in
-// layout.tsx applies the persisted choice before paint (no FOUC); this module
-// is the runtime toggle used by the terminal and the HoverMenu, and also
-// feeds `AstryxThemeProvider` (which manages the `<Theme mode>` wrapper).
+// layout.tsx decides the mode before paint (no FOUC); this module keeps it
+// right afterwards, and also feeds `AstryxThemeProvider` (which manages the
+// `<Theme mode>` wrapper).
+//
+// The page follows the system's colour scheme unless the visitor has chosen a
+// mode — which only the terminal's `theme` command does. A choice is
+// remembered across visits and holds until `theme auto` hands it back.
 
 import { useSyncExternalStore } from "react";
-import { ATTR, STORAGE_KEY, THEME_COLOR, type ThemeMode } from "./theme-constants";
+import { ATTR, STORAGE_KEY, THEME_COLOR, type ThemeMode } from "./theme-constants.ts";
 
 export type { ThemeMode };
 
 // Not exported: onThemeChange is the only supported way to observe this.
 const THEME_EVENT = "themechange";
+
+const SYSTEM_DARK = "(prefers-color-scheme: dark)";
 
 export function getTheme(): ThemeMode {
   if (typeof document === "undefined") return "light";
@@ -19,22 +25,67 @@ export function getTheme(): ThemeMode {
   return attr === "dark" ? "dark" : "light";
 }
 
-export function applyTheme(mode: ThemeMode): ThemeMode {
+/** The scheme the OS or browser asks for. */
+function systemTheme(): ThemeMode {
+  return window.matchMedia(SYSTEM_DARK).matches ? "dark" : "light";
+}
+
+/** The mode the visitor chose, if they have chosen one. */
+function chosenTheme(): ThemeMode | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === "dark" || stored === "light" ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember a choice, or with null forget it. */
+function remember(mode: ThemeMode | null): void {
+  try {
+    if (mode) localStorage.setItem(STORAGE_KEY, mode);
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* private mode / storage disabled — the theme still applies for this visit */
+  }
+}
+
+/** Put a mode on the page: the attribute every layer reads, and the browser's own chrome. */
+function show(mode: ThemeMode): ThemeMode {
   if (typeof document === "undefined") return mode;
   document.documentElement.setAttribute(ATTR, mode);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[mode]);
-  try {
-    localStorage.setItem(STORAGE_KEY, mode);
-  } catch {
-    /* private mode / storage disabled — theme still applies for this session */
-  }
   window.dispatchEvent(new CustomEvent<ThemeMode>(THEME_EVENT, { detail: mode }));
   return mode;
 }
 
-export function setTheme(mode: ThemeMode | "toggle"): ThemeMode {
+/**
+ * Choose a mode by hand — "toggle" flips the one showing — or hand the choice
+ * back with "auto", which forgets it and shows the system's scheme. Returns
+ * the mode now showing.
+ */
+export function setTheme(mode: ThemeMode | "toggle" | "auto"): ThemeMode {
+  if (mode === "auto") {
+    remember(null);
+    return show(systemTheme());
+  }
   const next = mode === "toggle" ? (getTheme() === "dark" ? "light" : "dark") : mode;
-  return applyTheme(next);
+  remember(next);
+  return show(next);
+}
+
+/**
+ * Keep up with the system's scheme as it changes — sunset, a settings switch
+ * — for as long as the visitor has not chosen a mode. The pre-paint script
+ * only reads it once, at load. Returns a function that stops following.
+ */
+export function followSystemTheme(): () => void {
+  const query = window.matchMedia(SYSTEM_DARK);
+  const follow = () => {
+    if (!chosenTheme()) show(systemTheme());
+  };
+  query.addEventListener("change", follow);
+  return () => query.removeEventListener("change", follow);
 }
 
 /** Subscribe to theme changes; returns an unsubscribe function. */

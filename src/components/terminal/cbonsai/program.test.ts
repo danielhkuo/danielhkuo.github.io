@@ -24,6 +24,8 @@ function ctx() {
     ok: (t) => lines.push(t),
     err: (t) => errs.push(t),
     rows: (rows: readonly TerminalRow[]) => lines.push(rows.map((r) => r.k).join(",")),
+    text: () => undefined,
+    cols: 80,
     clear: () => undefined,
     close: () => undefined,
     program: (p) => programs.push(p),

@@ -8,10 +8,13 @@ rebuilds whenever I push. Built with Next.js and hosted on GitHub Pages.
 
 - Pinned GitHub repos, pulled at build time and shown with their language
   breakdown, stars, and forks.
-- An interactive terminal for moving around the site and opening links, with
-  tab-completion and command history. Open it from the nav or with Cmd/Ctrl+K.
-- Light and dark modes, toggled from the nav or the terminal and remembered
-  between visits.
+- An interactive terminal that holds the site as a small filesystem: `ls`,
+  `cd`, `cat` and `open` behave as they do in zsh, markdown files are laid out
+  the way glow renders them, and commands and paths tab-complete. Open it by
+  clicking the header, from the launcher button, or with Cmd/Ctrl+K.
+- Light and dark modes that follow the system, live. `theme dark` or
+  `theme light` in the terminal picks one and remembers it; `theme auto` goes
+  back to following.
 - A contact form backed by Web3Forms, with hCaptcha for spam.
 - Static output — the whole site is pre-rendered, no server.
 

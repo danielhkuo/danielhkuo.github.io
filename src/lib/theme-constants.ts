@@ -9,8 +9,13 @@
 
 export type ThemeMode = "dark" | "light";
 
-/** localStorage key holding the visitor's explicit choice, if any. */
-export const STORAGE_KEY = "theme";
+/**
+ * localStorage key holding the mode the visitor chose with the terminal's
+ * `theme`, if any; without one the page follows the system. Not "theme": that
+ * key holds choices made with the nav's toggle, which is gone — honoured, they
+ * would pin those visitors to a mode with no visible way back.
+ */
+export const STORAGE_KEY = "theme-choice";
 
 /** Attribute on <html> that every other layer reads as the source of truth. */
 export const ATTR = "data-astryx-media";
@@ -18,7 +23,7 @@ export const ATTR = "data-astryx-media";
 /**
  * Mobile browser chrome (Android address bar, iOS Safari toolbar). Values are
  * --bg from globals.css. Applied to a single <meta name="theme-color"> that the
- * pre-paint script and applyTheme both rewrite — NOT the scheme-scoped pair
+ * pre-paint script and lib/theme.ts both rewrite — NOT the scheme-scoped pair
  * Next's `viewport` export can emit, because those key off the OS, leaving a
  * visitor whose stored choice disagrees with their OS permanently mismatched.
  */

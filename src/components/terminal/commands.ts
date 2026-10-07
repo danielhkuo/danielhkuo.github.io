@@ -1,55 +1,119 @@
 // Command registry. Pure logic — handlers emit data through `ctx`, never JSX.
-// `buildCommands` closes over the page bridge (`api`) and the nav-path getter/
-// setter so `cd` can move a simulated cwd without rebuilding the registry.
+// The path commands work on the filesystem in fs.ts through a `Session`: the
+// tree, and the working directory the shell holds for them. They behave as
+// their namesakes do in zsh on a Mac, down to the wording of the errors.
 
-import { CONTACT_ROWS, LINKS, SECTIONS, WHOAMI_LINES } from "./content";
-import type {
-  CommandMap,
-  TerminalApi,
-  ThemeMode,
-  TerminalLine,
-} from "./types";
+import { EMAIL, LINKS, PROFILE } from "./content.ts";
+import { HOME, absPath, completions, lookup, strerror, tildePath, type DirNode, type Path } from "./fs.ts";
+import { ls } from "./ls.ts";
+import { isWebLink, renderMarkdown } from "./markdown.ts";
+import type { Command, CommandMap, TerminalApi, TerminalLine, TextRun } from "./types";
 
-/** Slugify a repo name into a stable command key (matches the reference). */
-export function projectKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+/** The shell's place in the filesystem, as the path commands read and move it. */
+export interface Session {
+  root: DirNode;
+  cwd(): Path;
+  /** Where `cd -` goes back to. */
+  oldCwd(): Path;
+  chdir(path: Path): void;
 }
 
-/** Lines shown when the terminal first opens (and never auto-cleared). */
-export function welcomeLines(): TerminalLine[] {
+const USER = HOME[1];
+const HOST = "portfolio";
+
+// neofetch's colours, as the header draws them: systemCyan for user@host,
+// systemGray for the keys (their nearest xterm-256 neighbours).
+const NF_TITLE = 81;
+const NF_KEY = 246;
+
+/** "Tue Oct  6 09:14:02": a moment as `login` stamps it, in local time. */
+function loginStamp(now: Date): string {
+  const weekday = now.toLocaleDateString("en-US", { weekday: "short" });
+  const month = now.toLocaleDateString("en-US", { month: "short" });
+  const two = (n: number) => String(n).padStart(2, "0");
+  const time = `${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}`;
+  return `${weekday} ${month} ${String(now.getDate()).padStart(2)} ${time}`;
+}
+
+/** What a new session opens with (and `clear` alone removes): Terminal's login line, then a way in. */
+export function welcomeLines(now: Date): TerminalLine[] {
   return [
-    { kind: "out", text: "`daniel_kuo` :: interactive shell" },
-    {
-      kind: "out",
-      text: "`ls` to look around · `cd` to navigate · `help` for commands · `tab` completes",
-    },
+    { kind: "out", text: `Last login: ${loginStamp(now)} on ttys000` },
+    // Short enough for a phone's 52 columns.
+    { kind: "out", text: "`ls` to look around · `cat` to read · `help` for more" },
   ];
 }
 
-export function buildCommands(
-  api: TerminalApi,
-  getNavPath: () => string[],
-  setNavPath: (p: string[]) => void,
-): CommandMap {
-  const sectionByDir = new Map(SECTIONS.map((s) => [s.dir, s] as const));
+/** `neofetch` without the logo: user@host, the bio, the pinned repos, the colour blocks. */
+function neofetch(api: TerminalApi): TextRun[][] {
+  const title: TextRun[] = [
+    { text: USER, fg: NF_TITLE, bold: true },
+    { text: "@" },
+    { text: HOST, fg: NF_TITLE, bold: true },
+  ];
+  const row = (key: string, ...value: TextRun[]): TextRun[] => [
+    { text: key, fg: NF_KEY, bold: true },
+    { text: ": " },
+    ...value,
+  ];
+  const link = (text: string, href: string): TextRun => ({ text, underline: true, href });
+  const blocks = (from: number): TextRun[] =>
+    Array.from({ length: 8 }, (_, i) => ({ text: "   ", bg: from + i }));
+
+  const rows: TextRun[][] = [
+    title,
+    [{ text: "-".repeat(USER.length + 1 + HOST.length) }],
+    row("Name", { text: PROFILE.name }),
+    row("Title", { text: PROFILE.title }),
+    row("Previously", { text: PROFILE.previously }),
+    row("School", { text: PROFILE.school }),
+    row("Location", { text: PROFILE.location }),
+  ];
+  const pinned = api.getProjects().flatMap((p, i) => [...(i ? [{ text: " · " }] : []), link(p.name, p.url)]);
+  if (pinned.length) rows.push(row("Pinned", ...pinned));
+  rows.push(
+    row("Contact", link(EMAIL, LINKS.email), { text: " · " }, link("resume.pdf", LINKS.resume)),
+    [],
+    blocks(0),
+    blocks(8),
+    [],
+  );
+  return rows;
+}
+
+export function buildCommands(api: TerminalApi, session: Session): CommandMap {
+  const find = (path: string) => lookup(session.root, session.cwd(), path);
+  /** Tab completion for a path argument. */
+  const paths = (only?: "dir") => (typed: string) => completions(session.root, session.cwd(), typed, only);
+
+  const cat: Command = {
+    desc: "read a file",
+    usage: "<file>",
+    args: paths(),
+    run: (args, ctx) => {
+      if (!args.length) {
+        ctx.err("usage: cat file ...");
+        return;
+      }
+      for (const operand of args) {
+        const found = find(operand);
+        if ("errno" in found) ctx.err(`cat: ${operand}: ${strerror(found.errno)}`);
+        else if (found.node.kind === "dir") ctx.err(`cat: ${operand}: Is a directory`);
+        else if (found.node.text === undefined) ctx.err(`cat: ${operand}: not a text file — try \`open ${operand}\``);
+        else ctx.text(renderMarkdown(found.node.text, ctx.cols));
+      }
+    },
+  };
 
   const cmds: CommandMap = {
     help: {
       desc: "list commands",
       run: (_args, ctx) => {
-        ctx.out(
-          "hit `tab` to autocomplete · `cd` to move around · `theme dark` to flip the lights",
-        );
+        ctx.out("`tab` completes a command or a path · `↑` brings back the last line");
         const groups: { name: string; names: string[] }[] = [
-          { name: "navigation", names: ["cd", "ls", "pwd"] },
-          { name: "info", names: ["whoami", "work", "contact", "resume", "projects"] },
-          { name: "open", names: ["open", "github", "linkedin", "email"] },
-          { name: "settings", names: ["theme"] },
-          { name: "fun", names: ["cbonsai", "claude"] },
-          { name: "misc", names: ["echo", "clear", "exit"] },
+          { name: "files", names: ["ls", "cd", "pwd", "cat", "open"] },
+          { name: "programs", names: ["neofetch", "work", "cbonsai", "claude"] },
+          { name: "shell", names: ["theme", "whoami", "echo", "clear", "exit", "help"] },
         ];
         for (const g of groups) {
           const rows = g.names
@@ -63,159 +127,93 @@ export function buildCommands(
       },
     },
 
-    cd: {
-      desc: "change directory",
-      usage: "<dir>",
-      args: () => [...SECTIONS.map((s) => s.dir), "~", ".."],
+    ls: {
+      desc: "list a directory",
+      usage: "[-la] [path]",
+      args: paths(),
       run: (args, ctx) => {
-        const dest = (args[0] || "")
-          .toLowerCase()
-          .replace(/^\.?\/+/, "")
-          .replace(/\/+$/, "");
-
-        if (!dest || dest === "~") {
-          setNavPath([]);
-          api.scrollToSection(""); // empty id → scroll to top
-          ctx.ok("cd ~/");
-          return;
-        }
-        if (dest === "..") {
-          setNavPath([]);
-          api.scrollToSection("");
-          ctx.ok("cd ~/");
-          return;
-        }
-        const section = sectionByDir.get(dest);
-        if (!section) {
-          ctx.err(`cd: no such directory: ${dest} — run \`ls\``);
-          return;
-        }
-        setNavPath([section.dir]);
-        api.scrollToSection(section.id);
-        ctx.ok(`cd ~/${section.dir}`);
+        const listing = ls(args, { root: session.root, cwd: session.cwd(), cols: ctx.cols, now: new Date() });
+        for (const error of listing.errors) ctx.err(error);
+        if (listing.rows.length) ctx.text(listing.rows);
       },
     },
 
-    ls: {
-      desc: "list this directory",
-      usage: "[projects]",
-      args: ["projects"],
+    cd: {
+      desc: "change directory",
+      usage: "[dir]",
+      args: paths("dir"),
       run: (args, ctx) => {
-        if ((args[0] || "").toLowerCase() === "projects") {
-          const projects = api.getProjects();
-          if (!projects.length) {
-            ctx.out("no pinned repositories found.");
-            return;
-          }
-          ctx.rows(
-            projects.map((p) => ({
-              k: projectKey(p.name),
-              v: p.description || "—",
-            })),
-          );
-          ctx.out(`${projects.length} repos · run \`open <name>\` to view`);
+        // zsh reads two arguments as "replace the first with the second in $PWD".
+        if (args.length > 1) {
+          ctx.err(`cd: string not in pwd: ${args[0]}`);
           return;
         }
-        ctx.rows(SECTIONS.map((s) => ({ k: `${s.dir}/`, v: s.label })));
-        ctx.out("`cd` into any of these · `ls projects` to list repos");
+        const target = args[0] ?? "~";
+        if (target === "-") {
+          const back = session.oldCwd();
+          session.chdir(back);
+          ctx.out(tildePath(back));
+          return;
+        }
+        const found = find(target);
+        if ("errno" in found) ctx.err(`cd: ${strerror(found.errno).toLowerCase()}: ${target}`);
+        else if (found.node.kind !== "dir") ctx.err(`cd: not a directory: ${target}`);
+        else session.chdir(found.path);
       },
     },
 
     pwd: {
-      desc: "show current location",
-      run: (_a, ctx) => {
-        const p = getNavPath();
-        ctx.out("~/" + (p.length ? p.join("/") : ""));
-      },
+      desc: "print the working directory",
+      run: (_args, ctx) => ctx.out(absPath(session.cwd())),
     },
 
-    whoami: {
-      desc: "a quick intro",
-      run: (_a, ctx) => {
-        for (const line of WHOAMI_LINES) ctx.out(line);
-      },
-    },
-
-    contact: {
-      desc: "how to reach me",
-      run: (_a, ctx) => ctx.rows(CONTACT_ROWS),
-    },
-
-    resume: {
-      desc: "open my resume (pdf)",
-      run: (_a, ctx) => {
-        api.openUrl(LINKS.resume);
-        ctx.ok("opening resume.pdf in a new tab");
-      },
-    },
-
-    projects: {
-      desc: "list pinned repos",
-      run: (_a, ctx) => cmds.ls.run(["projects"], ctx),
-    },
+    cat,
+    // What `cat` does here is glow's job in a real terminal; answer to its name too.
+    glow: { ...cat, hidden: true },
 
     open: {
-      desc: "open a repo on github",
-      usage: "<repo>",
-      args: () => api.getProjects().map((p) => projectKey(p.name)),
+      desc: "open a file, a repo or a link in the browser",
+      usage: "<path|url>",
+      args: paths(),
       run: (args, ctx) => {
-        const key = (args[0] || "").toLowerCase();
+        if (!args.length) {
+          ctx.err("usage: open <file | directory | url>");
+          return;
+        }
+        for (const target of args) {
+          if (isWebLink(target)) {
+            api.openUrl(target);
+            continue;
+          }
+          const found = find(target);
+          if ("errno" in found) ctx.err(`The file ${target} does not exist.`);
+          else if (found.node.url) api.openUrl(found.node.url);
+          // A text file with nothing behind it opens in the only viewer there is.
+          else if (found.node.kind === "file" && found.node.text !== undefined) {
+            ctx.text(renderMarkdown(found.node.text, ctx.cols));
+          } else ctx.err(`No application knows how to open ${tildePath(found.path)}.`);
+        }
+      },
+    },
+
+    neofetch: {
+      desc: "who this is, at a glance",
+      run: (_args, ctx) => ctx.text(neofetch(api)),
+    },
+
+    work: {
+      desc: "browse pinned repos · `↑↓` move · `⏎` open · `/` filter · `q` quit",
+      run: (_args, ctx) => {
         const projects = api.getProjects();
-        if (!key) {
-          const first = projects[0] ? projectKey(projects[0].name) : "repo";
-          ctx.err(`usage: open <repo> — try \`open ${first}\``);
+        if (!projects.length) {
+          ctx.out("no pinned repositories found.");
           return;
         }
-        const match = projects.find((p) => {
-          const k = projectKey(p.name);
-          return k === key || k.startsWith(key);
-        });
-        if (!match) {
-          ctx.err(`no repo "${key}" — run \`ls projects\``);
-          return;
-        }
-        api.openUrl(match.homepageUrl ?? match.url);
-        ctx.ok(`opening ${match.name}`);
+        void import("./work/program")
+          .then((m) => ctx.program(m.createWorkProgram(projects, api)))
+          .catch(() => ctx.err("work: failed to load"));
       },
     },
-
-    github: {
-      desc: "open github",
-      run: (_a, ctx) => {
-        api.openUrl(LINKS.github);
-        ctx.ok("opening github");
-      },
-    },
-    linkedin: {
-      desc: "open linkedin",
-      run: (_a, ctx) => {
-        api.openUrl(LINKS.linkedin);
-        ctx.ok("opening linkedin");
-      },
-    },
-    email: {
-      desc: "compose an email",
-      run: (_a, ctx) => {
-        api.openUrl(LINKS.email);
-        ctx.ok("opening mail client");
-      },
-    },
-
-    theme: {
-      desc: "switch color theme",
-      usage: "[dark|light]",
-      args: ["dark", "light", "toggle"],
-      run: (args, ctx) => {
-        const arg = (args[0] || "toggle").toLowerCase();
-        if (arg !== "dark" && arg !== "light" && arg !== "toggle") {
-          ctx.err("usage: theme dark | light");
-          return;
-        }
-        const next = api.setTheme(arg as ThemeMode | "toggle");
-        ctx.ok(`theme set to ${next}`);
-      },
-    },
-
     cbonsai: {
       desc: "grow a bonsai tree · `-l` live · `-i` infinite · `-h` help",
       usage: "[options]",
@@ -242,19 +240,6 @@ export function buildCommands(
           .catch(() => ctx.err("cbonsai: failed to load"));
       },
     },
-    work: {
-      desc: "browse pinned repos · `↑↓` move · `⏎` open · `/` filter · `q` quit",
-      run: (_args, ctx) => {
-        const projects = api.getProjects();
-        if (!projects.length) {
-          ctx.out("no pinned repositories found.");
-          return;
-        }
-        void import("./work/program")
-          .then((m) => ctx.program(m.createWorkProgram(projects, api)))
-          .catch(() => ctx.err("work: failed to load"));
-      },
-    },
     claude: {
       desc: "start claude code (results may vary · `/exit` or ctrl-c twice to leave)",
       run: (_args, ctx) => {
@@ -262,6 +247,25 @@ export function buildCommands(
           .then((m) => ctx.program(m.createClaudeProgram()))
           .catch(() => ctx.err("claude: failed to load"));
       },
+    },
+
+    theme: {
+      desc: "switch color theme · `auto` follows the system again",
+      usage: "[dark|light|auto]",
+      args: ["dark", "light", "auto", "toggle"],
+      run: (args, ctx) => {
+        const arg = (args[0] || "toggle").toLowerCase();
+        if (arg !== "dark" && arg !== "light" && arg !== "auto" && arg !== "toggle") {
+          ctx.err("usage: theme dark | light | auto");
+          return;
+        }
+        const next = api.setTheme(arg);
+        ctx.ok(arg === "auto" ? `theme follows the system (${next})` : `theme set to ${next}`);
+      },
+    },
+    whoami: {
+      desc: "print the user name",
+      run: (_args, ctx) => ctx.out(USER),
     },
     echo: {
       desc: "print text",

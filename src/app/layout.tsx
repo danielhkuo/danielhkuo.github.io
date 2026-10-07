@@ -26,9 +26,9 @@ export const metadata: Metadata = {
 // No themeColor here on purpose. Scheme-scoped meta tags track the OS, so a
 // visitor whose stored choice disagrees with their OS got an address bar in the
 // other theme — permanently, not just for a frame. A single meta is rendered in
-// <head> below instead, and THEME_COLOR/applyTheme keep its content on the mode.
+// <head> below instead, and THEME_COLOR/lib/theme.ts keep its content on the mode.
 // viewport-fit=cover lets the page extend under the notch and home indicator,
-// which is what makes env(safe-area-inset-*) non-zero: the nav card and the
+// which is what makes env(safe-area-inset-*) non-zero: the header and the
 // full-screen terminal pad themselves by it.
 export const viewport: Viewport = { viewportFit: "cover" };
 

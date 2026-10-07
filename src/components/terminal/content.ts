@@ -1,41 +1,21 @@
 // Single source of truth for the terminal's content. No React.
 
-import type { TerminalRow } from "./types";
+export const EMAIL = "danielhkuo@rice.edu";
 
 export const LINKS = {
   github: "https://github.com/danielhkuo",
   // TODO(daniel): confirm the real LinkedIn URL — this is a placeholder guess.
   linkedin: "https://www.linkedin.com/in/danielhkuo/",
-  email: "mailto:danielhkuo@rice.edu",
+  email: `mailto:${EMAIL}`,
   resume: "/Daniel-Kuo-Resume.pdf",
 } as const;
 
-/** Lines printed by `whoami`. */
-export const WHOAMI_LINES: readonly string[] = [
-  "`Daniel Kuo` — full-stack product builder & team architect",
-  "Rice University · CS · Houston, TX",
-  "prev: summer analyst @ Goldman Sachs AWM",
-  "building: AI products · self-hosted systems · developer tools",
-];
-
-/** Rows printed by `contact`. */
-export const CONTACT_ROWS: readonly TerminalRow[] = [
-  { k: "email", v: "danielhkuo@rice.edu" },
-  { k: "github", v: "github.com/danielhkuo" },
-  { k: "linkedin", v: "linkedin.com/in/danielhkuo" },
-];
-
-export interface Section {
-  /** Directory name used by `cd`/`ls`, and the DOM id to scroll to. */
-  dir: string;
-  id: string;
-  label: string;
-}
-
-/** Navigable "filesystem" — maps directories to real section ids on the page. */
-export const SECTIONS: readonly Section[] = [
-  { dir: "about", id: "about", label: "whoami · bio" },
-  { dir: "currently", id: "currently", label: "location & local time" },
-  { dir: "work", id: "work", label: "pinned github repos" },
-  { dir: "contact", id: "contact", label: "send a note" },
-];
+/** The bio: the header's `neofetch` table, the shell's `neofetch`, and ~/about.md. */
+export const PROFILE = {
+  name: "Daniel Kuo",
+  title: "Full-stack product builder & team architect",
+  previously: "Summer Analyst @ Goldman Sachs AWM",
+  school: "Rice University · CS",
+  location: "Houston, TX",
+  building: "AI products · self-hosted systems · developer tools",
+} as const;

@@ -1,11 +1,14 @@
 // The shell's pure parts — no React, no DOM: the prompt, word splitting,
 // completion and history. useShell.ts wires them to state.
 
-import type { CommandMap } from "./types";
+import type { CommandContext, CommandMap } from "./types";
 
-/** zsh's default prompt, `%n@%m %1~ %# `: the cwd's last component, `~` at home. */
+/**
+ * zsh's default prompt, `%n@%m %1~ %# `, for a cwd written the way `%~`
+ * writes it ("~/projects"): its last component — `~` at home, `/` at the root.
+ */
 export function promptFor(cwd: string): string {
-  const dir = cwd.replace(/\/$/, "").split("/").pop() || "~";
+  const dir = cwd.split("/").pop() || "/";
   return `daniel@portfolio ${dir} % `;
 }
 
@@ -18,9 +21,9 @@ export interface Completion {
 }
 
 /**
- * Complete a command name, or a command's argument from its `args`.
- * Case-insensitive; an exact match leaves nothing to suggest. Accepting a
- * command that takes arguments leaves a space for them.
+ * Complete a command name, or the argument being typed from the command's
+ * `args`. Case-insensitive; an exact match leaves nothing to suggest.
+ * Accepting a command that takes arguments leaves a space for them.
  */
 export function complete(input: string, commands: CommandMap): Completion | null {
   const lead = input.replace(/^\s+/, "");
@@ -38,14 +41,15 @@ export function complete(input: string, commands: CommandMap): Completion | null
 
   const args = commands[words[0].toLowerCase()]?.args;
   if (!args) return null;
-  const typed = /\s$/.test(input) ? "" : words[1];
+  // The last word — empty when the line ends in a space, ready for a new one.
+  const typed = words[words.length - 1];
   const needle = typed.toLowerCase();
-  const option = (typeof args === "function" ? args() : args).find((o) => {
+  const option = (typeof args === "function" ? args(typed) : args).find((o) => {
     const lower = o.toLowerCase();
     return lower.startsWith(needle) && lower !== needle;
   });
   if (!option) return null;
-  return { suffix: option.slice(typed.length), line: `${words[0]} ${option}` };
+  return { suffix: option.slice(typed.length), line: input.slice(0, input.length - typed.length) + option };
 }
 
 /** Earlier command lines, recalled with ↑ and ↓ the way a line editor does. */
@@ -137,4 +141,24 @@ export function tokenize(line: string): string[] {
   }
   if (inWord) out.push(cur);
   return out;
+}
+
+/**
+ * Run a command line: its first word names the command — in any case, since
+ * a phone keyboard capitalises it — and the rest are its arguments. A
+ * command that throws is reported, not propagated.
+ */
+export function execute(line: string, commands: CommandMap, ctx: CommandContext): void {
+  const [word, ...args] = tokenize(line);
+  if (word === undefined) return;
+  const name = word.toLowerCase();
+  if (!Object.hasOwn(commands, name)) {
+    ctx.err(`zsh: command not found: ${word}`);
+    return;
+  }
+  try {
+    commands[name].run(args, ctx);
+  } catch (e) {
+    ctx.err(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }

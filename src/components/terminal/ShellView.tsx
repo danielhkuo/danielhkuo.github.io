@@ -5,13 +5,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
 import { isPlain, runClass, runStyle, trimRuns } from "./screenHtml";
 import { promptFor } from "./shell";
+import { xtermToCss } from "./tty/colors";
 import type { CellRun } from "./tty/screen";
-import type { TerminalLine } from "./types";
+import type { TerminalLine, TextRun } from "./types";
 import type { Shell } from "./useShell";
 
 /**
@@ -113,6 +115,8 @@ function LogLine({ line }: { line: TerminalLine }) {
   switch (line.kind) {
     case "screen":
       return <ScreenLine rows={line.rows} />;
+    case "text":
+      return <TextLines rows={line.rows} />;
     case "cmd":
       return (
         <div className="term-line cmd">
@@ -160,6 +164,68 @@ function ScreenLine({ rows }: { rows: CellRun[][] }) {
       </pre>
     </div>
   );
+}
+
+/**
+ * Rows a command laid out itself — `ls` in columns, a markdown file, neofetch.
+ * The rows and the runs of a printed line never reorder, so the index is a
+ * stable key for both. React Doctor can't tell, so its index-key rule is
+ * suppressed here.
+ */
+function TextLines({ rows }: { rows: TextRun[][] }) {
+  return (
+    <div className="term-text">
+      {rows.map((runs, y) => (
+        // react-doctor-disable-next-line react-doctor/no-array-index-as-key
+        <div key={y} className="term-text-row">
+          {runs.map((run, i) => (
+            // react-doctor-disable-next-line react-doctor/no-array-index-as-key
+            <Run key={i} run={run} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** One run: its colours and weight, and a real link when it carries a target. */
+function Run({ run }: { run: TextRun }) {
+  const className = runWeight(run);
+  const style = runColors(run);
+  if (run.href) {
+    return (
+      <a className={className} style={style} href={run.href} {...linkTarget(run.href)}>
+        {run.text}
+      </a>
+    );
+  }
+  if (!className && !style) return run.text;
+  return (
+    <span className={className} style={style}>
+      {run.text}
+    </span>
+  );
+}
+
+/** Bold and underline, as the classes `.term-text` styles. */
+function runWeight(run: TextRun): string | undefined {
+  if (run.bold && run.underline) return "tb tu";
+  if (run.bold) return "tb";
+  return run.underline ? "tu" : undefined;
+}
+
+/** Foreground and background, inline: any of xterm's 256, which a class apiece cannot cover. */
+function runColors(run: TextRun): CSSProperties | undefined {
+  if (run.fg === undefined && run.bg === undefined) return undefined;
+  const style: CSSProperties = {};
+  if (run.fg !== undefined) style.color = xtermToCss(run.fg);
+  if (run.bg !== undefined) style.background = xtermToCss(run.bg);
+  return style;
+}
+
+/** A mailbox opens the mail client; everything else opens beside the page. */
+function linkTarget(href: string): { target?: string; rel?: string } {
+  return href.startsWith("mailto:") ? {} : { target: "_blank", rel: "noopener noreferrer" };
 }
 
 /**

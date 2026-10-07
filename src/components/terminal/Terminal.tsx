@@ -23,8 +23,8 @@ export default function Terminal({
   api: TerminalApi;
 }) {
   const winRef = useRef<HTMLDialogElement>(null);
-  const shell = useShell(api, onClose);
   const termWindow = useTermWindow(winRef, open, onClose);
+  const shell = useShell(api, onClose, termWindow.size.cols);
 
   if (!open) return null;
 
