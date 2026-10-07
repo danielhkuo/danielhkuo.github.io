@@ -17,10 +17,32 @@ export interface SlimProject {
   updatedAt: string;
 }
 
-/** A key/value pair rendered as a two-column row (help, contact, ls). */
+/** What only the build knows about the site, passed from the server page. */
+export interface SiteInfo {
+  /** When the site was built, ISO 8601: the date on every file that is not a repo. */
+  builtAt: string;
+  /** The résumé PDF's size, for `ls -l`. */
+  resumeBytes: number;
+}
+
+/** A key/value pair rendered as a two-column row (help). */
 export interface TerminalRow {
   k: string;
   v: string;
+}
+
+/**
+ * A stretch of styled scrollback text, as a program's escape sequences would
+ * set it: SGR colours and weight, and an OSC 8 hyperlink. Colours are xterm
+ * 256-colour indices; absent means the terminal's default.
+ */
+export interface TextRun {
+  text: string;
+  fg?: number;
+  bg?: number;
+  bold?: boolean;
+  underline?: boolean;
+  href?: string;
 }
 
 /**
@@ -33,6 +55,8 @@ export type TerminalLine =
   | { kind: "ok"; text: string }
   | { kind: "err"; text: string }
   | { kind: "rows"; title?: string; rows: TerminalRow[] }
+  /** Rows a program laid out itself, at the width the window had when it ran. */
+  | { kind: "text"; rows: TextRun[][] }
   /** A finished character grid, as a full-screen program prints on exit. */
   | { kind: "screen"; rows: CellRun[][] };
 
@@ -86,20 +110,28 @@ export interface ScreenProgram {
   tap?(y: number, x: number): void;
 }
 
-/** Sink a command writes its output to. */
+/** What a command writes its output to, and what it knows of the terminal it runs in. */
 export interface CommandContext {
   out(text: string): void;
   ok(text: string): void;
   err(text: string): void;
   rows(rows: readonly TerminalRow[], title?: string): void;
+  /** Rows the command laid out itself, for a window `cols` wide. */
+  text(rows: TextRun[][]): void;
+  /** The window's width in cells. */
+  readonly cols: number;
   clear(): void;
   close(): void;
   /** Hand the terminal body to a full-screen program until it exits. */
   program(program: ScreenProgram): void;
 }
 
-/** Argument options for autocomplete: a fixed list or a lazy getter. */
-export type CommandArgs = readonly string[] | (() => readonly string[]);
+/**
+ * Argument options for autocomplete: a fixed list, or a getter given the word
+ * being typed — which a path needs, since its options depend on the
+ * directory part already there.
+ */
+export type CommandArgs = readonly string[] | ((typed: string) => readonly string[]);
 
 export interface Command {
   desc: string;
@@ -113,12 +145,13 @@ export type CommandMap = Record<string, Command>;
 
 export type ThemeMode = "dark" | "light";
 
-/** The bridge the terminal uses to drive the surrounding page. */
+/** The bridge the terminal uses to reach the surrounding page and the browser. */
 export interface TerminalApi {
-  scrollToSection(id: string): void;
   openUrl(url: string): void;
   getProjects(): SlimProject[];
   getTheme(): ThemeMode;
-  setTheme(mode: ThemeMode | "toggle"): ThemeMode;
+  /** Choose a mode, flip it, or with "auto" go back to the system's. Returns the mode now showing. */
+  setTheme(mode: ThemeMode | "toggle" | "auto"): ThemeMode;
   close(): void;
+  site: SiteInfo;
 }

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import type { MouseEvent } from "react";
+import { EMAIL, LINKS, PROFILE } from "@/components/terminal/content";
 import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
 
@@ -14,9 +15,6 @@ export interface HeaderProject {
   forks: number;
 }
 
-const EMAIL = "danielhkuo@rice.edu";
-const RESUME = "/Daniel-Kuo-Resume.pdf";
-
 /** Ask the TerminalLauncher to open the live shell, returning focus to `trigger` on close. */
 function openShell(trigger: HTMLElement | null) {
   window.dispatchEvent(
@@ -26,7 +24,7 @@ function openShell(trigger: HTMLElement | null) {
 
 /** zsh's stock prompt at home — uncoloured, as in a fresh Terminal. */
 function Prompt() {
-  return promptFor("~/");
+  return promptFor("~");
 }
 
 function Cursor() {
@@ -35,9 +33,8 @@ function Cursor() {
 
 /**
  * The page header: a macOS Terminal window that has just run `neofetch`, with
- * the headshot standing in for the distro logo and the bio as the spec table.
- * Replaces both the old Masthead card and the decorative #about panel; the id
- * stays so the shell's `cd about` still lands here.
+ * the headshot standing in for the distro logo and the bio as the spec table —
+ * the same bio the live shell's `neofetch` and ~/about.md print.
  *
  * Below 640px it does what neofetch itself does in a narrow terminal: the logo
  * block goes above the table and every Label / value pair stacks. The Contact
@@ -53,7 +50,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
   };
 
   return (
-    <header id="about" className="nf scroll-mt-28 px-5 pt-24 pb-16 sm:px-8 sm:pt-40 lg:px-10">
+    <header id="about" className="nf px-5 pt-[calc(2.5rem+env(safe-area-inset-top))] pb-16 sm:px-8 sm:pt-20 lg:px-10">
       <div className="nf-frame">
         <div className="term-bar static">
           <Lights />
@@ -62,9 +59,9 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
             daniel — -zsh<span className="nf-title-dims"> — 132×38</span>
           </div>
         </div>
-        {/* role=presentation: the body is not itself a control. The nav's
-            Terminal button, the mobile `./shell` row and ⌘K are the
-            accessible triggers; a click here is a pointer shortcut. */}
+        {/* role=presentation: the body is not itself a control. The launcher
+            button, the mobile `./shell` row and ⌘K are the accessible
+            triggers; a click here is a pointer shortcut. */}
         <div className="nf-body ink-panel" role="presentation" onClick={onBodyClick}>
           <p className="nf-cmd">
             <Prompt />
@@ -75,7 +72,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
             <div className="nf-face">
               <Image
                 src="/headshot.webp"
-                alt="Daniel Kuo"
+                alt={PROFILE.name}
                 width={200}
                 height={200}
                 sizes="(max-width: 639px) 128px, 200px"
@@ -92,15 +89,15 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
 
               <dl className="nf-table">
                 <dt>Name</dt>
-                <dd>Daniel Kuo</dd>
+                <dd>{PROFILE.name}</dd>
                 <dt>Title</dt>
-                <dd>Full-stack product builder &amp; team architect</dd>
+                <dd>{PROFILE.title}</dd>
                 <dt>Previously</dt>
-                <dd>Summer Analyst @ Goldman Sachs AWM</dd>
+                <dd>{PROFILE.previously}</dd>
                 <dt>School</dt>
-                <dd>Rice University · CS</dd>
+                <dd>{PROFILE.school}</dd>
                 <dt>Location</dt>
-                <dd>Houston, TX</dd>
+                <dd>{PROFILE.location}</dd>
                 {projects.length > 0 && (
                   <>
                     <dt>Pinned</dt>
@@ -138,11 +135,11 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
                 )}
                 <dt className="nf-contact">Contact</dt>
                 <dd className="nf-contact">
-                  <a className="nf-link" href={`mailto:${EMAIL}`}>
+                  <a className="nf-link" href={LINKS.email}>
                     {EMAIL}
                   </a>
                   {" · "}
-                  <a className="nf-link" href={RESUME} target="_blank" rel="noopener noreferrer">
+                  <a className="nf-link" href={LINKS.resume} target="_blank" rel="noopener noreferrer">
                     resume.pdf
                   </a>
                 </dd>
@@ -170,10 +167,10 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
           </p>
 
           <div className="nf-actions">
-            <a className="nf-action nf-link" href={`mailto:${EMAIL}`}>
+            <a className="nf-action nf-link" href={LINKS.email}>
               % mail {EMAIL}
             </a>
-            <a className="nf-action nf-link" href={RESUME} target="_blank" rel="noopener noreferrer">
+            <a className="nf-action nf-link" href={LINKS.resume} target="_blank" rel="noopener noreferrer">
               % open resume.pdf
             </a>
             <button

@@ -437,15 +437,6 @@ iframe[src*="hcaptcha"] {
   .captcha-fit { --captcha-scale: 0.72; }
 }
 
-/* Hover-capability gating — used by HoverMenu to render the right trigger
-   variant without a JS state read that would trip react-hooks/set-state-in-effect. */
-@media (hover: none) {
-  .hover-only { display: none !important; }
-}
-@media (hover: hover) {
-  .touch-only { display: none !important; }
-}
-
 /* =========================================================================
    Terminal — interactive shell popup, a replica of macOS 26 Terminal.app
    with the stock "Basic" profile in the dark appearance.
@@ -699,13 +690,19 @@ iframe[src*="hcaptcha"] {
   overscroll-behavior: contain;
   padding: 8.5px 10px;
 }
-.term-line { white-space: pre-wrap; word-break: break-word; }
-.term-line.cmd { color: var(--fg); }
-.term-line.ok { color: var(--fg); }
-.term-line.ok::before { content: "✓ "; color: var(--success); }
-.term-line.err { color: var(--fg); }
-.term-line.err::before { content: "✗ "; color: var(--danger); }
+/* Output and errors look alike, as stdout and stderr do in a terminal. */
+.term-line { white-space: pre-wrap; word-break: break-word; color: var(--fg); }
 .term-line .term-accent { color: var(--accent); font-weight: 700; }
+
+/* Rows a command laid out itself — `ls` in columns, a markdown file. Each was
+   fitted to the window when it was printed; if the window has narrowed since,
+   it wraps where the terminal would. Colours are inline, from the run. */
+.term-text-row { white-space: pre-wrap; overflow-wrap: anywhere; min-height: var(--term-line); }
+.term-text .tb { font-weight: 700; }
+.term-text .tu { text-decoration: underline; text-underline-offset: 2px; }
+.term-text a { color: inherit; }
+.term-text a:not(.tu) { text-decoration: none; }
+.term-text a:hover { color: var(--fg); }
 
 /* Blocks stay on the character grid: whole blank lines, whole cells. */
 .term-block { margin: 0 0 var(--term-line); }
@@ -1042,17 +1039,6 @@ iframe[src*="hcaptcha"] {
     text-underline-offset: 4px;
   }
   .nf-shell .nf-cursor { height: 15px; vertical-align: 0; }
-}
-
-/* Under sm the nav card loses its section links (HoverMenu hides them), and
-   what is left — Terminal, the theme toggle, Email — grows to 44pt rows. */
-@media (max-width: 639px) {
-  .site-nav button,
-  .site-nav a {
-    min-height: 44px;
-    font-size: 15px;
-  }
-  .site-nav button[aria-label] { min-width: 44px; }
 }
 
 @media (max-width: 760px) {

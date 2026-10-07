@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { buildCommands, welcomeLines } from "./commands";
-import { CommandHistory, complete, tokenize } from "./shell";
+import { HOME, tildePath, type Path } from "./fs";
+import { CommandHistory, complete, execute } from "./shell";
+import { siteTree } from "./site";
 import type { CommandContext, ScreenProgram, TerminalApi, TerminalLine } from "./types";
 
 /** A scrollback line. `id` keys it for React and never repeats, even across `clear`. */
@@ -13,7 +15,7 @@ export interface LogEntry {
 export interface Shell {
   /** The scrollback, oldest first. */
   entries: readonly LogEntry[];
-  /** The working directory, e.g. "~/work". */
+  /** The working directory as zsh's `%~` writes it, e.g. "~/projects". */
   cwd: string;
   /** The line being edited at the prompt. */
   input: string;
@@ -46,13 +48,15 @@ const cleared = (log: Log): Log => ({ entries: [], nextId: log.nextId });
 
 /**
  * The shell behind the live terminal: scrollback, prompt line, cwd, history,
- * and the command registry it dispatches to. Commands drive the page through
- * `api`; `exit` closes the window through `onClose`.
+ * and the command registry it dispatches to. Commands reach the page through
+ * `api`; `exit` closes the window through `onClose`. `cols` is the window's
+ * width in cells, which `ls` and `cat` lay their output out to.
  */
-export function useShell(api: TerminalApi, onClose: () => void): Shell {
-  const [log, setLog] = useState(() => append({ entries: [], nextId: 0 }, welcomeLines()));
+export function useShell(api: TerminalApi, onClose: () => void, cols: number): Shell {
+  const [log, setLog] = useState(() => append({ entries: [], nextId: 0 }, welcomeLines(new Date())));
   const [input, setInput] = useState("");
-  const [navPath, setNavPath] = useState<string[]>([]);
+  // Where the shell is, and where it was before the last `cd` (for `cd -`).
+  const [dirs, setDirs] = useState<{ cwd: Path; old: Path }>({ cwd: HOME, old: HOME });
   const [program, setProgram] = useState<ScreenProgram | null>(null);
   // Only handlers touch the history, so it is created on first use there.
   const historyRef = useRef<CommandHistory>(null);
@@ -61,11 +65,21 @@ export function useShell(api: TerminalApi, onClose: () => void): Shell {
     return historyRef.current;
   };
 
+  const root = useMemo(() => siteTree(api.getProjects(), api.site), [api]);
   // Rebuilt when the cwd changes (cheap; `cd` is rare), so command closures
   // always read the current path.
-  const commands = useMemo(() => buildCommands(api, () => navPath, setNavPath), [api, navPath]);
+  const commands = useMemo(
+    () =>
+      buildCommands(api, {
+        root,
+        cwd: () => dirs.cwd,
+        oldCwd: () => dirs.old,
+        chdir: (path) => setDirs((d) => ({ cwd: path, old: d.cwd })),
+      }),
+    [api, root, dirs],
+  );
   const completion = useMemo(() => complete(input, commands), [input, commands]);
-  const cwd = navPath.length ? `~/${navPath.join("/")}` : "~/";
+  const cwd = tildePath(dirs.cwd);
 
   // Functional updates throughout: a command may print after an await.
   const print = (...lines: TerminalLine[]) => setLog((l) => append(l, lines));
@@ -75,6 +89,8 @@ export function useShell(api: TerminalApi, onClose: () => void): Shell {
     ok: (text) => print({ kind: "ok", text }),
     err: (text) => print({ kind: "err", text }),
     rows: (rows, title) => print({ kind: "rows", rows: [...rows], title }),
+    text: (rows) => print({ kind: "text", rows }),
+    cols,
     clear: () => setLog(cleared),
     close: () => window.setTimeout(onClose, 120),
     program: (p) => setProgram(p),
@@ -86,18 +102,7 @@ export function useShell(api: TerminalApi, onClose: () => void): Shell {
     const raw = line.trim();
     if (!raw) return;
     history().add(raw);
-    const [word = "", ...args] = tokenize(raw);
-    const name = word.toLowerCase();
-    const command = commands[name];
-    if (!command) {
-      ctx.err(`command not found: ${name} — type \`help\``);
-      return;
-    }
-    try {
-      command.run(args, ctx);
-    } catch (e) {
-      ctx.err(`error: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    execute(raw, commands, ctx);
   };
 
   const recall = (line: string | null) => {
