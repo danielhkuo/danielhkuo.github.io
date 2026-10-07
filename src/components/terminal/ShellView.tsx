@@ -190,25 +190,11 @@ function TextLines({ rows }: { rows: TextRun[][] }) {
 
 /** One run: its colours and weight, and a real link when it carries a target. */
 function Run({ run }: { run: TextRun }) {
-  const className = [run.bold && "tb", run.underline && "tu"].filter(Boolean).join(" ") || undefined;
-  const style: CSSProperties | undefined =
-    run.fg === undefined && run.bg === undefined
-      ? undefined
-      : {
-          color: run.fg === undefined ? undefined : xtermToCss(run.fg),
-          background: run.bg === undefined ? undefined : xtermToCss(run.bg),
-        };
+  const className = runWeight(run);
+  const style = runColors(run);
   if (run.href) {
-    // A mailbox opens the mail client; everything else opens beside the page.
-    const external = !run.href.startsWith("mailto:");
     return (
-      <a
-        className={className}
-        style={style}
-        href={run.href}
-        target={external ? "_blank" : undefined}
-        rel={external ? "noopener noreferrer" : undefined}
-      >
+      <a className={className} style={style} href={run.href} {...linkTarget(run.href)}>
         {run.text}
       </a>
     );
@@ -219,6 +205,27 @@ function Run({ run }: { run: TextRun }) {
       {run.text}
     </span>
   );
+}
+
+/** Bold and underline, as the classes `.term-text` styles. */
+function runWeight(run: TextRun): string | undefined {
+  if (run.bold && run.underline) return "tb tu";
+  if (run.bold) return "tb";
+  return run.underline ? "tu" : undefined;
+}
+
+/** Foreground and background, inline: any of xterm's 256, which a class apiece cannot cover. */
+function runColors(run: TextRun): CSSProperties | undefined {
+  if (run.fg === undefined && run.bg === undefined) return undefined;
+  const style: CSSProperties = {};
+  if (run.fg !== undefined) style.color = xtermToCss(run.fg);
+  if (run.bg !== undefined) style.background = xtermToCss(run.bg);
+  return style;
+}
+
+/** A mailbox opens the mail client; everything else opens beside the page. */
+function linkTarget(href: string): { target?: string; rel?: string } {
+  return href.startsWith("mailto:") ? {} : { target: "_blank", rel: "noopener noreferrer" };
 }
 
 /**
