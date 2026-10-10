@@ -449,6 +449,93 @@ iframe[src*="hcaptcha"] {
 }
 
 /* =========================================================================
+   Fish cards — left alone, each project card's border bends into its
+   project's fish. components/fish/tank.ts decides when and runs the timeline;
+   lib/fish/morph.ts is the geometry. The script only writes numbers: a
+   `data-fish` attribute while a card is anything but a plain card, and 0–1
+   custom properties for how far each layer has come. What that looks like is
+   decided here, so the theme switch needs no redraw.
+   ========================================================================= */
+/* The fish layer has to reach out over the card's border, which the Card's
+   `overflow: clip` would cut off. These cards are square-cornered, so nothing
+   was relying on the clip. Two classes, to outrank the Card's own. */
+.astryx-card.fish-card {
+  position: relative;
+  overflow: visible;
+}
+/* Positioned so it paints above the layer: an absolutely positioned box would
+   otherwise sit on top of in-flow text. */
+.fish-copy {
+  position: relative;
+}
+.fish-layer {
+  position: absolute;
+  /* Out over the 1px border: the layer's origin is the card's border edge,
+     which is the coordinate system tank.ts measures in. */
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  display: none;
+  overflow: visible;
+  pointer-events: none;
+}
+/* Screen only: a page printed while cards are fish prints the cards. */
+@media screen {
+  .fish-card[data-fish] > .fish-layer {
+    display: block;
+  }
+  /* While a card is turning, its own border and background stand down and the
+     outline path takes over both: stroked where the border was, and filled
+     with the card's surface, so that in dark mode the lighter panel changes
+     shape with it instead of staying behind as a rectangle. */
+  .astryx-card.fish-card[data-fish] {
+    border-color: transparent;
+    background-color: transparent;
+  }
+  /* The copy goes; the name stays, moved down to a caption under the fish. It
+     is the same heading and the same link throughout, only transformed, so it
+     never leaves the tab order or the accessibility tree. */
+  .fish-card[data-fish] .fish-copy > :not(.fish-name) {
+    opacity: var(--fish-copy, 1);
+  }
+  /* Faded-out copy is still there to be tabbed to, but must not be clicked:
+     the stars row ends up lying over the caption, and an invisible "Repo"
+     link would open a tab for a click on what looks like empty paper. */
+  .fish-card[data-fish="bare"] .fish-copy > :not(.fish-name) {
+    pointer-events: none;
+  }
+  .fish-card[data-fish] .fish-name {
+    position: relative;
+    z-index: 1;
+    transform-origin: 0 0;
+    transform: translateY(calc(var(--fish-settle, 0) * var(--fish-name-drop, 0px)))
+      scale(calc(1 - var(--fish-settle, 0) * var(--fish-name-shrink, 0)));
+  }
+}
+.fish-outline {
+  fill: var(--color-background-card);
+  stroke: color-mix(in srgb, var(--fg) calc(var(--fish-settle, 0) * 100%), var(--color-border));
+  stroke-width: 1px;
+  stroke-linejoin: round;
+}
+.fish-strokes path {
+  fill: none;
+  stroke-width: 1px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The group is scaled to fit the card; the line stays 1px whatever the fit. */
+  vector-effect: non-scaling-stroke;
+}
+.fish-ink {
+  stroke: var(--fg);
+  opacity: var(--fish-ink, 0);
+}
+.fish-hatch {
+  stroke: var(--accent);
+  opacity: var(--fish-hatch, 0);
+}
+
+/* =========================================================================
    Terminal — interactive shell popup, a replica of macOS 26 Terminal.app
    with the stock "Basic" profile in the dark appearance.
 

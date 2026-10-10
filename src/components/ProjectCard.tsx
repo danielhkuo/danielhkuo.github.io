@@ -1,4 +1,5 @@
 import { Card, VStack, HStack, Heading, Text } from "@astryxdesign/core";
+import FishLayer from "@/components/fish/FishLayer";
 import type { PinnedRepo } from "@/lib/github";
 
 interface ProjectCardProps {
@@ -15,14 +16,19 @@ function shortDate(iso: string): string {
  * A compact repo card: language and date, the name as the loudest thing,
  * two lines of description, the language mix as one segmented rule, then
  * stars/forks and the links as plain text. Three fit in a row.
+ *
+ * Left alone, the card turns into its project's fish (see fish/tank.ts). The
+ * fish-* classes are that feature's hooks: the layer the fish is drawn on, the
+ * copy that fades out, and the name, which stays.
  */
 export default function ProjectCard({ project }: ProjectCardProps) {
   const languages = project.languages.filter((lang) => lang.percentage > 1);
   const hasCounts = project.stargazerCount > 0 || project.forkCount > 0;
 
   return (
-    <Card padding={5} className="h-full">
-      <VStack gap={3} height="100%">
+    <Card padding={5} className="fish-card h-full">
+      <FishLayer name={project.name} />
+      <VStack gap={3} height="100%" className="fish-copy">
         <HStack gap={2} hAlign="between" vAlign="center">
           <Text type="supporting" as="span" color="secondary" className="text-[13px]">
             <HStack gap={1.5} vAlign="center" as="span">
@@ -39,7 +45,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           </Text>
         </HStack>
 
-        <Heading level={3} className="font-display text-[26px] leading-[1.1] [overflow-wrap:anywhere]">
+        <Heading level={3} className="fish-name font-display text-[26px] leading-[1.1] [overflow-wrap:anywhere]">
           <a
             href={project.url}
             target="_blank"
