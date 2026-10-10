@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party code, kept as close to upstream as possible.
+    "src/lib/fish/fishdraw.mjs",
   ]),
 ]);
 

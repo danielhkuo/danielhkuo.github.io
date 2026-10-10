@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { sneakyTimes, ibmPlexSans } from "./fonts";
+import { adventor, libron } from "./fonts";
 import AstryxThemeProvider from "@/components/AstryxThemeProvider";
 import { flexokiTheme } from "@/theme/flexoki";
 import { ATTR, STORAGE_KEY, THEME_COLOR } from "@/lib/theme-constants";
@@ -46,12 +46,12 @@ export default function RootLayout({
     // var() there can only see custom properties defined on <html> itself.
     // On <body> they resolved to the literal fallbacks instead — and next/font
     // registers LOCAL fonts under a generated family name, so a human-readable
-    // fallback like "Sneaky Times" never matches it and headings silently fell
+    // fallback like "Libron" never matches it and the text silently fell
     // through to Georgia.
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sneakyTimes.variable} ${ibmPlexSans.variable}`}
+      className={`${adventor.variable} ${libron.variable}`}
     >
       <head>
         {/* The meta the script below rewrites. Must precede it: the script looks
