@@ -39,7 +39,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           </Text>
         </HStack>
 
-        <Heading level={3} className="font-display text-[26px] leading-[1.1] tracking-[-0.01em] [overflow-wrap:anywhere]">
+        <Heading level={3} className="font-display text-[26px] leading-[1.1] [overflow-wrap:anywhere]">
           <a
             href={project.url}
             target="_blank"
@@ -50,7 +50,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           </a>
         </Heading>
 
-        <Text type="body" as="p" color="secondary" className="line-clamp-2 min-h-[42px] text-sm leading-[1.5]">
+        <Text type="body" as="p" color="secondary" className="line-clamp-2 min-h-[42px] font-prose text-[13px] leading-[1.5]">
           {project.description}
         </Text>
 

@@ -51,16 +51,14 @@ export const flexokiTheme = defineTheme({
   typography: {
     scale: {base: 14, ratio: 1.2},
     body: {
-      family: 'IBM Plex Sans',
-      fallbacks:
-        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      family: 'Libron',
+      fallbacks: 'Georgia, "Times New Roman", Times, serif',
     },
     heading: {
-      family: 'Sneaky Times',
-      fallbacks: 'Georgia, "Times New Roman", Times, serif',
-      // Sneaky Times has a single weight; the theme's default bold steps would
-      // only trigger synthetic emboldening on a very high-contrast face.
-      weights: {3: 'normal', 4: 'normal'},
+      family: 'TeX Gyre Adventor',
+      fallbacks: '"Century Gothic", system-ui, sans-serif',
+      // Only Adventor Bold ships (see src/app/fonts.ts).
+      weight: 'bold',
     },
     code: {
       // macOS Terminal.app's own font — see --font-mono-family in globals.css.

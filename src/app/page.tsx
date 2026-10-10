@@ -72,7 +72,7 @@ export default async function Home() {
                 ))}
               </Grid>
             ) : (
-              <Text type="body" className="font-mono text-sm text-ink">
+              <Text type="body" className="text-sm text-ink">
                 No pinned repositories found. Add a GITHUB_TOKEN to fetch real projects.
               </Text>
             )}
@@ -80,7 +80,7 @@ export default async function Home() {
 
           <section id="contact" className="border-t border-divider py-16">
             <Grid columns={{ minWidth: 280, repeat: "fit" }} gap={8} className="paper-panel p-6 sm:p-8 lg:p-10">
-              <Heading level={2} type="display-2" className="font-display text-[clamp(30px,4vw,44px)] font-medium leading-[1.05] text-text-primary">
+              <Heading level={2} type="display-2" className="font-display text-[clamp(30px,4vw,44px)] leading-[1.05] text-text-primary">
                 Send a note.
               </Heading>
               <ContactForm />
