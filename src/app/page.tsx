@@ -14,10 +14,13 @@ export const metadata: Metadata = {
     "Software engineer and Rice CS student building AI products, self-hosted systems, and practical developer tools.",
 };
 
-// Lazy load below-the-fold components
+// Lazy load below-the-fold components. The placeholder is in the static HTML,
+// so it is the form's first paint: keep it the form's height or the panel
+// jumps on load. The form loses a row at 516px, where the submit button fits
+// beside the captcha, and another at `sm`, where Name and Email share one.
 const ContactForm = dynamic(() => import("@/components/ContactForm"), {
   loading: () => (
-    <div className="h-64 animate-pulse border border-divider bg-surface p-8" />
+    <div className="h-100 animate-pulse border border-divider bg-surface min-[516px]:h-88 sm:h-69" />
   ),
 });
 
@@ -78,13 +81,15 @@ export default async function Home() {
             )}
           </section>
 
-          <section id="contact" className="border-t border-divider py-16">
-            <Grid columns={{ minWidth: 280, repeat: "fit" }} gap={8} className="paper-panel p-6 sm:p-8 lg:p-10">
-              <Heading level={2} type="display-2" className="font-display text-[clamp(30px,4vw,44px)] leading-[1.05] text-text-primary">
+          {/* A closing note, not a second hero: one narrow panel on the cards'
+              left edge, about the size of two of them. */}
+          <section id="contact" className="border-t border-divider py-10">
+            <VStack gap={4} padding={6} className="paper-panel reveal max-w-xl">
+              <Heading level={2} type="display-3" className="font-display leading-tight text-text-primary">
                 Send a note.
               </Heading>
               <ContactForm />
-            </Grid>
+            </VStack>
           </section>
         </VStack>
       </main>
@@ -94,7 +99,7 @@ export default async function Home() {
           gap={3}
           wrap="wrap"
           vAlign="center"
-          className="mx-auto max-w-6xl justify-between px-5 py-10 sm:px-8 lg:px-10"
+          className="reveal mx-auto max-w-6xl justify-between px-5 py-10 sm:px-8 lg:px-10"
         >
           <Text type="label" className="caps-label text-xs text-text-muted">
             <span suppressHydrationWarning>© {new Date().getFullYear()} · Daniel Kuo</span>

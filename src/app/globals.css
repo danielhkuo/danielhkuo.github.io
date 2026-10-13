@@ -381,17 +381,13 @@ h3 {
    !important because Astryx's atomic font-weight class is unlayered and
    out-specifies our utilities.
 
-   The face is set tight, and tighter as it grows, because the gaps between
-   letters open up with size: on a 26px card name -0.04em already makes letters
-   touch, while the 44px contact heading has room for -0.045em. Tracking lives
+   The face is set tight, but no tighter: on a 26px card name -0.04em already
+   makes letters touch, and the contact heading is only 29px. Tracking lives
    here rather than in a utility for the same reason as the weight — this rule
    is unlayered, so a `tracking-*` class on the heading would lose to it. */
 .font-display {
   font-weight: 700 !important;
   letter-spacing: -0.03em;
-}
-h2.font-display {
-  letter-spacing: -0.045em;
 }
 
 /* hCaptcha injects its own iframe with a 4px radius. It's the only element on
@@ -958,9 +954,31 @@ iframe[src*="hcaptcha"] {
    (.term-bar) so the two read as the same app; the body is an ink panel, so
    it stays a stock dark Terminal in both themes.
    ========================================================================= */
-.nf-frame {
+/* The header is one screen tall and centres the window in it. Its block
+   padding is held in variables rather than utilities because the docking
+   keyframes (see "Scroll reveal") have to subtract it. */
+.nf {
+  --nf-pt: calc(2.5rem + env(safe-area-inset-top));
+  --nf-pb: 2.5rem;
+  padding-block: var(--nf-pt) var(--nf-pb);
+}
+@media (min-width: 640px) {
+  .nf {
+    --nf-pt: 4rem;
+    --nf-pb: 4rem;
+  }
+}
+/* What the header places and what docks on scroll: a box the exact size of
+   the window, so that a percentage in its `translate` is the window's height.
+   The header is a column flexbox, and an auto margin on a flex item's cross
+   axis turns stretch off — without a width it would shrink to the longest
+   line. */
+.nf-dock {
+  width: 100%;
   max-width: 896px;
   margin: 0 auto;
+}
+.nf-frame {
   /* A Terminal window like the live one, so the same corners — square
      corners under a macOS title bar read as a web panel, not a window. */
   border-radius: var(--term-radius);
@@ -1069,6 +1087,92 @@ iframe[src*="hcaptcha"] {
 
 /* Mobile only: the Contact row as tappable prompt lines. */
 .nf-actions { display: none; }
+
+/* Intro — on the first load in a tab the header plays as a session opening:
+   the window pops in on an empty prompt, `neofetch` is typed, the output
+   prints top to bottom, and the idle prompt comes back. It is keyed on
+   html[data-intro="play"], which the pre-paint script in layout.tsx stamps
+   once per tab session, so without JS, on a later load or under reduced
+   motion the header just renders finished.
+
+   Rows are held back with visibility, not display: the window is its final
+   size from the first frame, nothing below it moves, and a link that has not
+   printed yet cannot take focus. The holds fill backwards only, so a row that
+   has printed is back on its own styles; the typing cursor is the exception
+   and fills forwards, to stay gone.
+
+   When the last prompt is back the script clears the attribute and this is
+   the plain header again. It has to: a row that a breakpoint brings out of
+   display:none starts its animation afresh, and would sit through its delay
+   a second time. Screen only for the same reason — a print in the middle of
+   it would lose rows. */
+.nf-cursor-intro { display: none; }
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-intro="play"] .nf {
+    --nf-type-at: 0.45s; /* the beat on the empty prompt */
+    --nf-stroke: 60ms; /* per keystroke; --nf-key is taken, it is a colour */
+    --nf-return: calc(var(--nf-type-at) + 8 * var(--nf-stroke) + 0.2s);
+    --nf-row: 40ms; /* per printed row */
+  }
+  html[data-intro="play"] .nf-frame {
+    animation: termpop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  /* `neofetch` is eight cells of a monospace face. The word is its full
+     width from the first frame, so the line breaks where the finished header
+     breaks it; a clip uncovers one cell per keystroke and the cursor steps
+     back from its end by the same eight. Nothing here is layout — typing by
+     growing the box moved the word to a second row, and the window with it,
+     on the last keystroke of a 320px screen. */
+  html[data-intro="play"] .nf-typed {
+    display: inline-block;
+    animation: nf-type calc(8 * var(--nf-stroke)) steps(8, end) var(--nf-type-at) backwards;
+  }
+  /* Solid while typing, as a real cursor is; gone at the return. The
+     negative margin takes its 8px out of the line, for the width at which
+     the prompt and the command exactly fill the row: the cursor would wrap
+     on its own and add one. */
+  html[data-intro="play"] .nf-cursor-intro {
+    display: inline-block;
+    margin-right: -8px;
+    animation:
+      nf-caret calc(8 * var(--nf-stroke)) steps(8, end) var(--nf-type-at) backwards,
+      nf-gone 1ms linear var(--nf-return) forwards;
+  }
+  html[data-intro="play"] :is(.nf-face, .nf-host, .nf-rule, .nf-table > *, .nf-swatches, .nf-idle, .nf-actions) {
+    animation: nf-held 1ms linear calc(var(--nf-return) + var(--nf-i, 0) * var(--nf-row)) backwards;
+  }
+  /* The print order. A dt and its dd share an index: both are the nth of
+     their type. The last prompt waits one extra row. */
+  .nf-host { --nf-i: 1; }
+  .nf-rule { --nf-i: 2; }
+  .nf-table > :nth-of-type(1) { --nf-i: 3; }
+  .nf-table > :nth-of-type(2) { --nf-i: 4; }
+  .nf-table > :nth-of-type(3) { --nf-i: 5; }
+  .nf-table > :nth-of-type(4) { --nf-i: 6; }
+  .nf-table > :nth-of-type(5) { --nf-i: 7; }
+  .nf-table > :nth-of-type(6) { --nf-i: 8; }
+  .nf-table > :nth-of-type(7) { --nf-i: 9; }
+  .nf-swatches { --nf-i: 10; }
+  .nf-idle,
+  .nf-actions { --nf-i: 12; }
+}
+@keyframes nf-type {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes nf-caret {
+  from { translate: -8ch 0; }
+}
+@keyframes nf-held {
+  from { visibility: hidden; }
+}
+/* Hidden at both ends, not just `to`: visibility only reads hidden at a
+   progress of exactly 1, and a 1ms run after a long delay ends a rounding
+   error short of it. */
+@keyframes nf-gone {
+  from, to { visibility: hidden; }
+}
 
 
 /* Narrow terminal: logo block above the table, every row stacked — what
@@ -1222,6 +1326,103 @@ iframe[src*="hcaptcha"] {
   /* The keyboard covers the home indicator: the row sits right on the keyboard. */
   .term-win[data-keyboard] .term-inputrow { padding-bottom: 10px; }
   .term-ghost .tabhint { font-size: 11px; }
+}
+
+/* =========================================================================
+   Scroll reveal — the first screen is the terminal alone, and scrolling
+   brings the rest in. Everything here runs on scroll-driven animations: the
+   clock is a scroll position, so there is no script and no state, and it all
+   runs backwards on the way back up.
+
+   Docking. The header is a screen tall with the window in the middle of it.
+   Here the window is laid out at the BOTTOM of the header instead, where it
+   belongs once the page is moving, and the first frame lifts it back to the
+   centre by half the spare height. The timeline is the window's own passage
+   through the screen, inset by the header's padding: it starts with the
+   window's bottom on the lower inset, which is scroll 0, and ends with its
+   top on the upper one. So the window climbs to the top at half the speed of
+   the scroll while the projects come up under it at full speed, the two meet,
+   and the page goes on as one. A window taller than the screen has no spare
+   height: min() pins the lift at zero and it simply scrolls.
+
+   Reveal. Cards, the contact panel and the footer fade in as they enter. The
+   panel also rises 12px; a card does not, because the fish measure it with
+   getBoundingClientRect and a fractional translate leaves the outline half a
+   pixel out, and the footer does not, because a translate on the last box of
+   the page lengthens the scroll.
+
+   The values are released once an element is in — backwards fill, from-only
+   keyframes — but the element stays a stacking context and a containing block
+   for fixed descendants for as long as the rule matches. Keep these off any
+   ancestor of the launcher or the terminal window.
+
+   Longhands throughout: the `animation` shorthand resets the timeline, and
+   Lightning CSS has folded a timeline into it, which no browser accepts. The
+   1ms duration is for Firefox, which wants a real one; a scroll timeline
+   stretches it over the range.
+
+   Browsers without scroll-driven animations skip the block and get the page
+   as laid out, window centred. Screen only: paper has no scroll position.
+   ========================================================================= */
+@media screen and (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry 0% entry 100%)) {
+    .nf { justify-content: flex-end; }
+    .nf-dock {
+      animation-name: nf-dock;
+      animation-duration: 1ms;
+      animation-timing-function: linear;
+      animation-fill-mode: backwards;
+      animation-timeline: view(block var(--nf-pt) var(--nf-pb));
+      animation-range: contain 0% contain 100%;
+    }
+
+    .reveal {
+      animation-name: reveal;
+      animation-duration: 1ms;
+      animation-timing-function: linear;
+      animation-fill-mode: backwards;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+    .fish-card.reveal,
+    footer .reveal { animation-name: reveal-fade; }
+    /* Nobody types into a form that is half faded in: a field can take focus
+       while its panel is still entering, and the page does not scroll for
+       it. */
+    .reveal:focus-within { animation-name: none; }
+
+    /* The launcher is fixed, so it reads the page's scroll instead: absent on
+       the first screen, in by the time a third of it has gone past. Faded,
+       never hidden — it stays in the tab order and the accessibility tree,
+       where it is the only terminal control a wide screen has, and it has to
+       be able to take focus back when the terminal closes at the top. So
+       keyboard focus shows it wherever the page is, and until it is half in
+       it is not a click target. The gate has its own keyframes so the fade
+       can stay on the compositor. */
+    .term-launch {
+      animation-name: reveal-fade, launch-gate;
+      animation-duration: 1ms;
+      animation-timing-function: linear;
+      animation-fill-mode: backwards;
+      animation-timeline: scroll(root);
+      animation-range: 0 30vh;
+    }
+    .term-launch:focus-visible { animation-name: none; }
+  }
+}
+/* Half the header's spare height, upwards: (100svh − padding − window) / 2,
+   with the window's height as this box's own 100%. */
+@keyframes nf-dock {
+  from { translate: 0 min(0px, calc(50% + (var(--nf-pt) + var(--nf-pb)) / 2 - 50svh)); }
+}
+@keyframes reveal {
+  from { opacity: 0; translate: 0 12px; }
+}
+@keyframes reveal-fade {
+  from { opacity: 0; }
+}
+@keyframes launch-gate {
+  from { pointer-events: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

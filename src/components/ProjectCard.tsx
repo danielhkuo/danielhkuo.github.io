@@ -26,7 +26,7 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const hasCounts = project.stargazerCount > 0 || project.forkCount > 0;
 
   return (
-    <Card padding={5} className="fish-card h-full">
+    <Card padding={5} className="fish-card reveal h-full">
       <FishLayer name={project.name} />
       <VStack gap={3} height="100%" className="fish-copy">
         <HStack gap={2} hAlign="between" vAlign="center">

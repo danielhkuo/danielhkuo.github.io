@@ -49,7 +49,9 @@ export default function TerminalLauncher({
       body.style.left = prev.left;
       body.style.right = prev.right;
       body.style.width = prev.width;
-      window.scrollTo(0, scrollY);
+      // Instant: the page scrolls smoothly by default, and unpinning leaves it
+      // at the top — it would visibly travel back down through the whole page.
+      window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
     };
   }, [open]);
 
