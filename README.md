@@ -6,9 +6,10 @@ rebuilds whenever I push. Built with Next.js and hosted on GitHub Pages.
 
 ## Features
 
-- An entry that is only a terminal: the first screen is one window, which on
-  a first visit types `neofetch` and prints the bio. Scrolling docks it — the
-  window climbs to the top at half speed while the projects rise to meet it.
+- An entry that is only a terminal: a first visit starts on a lone cursor,
+  the window opens out of it, types `neofetch` and prints the bio. Scrolling
+  docks it — the window climbs to the top at half speed while the projects
+  rise to meet it.
 - Pinned GitHub repos, pulled at build time and shown with their language
   breakdown, stars, and forks.
 - An interactive terminal that holds the site as a small filesystem: `ls`,

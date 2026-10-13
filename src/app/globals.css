@@ -961,6 +961,15 @@ iframe[src*="hcaptcha"] {
   --nf-pt: calc(2.5rem + env(safe-area-inset-top));
   --nf-pb: 2.5rem;
   padding-block: var(--nf-pt) var(--nf-pb);
+  /* The window's shadow and the body's padding, as variables: the intro
+     draws a stand-in for the window and has to match both. The shadow is
+     .term-win's, a touch lighter for a resting window. */
+  --nf-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.28),
+    0 12px 24px rgba(0, 0, 0, 0.12),
+    0 28px 76px rgba(0, 0, 0, 0.18);
+  --nf-body-x: 40px;
+  --nf-body-y: 34px;
 }
 @media (min-width: 640px) {
   .nf {
@@ -984,15 +993,11 @@ iframe[src*="hcaptcha"] {
   border-radius: var(--term-radius);
   corner-shape: var(--term-corner);
   overflow: hidden;
-  /* Same macOS window shadow as .term-win, a touch lighter for a resting window. */
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.28),
-    0 12px 24px rgba(0, 0, 0, 0.12),
-    0 28px 76px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--nf-shadow);
 }
 .nf-body {
   background: var(--panel-ink);
-  padding: 34px 40px 30px;
+  padding: var(--nf-body-y) var(--nf-body-x) 30px;
   font-family: var(--font-mono-family);
   font-size: 13.5px;
   line-height: 1.7;
@@ -1089,11 +1094,19 @@ iframe[src*="hcaptcha"] {
 .nf-actions { display: none; }
 
 /* Intro — on the first load in a tab the header plays as a session opening:
-   the window pops in on an empty prompt, `neofetch` is typed, the output
-   prints top to bottom, and the idle prompt comes back. It is keyed on
-   html[data-intro="play"], which the pre-paint script in layout.tsx stamps
-   once per tab session, so without JS, on a later load or under reduced
-   motion the header just renders finished.
+   the page starts on a lone cursor, the window opens out of it, `neofetch` is
+   typed, the output prints top to bottom, and the idle prompt comes back. It
+   is keyed on html[data-intro="play"], which the pre-paint script in
+   layout.tsx stamps once per tab session, so without JS, on a later load or
+   under reduced motion the header just renders finished.
+
+   The window that opens is a stand-in: a pseudo-element behind the real one,
+   the same shape, colours and shadow, scaled up from the cursor. For as long
+   as the intro plays the real window has no surfaces of its own, and when the
+   attribute comes off the two swap in one frame, under which nothing changes.
+   That keeps everything that moves to `scale` and `opacity`, which the
+   compositor runs by itself — the intro plays while the page is hydrating,
+   and anything that needs a repaint per frame stutters there.
 
    Rows are held back with visibility, not display: the window is its final
    size from the first frame, nothing below it moves, and a link that has not
@@ -1110,13 +1123,42 @@ iframe[src*="hcaptcha"] {
 
 @media screen and (prefers-reduced-motion: no-preference) {
   html[data-intro="play"] .nf {
-    --nf-type-at: 0.45s; /* the beat on the empty prompt */
-    --nf-stroke: 60ms; /* per keystroke; --nf-key is taken, it is a colour */
+    --nf-grow-at: 0.5s; /* the beat on the lone cursor */
+    --nf-grow: 0.42s; /* the window opening out of it */
+    --nf-open: calc(var(--nf-grow-at) + var(--nf-grow));
+    --nf-type-at: calc(var(--nf-open) + 0.12s);
+    --nf-stroke: 55ms; /* per keystroke; --nf-key is taken, it is a colour */
     --nf-return: calc(var(--nf-type-at) + 8 * var(--nf-stroke) + 0.2s);
     --nf-row: 40ms; /* per printed row */
   }
-  html[data-intro="play"] .nf-frame {
-    animation: termpop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  /* The stand-in. It sits under the window (the dock is its stacking context)
+     and grows from where the cursor is: the body's padding, the prompt's 21
+     cells, half a cursor; the title bar, the padding, half a line. Near
+     enough — it comes out from under the cursor's chip. */
+  html[data-intro="play"] .nf-dock {
+    position: relative;
+    isolation: isolate;
+  }
+  html[data-intro="play"] .nf-dock::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: var(--term-radius);
+    corner-shape: var(--term-corner);
+    background: linear-gradient(var(--term-chrome) 32px, var(--panel-ink) 32px);
+    box-shadow: var(--nf-shadow);
+    font: 14px var(--font-mono-family); /* so that 1ch is the prompt's cell */
+    transform-origin: calc(var(--nf-body-x) + 21ch + 4px) calc(32px + var(--nf-body-y) + 10px);
+    animation: nf-grow var(--nf-grow) cubic-bezier(0.16, 1, 0.3, 1) var(--nf-grow-at) backwards;
+  }
+  /* The real window, flat and clear over it. */
+  html[data-intro="play"] .nf-frame { box-shadow: none; }
+  html[data-intro="play"] .nf-body { background-color: transparent; }
+  /* The lights and title, and the prompt, come up as it lands. */
+  html[data-intro="play"] .nf-frame .term-bar,
+  html[data-intro="play"] .nf-cmd:not(.nf-idle) .nf-ps1 {
+    animation: reveal-fade 0.16s linear calc(var(--nf-open) - 0.1s) backwards;
   }
   /* `neofetch` is eight cells of a monospace face. The word is its full
      width from the first frame, so the line breaks where the finished header
@@ -1128,14 +1170,19 @@ iframe[src*="hcaptcha"] {
     display: inline-block;
     animation: nf-type calc(8 * var(--nf-stroke)) steps(8, end) var(--nf-type-at) backwards;
   }
-  /* Solid while typing, as a real cursor is; gone at the return. The
-     negative margin takes its 8px out of the line, for the width at which
-     the prompt and the command exactly fill the row: the cursor would wrap
-     on its own and add one. */
+  /* The cursor. Alone at first, on a chip of the window's ink so that it
+     shows on the light page as well, with one blink; the chip goes once the
+     window has grown past it, because a shadow there would lie over the
+     prompt. Then solid while typing, as a real cursor is, and gone at the
+     return. The negative margin takes its 8px out of the line, for the width
+     at which the prompt and the command exactly fill the row: the cursor
+     would wrap on its own and add one. */
   html[data-intro="play"] .nf-cursor-intro {
     display: inline-block;
     margin-right: -8px;
     animation:
+      nf-chip calc(var(--nf-grow-at) + 0.1s) linear,
+      nf-lone var(--nf-grow-at) steps(1, end),
       nf-caret calc(8 * var(--nf-stroke)) steps(8, end) var(--nf-type-at) backwards,
       nf-gone 1ms linear var(--nf-return) forwards;
   }
@@ -1156,6 +1203,16 @@ iframe[src*="hcaptcha"] {
   .nf-swatches { --nf-i: 10; }
   .nf-idle,
   .nf-actions { --nf-i: 12; }
+}
+@keyframes nf-grow {
+  from { scale: 0; }
+}
+@keyframes nf-chip {
+  from, to { box-shadow: 0 0 0 5px var(--panel-ink); }
+}
+@keyframes nf-lone {
+  60% { background-color: transparent; }
+  80% { background-color: var(--panel-on); }
 }
 @keyframes nf-type {
   from { clip-path: inset(0 100% 0 0); }
@@ -1178,14 +1235,16 @@ iframe[src*="hcaptcha"] {
 /* Narrow terminal: logo block above the table, every row stacked — what
    neofetch itself does when the columns will not fit. */
 @media (max-width: 639px) {
-  .nf-frame {
-    box-shadow:
+  .nf {
+    --nf-shadow:
       0 0 0 0.5px rgba(0, 0, 0, 0.24),
       0 10px 26px rgba(0, 0, 0, 0.14);
+    --nf-body-x: 16px;
+    --nf-body-y: 20px;
   }
   .nf-title-dims { display: none; }
 
-  .nf-body { padding: 20px 16px 22px; font-size: 13px; line-height: 1.6; }
+  .nf-body { padding-bottom: 22px; font-size: 13px; line-height: 1.6; }
   .nf-grid { display: block; margin-top: 16px; }
   .nf-face img { width: 128px; height: 128px; }
   .nf-face-path { margin-top: 8px; }

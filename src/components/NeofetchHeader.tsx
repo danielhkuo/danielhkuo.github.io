@@ -22,9 +22,12 @@ function openShell(trigger: HTMLElement | null) {
   );
 }
 
-/** zsh's stock prompt at home — uncoloured, as in a fresh Terminal. */
+/**
+ * zsh's stock prompt at home — uncoloured, as in a fresh Terminal. In a span
+ * so the intro can bring it up after the window, apart from the cursor.
+ */
 function Prompt() {
-  return promptFor("~");
+  return <span className="nf-ps1">{promptFor("~")}</span>;
 }
 
 /** `intro`: the one that follows the typing, and exists only while the intro plays. */
@@ -41,8 +44,9 @@ function Cursor({ intro = false }: { intro?: boolean }) {
  * page is below the fold. Scrolling docks the two: the window climbs to the
  * top at half speed while the projects come up under it (.nf-dock, and
  * globals.css, "Scroll reveal"). On the first load in a tab the session plays
- * out — the command is typed, then the output prints — all in CSS
- * (globals.css, "Intro"), so this markup is the finished state.
+ * out — a lone cursor, the window opening out of it, the command typed, the
+ * output printing — all in CSS (globals.css, "Intro"), so this markup is the
+ * finished state.
  *
  * Below 640px it does what neofetch itself does in a narrow terminal: the logo
  * block goes above the table and every Label / value pair stacks. The Contact
