@@ -1,0 +1,172 @@
+// BakeWorld: everything the bake reads, on the torus. Heights, water and
+// rivers live on the solver grid G (4 cells per node); climate, rock and
+// region weights on the coarse grid C (8 cells per node).
+//
+// buildBakeWorld adapts generator outputs. Stages that are not built yet are
+// filled by the stand-ins in standin-land.ts, each marked STAND-IN there.
+
+import type { Plan } from "../gen/plan.ts";
+import type { WorldParams } from "../gen/params.ts";
+import { runSchedule } from "../gen/erode.ts";
+import { hydrology, type HydroResult } from "../gen/hydro.ts";
+import { NB8_DX, NB8_DY, wrapIndex } from "../core/torus.ts";
+import { climateFields, type Climate } from "../gen/climate.ts";
+import { standinDrown, standinExposure, standinShore } from "./standin-land.ts";
+
+export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
+export const SHORE = { none: 0, beach: 1, rocky: 2, cliff: 3, cove: 4 } as const;
+/** No surface, canopy included, stands above this. */
+export const HMAX = 160;
+
+export interface BakeWorld {
+  /** Cells a side; a multiple of 256. */
+  n: number;
+  /** n / 4 and n / 8. */
+  gN: number;
+  cN: number;
+
+  // --- G grid, gN² each ---
+  /** Ground height in units; sea bed is negative. */
+  ground: Float32Array;
+  /** Water surface: 0 on sea nodes, the lake's level on lake nodes; unused on land. */
+  waterLevel: Float32Array;
+  /** 0 land, 1 sea, 2 lake. */
+  waterKind: Uint8Array;
+  /** River width class in pixels, 0 (no river) to 6. */
+  riverWidth: Uint8Array;
+  /** Downstream neighbour as an NB8 index (E, SE, S, SW, W, NW, N, NE); 255 where there is no river. */
+  riverTo: Uint8Array;
+  /** Cells along the flow from this node to the river's end; drives the flow phase. */
+  riverRun: Float32Array;
+  /** Height above nearest drainage, units. */
+  hand: Float32Array;
+  /** Shore class: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */
+  shore: Uint8Array;
+
+  // --- C grid, cN² each ---
+  moisture: Float32Array;
+  wind: Float32Array;
+  exposure: Float32Array;
+  debris: Float32Array;
+  /** 0 hard, 1 medium, 2 soft. */
+  rock: Uint8Array;
+  /** Six planes of cN², archetype-major, summing to 1 per node. */
+  regions: Float32Array;
+}
+
+export interface HydroInput {
+  waterLevel: Float32Array;
+  waterKind: Uint8Array;
+  riverWidth: Uint8Array;
+  riverTo: Uint8Array;
+  riverRun: Float32Array;
+  hand: Float32Array;
+}
+
+export interface BakeWorldInput {
+  params: WorldParams;
+  plan: Plan;
+  seed: number;
+  /** Eroded ground on G, units (gen/erode.ts runSchedule().g). Run here when absent. */
+  heights?: ArrayLike<number>;
+  /** True once the heights are already drowned with a sea bed (S3, S6). STAND-IN drowning when false. */
+  drowned?: boolean;
+  /** S7 on G (gen/hydro.ts hydrology()), run on the drowned ground. Run here when absent. */
+  hydro?: HydroResult;
+  /** Shore classes on G. STAND-IN when absent. */
+  shore?: Uint8Array;
+  /** S8 moisture and wind on C (gen/climate.ts climateFields()). Run here when absent. */
+  climate?: Climate;
+  /** Coastal exposure and debris on C, 0–1. STAND-IN when absent. */
+  exposure?: Float32Array;
+  debris?: Float32Array;
+}
+
+export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
+  const { params: p, plan, seed } = inp;
+  const { n, gN, cN } = p;
+  if (n % 256 !== 0) throw new Error(`the bake needs a world of whole 256-cell tiles, not ${n}`);
+  if (plan.n !== cN) throw new Error("plan grid does not match params");
+
+  const eroded = inp.heights ?? runSchedule(plan, p, seed).g;
+  if (eroded.length !== gN * gN) throw new Error("heights must be on G");
+  const ground = inp.drowned ? Float32Array.from(eroded) : standinDrown(eroded, gN);
+
+  const isSea = new Uint8Array(gN * gN);
+  for (let i = 0; i < isSea.length; i++) if (ground[i] <= 0) isSea[i] = 1;
+  const hr = inp.hydro ?? hydrology(Float64Array.from(ground), gN, isSea, p.hydro);
+  // Hydrology fills the small basins; lake beds keep their depth.
+  for (let i = 0; i < ground.length; i++) if (!isSea[i]) ground[i] = hr.ground[i];
+  const hydro = fromHydro(hr, isSea, gN, n);
+  const shore = inp.shore ?? standinShore(ground, hydro.waterKind, gN);
+  const climate = inp.climate ?? climateFields(hr.ground, hr.rain, isSea, gN, p.climate);
+  const standin = standinExposure(cN, seed);
+  const exposure = inp.exposure ?? standin.exposure, debris = inp.debris ?? standin.debris;
+
+  return {
+    n, gN, cN, ground,
+    waterLevel: hydro.waterLevel, waterKind: hydro.waterKind,
+    riverWidth: hydro.riverWidth, riverTo: hydro.riverTo, riverRun: hydro.riverRun,
+    hand: hydro.hand, shore,
+    moisture: climate.moisture, wind: climate.wind, exposure, debris,
+    rock: plan.rock, regions: plan.regions,
+  };
+}
+
+/** Width in pixels of a channel carrying q node-rains. The largest rivers reach 5–6 px, most of the network 1 px. */
+export function riverWidthFor(q: number, n: number): number {
+  const w = Math.round(Math.sqrt(q / 1000) * (6400 / n));
+  return w < 1 ? 1 : w > 6 ? 6 : w;
+}
+
+/** The bake's water and river rasters from the hydrology stage. */
+export function fromHydro(hr: HydroResult, isSea: Uint8Array, gN: number, n: number): HydroInput {
+  const nn = gN * gN;
+  const waterLevel = new Float32Array(nn), waterKind = new Uint8Array(nn);
+  const riverWidth = new Uint8Array(nn), riverTo = new Uint8Array(nn).fill(255), riverRun = new Float32Array(nn);
+  const hand = new Float32Array(nn);
+  for (let i = 0; i < nn; i++) {
+    hand[i] = hr.hand[i];
+    if (isSea[i]) waterKind[i] = 1;
+    else if (hr.lakeId[i] >= 0) { waterKind[i] = 2; waterLevel[i] = hr.surface[i]; }
+  }
+  // Receivers come before their donors in the flood's pop order, so the run to the river's end is known.
+  for (let q = 0; q < hr.order.length; q++) {
+    const i = hr.order[q];
+    if (waterKind[i] !== 0 || !hr.channel[i]) continue;
+    const r = hr.rcv[i];
+    if (r === i) continue;
+    const x = i % gN, y = (i - x) / gN;
+    for (let d = 0; d < 8; d++) {
+      if (wrapIndex(x + NB8_DX[d], y + NB8_DY[d], gN) === r) { riverTo[i] = d; break; }
+    }
+    if (riverTo[i] > 7) continue;
+    riverWidth[i] = riverWidthFor(hr.q[i], n);
+    riverRun[i] = riverRun[r] + (riverTo[i] & 1 ? 4 * Math.SQRT2 : 4);
+  }
+  return { waterLevel, waterKind, riverWidth, riverTo, riverRun, hand };
+}
+
+/** A blank world of the given size: flat ground at `level`, no water, one region. For tests and fixtures. */
+export function blankWorld(n: number, level: number): BakeWorld {
+  const gN = n / 4, cN = n / 8;
+  const regions = new Float32Array(6 * cN * cN);
+  regions.fill(1, 0, cN * cN);
+  return {
+    n, gN, cN,
+    ground: new Float32Array(gN * gN).fill(level),
+    waterLevel: new Float32Array(gN * gN),
+    waterKind: new Uint8Array(gN * gN),
+    riverWidth: new Uint8Array(gN * gN),
+    riverTo: new Uint8Array(gN * gN).fill(255),
+    riverRun: new Float32Array(gN * gN),
+    hand: new Float32Array(gN * gN),
+    shore: new Uint8Array(gN * gN),
+    moisture: new Float32Array(cN * cN).fill(0.5),
+    wind: new Float32Array(cN * cN),
+    exposure: new Float32Array(cN * cN),
+    debris: new Float32Array(cN * cN),
+    rock: new Uint8Array(cN * cN).fill(1),
+    regions,
+  };
+}
