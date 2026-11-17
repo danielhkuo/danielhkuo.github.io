@@ -14,8 +14,12 @@ import { isVegetation, MATERIAL as M, MATERIAL_COUNT } from "../look/materials.t
 
 /** The tone flat, unshaded ground takes; shade runs below it and light above. */
 export const FLAT_TONE = 9;
-/** A river crosses near-flat ground, so it is held lighter than vegetation up to this tone. */
-export const RIVER_GUARD_TONE = FLAT_TONE + 1;
+/**
+ * A river runs in valley floors, so it is held lighter than vegetation up to
+ * this tone: the shaded and mid tones it actually crosses. (Guarding against
+ * sunlit vegetation as well drove the river to chalk white.)
+ */
+export const RIVER_GUARD_TONE = FLAT_TONE - 3;
 /** The river must be this many L* lighter than any vegetation it crosses. */
 export const RIVER_MARGIN = 15;
 
@@ -164,10 +168,10 @@ function evergreen(c: Lch): Seasons {
   return [[c[0] + 0.015, c[1] + 0.008, c[2] - 3], c, [c[0] - 0.005, c[1] - 0.004, c[2]], [c[0] - 0.02, c[1] - 0.012, c[2] + 6]];
 }
 
-const LAND = { drop: 0.36, rise: 0.4, cool: 0.03, ramp: "land" } as const;
-const CANOPY = { drop: 0.44, rise: 0.46, cool: 0.035, ramp: "land" } as const;
-const STONE = { drop: 0.3, rise: 0.45, cool: 0.016, ramp: "land" } as const;
-const PALE = { drop: 0.2, rise: 0.6, cool: 0.04, ramp: "land" } as const;
+const LAND = { drop: 0.46, rise: 0.5, cool: 0.05, ramp: "land" } as const;
+const CANOPY = { drop: 0.52, rise: 0.5, cool: 0.05, ramp: "land" } as const;
+const STONE = { drop: 0.44, rise: 0.55, cool: 0.045, ramp: "land" } as const;
+const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
 const LINE = { drop: 0.2, rise: 0.3, cool: 0.02, ramp: "land" } as const;
 
 function buildSpecs(): Spec[] {
@@ -185,7 +189,7 @@ function buildSpecs(): Spec[] {
     { drop: 0, rise: 0, cool: 0, ramp: "depth", mid: [0.74, 0.1, 203], deep: [0.52, 0.095, 242] });
   set(M.lake, [[0.75, 0.05, 222], [0.76, 0.055, 220], [0.74, 0.05, 226], [0.76, 0.03, 232]],
     { drop: 0, rise: 0, cool: 0, ramp: "depth", mid: [0.62, 0.068, 238], deep: [0.47, 0.072, 254] });
-  set(M.river, [[0.925, 0.04, 226], [0.93, 0.042, 228], [0.925, 0.036, 230], [0.93, 0.025, 236]],
+  set(M.river, [[0.8, 0.075, 214], [0.8, 0.08, 212], [0.79, 0.07, 216], [0.82, 0.05, 224]],
     { drop: 0, rise: 0, cool: 0, ramp: "flow" });
 
   // Shore.
@@ -400,10 +404,13 @@ function ramp(spec: Spec, season: number): Lab[] {
   }
   if (spec.ramp === "flow") {
     // One soft streak per cycle of the flow phase; the ends meet.
-    for (let t = 0; t < 16; t++) {
-      const wave = Math.cos((t / 16) * 2 * Math.PI);
+    // Tones 0–7: the flow phase of a river. Tones 8–14: a 1 px stream, quieter. Tone 15: the foam of a fall.
+    for (let t = 0; t < 8; t++) {
+      const wave = Math.cos((t / 8) * 2 * Math.PI);
       out[t] = [base[0] - 0.011 + 0.011 * wave, base[1] * (1.15 - 0.15 * wave), base[2] * (1.15 - 0.15 * wave)];
     }
+    for (let t = 8; t < 15; t++) out[t] = [base[0] - 0.03, base[1] * 0.8, base[2] * 0.8];
+    out[15] = [0.975, base[1] * 0.22, base[2] * 0.22];
     return out;
   }
   const shade: Lab = [
@@ -413,8 +420,8 @@ function ramp(spec: Spec, season: number): Lab[] {
   ];
   const light: Lab = [
     Math.min(0.99, base[0] + (1 - base[0]) * spec.rise + 0.02),
-    base[1] * 0.9 + 0.022 * LIGHT_YELLOW[1],
-    base[2] * 0.9 + 0.022 * LIGHT_YELLOW[2],
+    base[1] * 0.9 + 0.034 * LIGHT_YELLOW[1],
+    base[2] * 0.9 + 0.034 * LIGHT_YELLOW[2],
   ];
   for (let t = 0; t < 16; t++) {
     out[t] = t <= FLAT_TONE

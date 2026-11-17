@@ -3,7 +3,8 @@
 // inked when ground is hidden behind it, never because a slope is steep or a
 // height steps by a pixel.
 
-import { F_CANOPY, F_CLIFF, F_DEEP, F_BEDDED, F_QUIET, F_SEACLIFF } from "./cells.ts";
+import { hash2 } from "../core/hash.ts";
+import { F_CANOPY, F_CLIFF, F_DEEP, F_QUIET, F_SEACLIFF } from "./cells.ts";
 
 export const INK_NONE = 0;
 export const INK_SOFT = 1;
@@ -74,7 +75,8 @@ export function inkOcclusion(p: Painted): void {
       const hid = hidden[i];
       const f = flags[i];
       const canopy = (f & F_CANOPY) !== 0;
-      if (hid >= (canopy ? CANOPY_MIN_HIDDEN : INK_MIN_HIDDEN)) {
+      // Crowns take no ink: a wood's edge is drawn by its shade, and an inked edge reads as an outline round every copse.
+      if (!canopy && hid >= INK_MIN_HIDDEN) {
         const quiet = (f & F_QUIET) !== 0 || (canopy && (flags[i - w] & F_CANOPY) !== 0);
         if (!quiet) {
           // A crown is small: its edge takes soft ink only, and no side tracing.
@@ -101,7 +103,7 @@ export function inkOcclusion(p: Painted): void {
 }
 
 /** Full ink on the lip above a rock wall of LIP_RUN pixels or more, and on cliffed coasts at the waterline. */
-export function inkCliffs(p: Painted, isWater: Uint8Array): void {
+export function inkCliffs(p: Painted, isStill: Uint8Array): void {
   const { w, h, flags, ink, mat, y, aux } = p;
   for (let c = 0; c < w; c++) {
     let run = 0;
@@ -113,47 +115,48 @@ export function inkCliffs(p: Painted, isWater: Uint8Array): void {
       if (run >= LIP_RUN && (f & (F_QUIET | F_CANOPY)) === 0 && y[i + w] - y[i] <= 3) ink[i] = INK_FULL;
       run = 0;
     }
+    // The coastline: a thin line where land meets standing water, full at a cliff's foot. Beaches take foam, not ink.
     for (let r = 0; r + 1 < h; r++) {
       const i = r * w + c;
-      if ((flags[i] & F_SEACLIFF) !== 0 && (flags[i] & (F_QUIET | F_CANOPY)) === 0 && isWater[mat[i + w]] === 1 && isWater[mat[i]] === 0) ink[i] = INK_FULL;
+      const f = flags[i];
+      if ((f & (F_QUIET | F_CANOPY)) !== 0 || isStill[mat[i]] === 1 || ink[i] !== 0) continue;
+      if (isStill[mat[i + w]] === 1 || (c > 0 && isStill[mat[i - 1]] === 1) || (c + 1 < w && isStill[mat[i + 1]] === 1)) {
+        ink[i] = (f & F_SEACLIFF) !== 0 ? INK_FULL : INK_SOFT;
+      }
     }
   }
 }
 
 /**
- * Hatching, as soft ink, on cliffs and in deep terrain shadow only. The
- * stroke masks are nested: the dense level contains the sparse one. Hard rock
- * takes vertical strokes; sedimentary rock takes bedding lines that follow
- * the strata's height; shadow takes strokes along the light. Blue noise
- * breaks every stroke into dashes.
+ * Hatching, as soft ink: only on steep faces that are in shade, and in deep
+ * terrain shadow. Strokes run down the fall line (down the screen on the
+ * faces the camera sees). Which columns carry a stroke, where each stroke
+ * starts and how long it runs all come from a hash of the position, so there
+ * is no grid; cliffs carry more and longer strokes than merely steep ground.
  */
 export function hatch(p: Painted, mask: Uint8Array): void {
-  const { w, h, x0, r0, flags, ink, y, aux } = p;
-  for (let r = 0; r < h; r++) {
-    const R = r0 + r;
-    for (let c = 0; c < w; c++) {
+  const { w, h, x0, r0, flags, ink, aux, light } = p;
+  for (let c = 0; c < w; c++) {
+    const X = x0 + c;
+    const hx = hash2(X, 17, 0x4a7c);
+    // About one column in three carries strokes at all.
+    const pick = hx & 255;
+    const period = 11 + ((hx >>> 8) & 7), phase = (hx >>> 12) & 31;
+    for (let r = 0; r < h; r++) {
       const i = r * w + c;
       const f = flags[i];
       if ((f & (F_CLIFF | F_DEEP)) === 0 || ink[i] !== 0 || (f & (F_QUIET | F_CANOPY)) !== 0) continue;
-      const X = x0 + c;
-      let on = false;
-      if ((f & F_CLIFF) !== 0) {
-        if ((f & F_BEDDED) !== 0) {
-          // The pixel's own elevation: strata sit at fixed heights.
-          const elev = Math.floor((4 * y[i]) / 5) - R;
-          on = aux[i] >= 2
-            ? (elev & 1) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < ((elev & 3) === 0 ? 120 : 40)
-            : (elev & 3) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < 60;
-        } else {
-          on = aux[i] >= 2
-            ? (X & 1) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < ((X & 3) === 0 ? 110 : 36)
-            : (X & 3) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < 55;
-        }
-      } else {
-        const d = X - R;
-        on = (d & 3) === 0 && mask[(((R + X) >> 3) & 255) * 256 + (d & 255)] < 90;
-      }
-      if (on) ink[i] = INK_SOFT;
+      const cliff = (f & F_CLIFF) !== 0 && aux[i] >= 2;
+      // Steep ground is hatched only on its shade side.
+      if ((f & F_DEEP) === 0 && light[i] > (cliff ? 118 : 96)) continue;
+      if (pick > (cliff ? 110 : 60)) continue;
+      const R = r0 + r;
+      // Strokes of 3–8 px with gaps, each band of the column offset by a second hash; blue noise frays their ends.
+      const band = Math.floor((R + phase) / period);
+      const hb = hash2(X, band, 0x91e3);
+      const start = hb & 3, len = (cliff ? 4 : 3) + ((hb >>> 2) & 3) + (cliff ? (hb >>> 4) & 1 : 0);
+      const q = R + phase - band * period;
+      if (q >= start && q < start + len && (hb >>> 8 & 3) !== 0 && mask[(R & 255) * 256 + (X & 255)] < 235) ink[i] = INK_SOFT;
     }
   }
 }

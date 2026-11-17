@@ -27,6 +27,24 @@ export interface LiveWater {
 /** Packed RGBA drawn where no chunk is baked yet: bare paper. */
 export const PAPER = 0xffd2e8f0;
 
+/**
+ * Paper grain: darkens each pixel by 0–3 levels from the blue-noise mask,
+ * indexed by bake pixel so the grain is fixed in the world and does not swim.
+ */
+export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array): void {
+  const { x: vx, y: vy, w, h } = view;
+  for (let r = 0; r < h; r++) {
+    const mrow = ((vy + r + 61) & 255) * 256;
+    for (let c = 0; c < w; c++) {
+      const g = mask[mrow + ((vx + c + 113) & 255)] >> 6;
+      if (g === 0) continue;
+      const v = out[r * w + c];
+      const R = (v & 255) - g, G = ((v >>> 8) & 255) - g, B = ((v >>> 16) & 255) - g - 1;
+      out[r * w + c] = ((v & 0xff000000) | ((B < 0 ? 0 : B) << 16) | ((G < 0 ? 0 : G) << 8) | (R < 0 ? 0 : R)) >>> 0;
+    }
+  }
+}
+
 export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, out: Uint32Array, live?: LiveWater): void {
   const { x: vx, y: vy, w, h } = view;
   const cx0 = Math.floor(vx / CHUNK), cx1 = Math.floor((vx + w - 1) / CHUNK);

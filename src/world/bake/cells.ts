@@ -22,6 +22,8 @@ export interface Look {
   /** Per material id: 1 for tree crowns. */
   isCanopy: Uint8Array;
   palette: Palette;
+  /** Per material id: 1 for standing water (sea, lakes), whose shores take a coast line. Optional: isWater when absent. */
+  isStill?: Uint8Array;
   /** Per material id: 1 where ink is never drawn (fields, roads, sand). Optional. */
   noInk?: Uint8Array;
 }
@@ -60,12 +62,14 @@ const TREE_REACH = 4;
 const STAMP_REACH = 6;
 const BLUR_R = 8;
 const SHORE_CAP = 15;
+/** Shore classes apply this many cells inland. */
+const SHORE_BAND = 9;
 /** Shore-distance tones run this many cells out; deeper tones follow the sea bed. */
 const SHELF = 8;
 /** Rivers are looked for this many cells due north and due south of a cell. */
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
-export const STREAM_MAX_SLOPE = 1.2;
+export const STREAM_MAX_SLOPE = 0.9;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
 export const CLIFF_SLOPE = 1.7;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
@@ -202,7 +206,15 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (lakeLevel[a + 1] > top) top = lakeLevel[a + 1];
         if (lakeLevel[a + gW] > top) top = lakeLevel[a + gW];
         if (lakeLevel[a + gW + 1] > top) top = lakeLevel[a + gW + 1];
-        if (e < top) {
+        // A lake's edge follows the ground where the bed is cut; on a flattened floor it follows the lake nodes' bilinear outline.
+        let inside = e < top;
+        if (!inside && top > -Infinity && e < top + 0.6) {
+          const fx = (wx0 + x + 0.5) / 4 - 0.5 - (gi + gxa), fy = (wy0 + y + 0.5) / 4 - 0.5 - (gj + gya);
+          const m = (lakeLevel[a] > -Infinity ? (1 - fx) * (1 - fy) : 0) + (lakeLevel[a + 1] > -Infinity ? fx * (1 - fy) : 0) +
+            (lakeLevel[a + gW] > -Infinity ? (1 - fx) * fy : 0) + (lakeLevel[a + gW + 1] > -Infinity ? fx * fy : 0);
+          inside = m >= 0.5;
+        }
+        if (inside) {
           water[i] = 2;
           level[i] = top < 0 ? 0 : top;
           continue;
@@ -231,6 +243,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   for (let i = 0; i < count; i++) dist[i] = water[i] ? big : 0;
   chamfer(dist, W, H, PAD_N - SHORE_CAP - 1);
 
+  // Cells from the sea on the land side, so shore bands follow the coast and not the G nodes.
+  const inland = new Int16Array(count);
+  for (let i = 0; i < count; i++) inland[i] = water[i] === 1 ? 0 : big;
+  chamfer(inland, W, H, PAD_N - COVER_N - SHORE_BAND - 2);
+
   // 5. Rivers: the cells under each curve, the flow phase there, and the distance to the nearest.
   const riv = new Int16Array(count).fill(big);
   const phase = new Uint8Array(count);
@@ -254,13 +271,33 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const i = yy * W + xx;
         if (water[i]) continue;
         // Several curve points land on one cell; the lowest run wins so the phase never depends on their order.
-        const ph = Math.floor(run) & 15;
+        // Tones 0–7: flow phase of a river; 8: a 1 px stream; 15: foam (set at falls).
+        const ph = width === 1 ? 8 : Math.floor(run) & 7;
         if (riv[i] !== 0 || ph < phase[i]) phase[i] = ph;
         riv[i] = 0;
         rivers = true;
       }
     }
   });
+  // Waterfalls: foam on the river at the drop, and a plunge pool just south of it.
+  const falls = world.falls;
+  for (let f = 0; f < falls.length; f += 3) {
+    let fx = falls[f] - wx0, fy = falls[f + 1] - wy0;
+    fx -= Math.floor(fx / n) * n;
+    fy -= Math.floor(fy / n) * n;
+    for (let oy = fy > H + 8 ? fy - n : fy; oy < H + 8; oy += n) for (let ox = fx > W + 8 ? fx - n : fx; ox < W + 8; ox += n) {
+      const cx = Math.floor(ox), cy = Math.floor(oy);
+      for (let yy = cy - 3; yy <= cy + 6; yy++) for (let xx = cx - 3; xx <= cx + 3; xx++) {
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const i = yy * W + xx;
+        if (water[i]) continue;
+        const dx = xx + 0.5 - ox, dy = yy + 0.5 - oy;
+        if (riv[i] === 0 && dx * dx + dy * dy <= 6.5) phase[i] = 15;
+        else if (dx * dx + (dy - 3.5) * (dy - 3.5) <= 5) { if (riv[i] !== 0) phase[i] = 0; riv[i] = 0; rivers = true; }
+      }
+    }
+  }
+
   // Cells to the nearest river due north and due south, within sight.
   const rivN = new Uint8Array(count).fill(255), rivS = new Uint8Array(count).fill(255);
   if (rivers) {
@@ -326,7 +363,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const gfx = gF[x];
       const g00 = gr0 + gI0[x], g10 = gr0 + gI1[x], g01 = gr1 + gI0[x], g11 = gr1 + gI1[x];
       const ha = hand[g00] + (hand[g10] - hand[g00]) * gfx, hb = hand[g01] + (hand[g11] - hand[g01]) * gfx;
-      const sh = shore[gfy < 0.5 ? (gfx < 0.5 ? g00 : g10) : gfx < 0.5 ? g01 : g11];
+      const sh = inland[i] <= 3 * SHORE_BAND ? shore[gfy < 0.5 ? (gfx < 0.5 ? g00 : g10) : gfx < 0.5 ? g01 : g11] : 0;
       shoreAt[i] = sh;
 
       const cfx = cF[x];
@@ -436,7 +473,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const dither = (mask[((wrap(y0 + y, n) + 91) & 255) * 256 + ((wrap(x0 + x, n) + 157) & 255)] + 0.5) / 256;
         const d = (dist[i] - 3) / 3;
         const depth = (water[i] === 2 ? level[i] : 0) - ground[i];
-        const far = SHELF + (depth - 1) / 3.5;
+        // Low-frequency mottling: a wash, not a gradient.
+        const per = n / 32;
+        const mottle = 1.1 * gradNoise(wrap(x0 + x, n) / 32, wrap(y0 + y, n) / 32, per, 0x5ea) + 0.5 * gradNoise(wrap(x0 + x, n) / 8, wrap(y0 + y, n) / 8, n / 8, 0x5eb);
+        const far = SHELF + (depth - 1) / 3.5 + mottle;
         const v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;

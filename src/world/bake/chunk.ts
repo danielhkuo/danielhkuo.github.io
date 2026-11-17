@@ -9,7 +9,7 @@
 
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
-import { buildTile, F_CANOPY, F_CLIFF, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
+import { buildTile, F_CANOPY, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
 import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
 import { forEachRiverPoint } from "./lines.ts";
@@ -187,9 +187,7 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
       let tone: number;
       if (look.isWater[m] === 1) tone = p.aux[i] & 15;
       else {
-        let l = p.light[i];
-        // A cliff's face stands in its own shade.
-        if ((f & F_CLIFF) !== 0 && Math.floor((4 * p.y[i]) / 5) - R - Math.floor(p.height[i] + 0.5) < 0) l -= 28;
+        const l = p.light[i];
         // Flat, unshaded ground sits at FLAT_TONE; darks have the longer run of the ramp.
         const d = (l - Math.floor(BASE_TONE * 255 + 0.5)) / 255;
         tone = Math.floor(FLAT_TONE + d * (d < 0 ? 2 * FLAT_TONE : 2 * (15 - FLAT_TONE)) + (mask[(R & 255) * 256 + ((p.x0 + mx + c) & 255)] + 0.5) / 256);
@@ -208,7 +206,7 @@ export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
   drawRivers(world, tiles, p, look.isWater);
   inkOcclusion(p);
-  inkCliffs(p, look.isWater);
+  inkCliffs(p, look.isStill ?? look.isWater);
   hatch(p, mask);
   return pack(p, look, mask, MX, MT, w, h);
 }

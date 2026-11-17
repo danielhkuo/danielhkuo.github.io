@@ -19,12 +19,20 @@ export function noInkFlags(): Uint8Array {
   return out;
 }
 
+/** Standing water: sea and lakes. */
+export function stillFlags(): Uint8Array {
+  const out = new Uint8Array(256);
+  out[M.sea] = out[M.seaClear] = out[M.lake] = 1;
+  return out;
+}
+
 /** The world's look for a world of n cells, drawn through `palette`. */
 export function worldLook(n: number, palette: Palette): Look {
   return {
     cover: (c, mask) => cover(c, mask, n),
     scatter: (c, groundMat, mask, riverDist) => scatterAt(c, groundMat, mask, riverDist, n),
     isWater, isCanopy, palette,
+    isStill: stillFlags(),
     noInk: noInkFlags(),
   };
 }

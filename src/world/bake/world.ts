@@ -51,6 +51,8 @@ export interface BakeWorld {
   shore: Uint8Array;
 
   rivers: RiverIndex;
+  /** Waterfalls: x, y (cells), drop (units) each. */
+  falls: Float32Array;
 
   // --- C grid, cN² each ---
   moisture: Float32Array;
@@ -104,6 +106,18 @@ export function riverIndex(lines: readonly RiverLine[], n: number): RiverIndex {
   return { vertices, bN, bucketStart: count, segments };
 }
 
+/** First-order streams shorter than this, in cells, are not drawn. */
+export const MIN_STREAM = 60;
+
+function reachLength(v: Float32Array): number {
+  let len = 0;
+  for (let k = 4; k < v.length; k += 4) {
+    const dx = v[k] - v[k - 4], dy = v[k + 1] - v[k - 3];
+    len += Math.sqrt(dx * dx + dy * dy);
+  }
+  return len;
+}
+
 export interface BakeWorldInput {
   params: WorldParams;
   seed: number;
@@ -147,7 +161,9 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
 
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,
-    rivers: riverIndex(rivers.reaches.map((r) => ({ vertices: r.vertices, stride: 4 })), n),
+    // First-order streams shorter than MIN_STREAM cells are left out: on a planar slope they draw as a comb.
+    rivers: riverIndex(rivers.reaches.filter((r) => r.order > 1 || reachLength(r.vertices) >= MIN_STREAM).map((r) => ({ vertices: r.vertices, stride: 4 })), n),
+    falls: Float32Array.from(rivers.falls.flatMap((f) => [f.x, f.y, f.drop])),
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
   };
@@ -166,6 +182,7 @@ export function blankWorld(n: number, level: number): BakeWorld {
     hand: new Float32Array(gN * gN),
     shore: new Uint8Array(gN * gN),
     rivers: riverIndex([], n),
+    falls: new Float32Array(0),
     moisture: new Float32Array(cN * cN).fill(0.5),
     wind: new Float32Array(cN * cN),
     exposure: new Float32Array(cN * cN),

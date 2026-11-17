@@ -7,7 +7,7 @@ import { bakeChunk, CHUNK, CHUNK_ROWS, tileCache, type TileSource } from "../bak
 import { groundAt, type Look } from "../bake/cells.ts";
 import type { BakeWorld } from "../bake/world.ts";
 import { wrap } from "../core/torus.ts";
-import { compose, type LiveWater, type ViewRect } from "../render/compose.ts";
+import { compose, paperGrain, type LiveWater, type ViewRect } from "../render/compose.ts";
 
 export interface Site {
   x: number;
@@ -40,6 +40,8 @@ export interface ViewOptions {
   height?: number;
   /** Chunks kept; 24 is 6.3 MB. */
   cacheChunks?: number;
+  /** Lay the paper grain over the frame (default true). */
+  paper?: boolean;
   /** Draw drifting glints on water. */
   liveWater?: boolean;
 }
@@ -82,6 +84,7 @@ export function createView(world: BakeWorld, look: Look, mask: Uint8Array, opts:
     frame(out, time = 0) {
       const live: LiveWater | undefined = opts.liveWater ? { isWater: look.isWater, mask, time } : undefined;
       compose(chunk, look.palette, rect, out, live);
+      if (opts.paper !== false) paperGrain(out, rect, mask);
     },
     depthAt(px, py) {
       const bx = rect.x + Math.floor(px), by = rect.y + Math.floor(py);

@@ -12,6 +12,9 @@ export const SHADOW_DROP = 2 * Math.SQRT2;
 /** A caster further than this many diagonal steps cannot shade anything: 64 · 2√2 > HMAX. */
 export const SHADOW_REACH = 64;
 
+/** Heights are multiplied by this for the Lambert term only. */
+export const EXAGGERATE = 2.5;
+
 /** The tone flat, unshadowed ground takes, 0–1. */
 export const BASE_TONE = 0.5;
 
@@ -77,17 +80,20 @@ export function boxBlur(src: Float32Array, w: number, lo: number, hi: number, r:
  * `relief` is the ground's height minus its 16-cell blur; `e` its height.
  */
 export function shade(dhdx: number, dhdy: number, relief: number, e: number): number {
-  const ndotl = (-dhdx * SUN_X - dhdy * SUN_Y + SUN_Z) / Math.sqrt(dhdx * dhdx + dhdy * dhdy + 1);
-  // Lambert, rescaled so flat ground sits at one half.
-  // The camera mostly sees slopes that face away from the sun, so the dark side keeps a floor of sky light.
-  let lam = ndotl >= SUN_Z ? 0.5 + (0.5 * (ndotl - SUN_Z)) / (1 - SUN_Z) : 0.5 * (0.3 + (0.7 * ndotl) / SUN_Z);
-  if (lam < 0) lam = 0;
-  let rel = 0.5 + 0.07 * relief;
-  if (rel < 0) rel = 0;
-  else if (rel > 1) rel = 1;
-  const lit = 0.6 * lam + 0.4 * rel;
+  // Lambert on exaggerated normals: the land is low and wide, and true normals barely turn.
+  const ex = dhdx * EXAGGERATE, ey = dhdy * EXAGGERATE;
+  const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
+  // Rescaled so flat ground sits at one half; the dark side keeps a little sky light.
+  let lam = ndotl >= SUN_Z ? 0.5 + (0.38 * (ndotl - SUN_Z)) / (1 - SUN_Z) : 0.5 * (0.12 + (0.88 * ndotl) / SUN_Z);
+  if (lam < 0.03) lam = 0.03;
+  // Relief: hollows and valley floors darken (ambient occlusion); crests lighten only a little, so they grow no rim.
+  let rel = relief < 0 ? 0.5 + 0.065 * relief : 0.5 + 0.018 * relief;
+  if (rel < 0.02) rel = 0.02;
+  else if (rel > 0.62) rel = 0.62;
+  const lit = 0.5 + 0.68 * (lam - 0.5) + 0.32 * (rel - 0.5);
   // Contrast grows with height (after Imhof): lowland is soft, summits are crisp.
-  const contrast = 0.75 + (e < 0 ? 0 : e > 130 ? 130 : e) / 200;
+  const contrast = 0.85 + (e < 0 ? 0 : e > 130 ? 130 : e) / 300;
   const tone = BASE_TONE + (lit - 0.5) * contrast;
-  return tone < 0 ? 0 : tone > 1 ? 1 : tone;
+  // Keep clear of the ramp's two ends.
+  return tone < 0.06 ? 0.06 : tone > 0.94 ? 0.94 : tone;
 }

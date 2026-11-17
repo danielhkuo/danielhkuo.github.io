@@ -72,14 +72,15 @@ test("rivers are at least 15 L* lighter than any vegetation they cross, in every
     }
   });
   assert.equal(RIVER_MARGIN, 15);
-  assert.ok(RIVER_GUARD_TONE > FLAT_TONE);
+  assert.ok(RIVER_GUARD_TONE >= FLAT_TONE - 3);
   assert.ok(tightest < 25, "the guard should bind somewhere, or the river is washed out for nothing");
 });
 
 test("the river stays water-coloured: blue, and not blown out to white by day", () => {
   for (const season of SEASONS) {
     const pal = buildPalette({ time: 0.5, season, overcast: 0 });
-    for (let tone = 0; tone < 16; tone++) {
+    // Tone 15 is the foam of a fall, which is white.
+    for (let tone = 0; tone < 15; tone++) {
       const [L, C, h] = lch(at(pal, M.river, tone));
       assert.ok(h > 190 && h < 260, `season ${season}: river hue ${h}`);
       assert.ok(C > 0.012, `season ${season}: river chroma ${C}`);
@@ -338,14 +339,14 @@ test("water tone bits: the sea runs from turquoise shallows to deep blue, the ri
     assert.ok(deep[2] > 235 && deep[2] < 265, `${MATERIAL_NAMES[mat]} deep hue ${deep[2]}`);
     assert.ok(shore[0] - deep[0] > 0.3);
   }
-  // The river's phase ramp is a gentle streak whose ends meet.
+  // The river's phase ramp (tones 0–7) is a gentle streak whose ends meet; 8–14 are streams, 15 is foam.
   let lo = Infinity;
   let hi = -Infinity;
-  for (let tone = 0; tone < 16; tone++) {
+  for (let tone = 0; tone < 8; tone++) {
     const L = lstar(at(pal, M.river, tone));
     lo = Math.min(lo, L);
     hi = Math.max(hi, L);
-    const next = lstar(at(pal, M.river, (tone + 1) & 15));
+    const next = lstar(at(pal, M.river, (tone + 1) & 7));
     assert.ok(Math.abs(next - L) < 1.2, `river phase jumps at ${tone}`);
   }
   assert.ok(hi - lo > 0.8 && hi - lo < 5, `river streak ${hi - lo} L*`);

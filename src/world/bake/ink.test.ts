@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fieldWorld, loadMask, M_LAND, M_SEA, M_TREE, plainLook } from "../testing/bakefix.ts";
+import { fieldWorld, loadMask, M_SEA, M_TREE, plainLook } from "../testing/bakefix.ts";
 import { F_CANOPY, F_QUIET } from "./cells.ts";
 import { bakeWindow, depthBase, tileCache } from "./chunk.ts";
-import { INK_FULL, INK_SOFT, inkOcclusion, newPainted } from "./ink.ts";
+import { INK_FULL, inkOcclusion, newPainted } from "./ink.ts";
 
 const mask = loadMask();
 const N = 512;
@@ -56,7 +56,7 @@ test("no ink on water, on 1 px steps or on gentle south-facing slopes", () => {
   for (let r = 0; r < 200; r++) for (let c = 0; c < 128; c++) {
     if (b.mat(c, r) === M_SEA) sea++;
     else land++;
-    assert.equal(b.ink(c, r), 0, `ink at ${c},${r}`);
+    if (b.mat(c, r) === M_SEA || (r + 1 < 200 && b.mat(c, r + 1) !== M_SEA)) assert.equal(b.ink(c, r), 0, `ink at ${c},${r}`);
   }
   assert.ok(sea > 1000 && land > 1000);
 });
@@ -65,27 +65,32 @@ test("crowns ink against the ground behind them, never against each other or on 
   const p = newPainted(0, 0, 4, 3);
   // Row 1 holds four near pixels, each hiding five rows behind it; row 0 is what lies behind.
   p.hidden.fill(5, 4, 8);
-  p.flags[0] = 0; p.flags[4] = F_CANOPY; // crown before ground
+  p.flags[0] = 0; p.flags[4] = F_CANOPY; // crown before ground: no ink either
   p.flags[1] = F_CANOPY; p.flags[5] = F_CANOPY; // crown before crown
   p.flags[2] = 0; p.flags[6] = F_QUIET; // a river, field or beach
   p.flags[3] = 0; p.flags[7] = 0; // open ground
   p.hidden[7] = 12;
   inkOcclusion(p);
-  assert.deepEqual([...p.ink.subarray(4, 8)], [INK_SOFT, 0, 0, INK_FULL]);
+  assert.deepEqual([...p.ink.subarray(4, 8)], [0, 0, 0, INK_FULL]);
 });
 
-test("tall crowns on flat ground take soft ink only, on the crown", () => {
+test("crowns take no ink", () => {
   const b = bake(() => 6, 64, 100, 96, 64, true);
-  let soft = 0;
+  let trees = 0;
   for (let r = 0; r < 64; r++) for (let c = 0; c < 96; c++) {
-    const k = b.ink(c, r);
-    if (k === 0) continue;
-    assert.equal(k, INK_SOFT);
-    assert.equal(b.mat(c, r), M_TREE);
-    soft++;
+    assert.equal(b.ink(c, r), 0);
+    if (b.mat(c, r) === M_TREE) trees++;
   }
-  assert.ok(soft > 0, "crowns are outlined against the ground");
-  let ground = 0;
-  for (let r = 0; r < 64; r++) for (let c = 0; c < 96; c++) if (b.mat(c, r) === M_LAND) ground++;
-  assert.ok(ground > 1000);
+  assert.ok(trees > 50);
+});
+
+test("a coast takes a thin line where land meets the sea, and the sea takes none", () => {
+  // Land to the north, falling to the sea at about y = 260 on a slope steep enough not to be a beach.
+  const b = bake((_x, y) => (y < 200 ? 30 : 30 - 0.5 * (y - 200)), 64, 150, 128, 120);
+  let coast = 0;
+  for (let r = 0; r < 119; r++) for (let c = 0; c < 128; c++) {
+    if (b.mat(c, r) === M_SEA) assert.equal(b.ink(c, r), 0);
+    else if (b.mat(c, r + 1) === M_SEA) { assert.ok(b.ink(c, r) > 0); coast++; }
+  }
+  assert.equal(coast, 128);
 });
