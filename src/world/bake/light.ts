@@ -84,8 +84,14 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
   const ex = dhdx * EXAGGERATE, ey = dhdy * EXAGGERATE;
   const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
   // Rescaled so flat ground sits at one half; the dark side keeps a little sky light.
-  let lam = ndotl >= SUN_Z ? 0.5 + (0.38 * (ndotl - SUN_Z)) / (1 - SUN_Z) : 0.5 * (0.12 + (0.88 * ndotl) / SUN_Z);
+  // How far the slope leans towards the sun. A lean past the sun's own angle stays fully lit:
+  // exaggerated normals would otherwise darken the steep sunward faces again.
+  const toward = -(ex * SUN_X + ey * SUN_Y);
+  let lam = toward >= 0
+    ? 0.5 + 0.38 * (toward > 0.45 ? 1 : toward / 0.45)
+    : 0.5 * (0.12 + (0.88 * ndotl) / SUN_Z);
   if (lam < 0.03) lam = 0.03;
+  else if (lam > 0.5 && ndotl < SUN_Z) lam = Math.max(0.5, lam - 0.25 * (SUN_Z - ndotl));
   // Relief: hollows and valley floors darken (ambient occlusion); crests lighten only a little, so they grow no rim.
   let rel = relief < 0 ? 0.5 + 0.065 * relief : 0.5 + 0.018 * relief;
   if (rel < 0.02) rel = 0.02;

@@ -9,7 +9,7 @@
 import { wrap } from "../core/torus.ts";
 import type { WorldParams } from "../gen/params.ts";
 import { makeWorld, type World } from "../gen/pipeline.ts";
-import { standinExposure, standinSeaBed, standinShore } from "./standin-land.ts";
+import { standinSeaBed } from "./standin-land.ts";
 
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
 export const SHORE = { none: 0, beach: 1, rocky: 2, cliff: 3, cove: 4 } as const;
@@ -123,10 +123,6 @@ export interface BakeWorldInput {
   seed: number;
   /** The generator's stages (gen/pipeline.ts makeWorld()). Run here when absent. */
   world?: World;
-  /** Shore classes on G. STAND-IN when absent. */
-  shore?: Uint8Array;
-  /** Coastal exposure on C, 0–1. STAND-IN when absent. */
-  exposure?: Float32Array;
 }
 
 /** Talus debris on G as a 0–1 field on C: thick from about 3 units. */
@@ -148,16 +144,24 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   const { land, hydro, rivers, climate } = w;
   const isSea = land.isSea;
 
-  // The rivers stage's ground is final on land; the sea bed is a stand-in until the coast stage.
-  const ground = standinSeaBed(rivers.ground, isSea, gN);
+  // The rivers stage's ground is final. The coast stage shelves the sea bed; a flat one gets the stand-in.
+  let deepest = 0;
+  for (let i = 0; i < isSea.length; i++) if (isSea[i] && rivers.ground[i] < deepest) deepest = rivers.ground[i];
+  const ground = deepest < -2 ? Float32Array.from(rivers.ground) : standinSeaBed(rivers.ground, isSea, gN);
+  for (let i = 0; i < ground.length; i++) if (!isSea[i] && ground[i] <= 0) ground[i] = 0.01;
   const waterLevel = new Float32Array(gN * gN), waterKind = new Uint8Array(gN * gN), hand = new Float32Array(gN * gN);
   for (let i = 0; i < waterKind.length; i++) {
     hand[i] = hydro.hand[i];
     if (isSea[i]) waterKind[i] = 1;
     else if (hydro.lakeId[i] >= 0) { waterKind[i] = 2; waterLevel[i] = hydro.surface[i]; }
   }
-  const exposure = inp.exposure ?? standinExposure(cN, seed);
-  const shore = inp.shore ?? standinShore(ground, waterKind, exposure, gN);
+  // Coastal exposure on C from the coast stage's G field.
+  const exposure = new Float32Array(cN * cN);
+  for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
+    const i = 2 * y * gN + 2 * x;
+    exposure[y * cN + x] = (land.exposure[i] + land.exposure[i + 1] + land.exposure[i + gN] + land.exposure[i + gN + 1]) / 4;
+  }
+  const shore = land.shoreClass;
 
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,
