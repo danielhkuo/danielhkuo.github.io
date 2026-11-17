@@ -38,6 +38,8 @@ export interface WorldParams {
   rock: { kMul: readonly [number, number, number]; kBase: number; warpCells: number };
   regions: { blend: readonly [number, number] };
   /** S7 hydrology on G (see gen/hydro.ts HydroParams). */
+  /** S5 talus: repose per rock class (height per cell) and sweeps; land is scaled down uniformly if it rises above `cap`. */
+  talus: { repose: readonly [number, number, number]; sweeps: number; cap: number };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
   climate: { moistureRadius: number; windReach: number; windDropPerNode: number; windScale: number };
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
@@ -83,6 +85,7 @@ export function paramsFor(n: number): WorldParams {
     regions: { blend: [100 * s, 200 * s] },
     // Tuned 2026-11-17: mean land rain ~0.93, windward up to ~1.9, lee ~0.6.
     // Lakes ≥ 120 cells (7.5 G nodes); a channel drains ≥ 40 node-rains.
+    talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128 },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
     climate: { moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30 },
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
