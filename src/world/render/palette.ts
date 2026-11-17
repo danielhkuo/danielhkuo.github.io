@@ -22,6 +22,11 @@ export const FLAT_TONE = 9;
 export const RIVER_GUARD_TONE = FLAT_TONE - 3;
 /** The river must be this many L* lighter than any vegetation it crosses. */
 export const RIVER_MARGIN = 15;
+/** The first and the last of the river's tones that belong to 1 px streams, and the lightness they run between. */
+export const STREAM_TONE = 8;
+export const STREAM_TONES = 7;
+export const STREAM_DARK = 0.49;
+export const STREAM_LIGHT = 0.73;
 
 /** Share of ink mixed in for each value of the ink bits: none, soft, full, solid. */
 export const INK_MIX: readonly number[] = [0, 0.5, 0.85, 1];
@@ -177,6 +182,9 @@ function evergreen(c: Lch): Seasons {
 
 // Vegetation shades toward teal and lights toward gold; stone and snow shade toward violet.
 const LAND = { drop: 0.5, rise: 0.58, cool: 0.055, coolHue: 238, warm: 0.046, ramp: "land" } as const;
+// Upland turf, heather and moor: a deeper, bluer shade and a light that stays a colour, so a lit crest is gold-green
+// and not a mint rim, and lit and shaded faces part in value.
+const UPLAND = { drop: 0.55, rise: 0.42, cool: 0.06, coolHue: 246, warm: 0.064, ramp: "land" } as const;
 const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, ramp: "land" } as const;
 const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, coolHue: 278, warm: 0.075, ramp: "land" } as const;
 const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
@@ -228,19 +236,19 @@ function buildSpecs(): Spec[] {
   const alpine: Lch[] = [[0.72, 0.08, 148], [0.74, 0.085, 140], [0.76, 0.09, 128]];
   for (let v = 0; v < 3; v++) {
     const g = grass(alpine[v]);
-    set(M.alpineCool + v, [g[0], g[1], g[2], SNOW], LAND);
+    set(M.alpineCool + v, [g[0], g[1], g[2], SNOW], UPLAND);
   }
   // Heather blooms purple in summer and is brown the rest of the year.
   const heathBloom: Lch[] = [[0.58, 0.055, 325], [0.59, 0.045, 355], [0.61, 0.04, 96]];
   const heathBrown: Lch[] = [[0.53, 0.03, 20], [0.54, 0.035, 55], [0.57, 0.04, 85]];
   for (let v = 0; v < 3; v++) {
     const b = heathBrown[v];
-    set(M.heathCool + v, [[b[0] + 0.01, b[1], b[2] + 20], heathBloom[v], b, [b[0] + 0.04, b[1] - 0.012, b[2]]], LAND);
+    set(M.heathCool + v, [[b[0] + 0.01, b[1], b[2] + 20], heathBloom[v], b, [b[0] + 0.04, b[1] - 0.012, b[2]]], UPLAND);
   }
   const moor: Lch[] = [[0.65, 0.06, 130], [0.67, 0.065, 120], [0.69, 0.07, 109]];
   for (let v = 0; v < 3; v++) {
     const g = grass(moor[v]);
-    set(M.moorCool + v, [g[0], g[1], g[2], [g[3][0] + 0.05, g[3][1], g[3][2]]], LAND);
+    set(M.moorCool + v, [g[0], g[1], g[2], [g[3][0] + 0.05, g[3][1], g[3][2]]], UPLAND);
   }
 
   // Woods.
@@ -463,12 +471,16 @@ function ramp(spec: Spec, season: number): Lab[] {
   }
   if (spec.ramp === "flow") {
     // One soft streak per cycle of the flow phase; the ends meet.
-    // Tones 0–7: the flow phase of a river. Tones 8–14: a 1 px stream, quieter. Tone 15: the foam of a fall.
+    // Tones 0–7: the flow phase of a river. Tones 8–14: a 1 px stream, from deep shade to full light. Tone 15: the foam of a fall.
     for (let t = 0; t < 8; t++) {
       const wave = Math.cos((t / 8) * 2 * Math.PI);
       out[t] = [base[0] - 0.011 + 0.011 * wave, base[1] * (1.15 - 0.15 * wave), base[2] * (1.15 - 0.15 * wave)];
     }
-    for (let t = 8; t < 15; t++) out[t] = [base[0] - 0.045, base[1] * 0.62, base[2] * 0.62];
+    // A stream is a line of water darker than the ground it crosses, never a white scratch: its tone follows that ground's shade.
+    for (let t = 8; t < 15; t++) {
+      const k = (t - 8) / 6;
+      out[t] = [STREAM_DARK + (STREAM_LIGHT - STREAM_DARK) * k, base[1] * (1.4 - 0.3 * k), base[2] * (1.4 - 0.3 * k)];
+    }
     out[15] = [0.975, base[1] * 0.22, base[2] * 0.22];
     return out;
   }
@@ -531,13 +543,14 @@ export function buildPalette(o: PaletteOptions): Palette {
       if (isVegetation[mat] === 0 || snowCover(mat, o.season) > 0.25) continue;
       for (let t = 0; t <= RIVER_GUARD_TONE; t++) vegMax = Math.max(vegMax, lstar(pack(tones[mat][depth][t])));
     }
-    // One lift for the whole ramp, so the flow streak keeps its shape.
+    // One lift for the whole flow ramp, so the streak keeps its shape. Streams are left as they are: they are dark lines.
     const river = tones[M.river][depth];
+    const flows = (t: number): boolean => t < STREAM_TONE || t >= STREAM_TONE + STREAM_TONES;
     for (let i = 0; i < 120; i++) {
       let lowest = Infinity;
-      for (let t = 0; t < 16; t++) lowest = Math.min(lowest, lstar(pack(river[t])));
+      for (let t = 0; t < 16; t++) if (flows(t)) lowest = Math.min(lowest, lstar(pack(river[t])));
       if (lowest >= vegMax + RIVER_MARGIN + 0.5) break;
-      for (let t = 0; t < 16; t++) river[t][0] = Math.min(1, river[t][0] + 0.004);
+      for (let t = 0; t < 16; t++) if (flows(t)) river[t][0] = Math.min(1, river[t][0] + 0.004);
     }
   }
 

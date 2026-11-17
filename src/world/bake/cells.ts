@@ -38,11 +38,22 @@ export interface Look {
   turf?: number;
   /** The sand of a river's point bars. Optional: bars are not drawn when absent. */
   barSand?: number;
+  /** Per material id: 1 for bare rock, whose walls are drawn as strata. Optional: none when absent. */
+  isRock?: Uint8Array;
+  /** The shingle and the boulders of the apron at a sea cliff's foot. Optional: cliffs stand in the water when absent. */
+  apron?: number;
+  apronRock?: number;
 }
 
-/** Land cells' aux: bits 0–1 the hatch level (1 steep, 2 a cliff), bits 2–3 a crest (1 soft, 2 full, 3 one that runs north–south). */
+/**
+ * Land cells' aux: bits 0–1 the hatch level (1 steep, 2 a cliff), bits 2–3 a crest (1 soft, 2 full, 3 one that
+ * runs north–south), bit 4 bare rock, bit 5 a sharp crest on high ground (an arête or a summit). Stream cells' aux: 8 and the
+ * shade of the ground they cross, 0–6.
+ */
 export const AUX_STEEP = 3;
 export const AUX_CREST_SHIFT = 2;
+export const AUX_ROCK = 0x10;
+export const AUX_SHARP = 0x20;
 
 /** Cell flags. */
 export const F_SHADOW = 0x03;
@@ -114,6 +125,11 @@ export const CREST_DROP_HIGH = 1.1;
 export const CREST_LOW = 40;
 export const CREST_HIGH = 80;
 export const CREST_FULL = 5;
+/** A sharp crest from this height is marked as a high one: among rock it is an arête, inked whether or not it hides anything. */
+export const CREST_HIGH_LINE = 45;
+/** The apron at a sea cliff's foot is this many cells wide at most, and one cell in APRON_BOULDER of it is a boulder. */
+export const APRON_WIDTH = 3;
+export const APRON_BOULDER = 5;
 /** High ground also shows the crest of a broad ridge: this drop over this reach. */
 export const CREST_WIDE = 12;
 export const CREST_DROP_WIDE = 1.5;
@@ -342,7 +358,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           const k = across ? dCol : row && dRow > dCol ? dRow : 0;
           const need = pass === 1 ? CREST_DROP_WIDE : e <= CREST_LOW ? CREST_DROP : e >= CREST_HIGH ? CREST_DROP_HIGH : CREST_DROP + ((CREST_DROP_HIGH - CREST_DROP) * (e - CREST_LOW)) / (CREST_HIGH - CREST_LOW);
           // 1 and 2: a crest running across the view, soft and full. 3: one running away from the camera.
-          if (k >= need) crest[i] = !across ? 3 : pass === 0 && k >= CREST_FULL ? 2 : 1;
+          if (k >= need) crest[i] = (!across ? 3 : pass === 0 && k >= CREST_FULL ? 2 : 1) | (pass === 0 && e >= CREST_HIGH_LINE ? 4 : 0);
         }
       }
     }
@@ -507,8 +523,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   /** River cells of a river at least 2 cells wide: the ones that carry riverside trees. */
   const wide = new Uint8Array(count);
   let rivers = false;
-  forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run) => {
-    const r = width / 2, r2 = r * r;
+  forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run, _first, exact) => {
+    // A river two cells wide or more is the cells whose centres lie within half its own, unrounded width of the curve, so its banks
+    // follow the curve; a stream is the cells the curve passes through.
+    const r = width >= 2 ? (exact < 1.5 ? 0.75 : exact / 2) : 0.5, r2 = r * r;
     const cx = Math.floor(px) - wx0, cy = Math.floor(py) - wy0;
     // A rill that reaches the town's terraces goes under them in a culvert.
     if (width === 1 && band !== null && cx >= 0 && cy >= 0 && cx < W && cy < H && band[cy * W + cx] >= 1 && band[cy * W + cx] <= 3) return;
@@ -518,18 +536,18 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
       if (sx * sx + sy * sy > STREAM_MAX_SLOPE * STREAM_MAX_SLOPE) return;
     }
-    const reach = Math.floor(r + 0.5);
+    const reach = Math.ceil(r);
     for (let yy = cy - reach; yy <= cy + reach; yy++) {
       if (yy < 0 || yy >= H) continue;
       for (let xx = cx - reach; xx <= cx + reach; xx++) {
         if (xx < 0 || xx >= W) continue;
         const dx = xx + 0.5 + wx0 - px, dy = yy + 0.5 + wy0 - py;
-        if ((xx !== cx || yy !== cy) && dx * dx + dy * dy > r2) continue;
+        if ((width >= 2 || xx !== cx || yy !== cy) && dx * dx + dy * dy > r2) continue;
         const i = yy * W + xx;
         if (water[i]) continue;
         // Several curve points land on one cell; the lowest run wins so the phase never depends on their order.
-        // Tones 0–7: flow phase of a river; 8: a 1 px stream; 15: foam (set at falls).
-        const ph = run < 0 ? 9 : width === 1 ? 8 : Math.floor(run) & 7;
+        // Tones 0–7: flow phase of a river (4 on still water); 8: a 1 px stream; 15: foam (set at falls).
+        const ph = run < 0 ? 4 : width === 1 ? 8 : Math.floor(run) & 7;
         if (riv[i] !== 0 || ph < phase[i]) phase[i] = ph;
         riv[i] = 0;
         if (width >= 2) wide[i] = 1;
@@ -861,6 +879,24 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     mott[j * mW + i] = 1.1 * gradNoise(lx / 4, ly / 4, n / 32, 0x5ea) + 0.5 * gradNoise(lx, ly, n / 8, 0x5eb);
   }
 
+  // The apron: shingle and fallen boulders in the water at a sea cliff's foot, a cell or two wide and broken by gaps,
+  // so a cliff stands on something. 0 none, 1 shingle, 2 a boulder.
+  const apronAt = (i: number, X: number, Y: number): number => {
+    if (water[i] !== 1 || dist[i] > 4 * APRON_WIDTH) return 0;
+    const ring = dist[i] <= 4 ? 1 : dist[i] <= 8 ? 2 : 3;
+    const v = gradNoise(X / 8, Y / 8, n / 8, 0xa970);
+    if (v < (ring === 1 ? -0.3 : ring === 2 ? -0.08 : 0.25)) return 0;
+    let foot = false;
+    for (let k = 1; k <= ring && !foot; k++) {
+      for (let q = 0; q < 5 && !foot; q++) {
+        const j = q === 0 ? i - k * W : q === 1 ? i - k * W - 1 : q === 2 ? i - k * W + 1 : q === 3 ? i - k : i + k;
+        foot = water[j] === 0 && shoreAt[j] === 3 && (ground[j] >= 1.5 || slope[j] >= CLIFF_SLOPE);
+      }
+    }
+    if (!foot) return 0;
+    return hash2(X, Y, 0xb01d) % APRON_BOULDER === 0 ? 2 : 1;
+  };
+
   // 8. Light, shadow and flags for the core.
   const out: Cells = { w, h, surf: new Float32Array(w * h), mat: new Uint8Array(w * h), light: new Uint8Array(w * h), flags: new Uint8Array(w * h), aux: new Uint8Array(w * h) };
   const noInk = look.noInk;
@@ -887,6 +923,22 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
 
       out.surf[o] = top;
       out.mat[o] = m;
+      if (water[i] === 1 && !structure && look.apron !== undefined && anySea) {
+        const X = wrap(x0 + x, n), Y = wrap(y0 + y, n);
+        const ap = apronAt(i, X, Y);
+        if (ap !== 0) {
+          const hs = hash2(X, Y, 0x5a17);
+          const boulder = ap === 2 && look.apronRock !== undefined;
+          out.mat[o] = boulder ? (look.apronRock as number) : look.apron;
+          if (boulder) out.surf[o] = top + 1 + ((hs >>> 8) & 1);
+          // Pale stones under the dark wall, a tone darker where the water laps them. The cliff's own shadow is held to
+          // its lightest, or the strip reads as a violet line round the coast.
+          out.light[o] = boulder ? 96 + (hs & 31) : (dist[i] <= 4 ? 126 : 110) + (hs & 15);
+          out.aux[o] = 0;
+          out.flags[o] = ((flags & F_SHADOW) !== 0 ? 1 : 0) | F_QUIET;
+          continue;
+        }
+      }
       if (water[i] !== 0 && !structure) {
         // Tone: cells from the shore across the shallows, then the depth of the water beyond them.
         // Blue noise per cell breaks the steps between tones into a wash.
@@ -902,14 +954,26 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         // The ramp is spent fastest over the shelf: turquoise shallows, mid blue by 5 units, deep blue offshore.
         const deep = 1 + (depth <= 0 ? 0 : (13.5 * depth) / (depth + SEA_HALF)) + mottle * (depth < 4 ? depth / 4 : 1);
         const far = deep > 14 ? 14 : deep;
-        const v = Math.floor(d < 0.5 ? 0 : far < 1 ? 1 : far + dither - 0.5);
+        let v = Math.floor(d < 0.5 ? 0 : far < 1 ? 1 : far + dither - 0.5);
+        // The sea breaks on the apron at a cliff's foot as it does on a shore.
+        if (v > 0 && water[i] === 1 && look.apron !== undefined && dist[i] <= 4 * APRON_WIDTH + 4) {
+          const X = wrap(x0 + x, n), Y = wrap(y0 + y, n);
+          if (apronAt(i - W, X, wrap(Y - 1, n)) !== 0 || apronAt(i - 1, wrap(X - 1, n), Y) !== 0 || apronAt(i + 1, wrap(X + 1, n), Y) !== 0) v = 0;
+        }
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;
         continue;
       }
       if (riv[i] === 0 && !structure) {
-        out.aux[o] = phase[i];
+        let ph = phase[i];
+        if (ph === 8) {
+          // A stream is a line of water a little darker than the ground it crosses: it takes that ground's shade.
+          const t = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);
+          const k = Math.floor((t - 0.2) * 14);
+          ph = 8 + (k < 0 ? 0 : k > 6 ? 6 : k);
+        }
+        out.aux[o] = ph;
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;
         continue;
@@ -950,7 +1014,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
             ax = fields.steep[i] >= FORM_CLIFF ? 2 : 1;
           }
           // The lip of a tarn's bowl is no crest line: only the headwall behind the water keeps one, so no tarn is ringed.
-          if (crest[i] !== 0 && !(lakes && besideLake(water, W, i))) ax |= crest[i] << AUX_CREST_SHIFT;
+          if (crest[i] !== 0 && !(lakes && besideLake(water, W, i))) ax |= ((crest[i] & 3) << AUX_CREST_SHIFT) | ((crest[i] & 4) !== 0 ? AUX_SHARP : 0);
+          if (look.isRock !== undefined && look.isRock[m] === 1) ax |= AUX_ROCK;
         }
         out.aux[o] = ax;
         if (deep) flags |= F_DEEP;

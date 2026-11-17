@@ -11,7 +11,8 @@ export const RIVER_PIECE_REACH = 8;
 /** Points are emitted at most this far apart, in cells. */
 const STEP = 0.45;
 
-export type RiverPointFn = (x: number, y: number, width: number, run: number, first: boolean) => void;
+/** `width` is the line's width in whole cells, 1–6; `exact` the same width unrounded, eased along the segment. */
+export type RiverPointFn = (x: number, y: number, width: number, run: number, first: boolean, exact: number) => void;
 
 /**
  * Walks every river segment filed within RIVER_PIECE_REACH of the cell
@@ -46,10 +47,12 @@ export function forEachLinePoint(index: RiverIndex, x0: number, y0: number, x1: 
         const steps = Math.max(1, Math.ceil(len / STEP));
         // Still water (an oxbow) carries a negative width; it is handed on as run −1.
         const still = vertices[v + 2] < 0;
-        const w = Math.floor((still ? -vertices[v + 2] : vertices[v + 2]) + 0.5), run = vertices[v + 3], dRun = vertices[v + 7] - run;
+        const wa = still ? -vertices[v + 2] : vertices[v + 2], wb = vertices[v + 6] < 0 ? -vertices[v + 6] : vertices[v + 6];
+        const w = Math.floor(wa + 0.5), run = vertices[v + 3], dRun = vertices[v + 7] - run;
         for (let k = 0; k <= steps; k++) {
           const t = k / steps;
-          emit(ax + ox + t * dx, ay + oy + t * dy, w < 1 ? 1 : w > 6 ? 6 : w, still ? -1 : run + t * dRun, k === 0);
+          const e = wa + t * (wb - wa);
+          emit(ax + ox + t * dx, ay + oy + t * dy, w < 1 ? 1 : w > 6 ? 6 : w, still ? -1 : run + t * dRun, k === 0, e < 1 ? 1 : e > 6 ? 6 : e);
         }
       }
     }
