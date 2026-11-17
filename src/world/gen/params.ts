@@ -83,6 +83,72 @@ export interface WorldParams {
     /** Hillslope diffusion per archetype, in C-node units (×4 on G). */
     d: readonly number[];
   };
+  /** S3: the sea rises by `rise` units after erosion and heights are re-zeroed. */
+  drown: { rise: number };
+  /** S4. Lengths in cells, depths in units, areas in cells². */
+  glacial: {
+    /** A region weight of at least this puts a node inside that region's mask. */
+    mask: number;
+    /** `step` is the share of a lake's reach, from its head, over which the old floor steps down to the basin; `wall` the side's rise at the half-width, as a slope. */
+    lakes: { count: readonly [number, number]; length: readonly [number, number]; depth: readonly [number, number]; halfWidth: readonly [number, number]; minArea: number; minFloor: number; step: number; wall: number };
+    tarns: { count: readonly [number, number]; radius: readonly [number, number]; depth: number; minHeight: number; maxArea: number };
+    dams: { count: readonly [number, number]; height: readonly [number, number]; thickness: number; span: number; minArea: number; minFloor: number };
+    /** U-section: half-width range, lowest floor, smallest drainage, and the wall's height at the half-width as a slope. */
+    trough: { halfWidth: readonly [number, number]; minFloor: number; minArea: number; wall: number };
+  };
+  /** S6. Lengths in cells, slopes in units per cell, areas in cells². */
+  coast: {
+    maxFetch: number;
+    /** Weight of rays in the south-west quadrant; the rest weigh 1. */
+    swWeight: number;
+    /** Raw fetch shares that map to E = 0 and E = 1. */
+    fetchRange: readonly [number, number];
+    cliffE: number;
+    retreat: number;
+    /** Retreat multiplier per rock class: hard, medium, soft. */
+    retreatK: readonly [number, number, number];
+    /** Platform depth below the sea at E = cliffE and at E = 1. */
+    platform: readonly [number, number];
+    cliffCap: number;
+    /** Shores facing within 60° of east or west (|facing·east| > gateCos), or north, are capped at gateCap. */
+    gateCap: number;
+    gateCos: number;
+    /** Land behind a cap may rise from it at this slope. */
+    capSlope: number;
+    /** A cut shore at least this tall is classed cliff; lower is rocky shore. */
+    minCliff: number;
+    stackArea: readonly [number, number];
+    stackNoise: number;
+    stackNoiseCells: number;
+    stackTop: readonly [number, number];
+    headlandStacks: readonly [number, number];
+    headlandSpacing: number;
+    /** Share of sea within headlandR of a shore node that makes it a convex headland. */
+    headlandSea: number;
+    headlandR: number;
+    coveR: readonly [number, number];
+    /** Smallest drainage (cells²) whose channel cuts a cove into a cliff coast. */
+    coveArea: number;
+    /** Least distance between two coves, in cells. */
+    coveSpacing: number;
+    /** Smallest drainage (cells²) that counts as a channel at the coast. */
+    channelArea: number;
+    beachE: number;
+    beachSlope: number;
+    /** A channel draining at least beachFeedArea (cells²) feeds sand to shores within beachMouth cells of its mouth; they may be as steep as beachFed. */
+    beachFed: number;
+    beachFeedArea: number;
+    beachMouth: number;
+    /** Multiplier on both slope limits per archetype: home, highland, slate, lakes, karst, skerry. */
+    beachRegion: readonly number[];
+    beachLand: number;
+    beachBase: number;
+    beachRise: number;
+    shelf: number;
+    shelfSlope: number;
+    deltaE: number;
+    bathy: { max: number; slope: number; base: number; eGain: number };
+  };
 }
 
 export function paramsFor(n: number): WorldParams {
@@ -159,6 +225,54 @@ export function paramsFor(n: number): WorldParams {
       // Tuned 2026-11-17 on eroded renders: the first values smoothed away
       // every valley narrower than ~70 cells.
       d: [0.03, 0.004, 0.01, 0.007, 0.012, 0.005],
+    },
+    // 2, not the design's 3: at 3 the 6400 world fell to ~26 % land (target 30–35 %).
+    drown: { rise: 2 },
+    glacial: {
+      mask: 0.5,
+      lakes: { count: [3, 6], length: [80 * s, 250 * s], depth: [6, 12], halfWidth: [12 * s, 22 * s], minArea: 1500 * s * s, minFloor: 4, step: 0.25, wall: 0.5 / s },
+      tarns: { count: [4, 8], radius: [12 * s, 20 * s], depth: 5, minHeight: 60, maxArea: 6000 * s * s },
+      dams: { count: [2, 4], height: [4, 8], thickness: 10 * s, span: 60 * s, minArea: 6000 * s * s, minFloor: 8 },
+      trough: { halfWidth: [8 * s, 16 * s], minFloor: 35, minArea: 20000 * s * s, wall: 0.5 / s },
+    },
+    coast: {
+      maxFetch: 600 * s,
+      swWeight: 2,
+      fetchRange: [0.1, 0.6],
+      cliffE: 0.55,
+      retreat: 200 * s,
+      retreatK: [0.6, 1, 0],
+      platform: [1.5, 3],
+      cliffCap: 45,
+      gateCap: 12,
+      gateCos: 0.5,
+      capSlope: 0.8 / s,
+      minCliff: 5,
+      stackArea: [8 * s * s, 120 * s * s],
+      stackNoise: 0.8,
+      stackNoiseCells: 40 * s,
+      stackTop: [4, 30],
+      headlandStacks: [1, 4],
+      headlandSpacing: 260 * s,
+      headlandSea: 0.62,
+      headlandR: 48 * s,
+      coveR: [8 * s, 20 * s],
+      coveArea: 2000 * s * s,
+      coveSpacing: 260 * s,
+      channelArea: 1024 * s * s,
+      beachE: 0.35,
+      beachSlope: 0.15 / s,
+      beachFed: 0.3 / s,
+      beachFeedArea: 8000 * s * s,
+      beachMouth: 40 * s,
+      beachRegion: [2, 0.8, 1, 1, 1, 1],
+      beachLand: 10 * s,
+      beachBase: 0.6,
+      beachRise: 0.05 / s,
+      shelf: 30 * s,
+      shelfSlope: 0.04 / s,
+      deltaE: 0.4,
+      bathy: { max: 24, slope: 0.12 / s, base: 0.6, eGain: 0.8 },
     },
   };
 }
