@@ -47,7 +47,9 @@ test("peak densities: broadleaf 0.20, conifer 0.22; boulders and flowers are few
   assert.ok(Math.abs(conifer.length / cells - 0.22) < 0.005, `conifer ${conifer.length / cells}`);
   for (const s of broadleaf) assert.ok(s.mat >= M.broadleafCool && s.mat <= M.broadleafWarm);
   for (const s of conifer) assert.ok(s.mat >= M.coniferCool && s.mat <= M.coniferWarm);
-  for (const ground of [M.scree, M.moorMid, M.heathMid]) {
+  // A scree fan is a wash with its own flat stones: no domes on it.
+  assert.equal(patch(M.scree, { debris: 1 }).length, 0);
+  for (const ground of [M.moorMid, M.heathMid]) {
     const rocks = patch(ground, { debris: 1 });
     assert.ok(rocks.length > 0 && rocks.length / cells <= 0.012, `${MATERIAL_NAMES[ground]} ${rocks.length / cells}`);
     for (const s of rocks) assert.equal(s.mat, M.boulder);
@@ -272,7 +274,7 @@ function autocorrelation(grid: Uint8Array, size: number, dx: number, dy: number)
 
 test("no rows, no grid, no rings: trees and boulders are blue-noise spaced", () => {
   const size = 256;
-  for (const ground of [M.floorBroadleaf, M.floorConifer, M.scree]) {
+  for (const ground of [M.floorBroadleaf, M.floorConifer]) {
     const grid = new Uint8Array(size * size);
     for (const s of patch(ground, {}, size, -1, 0, 0)) grid[Math.floor(s.y) * size + Math.floor(s.x)] = 1;
     let peak = -Infinity;

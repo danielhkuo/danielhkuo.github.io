@@ -3,15 +3,16 @@
 // material, light and cast shadows. Every output is a pure function of the
 // wrapped cell position, so any window equals the same crop of any other.
 
+import { hash2 } from "../core/hash.ts";
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
 import { coverFields } from "./coverFields.ts";
-import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
+import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
-import { HMAX, type BakeWorld } from "./world.ts";
+import { HMAX, type BakeWorld, type Patch } from "./world.ts";
 
 export const TILE = 256;
 
@@ -29,7 +30,17 @@ export interface Look {
   isStill?: Uint8Array;
   /** Per material id: 1 where ink is never drawn (fields, roads, sand). Optional. */
   noInk?: Uint8Array;
+  /** Per material id: 1 for snow, which is lit by its true normals. Optional. */
+  isSnow?: Uint8Array;
+  /** The turf laid on the tops of sea stacks. Optional: the cover's own choice when absent. */
+  turf?: number;
+  /** The sand of a river's point bars. Optional: bars are not drawn when absent. */
+  barSand?: number;
 }
+
+/** Land cells' aux: bits 0–1 the hatch level (1 steep, 2 a cliff), bits 2–3 a crest (1 soft, 2 full, 3 one that runs north–south). */
+export const AUX_STEEP = 3;
+export const AUX_CREST_SHIFT = 2;
 
 /** Cell flags. */
 export const F_SHADOW = 0x03;
@@ -54,7 +65,7 @@ export interface Cells {
   /** Tone 0–255 before dithering. */
   light: Uint8Array;
   flags: Uint8Array;
-  /** Water cells: shore distance 0–15 (sea, lakes) or flow phase 0–15 (rivers). Steep land: hatch level 1 or 2. */
+  /** Water cells: depth tone 0–15 (sea, lakes) or flow phase 0–15 (rivers). Land: the AUX_ bits. */
   aux: Uint8Array;
 }
 
@@ -74,12 +85,30 @@ export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
 export const STREAM_MAX_SLOPE = 0.9;
 /** Ground from this slope is gullied, up to GULLY_DEPTH units deep. */
-export const GULLY_SLOPE = 0.75;
-export const GULLY_DEPTH = 4;
+export const GULLY_SLOPE = 0.9;
+export const GULLY_DEPTH = 2.2;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
 export const CLIFF_SLOPE = 1.4;
+/** And its smoothed form (coverFields `steep`) must be this steep for the cell to be hatched and lipped as a cliff. */
+export const FORM_CLIFF = 1.3;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
 export const STEEP_SLOPE = 1.15;
+/** A crest stands at least this far over the ground CREST_REACH cells to either side of it; from CREST_FULL its line is full ink. */
+export const CREST_REACH = 5;
+/** The drop a crest needs: CREST_DROP on low ground, easing to CREST_DROP_HIGH from CREST_LOW to CREST_HIGH units up, where summits are broad. */
+export const CREST_DROP = 1.8;
+export const CREST_DROP_HIGH = 1.1;
+export const CREST_LOW = 40;
+export const CREST_HIGH = 80;
+export const CREST_FULL = 5;
+/** High ground also shows the crest of a broad ridge: this drop over this reach. */
+export const CREST_WIDE = 12;
+export const CREST_DROP_WIDE = 1.5;
+/** Beaches, shingle and coves keep to a strip this many cells wide, give or take BEACH_WANDER. */
+const BEACH_BAND = 5;
+const BEACH_WANDER = 2.5;
+/** Water this deep is half way down the depth ramp. */
+const SEA_HALF = 5;
 /** Cover is evaluated this far north-west and south-east of the core. */
 const COVER_N = TREE_REACH + STAMP_REACH;
 const COVER_S = 1 + STAMP_REACH;
@@ -149,6 +178,72 @@ function stampsNear(world: BakeWorld, x0: number, y0: number, w: number, h: numb
   return out;
 }
 
+/**
+ * Sea stacks, reshaped at cell size: each its own height, tapering from a small uneven top, never above the
+ * stamp's own column. Returns the cells that stand on a stack, or null when the window holds none.
+ */
+function reshapeStacks(ground: Float32Array, W: number, H: number, wx0: number, wy0: number, n: number, stamps: readonly CoastStamp[]): Uint8Array | null {
+  let on: Uint8Array | null = null, best: Float32Array | null = null;
+  for (const s of stamps) {
+    if (s.kind !== "stack") continue;
+    const reach = s.r * (1 + 1.6 * s.lobe) + 1;
+    const cx = s.x - wx0 - Math.floor((s.x - wx0 + reach) / n) * n, cy = s.y - wy0 - Math.floor((s.y - wy0 + reach) / n) * n;
+    if (cx - reach >= W || cy - reach >= H) continue;
+    const hs = hash2(Math.floor(s.x), Math.floor(s.y), 0x57ac);
+    // Its own height, and how much of the top is level before the sides fall away.
+    const tall = s.top * (0.62 + (0.38 * (hs & 255)) / 255);
+    const flat = 0.2 + (0.3 * ((hs >>> 8) & 255)) / 255;
+    const y1 = Math.min(H - 1, Math.ceil(cy + reach)), x1 = Math.min(W - 1, Math.ceil(cx + reach));
+    for (let yy = Math.max(0, Math.floor(cy - reach)); yy <= y1; yy++) {
+      for (let xx = Math.max(0, Math.floor(cx - reach)); xx <= x1; xx++) {
+        const dx = xx + 0.5 - cx, dy = yy + 0.5 - cy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const c = d > 0 ? (dx * s.ux + dy * s.uy) / d : 0;
+        const r = s.r * (1 + s.lobe * c + 0.6 * s.lobe * (2 * c * c - 1));
+        if (d >= r) continue;
+        const q = d / r, i = yy * W + xx;
+        const t0 = q <= 0.6 ? 0 : (q - 0.6) / 0.4;
+        const stamp = s.top * (1 - 0.8 * t0 * t0);
+        // Land that stands higher than the stamp is not the stack's.
+        if (ground[i] > stamp + 0.05) continue;
+        const t = q <= flat ? 0 : (q - flat) / (1 - flat);
+        const X = wrap(wx0 + xx, n), Y = wrap(wy0 + yy, n);
+        const rough = 0.5 + 0.5 * (gradNoise(X / 2, Y / 2, n / 2, 0x51c) + gradNoise(X / 4, Y / 4, n / 4, 0x51d));
+        let v = tall * (1 - 0.72 * t * t) * (1 - 0.2 * (rough < 0 ? 0 : rough > 1 ? 1 : rough));
+        if (v > stamp) v = stamp;
+        if (v < 0.6) v = 0.6;
+        if (!on || !best) { on = new Uint8Array(W * H); best = new Float32Array(W * H); }
+        if (v > best[i]) best[i] = v;
+        on[i] = 1;
+      }
+    }
+  }
+  if (on && best) for (let i = 0; i < W * H; i++) if (on[i] === 1) ground[i] = Math.floor(best[i] * 64 + 0.5) / 64;
+  return on;
+}
+
+/** Calls `hit` with the window index of every cell whose centre lies inside the patch (even-odd), in the patch's own arithmetic. */
+function forEachPatchCell(p: Patch, n: number, wx0: number, wy0: number, W: number, H: number, hit: (i: number) => void): void {
+  const bw = p.x1 - p.x0, bh = p.y1 - p.y0;
+  const ox = imageOffset(p.x0, bw, wx0, n), oy = imageOffset(p.y0, bh, wy0, n);
+  if (ox >= W || oy >= H) return;
+  const v = p.outline, m = v.length >> 1;
+  for (let j = oy < 0 ? -oy : 0; j < bh && oy + j < H; j++) {
+    const py = p.y0 + j + 0.5;
+    for (let q = ox < 0 ? -ox : 0; q < bw && ox + q < W; q++) {
+      const px = p.x0 + q + 0.5;
+      let inside = false;
+      for (let k = 0, l = m - 1; k < m; l = k++) {
+        const ay = v[2 * k + 1], by = v[2 * l + 1];
+        if ((ay <= py) === (by <= py)) continue;
+        const ax = v[2 * k], bx = v[2 * l];
+        if (px < ax + ((py - ay) * (bx - ax)) / (by - ay)) inside = !inside;
+      }
+      if (inside) hit((oy + j) * W + ox + q);
+    }
+  }
+}
+
 /** Chamfer 3–4 distance transform in place over the cells from (lo, lo) to the end of a w × h window; `d` holds 0 at sources and `big` elsewhere. */
 function chamfer(d: Int16Array, w: number, h: number, lo: number): void {
   for (let y = lo; y < h; y++) {
@@ -193,11 +288,14 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 1. Ground.
   const ground = new Float32Array(count);
   upsampleGround(world.ground, gN, wx0, wy0, W, H, ground);
+  // The cells that stand on a sea stack.
+  let stackTop: Uint8Array | null = null;
   if (world.base && world.conform && world.stamps) {
     // Crisp coasts: the pre-stamp ground, the coast stamps at cell size, then the rivers' conforming.
     const crisp = new Float32Array(count), delta = new Float32Array(count);
+    const near = stampsNear(world, wx0, wy0, W, H);
     upsampleGround(world.base, gN, wx0, wy0, W, H, crisp);
-    applyStampsTo(crisp, { w: W, h: H, cellsPerNode: 1, x0: wx0, y0: wy0, period: n }, stampsNear(world, wx0, wy0, W, H));
+    applyStampsTo(crisp, { w: W, h: H, cellsPerNode: 1, x0: wx0, y0: wy0, period: n }, near);
     upsampleGround(world.conform, gN, wx0, wy0, W, H, delta);
     for (let i = 0; i < count; i++) {
       // Heights are kept to whole 64ths, so the last bits of a stamp's arithmetic cannot differ between windows.
@@ -205,28 +303,58 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       // Under the sea the generator's own bed (its bathymetry) stands, unless the stamp cut deeper.
       ground[i] = v > 0 ? v : ground[i] < v ? ground[i] : v < 0 ? v : ground[i] < 0 ? ground[i] : -0.02;
     }
+    stackTop = reshapeStacks(ground, W, H, wx0, wy0, n, near);
+  }
+  // Crests: a cell that tops its row or its column and stands well over the ground a few cells to either side.
+  // Found on the smooth ground, before gullies, so a face's ribs are not crests.
+  const crest = new Uint8Array(count);
+  {
+    for (let y = PAD_N; y < PAD_N + h; y++) {
+      for (let x = PAD_N; x < PAD_N + w; x++) {
+        const i = y * W + x, e = ground[i];
+        if (e < 6) continue;
+        const col = e >= ground[i - W] && e > ground[i + W], row = e >= ground[i - 1] && e > ground[i + 1];
+        if (!col && !row) continue;
+        // Two scales: a sharp arête shows over CREST_REACH cells, a broad summit ridge only over CREST_WIDE.
+        for (let pass = 0; pass < 2; pass++) {
+          if (pass === 1 && (crest[i] !== 0 || e < CREST_LOW)) break;
+          const R = pass === 0 ? CREST_REACH : CREST_WIDE;
+          let a = ground[i - R * W], b = ground[i + R * W];
+          const dCol = e - (a > b ? a : b);
+          a = ground[i - R];
+          b = ground[i + R];
+          const dRow = e - (a > b ? a : b);
+          // The axis the ground bends across most owns the crest, so a slanting ridge is one line and not two.
+          const across = col && dCol >= dRow;
+          const k = across ? dCol : row && dRow > dCol ? dRow : 0;
+          const need = pass === 1 ? CREST_DROP_WIDE : e <= CREST_LOW ? CREST_DROP : e >= CREST_HIGH ? CREST_DROP_HIGH : CREST_DROP + ((CREST_DROP_HIGH - CREST_DROP) * (e - CREST_LOW)) / (CREST_HIGH - CREST_LOW);
+          // 1 and 2: a crest running across the view, soft and full. 3: one running away from the camera.
+          if (k >= need) crest[i] = !across ? 3 : pass === 0 && k >= CREST_FULL ? 2 : 1;
+        }
+      }
+    }
   }
   // Gullies: steep ground is incised along its fall line, a few units deep, so faces show ribs and
   // couloirs in their shading and their silhouettes. A pure function of the cell and the smooth ground.
   {
-    const cut = new Float32Array(count), per = n / 2;
+    const cut = new Float32Array(count), per = n / 4;
     for (let y = 1; y < H - 1; y++) {
-      const v = wrap(wy0 + y, n) / 2;
+      const v = wrap(wy0 + y, n) / 4;
       for (let x = 1; x < W - 1; x++) {
         const i = y * W + x, e = ground[i];
         if (e <= 1.5) continue;
         const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
         const s2 = dx * dx + dy * dy;
         if (s2 < GULLY_SLOPE * GULLY_SLOPE) continue;
-        const u = wrap(wx0 + x, n) / 2;
+        const u = wrap(wx0 + x, n) / 4;
         // Noise smeared four lattice steps along whichever axis the ground falls, so the grain runs downhill.
         let a: number;
-        // (Every lattice coordinate is the cell over 2, so the noise wraps with the world.)
-        if (dy * dy >= dx * dx) a = 0.5 * (gradNoise(u, v, per, 0x61b) + gradNoise(u, v + 2, per, 0x61b) + gradNoise(u, v + 4, per, 0x61b) + gradNoise(u, v + 6, per, 0x61b));
-        else a = 0.5 * (gradNoise(u, v, per, 0x7c3) + gradNoise(u + 2, v, per, 0x7c3) + gradNoise(u + 4, v, per, 0x7c3) + gradNoise(u + 6, v, per, 0x7c3));
+        // (Every lattice coordinate is the cell over 4, so the noise wraps with the world, and ribs are broad.)
+        if (dy * dy >= dx * dx) a = gradNoise(u, v, per, 0x61b) + gradNoise(u, v + 2, per, 0x61b);
+        else a = gradNoise(u, v, per, 0x7c3) + gradNoise(u + 2, v, per, 0x7c3);
         const ridge = a < 0 ? -a : a;
-        // Narrow cuts between broad ribs: deepest where the noise crosses zero.
-        const depth = ridge > 0.5 ? 0 : 1 - ridge * 2;
+        // A few narrow cuts between broad ribs: only where the noise crosses zero.
+        const depth = ridge > 0.3 ? 0 : 1 - ridge / 0.3;
         const steep = Math.sqrt(s2) - GULLY_SLOPE;
         cut[i] = depth * depth * GULLY_DEPTH * (steep > 0.6 ? 1 : steep / 0.6) * (e > 16 ? 1 : (e - 1.5) / 14.5);
       }
@@ -312,6 +440,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         }
       }
       if (e <= 0) water[i] = 1;
+    }
+  }
+
+  // Oxbow ponds: still water a little below the bank, never above it.
+  if (world.ponds) {
+    for (const p of world.ponds) {
+      forEachPatchCell(p, n, wx0, wy0, W, H, (i) => {
+        if (water[i] !== 0) return;
+        const g = ground[i];
+        const s = p.level > g ? g : p.level < g - 1 ? g - 1 : p.level;
+        water[i] = 2;
+        level[i] = s < 0.05 ? 0.05 : s;
+        ground[i] = level[i] - 1.5;
+      });
     }
   }
 
@@ -454,7 +596,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0 };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cN * cN;
   const rockW = new Float64Array(3);
@@ -462,16 +604,43 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const sLo = PAD_N - TREE_REACH, sHiX = PAD_N + w + 1, sHiY = PAD_N + h + 1;
 
   // Column lookups for the two grids.
-  const gI0 = new Int32Array(cw), gI1 = new Int32Array(cw), gF = new Float32Array(cw);
+  const gI0 = new Int32Array(cw), gI1 = new Int32Array(cw), gF = new Float32Array(cw), gL = new Int32Array(cw);
   const cI0 = new Int32Array(cw), cI1 = new Int32Array(cw), cF = new Float32Array(cw);
   for (let x = 0; x < cw; x++) {
     const wx = wx0 + cOff + x;
     const gu = (wx + 0.5) / 4 - 0.5, gj = Math.floor(gu);
-    gI0[x] = wrap(gj, gN); gI1[x] = wrap(gj + 1, gN); gF[x] = gu - gj;
+    gI0[x] = wrap(gj, gN); gI1[x] = wrap(gj + 1, gN); gF[x] = gu - gj; gL[x] = gj - gxa;
     const cu = (wx + 0.5) / 8 - 0.5, cj = Math.floor(cu);
     cI0[x] = wrap(cj, cN); cI1[x] = wrap(cj + 1, cN); cF[x] = cu - cj;
   }
   const { hand, shore, moisture, wind, exposure, debris, rock, regions } = world;
+  // Shore classes live on the one ring of nodes at the water. Spread two nodes inland and voted by the corners'
+  // weights, they bound beaches by the coast's own curve and not by 4-cell blocks.
+  let shoreD: Uint8Array | null = null;
+  if (anySea) {
+    shoreD = new Uint8Array(gW * gH);
+    // The ring's classes over the node window and two nodes round it.
+    const rw = gW + 4, rh = gH + 4, ring = new Uint8Array(rw * rh);
+    for (let j = 0; j < rh; j++) {
+      const row = wrap(gya + j - 2, gN) * gN;
+      for (let q = 0; q < rw; q++) ring[j * rw + q] = shore[row + wrap(gxa + q - 2, gN)];
+    }
+    for (let j = 0; j < gH; j++) for (let q = 0; q < gW; q++) {
+      const at = (j + 2) * rw + q + 2;
+      let cls = ring[at];
+      if (cls === 0) {
+        let bd = 99;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+          const d = dx * dx + dy * dy;
+          if (d >= bd) continue;
+          const v = ring[at + dy * rw + dx];
+          if (v !== 0) { bd = d; cls = v; }
+        }
+      }
+      shoreD[j * gW + q] = cls;
+    }
+  }
+  const shW = new Float64Array(8);
 
   for (let y = 0; y < ch; y++) {
     const wy = wy0 + cOff + y;
@@ -493,7 +662,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const gfx = gF[x];
       const g00 = gr0 + gI0[x], g10 = gr0 + gI1[x], g01 = gr1 + gI0[x], g11 = gr1 + gI1[x];
       const ha = hand[g00] + (hand[g10] - hand[g00]) * gfx, hb = hand[g01] + (hand[g11] - hand[g01]) * gfx;
-      const sh = inland[i] <= 3 * SHORE_BAND ? shore[gfy < 0.5 ? (gfx < 0.5 ? g00 : g10) : gfx < 0.5 ? g01 : g11] : 0;
+      let sh = 0;
+      if (shoreD !== null && inland[i] <= 3 * SHORE_BAND) {
+        const a = (gj - gya) * gW + gL[x];
+        const s00 = shoreD[a], s10 = shoreD[a + 1], s01 = shoreD[a + gW], s11 = shoreD[a + gW + 1];
+        if (s00 === s10 && s00 === s01 && s00 === s11) sh = s00;
+        else {
+          shW.fill(0);
+          shW[s00] += (1 - gfx) * (1 - gfy); shW[s10] += gfx * (1 - gfy); shW[s01] += (1 - gfx) * gfy; shW[s11] += gfx * gfy;
+          let most = 0;
+          for (let k = 1; k < 8; k++) if (shW[k] > most) { most = shW[k]; sh = k; }
+        }
+        // Sand and shingle keep to a strip along the water whose width wanders; cliffs, dunes and saltmarsh take the whole band.
+        if (sh !== 0 && sh !== 3 && sh < 5 && inland[i] > 3 * (BEACH_BAND + BEACH_WANDER * gradNoise(wrap(wx0 + cOff + x, n) / 32, c.y / 32, n / 32, 0xb3ac))) sh = 0;
+      }
       shoreAt[i] = sh;
 
       const cfx = cF[x];
@@ -535,6 +717,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.rock = rockW[1] + 2 * rockW[2];
       c.cliffAbove = fields.cliffAbove[i];
       c.relief = fields.relief[i];
+      c.steep = fields.steep[i];
+      c.form = fields.form[i];
+      c.curve = fields.curve[i];
       for (let a = 0; a < 6; a++) {
         const o = a * cc;
         region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];
@@ -595,6 +780,24 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           }
         }
       }
+    }
+  }
+
+  // Stack tops are turf; point bars are pale sand with nothing growing on them.
+  if (stackTop !== null && look.turf !== undefined) {
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+      const i = (y + cOff) * W + x + cOff;
+      if (stackTop[i] === 1 && water[i] === 0 && slope[i] < 1) gmat[i] = look.turf;
+    }
+  }
+  if (world.bars && look.barSand !== undefined) {
+    const sand = look.barSand;
+    for (const p of world.bars) {
+      forEachPatchCell(p, n, wx0, wy0, W, H, (i) => {
+        if (water[i] !== 0 || riv[i] === 0 || road[i] !== 0) return;
+        gmat[i] = sand;
+        crown[i] = -Infinity;
+      });
     }
   }
 
@@ -683,7 +886,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const mottle = (1 - mfy) * (mott[ma] + (mott[ma + 1] - mott[ma]) * mfx) + mfy * (mott[ma + mW] + (mott[ma + mW + 1] - mott[ma + mW]) * mfx);
         // Tone follows the sea bed: a wide pale shelf in a shallow bay, dark water straight under a cliff.
         // Only the cell on the shore itself is foam.
-        const deep = 1 + depth * 0.5 + mottle * (depth < 4 ? depth / 4 : 1);
+        // The ramp is spent fastest over the shelf: turquoise shallows, mid blue by 5 units, deep blue offshore.
+        const deep = 1 + (depth <= 0 ? 0 : (13.5 * depth) / (depth + SEA_HALF)) + mottle * (depth < 4 ? depth / 4 : 1);
         const far = deep > 14 ? 14 : deep;
         const v = Math.floor(d < 0.5 ? 0 : far < 1 ? 1 : far + dither - 0.5);
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
@@ -699,7 +903,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
 
       const gx = (surf[i + 1] - surf[i - 1]) * 0.5, gy = (surf[i + W] - surf[i - W]) * 0.5;
-      let tone = shade(gx, gy, dry[i] - blur[i], ground[i]);
+      const snow = !hasCrown && look.isSnow !== undefined && look.isSnow[m] === 1;
+      let tone = snow ? shadeSnow(gx, gy, dry[i] - blur[i]) : shade(gx, gy, dry[i] - blur[i], ground[i]);
       if (hasCrown) {
         // A crown is modelled by its own dome, but keeps the light of the hillside it stands on, so woods show the land's form.
         const under = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);
@@ -723,11 +928,17 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const canopy = hasCrown && look.isCanopy[m] === 1;
       if (canopy) flags |= F_CANOPY;
       else {
-        if (!hasCrown && made[i] === 0 && terr[i] === 0 && slope[i] >= STEEP_SLOPE) {
-          // Steep ground is hatched: sparsely from STEEP_SLOPE, densely on true cliffs. The level rides in aux.
-          flags |= F_CLIFF;
-          out.aux[o] = slope[i] >= CLIFF_SLOPE ? 2 : 1;
+        let ax = 0;
+        if (!hasCrown && made[i] === 0 && terr[i] === 0) {
+          if (slope[i] >= STEEP_SLOPE) {
+            // Steep ground is hatched: sparsely from STEEP_SLOPE, densely on true cliffs. The level rides in aux.
+            flags |= F_CLIFF;
+            // A cliff by the land's form, not by the cell's own slope: a gully's wall on a moderate slope takes no lip and no strokes.
+            ax = fields.steep[i] >= FORM_CLIFF ? 2 : 1;
+          }
+          ax |= crest[i] << AUX_CREST_SHIFT;
         }
+        out.aux[o] = ax;
         if (deep) flags |= F_DEEP;
       }
       if (rockAt[i] !== 0) flags |= F_BEDDED;

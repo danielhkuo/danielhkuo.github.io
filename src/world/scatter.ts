@@ -86,9 +86,8 @@ export function treeDensity(c: CoverInput, groundMat: number): number {
   return 0;
 }
 
-/** Boulders per cell: scree, and the stonier parts of moor, heath and alpine ground. */
+/** Boulders per cell: the stonier parts of moor, heath and alpine ground. Scree draws its own stones flat: a fan is a wash, not a field of domes. */
 export function boulderDensity(c: CoverInput, groundMat: number): number {
-  if (groundMat === M.scree || groundMat === M.screeSlate) return DENSITY.boulder;
   // Elsewhere stones lie only where debris reaches: no debris, no boulders.
   if (inTriple(groundMat, M.moorCool) || inTriple(groundMat, M.heathCool)) return DENSITY.boulder * 0.7 * clamp01(c.debris * 2);
   if (inTriple(groundMat, M.alpineCool) || groundMat === M.snowLate) return DENSITY.boulder * 0.5 * clamp01(c.debris * 2);

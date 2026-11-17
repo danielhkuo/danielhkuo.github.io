@@ -42,7 +42,10 @@ export const TERRAIN_CHROMA_CAP = 0.09;
 
 const INK: Lch = [0.24, 0.03, 60];
 const PAPER: Lch = [0.955, 0.02, 90];
-const SNOW: Lch = [0.965, 0.008, 250];
+/** Flat snow is a hair warm, so the light end of its ramp is cream and only its shade is blue. */
+const SNOW: Lch = [0.962, 0.006, 100];
+/** Snow: a long, even fall into blue shade and a short rise to cream. */
+const SNOWY = { drop: 0.3, rise: 0.7, cool: 0.07, warm: 0.045, ramp: "land" } as const;
 
 const RAD = Math.PI / 180;
 
@@ -200,8 +203,8 @@ function buildSpecs(): Spec[] {
   set(M.shingle, all([0.8, 0.015, 85]), STONE);
 
   // Snow; late snow melts to fellfield in summer.
-  set(M.snow, all(SNOW), PALE);
-  set(M.snowLate, [SNOW, [0.73, 0.03, 118], SNOW, SNOW], PALE);
+  set(M.snow, all(SNOW), SNOWY);
+  set(M.snowLate, [SNOW, [0.73, 0.03, 118], SNOW, SNOW], SNOWY);
 
   // Rock.
   set(M.rockHard, all([0.68, 0.012, 265]), STONE);
@@ -215,6 +218,8 @@ function buildSpecs(): Spec[] {
   // Scree is fresh, broken stone: lighter and warmer than the face it fell from.
   set(M.scree, all([0.82, 0.022, 82]), STONE);
   set(M.screeSlate, all([0.68, 0.02, 258]), STONE);
+  // Its stones are a tone under the fan: grey-buff, nowhere near ink.
+  set(M.screeStone, all([0.7, 0.018, 80]), STONE);
 
   // Upland. Alpine meadow is the winter snow band.
   const alpine: Lch[] = [[0.72, 0.08, 148], [0.74, 0.085, 140], [0.76, 0.09, 128]];
@@ -272,6 +277,11 @@ function buildSpecs(): Spec[] {
   // Wet ground.
   set(M.marsh, grass([0.62, 0.065, 128]), LAND);
   set(M.reeds, [[0.66, 0.07, 115], [0.67, 0.065, 105], [0.7, 0.07, 85], [0.72, 0.06, 82]], LAND);
+
+  // The shore's own plants. Marram is a pale sage that bleaches in winter; saltmarsh a grey-green, its creeks wet mud.
+  set(M.duneGrass, [[0.8, 0.05, 124], [0.81, 0.045, 118], [0.8, 0.045, 104], [0.79, 0.035, 96]], LAND);
+  set(M.saltmarsh, [[0.68, 0.045, 138], [0.67, 0.042, 142], [0.66, 0.04, 118], [0.65, 0.03, 110]], LAND);
+  set(M.saltCreek, all([0.71, 0.022, 215]), LINE);
 
   // Lowland grass.
   const meadow: Lch[] = [[0.785, 0.1, 140], [0.8, 0.105, 131], [0.81, 0.1, 121]];

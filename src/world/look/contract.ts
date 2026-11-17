@@ -67,6 +67,24 @@ export interface CoverInput {
    * gullies and couloirs.
    */
   relief?: number;
+  /**
+   * Optional (bake/coverFields.ts): the slope of the land's form, with
+   * gullies smoothed out; on a sharp crest it reads the slope of the flanks.
+   * Without it the cover falls back on `slope`.
+   */
+  steep?: number;
+  /**
+   * Optional (bake/coverFields.ts): the height of the land's form, the ground
+   * smoothed over a few cells. Strata and crag bands follow its contours, so
+   * they run straight across gullies. Without it the cover uses `e`.
+   */
+  form?: number;
+  /**
+   * Optional (bake/coverFields.ts): height of the smoothed ground above the
+   * mean of the ground eight cells round it. Positive on ridges and spurs,
+   * negative in corries and valley heads.
+   */
+  curve?: number;
 }
 
 /** A crown or rock stamped into height and material by the bake. */

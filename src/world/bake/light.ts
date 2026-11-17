@@ -15,6 +15,9 @@ export const SHADOW_REACH = 64;
 /** Heights are multiplied by this for the Lambert term only. */
 export const EXAGGERATE = 2.5;
 
+/** And by this on snow. */
+export const SNOW_LEAN = 1.8;
+
 /** The tone flat, unshadowed ground takes, 0–1. */
 export const BASE_TONE = 0.5;
 
@@ -102,4 +105,19 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
   const tone = BASE_TONE + (lit - 0.5) * contrast;
   // Keep clear of the ramp's two ends.
   return tone < 0.06 ? 0.06 : tone > 0.94 ? 0.94 : tone;
+}
+
+/**
+ * Tone 0–1 of snow, from its own normal alone: flat snow sits at the base tone, a
+ * slope turned to the sun runs up to cream, one turned away falls steadily
+ * into blue shade, so ridges, couloirs and cirque walls model. Hollows darken
+ * a little.
+ */
+export function shadeSnow(dhdx: number, dhdy: number, relief: number): number {
+  // Snowfields are broad and low: the normal is leaned a little, less than the land's, so no face saturates.
+  const ex = dhdx * SNOW_LEAN, ey = dhdy * SNOW_LEAN;
+  const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
+  let tone = ndotl >= SUN_Z ? BASE_TONE + (0.36 * (ndotl - SUN_Z)) / (1 - SUN_Z) : BASE_TONE - 0.66 * (SUN_Z - ndotl);
+  if (relief < 0) tone += relief < -10 ? -0.05 : 0.005 * relief;
+  return tone < 0.08 ? 0.08 : tone > 0.94 ? 0.94 : tone;
 }

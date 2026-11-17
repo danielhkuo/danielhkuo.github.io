@@ -4,7 +4,7 @@
 // height steps by a pixel.
 
 import { hash2 } from "../core/hash.ts";
-import { F_CANOPY, F_CLIFF, F_DEEP, F_QUIET, F_SEACLIFF } from "./cells.ts";
+import { AUX_CREST_SHIFT, AUX_STEEP, F_CANOPY, F_CLIFF, F_DEEP, F_QUIET, F_SEACLIFF } from "./cells.ts";
 
 export const INK_NONE = 0;
 export const INK_SOFT = 1;
@@ -24,8 +24,12 @@ export const INK_FULL_HIDDEN = 10;
 export const INK_SOLID_HIDDEN = 24;
 /** A side silhouette is traced at most this many pixels below its crest. */
 export const CREST_REACH = 24;
+/** Hatching reaches this many pixels down from a cliff's lip. */
+export const LIP_HATCH = 7;
 /** A cliff lip is inked above a rock wall at least this tall. */
-export const LIP_RUN = 4;
+export const LIP_RUN = 9;
+/** From a wall this tall the lip's ink is full; a shorter crag's is soft. */
+export const LIP_FULL = 16;
 
 /** A painted window: one entry per bake pixel, row-major, w × h. */
 export interface Painted {
@@ -76,7 +80,8 @@ export function inkOcclusion(p: Painted): void {
       const f = flags[i];
       const canopy = (f & F_CANOPY) !== 0;
       // Crowns take no ink: a wood's edge is drawn by its shade, and an inked edge reads as an outline round every copse.
-      if (!canopy && hid >= INK_MIN_HIDDEN) {
+      // Inside a rock face a short hide is a ledge among ledges: only a real break is inked there.
+      if (!canopy && hid >= ((f & F_CLIFF) !== 0 ? INK_FULL_HIDDEN : INK_MIN_HIDDEN)) {
         const quiet = (f & F_QUIET) !== 0 || (canopy && (flags[i - w] & F_CANOPY) !== 0);
         if (!quiet) {
           // A crown is small: its edge takes soft ink only, and no side tracing.
@@ -102,17 +107,17 @@ export function inkOcclusion(p: Painted): void {
   }
 }
 
-/** Full ink on the lip above a rock wall of LIP_RUN pixels or more, and on cliffed coasts at the waterline. */
+/** Ink on the lip above a rock wall of LIP_RUN pixels or more (full from LIP_FULL), and on cliffed coasts at the waterline. */
 export function inkCliffs(p: Painted, isStill: Uint8Array): void {
-  const { w, h, flags, ink, mat, y, aux } = p;
+  const { w, h, x0, r0, flags, ink, mat, y, aux, height } = p;
   for (let c = 0; c < w; c++) {
     let run = 0;
     for (let r = h - 1; r >= 0; r--) {
       const i = r * w + c;
       const f = flags[i];
-      if ((f & F_CLIFF) !== 0 && aux[i] >= 2) { run++; continue; }
+      if ((f & F_CLIFF) !== 0 && (aux[i] & AUX_STEEP) >= 2) { run++; continue; }
       // The first pixel above a tall enough wall, if it is the ground the wall drops from.
-      if (run >= LIP_RUN && (f & (F_QUIET | F_CANOPY)) === 0 && y[i + w] - y[i] <= 3) ink[i] = INK_FULL;
+      if (run >= LIP_RUN && (f & (F_QUIET | F_CANOPY)) === 0 && y[i + w] - y[i] <= 3) ink[i] = run >= LIP_FULL ? INK_FULL : INK_SOFT;
       run = 0;
     }
     // The coastline: a thin line where land meets standing water, full at a cliff's foot. Beaches take foam, not ink.
@@ -120,9 +125,31 @@ export function inkCliffs(p: Painted, isStill: Uint8Array): void {
       const i = r * w + c;
       const f = flags[i];
       if ((f & (F_QUIET | F_CANOPY)) !== 0 || isStill[mat[i]] === 1 || ink[i] !== 0) continue;
-      if (isStill[mat[i + w]] === 1 || (c > 0 && isStill[mat[i - 1]] === 1) || (c + 1 < w && isStill[mat[i + 1]] === 1)) {
-        ink[i] = (f & F_SEACLIFF) !== 0 ? INK_FULL : INK_SOFT;
-      }
+      const j = isStill[mat[i + w]] === 1 ? i + w : c > 0 && isStill[mat[i - 1]] === 1 ? i - 1 : c + 1 < w && isStill[mat[i + 1]] === 1 ? i + 1 : -1;
+      if (j < 0) continue;
+      if (height[j] > 0.5) {
+        // A lake or tarn: a light, broken line along the far shore only, never a ring.
+        if (j === i + w && (((x0 + c + 2 * (r0 + r)) % 5) + 5) % 5 < 3) ink[i] = INK_SOFT;
+      } else ink[i] = (f & F_SEACLIFF) !== 0 ? INK_FULL : INK_SOFT;
+    }
+  }
+}
+
+/**
+ * Crest lines: the topmost pixel of a cell that stands on a ridge (cells.ts marks them) takes ink even where
+ * nothing is hidden behind it, so a range keeps its skeleton under snow and on slopes too gentle to occlude.
+ */
+export function inkCrests(p: Painted): void {
+  const { w, h, flags, ink, aux, y } = p;
+  for (let r = 1; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const i = r * w + c;
+      if (ink[i] !== 0 || (flags[i] & (F_QUIET | F_CANOPY)) !== 0) continue;
+      const v = (aux[i] >> AUX_CREST_SHIFT) & 3;
+      if (v === 0) continue;
+      // A crest that runs away from the camera is a column of cells, each a pixel or two tall: both are inked, so the line is whole.
+      if (y[i - w] === y[i] && (v !== 3 || r < 2 || y[i - 2 * w] === y[i])) continue;
+      ink[i] = v === 2 ? INK_FULL : INK_SOFT;
     }
   }
 }
@@ -139,18 +166,21 @@ export function hatch(p: Painted, mask: Uint8Array): void {
   for (let c = 0; c < w; c++) {
     const X = x0 + c;
     const hx = hash2(X, 17, 0x4a7c);
-    // About one column in three carries strokes at all.
+    // About one column in four carries strokes at all.
     const pick = hx & 255;
     const period = 11 + ((hx >>> 8) & 7), phase = (hx >>> 12) & 31;
+    // Rows since the cliff began in this column: hatching hangs from the lip and stops a little way down.
+    let below = LIP_HATCH;
     for (let r = 0; r < h; r++) {
       const i = r * w + c;
       const f = flags[i];
-      if ((f & (F_CLIFF | F_DEEP)) === 0 || ink[i] !== 0 || (f & (F_QUIET | F_CANOPY)) !== 0) continue;
-      // Only true cliffs are hatched, on their shade side or in deep shadow; moderate slopes take none.
-      const cliff = (f & F_CLIFF) !== 0 && aux[i] >= 2;
-      if (!cliff) continue;
-      if ((f & F_DEEP) === 0 && light[i] > 112) continue;
-      if (pick > 100) continue;
+      const cliff = (f & F_CLIFF) !== 0 && (aux[i] & AUX_STEEP) >= 2 && (f & (F_QUIET | F_CANOPY)) === 0;
+      if (!cliff) { below = 0; continue; }
+      below++;
+      // Only at the slope break: nothing over the open face below it.
+      if (below > LIP_HATCH || ink[i] !== 0) continue;
+      if ((f & F_DEEP) === 0 && light[i] > 100) continue;
+      if (pick > 64) continue;
       const R = r0 + r;
       // Strokes of 3–8 px with gaps, each band of the column offset by a second hash; blue noise frays their ends.
       const band = Math.floor((R + phase) / period);
