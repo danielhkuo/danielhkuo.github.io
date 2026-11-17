@@ -257,7 +257,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0 };
   const cc = cN * cN;
   const rockW = new Float64Array(3);
   // Stamps may only touch cells whose crowns matter: the core, TREE_REACH to the north-west and one cell round.
@@ -308,6 +308,18 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.e = e;
       c.slope = s;
       c.northness = s > 1e-6 ? dy / s : 0;
+      c.westness = s > 1e-6 ? dx / s : 0;
+      // The way from the nearest river to here: the gradient of the river distance, scaled to that distance.
+      c.riverDx = 0;
+      c.riverDy = 0;
+      if (rivers && riv[i] > 0 && riv[i] < 3 * RIVER_CAP) {
+        const rx = riv[i + 1] - riv[i - 1], ry = riv[i + W] - riv[i - W];
+        const rl = Math.sqrt(rx * rx + ry * ry);
+        if (rl > 0) {
+          c.riverDx = (rx / rl) * (riv[i] / 3);
+          c.riverDy = (ry / rl) * (riv[i] / 3);
+        }
+      }
       c.hand = ha + (hb - ha) * gfy;
       c.moisture = w00 * moisture[c00] + w10 * moisture[c10] + w01 * moisture[c01] + w11 * moisture[c11];
       c.wind = w00 * wind[c00] + w10 * wind[c10] + w01 * wind[c01] + w11 * wind[c11];

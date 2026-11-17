@@ -24,6 +24,20 @@ export interface RiverDist {
   south: number;
 }
 
+/**
+ * River clearance from the bake's optional river offset on the cell. The
+ * river lies at −(riverDx, riverDy). Where that is to the north, a straight
+ * reach at plain distance d crosses the cell's own column d² / dy cells due
+ * north; the crown must also stay clear of the water in plan, wherever it is.
+ */
+export function riverDistOf(c: CoverInput): RiverDist | undefined {
+  const dx = c.riverDx === undefined ? 0 : c.riverDx;
+  const dy = c.riverDy === undefined ? 0 : c.riverDy;
+  if (dx === 0 && dy === 0) return undefined;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  return { north: dy > 0 ? (d * d) / dy : Infinity, south: d };
+}
+
 /** Peak densities, instances per cell. */
 export const DENSITY = {
   broadleaf: 0.2,
@@ -31,6 +45,8 @@ export const DENSITY = {
   pastureTree: 0.02,
   meadowTree: 0.006,
   marshTree: 0.012,
+  /** Hedgerow trees: one in ten cells of a treed hedge; most hedges are bare. */
+  hedgeTree: 0.08,
   shrub: 0.05,
   alderBank: 0.3,
   boulder: 0.04,
@@ -78,6 +94,7 @@ export function treeDensity(c: CoverInput, groundMat: number): number {
   if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c);
   if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c);
   if (groundMat === M.marsh) return DENSITY.marshTree;
+  if (groundMat === M.hedge) return DENSITY.hedgeTree;
   if (inTriple(groundMat, M.scrubCool)) return DENSITY.shrub * (0.5 + 0.5 * clamp01(c.moisture / 0.3));
   return 0;
 }
@@ -161,7 +178,7 @@ export function scatterAt(
   }
 
   const density = treeDensity(c, groundMat);
-  if (treeRoll < density && (density > SPARSE || treeRoll < density * clump(x, y, n, 0))) {
+  if (treeRoll < density && (density > SPARSE || treeRoll < density * clump(x, y, n, groundMat === M.hedge ? 0.71 : 0))) {
     let r: number;
     let h: number;
     let mat: number;
@@ -182,7 +199,7 @@ export function scatterAt(
       mat = M.alder;
     } else {
       // Broadleaf: wider than tall, most crowns small, a few big. Lone field trees are the big ones.
-      r = groundMat === M.floorBroadleaf ? 1.5 + 1.5 * u1 * u1 : 1.9 + 1.1 * u1;
+      r = groundMat === M.floorBroadleaf ? 1.5 + 1.5 * u1 * u1 : groundMat === M.hedge ? 1.5 + 0.9 * u1 : 1.9 + 1.1 * u1;
       h = 1.2 * r + 1.5;
       const v = hueField(x, y, HUE_CLASS.broadleaf, n) + (u4 - 0.5) * 1.1;
       mat = M.broadleafCool + (v < 0.5 ? 0 : v < 1.5 ? 1 : 2);

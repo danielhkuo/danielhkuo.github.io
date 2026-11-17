@@ -37,7 +37,10 @@ test("flag tables are indexed by id and say what they should", () => {
   assert.deepEqual(on(isCanopy), [
     M.broadleafCool, M.broadleafMid, M.broadleafWarm, M.coniferCool, M.coniferMid, M.coniferWarm, M.alder, M.shrub,
   ]);
-  assert.deepEqual(on(isCrop), [M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine]);
+  assert.deepEqual(on(isCrop), [
+    M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine,
+    M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
+  ]);
   // Water, stone, snow, sand and roads are not vegetation; every canopy, crop and grass is.
   for (const id of [M.none, M.sea, M.river, M.sand, M.snow, M.snowLate, M.rockHard, M.cliffLime, M.scree, M.boulder, M.road, M.wall]) {
     assert.equal(isVegetation[id], 0, MATERIAL_NAMES[id]);

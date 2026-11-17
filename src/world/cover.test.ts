@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { rngFor } from "./core/rng.ts";
-import { cover, hueField, hueVariant, HUE_CLASS, parcelAt, RULE, ruleJitter, WORLD_N } from "./cover.ts";
+import { BOUNDARY_HALF, cover, fieldAt, hueField, hueVariant, HUE_CLASS, MARGIN, RULE, ruleJitter, WORLD_N } from "./cover.ts";
 import type { CoverInput } from "./look/contract.ts";
 import { isCrop, isWater, MATERIAL as M, MATERIAL_COUNT, MATERIAL_NAMES } from "./look/materials.ts";
 
@@ -63,8 +63,8 @@ test("water is sea, lake or river, whatever else the cell says", () => {
 });
 
 test("sand: the beach stamp, or low sheltered flat ground", () => {
-  only({ shore: 1, e: 1, slope: 0.1 }, M.sand);
-  only({ shore: 4, e: 1, slope: 0.1, region: KARST }, M.sandPale);
+  only({ shore: 1, e: 0.6, slope: 0.1 }, M.sand);
+  only({ shore: 4, e: 0.6, slope: 0.1, region: KARST }, M.sandPale);
   only({ e: 0.8, exposure: 0.1, slope: 0.03, hand: 0.8 }, M.sand);
   // Exposed, steep or high ground is not sand.
   none({ e: 0.8, exposure: 0.8, slope: 0.03, hand: 0.8 }, M.sand, M.sandPale);
@@ -133,7 +133,7 @@ test("forest: lower valley sides, moist, sheltered; conifer where it is cold", (
   const wood = { hand: 12, slope: 0.3, moisture: 0.7, wind: 0.2 };
   only({ ...wood, e: 20 }, M.floorBroadleaf);
   only({ ...wood, e: 57 }, M.floorConifer);
-  for (const no of [{ hand: 0.5 }, { hand: 45 }, { slope: 0.02 }, { slope: 0.88 }, { moisture: 0.3 }, { wind: 0.52 }, { e: 65 }]) {
+  for (const no of [{ hand: 0.5 }, { hand: 45 }, { slope: 0.02 }, { slope: 0.88 }, { moisture: 0.3 }, { wind: 0.6 }, { e: 65 }]) {
     none({ ...wood, e: 20, ...no }, M.floorBroadleaf, M.floorConifer);
   }
 });
@@ -154,45 +154,178 @@ test("the conifer line is a wide belt of mixed wood", () => {
   assert.equal(share(57), 1);
 });
 
-test("farmland: flat low ground of the home lowland, as crops between hedges", () => {
-  let crops = 0;
-  let hedges = 0;
+/** What a field cell may be: a crop or its texture, grass, a copse floor, or the boundary. */
+function enclosed(id: number): boolean {
+  return isCrop[id] === 1 || id === M.hedge || id === M.wall || id === M.floorBroadleaf ||
+    (id >= M.meadowCool && id <= M.pastureWarm) || (id >= M.scrubCool && id <= M.scrubWarm) || (id >= M.moorCool && id <= M.moorWarm);
+}
+
+/** The base crop of a textured cell: a row, stripe or stubble belongs to its field. */
+function cropOf(id: number): number {
+  if (id === M.wheatRow || id === M.stubble || id === M.stubbleRow) return M.wheat;
+  if (id === M.barleyRow) return M.barley;
+  if (id === M.leyStripe) return M.ley;
+  if (id === M.hayRow) return M.hay;
+  if (id === M.ploughRow) return M.plough;
+  if (id === M.vineRow) return M.vine;
+  return id;
+}
+
+/** Shares of a patch of gently sloping lowland by kind of cover. */
+function lowlandShares(over: Partial<CoverInput>, size = 400): { arable: number; grass: number; wood: number; boundary: number; kinds: Set<number> } {
+  let arable = 0, grass = 0, wood = 0, boundary = 0;
   const kinds = new Set<number>();
-  for (let y = 0; y < 200; y++) {
-    for (let x = 0; x < 200; x++) {
-      const id = cover(cell({ x: 800 + x, y: 900 + y, slope: 0.03, hand: 6, region: HOME }), MASK);
-      assert.ok(isCrop[id] === 1 || id === M.hedge, MATERIAL_NAMES[id]);
-      if (id === M.hedge) hedges++;
-      else {
-        crops++;
-        kinds.add(id);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const id = cover(cell({ x: 800 + x, y: 900 + y, slope: 0.05, hand: 6, westness: 0, northness: 1, ...over }), MASK);
+      assert.ok(enclosed(id), `a gap in the farmland: ${MATERIAL_NAMES[id]} at ${x}, ${y}`);
+      if (id === M.hedge || id === M.wall) boundary++;
+      else if (id === M.floorBroadleaf) wood++;
+      else if (isCrop[id] === 1) {
+        arable++;
+        kinds.add(cropOf(id));
+      } else grass++;
+    }
+  }
+  const total = size * size;
+  return { arable: arable / total, grass: grass / total, wood: wood / total, boundary: boundary / total, kinds };
+}
+
+test("lowland farmland has no gaps: every cell is a crop, grass, a copse or a hedge", () => {
+  const home = lowlandShares({ region: HOME });
+  assert.ok(home.kinds.size >= 5, `only ${home.kinds.size} crops`);
+  assert.ok(home.arable > 0.45 && home.arable < 0.75, `arable ${home.arable}`);
+  assert.ok(home.grass > 0.2 && home.grass < 0.45, `grass ${home.grass}`);
+  assert.ok(home.wood < 0.08, `copses ${home.wood}`);
+  assert.ok(home.boundary > 0.015 && home.boundary < 0.09, `hedges ${home.boundary}`);
+  // Lowland boundaries are hedges, never walls.
+  for (let i = 0; i < 4000; i++) {
+    assert.notEqual(cover(cell({ x: i * 3, y: 700 + (i % 50), slope: 0.05, hand: 6, region: HOME }), MASK), M.wall);
+  }
+});
+
+test("farmland keeps to gentle low ground of the home lowland and the karst valley floors", () => {
+  for (const no of [{ slope: 0.3 }, { hand: 40 }, { region: SKERRY }, { wind: 0.9 }, { e: 0.6 }]) {
+    for (const id of patch({ slope: 0.05, hand: 6, moisture: 0.36, region: HOME, ...no })) {
+      assert.ok(isCrop[id] === 0 && id !== M.hedge && id !== M.wall, `${MATERIAL_NAMES[id]} with ${JSON.stringify(no)}`);
+    }
+  }
+  const floor = lowlandShares({ region: KARST, hand: 3 }, 300);
+  assert.ok(floor.kinds.has(M.vine), "the karst grows vines");
+  for (const id of patch({ slope: 0.05, hand: 15, region: KARST })) assert.ok(isCrop[id] === 0 && id !== M.hedge);
+});
+
+test("upland in-bye land is walled grass: valley and lake country, and the highland's margins", () => {
+  for (const region of [SLATE, LAKES, HIGHLAND]) {
+    let wall = 0, grass = 0, other = 0;
+    for (let y = 0; y < 300; y++) {
+      for (let x = 0; x < 300; x++) {
+        const id = cover(cell({ x: 2000 + x, y: 3000 + y, slope: 0.1, hand: 5, e: 15, region }), MASK);
+        assert.ok(enclosed(id), MATERIAL_NAMES[id]);
+        assert.notEqual(id, M.hedge);
+        if (id === M.wall) wall++;
+        else if ((id >= M.meadowCool && id <= M.pastureWarm) || id === M.hay || id === M.hayRow) grass++;
+        else other++;
+      }
+    }
+    assert.ok(wall / 90000 > 0.015 && wall / 90000 < 0.1, `walls ${wall / 90000}`);
+    assert.ok(grass / 90000 > 0.75, `grass ${grass / 90000}`);
+    assert.ok(other / 90000 < 0.2);
+  }
+  // Not on the tops, not on steep ground, not in the cold.
+  for (const no of [{ hand: 30 }, { slope: 0.4 }, { e: 60 }, { wind: 0.7 }]) {
+    assert.ok(!patch({ slope: 0.1, hand: 5, e: 15, region: SLATE, ...no }).has(M.wall), JSON.stringify(no));
+  }
+});
+
+test("a field is one use: its crop, with its own rows, inside a margin and a boundary", () => {
+  const byField = new Map<number, number>();
+  for (let y = 0; y < 300; y++) {
+    for (let x = 0; x < 300; x++) {
+      const c = cell({ x: 4000 + x, y: 100 + y, slope: 0.05, hand: 6, region: HOME, westness: 0, northness: 1 });
+      const id = cover(c, MASK);
+      const f = fieldAt(c);
+      if (f.edge < BOUNDARY_HALF) {
+        assert.equal(id, M.hedge);
+        continue;
+      }
+      assert.notEqual(id, M.hedge);
+      if (f.edge < MARGIN) continue;
+      // Wheat and barley both leave stubble, so they count as one use here.
+      const crop = cropOf(id) === M.barley ? M.wheat : cropOf(id);
+      const use = id >= M.pastureCool && id <= M.pastureWarm ? M.pastureCool : id >= M.meadowCool && id <= M.meadowWarm ? M.meadowCool : crop;
+      if (byField.has(f.id)) assert.equal(MATERIAL_NAMES[byField.get(f.id) as number], MATERIAL_NAMES[use]);
+      else byField.set(f.id, use);
+    }
+  }
+  assert.ok(byField.size > 12);
+});
+
+test("crop texture: single-pixel lines along the field's axis, broken by the mask, a tone from the field", () => {
+  // South-rising ground: furrows run west–east, counted in screen rows.
+  const lines = new Map<number, { line: number; all: number; rows: Set<number> }>();
+  const pair: [number, number][] = [[M.wheat as number, M.wheatRow as number], [M.barley, M.barleyRow], [M.hay, M.hayRow], [M.plough, M.ploughRow], [M.stubble, M.stubbleRow]];
+  const lineOf = new Map(pair.map(([base, row]) => [row, base]));
+  for (let y = 0; y < 500; y++) {
+    for (let x = 0; x < 500; x++) {
+      const c = cell({ x: 1200 + x, y: 5200 + y, slope: 0.08, hand: 6, region: HOME, westness: 0, northness: 1 });
+      const id = cover(c, MASK);
+      const base = lineOf.get(id) ?? id;
+      if (!pair.some(([b]) => b === base)) continue;
+      let t = lines.get(base);
+      if (!t) {
+        t = { line: 0, all: 0, rows: new Set() };
+        lines.set(base, t);
+      }
+      t.all++;
+      const row = Math.floor((4 * (5200 + y)) / 5);
+      if (id !== base) {
+        t.line++;
+        t.rows.add(row);
       }
     }
   }
-  assert.ok(kinds.size >= 4, `only ${kinds.size} crops`);
-  const hedgeShare = hedges / (hedges + crops);
-  assert.ok(hedgeShare > 0.01 && hedgeShare < 0.12, `hedge share ${hedgeShare}`);
-  // Not on slopes, not high above the valley, not outside the lowland.
-  for (const no of [{ slope: 0.3 }, { hand: 40 }, { region: SKERRY }]) {
-    for (const id of patch({ slope: 0.03, hand: 6, region: HOME, ...no })) assert.ok(isCrop[id] === 0 && id !== M.hedge, JSON.stringify(no));
+  const period = new Map<number, number>([[M.wheat, 8], [M.barley, 5], [M.hay, 5], [M.plough, 2], [M.stubble, 4]]);
+  for (const [base, t] of lines) {
+    const p = period.get(base) as number;
+    // Lines sit only on every p-th screen row, and not on all of each: broken, not ruled.
+    for (const row of t.rows) assert.equal(row % p, 0, `${MATERIAL_NAMES[base]}: a line off its row`);
+    const share = t.line / t.all;
+    // A line row that is one of the doubled screen rows holds two world rows, so up to a third more cells.
+    assert.ok(share > 0.4 / p && share < 1.35 / p, `${MATERIAL_NAMES[base]}: ${share.toFixed(3)} of the field is line`);
   }
-  // Karst farms keep to the valley floor.
-  for (const id of patch({ slope: 0.03, hand: 3, region: KARST })) assert.ok(isCrop[id] === 1 || id === M.hedge);
-  for (const id of patch({ slope: 0.03, hand: 15, region: KARST })) assert.ok(isCrop[id] === 0 && id !== M.hedge);
+  assert.ok(lines.size >= 4, `${lines.size} textured crops in the patch`);
 });
 
-test("a field is one crop", () => {
-  const byField = new Map<number, number>();
-  for (let y = 0; y < 150; y++) {
-    for (let x = 0; x < 150; x++) {
-      const id = cover(cell({ x: 4000 + x, y: 100 + y, slope: 0.03, hand: 6, region: HOME }), MASK);
-      if (id === M.hedge) continue;
-      const field = parcelAt(4000 + x, 100 + y, WORLD_N) >>> 1;
-      if (byField.has(field)) assert.equal(byField.get(field), id);
-      else byField.set(field, id);
+test("arable fields keep a grass margin inside the hedge", () => {
+  let margin = 0, inner = 0, marginGrass = 0, innerGrass = 0;
+  for (let y = 0; y < 400; y++) {
+    for (let x = 0; x < 400; x++) {
+      const c = cell({ x: 5000 + x, y: 2500 + y, slope: 0.05, hand: 6, region: HOME, westness: 0, northness: 1 });
+      const id = cover(c, MASK);
+      const f = fieldAt(c);
+      if (f.edge < BOUNDARY_HALF) continue;
+      if (f.edge < MARGIN) {
+        margin++;
+        if (id === M.pastureMid) marginGrass++;
+      } else if (f.edge > 4) {
+        inner++;
+        if (id === M.pastureMid) innerGrass++;
+      }
     }
   }
-  assert.ok(byField.size > 5);
+  assert.ok(marginGrass / margin > 2.5 * (innerGrass / inner), `margin ${marginGrass / margin}, inside ${innerGrass / inner}`);
+  assert.ok(marginGrass / margin > 0.3);
+});
+
+test("a river through farmland is never ploughed across: its banks are a meadow verge", () => {
+  for (let y = 0; y < 400; y++) {
+    for (const d of [-2, -1, 1, 2]) {
+      const id = cover(cell({ x: 3000 + d, y: 1000 + y, slope: 0.05, hand: 3, region: HOME, riverDx: d, riverDy: 0 }), MASK);
+      assert.ok(id === M.hedge || (id >= M.meadowCool && id <= M.meadowWarm), MATERIAL_NAMES[id]);
+    }
+    assert.equal(cover(cell({ x: 3000, y: 1000 + y, slope: 0.05, hand: 0, region: HOME, water: 3 }), MASK), M.river);
+  }
 });
 
 test("marsh and reeds: flat ground at the water's level", () => {
@@ -222,11 +355,13 @@ test("rule order: the first match wins", () => {
   only({ ...all, e: 58, rock: 2, debris: 0, slope: 0.3, region: SKERRY, wind: 0.2 }, M.floorConifer);
   family({ ...all, e: 58, rock: 2, debris: 0, slope: 0.3, region: SKERRY, wind: 0.2, moisture: 0.1 }, M.scrubCool);
   // Sand beats the forest that would grow on the same low ground; late snow beats alpine meadow.
-  only({ shore: 1, e: 1, slope: 0.3, hand: 12, moisture: 0.7 }, M.sand);
+  only({ shore: 1, e: 0.6, slope: 0.3, hand: 12, moisture: 0.7 }, M.sand);
   only({ e: 77, hand: 40, region: HIGHLAND }, M.snowLate);
-  // Forest beats farmland on a slope both accept; farmland beats marsh on the valley floor.
-  only({ slope: 0.11, hand: 6, moisture: 0.7, region: HOME }, M.floorBroadleaf);
-  for (const id of patch({ slope: 0.005, hand: 0.1, region: HOME })) assert.ok(isCrop[id] === 1 || id === M.hedge);
+  // Where people farm the field decides: farmland beats forest on gentle ground, and marsh on the valley floor.
+  for (const id of patch({ slope: 0.11, hand: 6, moisture: 0.7, region: HOME })) assert.ok(enclosed(id) && id !== M.wall, MATERIAL_NAMES[id]);
+  for (const id of patch({ slope: 0.005, hand: 0.1, e: 5, region: HOME })) assert.ok(enclosed(id), MATERIAL_NAMES[id]);
+  // Woods keep the ground too steep to plough.
+  only({ slope: 0.3, hand: 6, moisture: 0.7, region: HOME }, M.floorBroadleaf);
 });
 
 /** Indices at which a row changes. */
@@ -359,12 +494,17 @@ test("cover tiles on the world, at the full size and the test size", () => {
       // Farmland, grass and heath exercise the parcels, the hue field and the heather drifts: all that depends on position alone.
       const kind = i % 3;
       const base = kind === 0 ? { slope: 0.03, hand: 6, region: HOME } : kind === 1 ? { moisture: 0.36 } : { wind: 0.8, region: SLATE };
-      const at = (dx: number, dy: number): number => cover(cell({ ...base, x: x + dx, y: y + dy }), MASK, n);
+      // Furrows are counted in screen rows, which wrap with the 6400 world only; elsewhere compare the crop under the texture.
+      const at = (dx: number, dy: number): number => {
+        const id = cover(cell({ ...base, x: x + dx, y: y + dy }), MASK, n);
+        const crop = cropOf(id) === M.barley ? M.wheat : cropOf(id);
+        return n === WORLD_N ? id : crop;
+      };
       const here = at(0, 0);
       assert.equal(at(n, 0), here);
       assert.equal(at(0, n), here);
       assert.equal(at(-n, -n), here);
-      assert.equal(parcelAt(x + n, y - n, n), parcelAt(x, y, n));
+      assert.equal(fieldAt(cell({ x: x + n, y: y - n }), n).id, fieldAt(cell({ x, y }), n).id);
       assert.ok(Math.abs(hueField(x - n, y + n, kind, n) - hueField(x, y, kind, n)) < 1e-9);
     }
   }
@@ -377,7 +517,7 @@ test("the mask's 256-cell period does not show in the hue field or the parcels",
     const x = (i * 37) % WORLD_N;
     const y = (i * 91) % WORLD_N;
     if (Math.abs(hueField(x, y, 0, WORLD_N) - hueField(x + 256, y, 0, WORLD_N)) < 1e-9) hueSame++;
-    if (parcelAt(x, y, WORLD_N) === parcelAt(x + 256, y, WORLD_N)) parcelSame++;
+    if (fieldAt(cell({ x, y })).id === fieldAt(cell({ x: x + 256, y })).id) parcelSame++;
   }
   assert.equal(hueSame, 0);
   assert.ok(parcelSame < 20);

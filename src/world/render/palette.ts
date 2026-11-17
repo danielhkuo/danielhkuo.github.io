@@ -12,8 +12,12 @@ import {
 } from "../look/contract.ts";
 import { isVegetation, MATERIAL as M, MATERIAL_COUNT } from "../look/materials.ts";
 
-/** The tone flat, unshaded ground takes; shade runs below it and light above. */
-export const FLAT_TONE = 9;
+/**
+ * The tone flat, unshaded ground takes; shade runs below it and light above.
+ * The bake's shade() puts flat ground at one half, which dithers between
+ * tones 7 and 8.
+ */
+export const FLAT_TONE = 8;
 /** A river crosses near-flat ground, so it is held lighter than vegetation up to this tone. */
 export const RIVER_GUARD_TONE = FLAT_TONE + 1;
 /** The river must be this many L* lighter than any vegetation it crosses. */
@@ -246,7 +250,19 @@ function buildSpecs(): Spec[] {
   set(M.ley, [[0.75, 0.13, 134], [0.73, 0.12, 136], [0.72, 0.1, 130], [0.68, 0.07, 125]], LAND);
   set(M.hay, [[0.77, 0.115, 128], [0.775, 0.09, 116], [0.75, 0.09, 122], [0.7, 0.06, 112]], LAND);
   set(M.plough, [[0.56, 0.05, 55], [0.62, 0.055, 85], [0.55, 0.05, 55], [0.53, 0.045, 50]], LAND);
-  set(M.vine, [[0.62, 0.06, 95], [0.6, 0.085, 132], [0.62, 0.09, 70], [0.56, 0.035, 60]], LAND);
+  // Vines: rows of green over pale stony earth.
+  set(M.vine, [[0.7, 0.045, 88], [0.715, 0.05, 92], [0.7, 0.05, 80], [0.66, 0.04, 70]], LAND);
+  set(M.vineRow, [[0.62, 0.07, 110], [0.59, 0.085, 134], [0.6, 0.09, 72], [0.52, 0.03, 55]], LAND);
+  // Lines across a crop sit a tone or two from the field: tramlines and
+  // furrows darker, windrows and mown swaths lighter.
+  set(M.wheatRow, [[0.7, 0.105, 134], [0.745, 0.08, 100], [0.66, 0.055, 80], [0.52, 0.05, 55]], LAND);
+  set(M.barleyRow, [[0.72, 0.105, 130], [0.73, 0.085, 114], [0.645, 0.055, 78], [0.565, 0.07, 122]], LAND);
+  set(M.leyStripe, [[0.775, 0.125, 132], [0.755, 0.115, 133], [0.745, 0.095, 128], [0.7, 0.07, 123]], LAND);
+  set(M.hayRow, [[0.785, 0.11, 126], [0.8, 0.075, 104], [0.77, 0.085, 118], [0.715, 0.06, 110]], LAND);
+  set(M.ploughRow, [[0.51, 0.05, 50], [0.57, 0.055, 80], [0.5, 0.05, 50], [0.485, 0.045, 46]], LAND);
+  // Stubble: what a cut cornfield leaves, paler than the standing crop, with the drill rows showing.
+  set(M.stubble, [[0.75, 0.1, 128], [0.795, 0.06, 96], [0.72, 0.055, 84], [0.57, 0.05, 58]], LAND);
+  set(M.stubbleRow, [[0.72, 0.1, 130], [0.76, 0.065, 92], [0.69, 0.055, 82], [0.54, 0.05, 56]], LAND);
 
   // Wet ground.
   set(M.marsh, grass([0.62, 0.065, 128]), LAND);
