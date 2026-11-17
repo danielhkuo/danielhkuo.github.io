@@ -63,6 +63,8 @@ export const CLIFF_SLOPE = 1.35;
 /** Crag bands start at this slope and thicken up to a cliff; they repeat every CRAG_SPACING units of height. */
 export const CRAG_SLOPE = 0.75;
 const CRAG_SPACING = 8;
+/** Scree lies at its angle of rest or flatter: steeper ground under a cliff is still the cliff's own slope. */
+const SCREE_REST = 0.9;
 /** Ground steeper than this sheds its snow. */
 export const SNOW_SHED = 0.85;
 /** Ground this close to its river's level is floodplain. */
@@ -294,9 +296,10 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     const u = ((x + 0.5) * cp) / n, v = ((y + 0.5) * cp) / n;
     const warp = gradNoise(u, v, cp, CRAG_SEED);
     const gate = gradNoise(((x + 0.5) * gp) / n + 0.5, ((y + 0.5) * gp) / n, gp, CRAG_SEED + 1);
-    const t = (e + 7 * warp) / CRAG_SPACING;
+    const t = (e + 13 * warp) / CRAG_SPACING;
     const steepness = (s - CRAG_SLOPE) / (CLIFF_SLOPE - CRAG_SLOPE);
-    const present = gate > -0.1 ? (gate > 0.25 ? 1 : (gate + 0.1) / 0.35) : 0;
+    // Bands come and go along the face: most of a steep slope carries none.
+    const present = gate > 0.08 ? (gate > 0.3 ? 1 : (gate - 0.08) / 0.22) : 0;
     const thick = 0.42 * steepness * present * (1 - 0.25 * (c.rock > 2 ? 2 : c.rock)) + 0.1 * karst * present;
     if (t - Math.floor(t) < thick + j * 0.04) return M.rockHard + rockKind(c, x, y, n);
   }
@@ -305,7 +308,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   // to a stipple at their toe; and wherever the generator left debris thick.
   j = ruleJitter(mask, x, y, RULE.scree);
   const fan = c.cliffAbove === undefined ? 0 : c.cliffAbove;
-  if (s > 0.18 && (fan > 0.28 + (j + 0.5) * 0.6 || (c.debris > 0.3 + j * 6 * PER_CELL.debris && s >= 0.3))) {
+  if (s > 0.18 && s < SCREE_REST && (fan > 0.28 + (j + 0.5) * 0.6 || (c.debris > 0.3 + j * 6 * PER_CELL.debris && s >= 0.3))) {
     return slate > 0.5 ? M.screeSlate : M.scree;
   }
 

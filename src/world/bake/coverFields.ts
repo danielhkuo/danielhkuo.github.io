@@ -8,8 +8,8 @@ export const FAN_REACH = 10;
 /** Relief is measured against the ground this many cells round. */
 export const RELIEF_R = 4;
 /** Ground this steep feeds scree to what lies below it; it is a full source from CLIFF_FULL. */
-export const CLIFF_FEED = 1.0;
-export const CLIFF_FULL = 1.35;
+export const CLIFF_FEED = 1.3;
+export const CLIFF_FULL = 1.6;
 /** A fan loses this share of its strength with each cell it runs. */
 const DECAY = 0.86;
 /** Cells of margin the helper reads beyond the region it fills. */
