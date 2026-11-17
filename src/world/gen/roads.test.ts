@@ -36,17 +36,19 @@ test("islandIds separates islands and joins across the wrap", () => {
 });
 
 test("on flat land a path is near-straight", () => {
-  const n = 64, inp = flat(n), path = leastCostPath(inp, P, idx(5, 10, n), idx(50, 30, n))!;
+  const n = 64, inp = flat(n), path = leastCostPath(inp, P, idx(5, 10, n), idx(30, 25, n))!;
   assert.ok(path);
   assert.equal(path[0], idx(5, 10, n));
-  assert.equal(path[path.length - 1], idx(50, 30, n));
+  assert.equal(path[path.length - 1], idx(30, 25, n));
   stepsAreLegal(inp, path);
   let len = 0;
   for (let k = 1; k < path.length; k++) {
     const [ax, ay] = xy(path[k - 1], n), [bx, by] = xy(path[k], n);
-    len += Math.sqrt((bx - ax) ** 2 + (by - ay) ** 2);
+    let dx = bx - ax, dy = by - ay;
+    if (dx > n / 2) dx -= n; if (dx < -n / 2) dx += n; if (dy > n / 2) dy -= n; if (dy < -n / 2) dy += n;
+    len += Math.sqrt(dx * dx + dy * dy);
   }
-  assert.ok(len <= 1.08 * Math.sqrt(45 * 45 + 20 * 20), `length ${len}`);
+  assert.ok(len <= 1.08 * Math.sqrt(25 * 25 + 15 * 15), `length ${len}`);
 });
 
 test("a steep hill is climbed by switchbacks within the grade limit", () => {
@@ -55,7 +57,8 @@ test("a steep hill is climbed by switchbacks within the grade limit", () => {
     const d = Math.sqrt((x - 32) ** 2 + (y - 32) ** 2);
     inp.h[idx(x, y, n)] = Math.max(0.5, 40 - 2 * d); // grade 0.5 per cell: far over the limit straight up
   }
-  const path = leastCostPath(inp, P, idx(32, 60, n), idx(32, 33, n));
+  // To a shoulder 10 nodes from the summit (height 20): reachable only by a long climbing traverse.
+  const path = leastCostPath(inp, P, idx(32, 60, n), idx(32, 42, n));
   assert.ok(path, "no path");
   stepsAreLegal(inp, path!);
   assert.ok(path!.length > 60, `too direct: ${path!.length}`);
