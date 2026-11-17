@@ -51,7 +51,7 @@ test("mask is 256² bytes using the whole range", () => {
 });
 
 test("a chunk is deterministic", () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const { field, mask, cold } = setup();
   assert.deepEqual(bakeBenchChunk(field, 1, 1, null, mask).pixels, cold.pixels);
 });
@@ -79,7 +79,7 @@ test("a cold chunk does the full per-cell workload", () => {
 });
 
 test("a warm chunk reuses cached tiles", () => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const { field, mask, cold } = setup();
   const cache: TileCache = new Map();
   const first = bakeBenchChunk(field, 1, 2, cache, mask);

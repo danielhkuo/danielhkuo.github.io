@@ -15,7 +15,7 @@ import type { Look } from "./cells.ts";
 export function noInkFlags(): Uint8Array {
   const out = new Uint8Array(256);
   for (let m = 0; m < 256; m++) if (isWater[m] || isCrop[m] || isLine[m]) out[m] = 1;
-  for (const m of [M.sand, M.sandPale, M.shingle, M.marsh, M.reeds, M.flowerPale, M.flowerMauve]) out[m] = 1;
+  for (const m of [M.sand, M.sandPale, M.shingle, M.marsh, M.reeds, M.flowerPale, M.flowerMauve, M.hedgeCrown]) out[m] = 1;
   return out;
 }
 
