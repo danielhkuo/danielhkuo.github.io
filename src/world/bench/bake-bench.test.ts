@@ -19,6 +19,7 @@ const tone = (p: number) => (p >>> 8) & 15;
 const shadow = (p: number) => (p >>> 12) & 3;
 
 test("field sizes and shape", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   assert.equal(field.gN, 320);
   assert.equal(field.cN, 160);
@@ -34,12 +35,14 @@ test("field sizes and shape", () => {
 });
 
 test("field is deterministic and seed-dependent", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   assert.deepEqual(makeBenchField(1280, 7).heights, field.heights);
   assert.notDeepEqual(makeBenchField(1280, 8).heights, field.heights);
 });
 
 test("mask is 256² bytes using the whole range", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   assert.equal(mask.length, 65536);
   let lo = 255, hi = 0;
@@ -48,11 +51,13 @@ test("mask is 256² bytes using the whole range", () => {
 });
 
 test("a chunk is deterministic", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   assert.deepEqual(bakeBenchChunk(field, 1, 1, null, mask).pixels, cold.pixels);
 });
 
 test("every pixel is written exactly once", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   assert.equal(cold.pixels.length, 65536);
   assert.ok(!cold.pixels.includes(0xffffffff));
@@ -61,6 +66,7 @@ test("every pixel is written exactly once", () => {
 });
 
 test("a cold chunk does the full per-cell workload", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   const s = cold.stats, cells = 256 * 256;
   assert.ok(s.tilesBuilt >= 3, `tiles ${s.tilesBuilt}`);
@@ -73,6 +79,7 @@ test("a cold chunk does the full per-cell workload", () => {
 });
 
 test("a warm chunk reuses cached tiles", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   const cache: TileCache = new Map();
   const first = bakeBenchChunk(field, 1, 2, cache, mask);
@@ -82,6 +89,7 @@ test("a warm chunk reuses cached tiles", () => {
 });
 
 test("ink falls on 0.5–10 % of land pixels", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   let land = 0, inked = 0;
   for (const p of cold.pixels) {
@@ -94,6 +102,7 @@ test("ink falls on 0.5–10 % of land pixels", () => {
 });
 
 test("pixels decode into a varied, shaded scene", () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { field, mask, cold } = setup();
   const mats = new Set<number>(), tones = new Set<number>();
   let shaded = 0;
