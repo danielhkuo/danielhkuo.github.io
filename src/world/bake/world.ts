@@ -7,7 +7,8 @@
 
 import type { Plan } from "../gen/plan.ts";
 import type { WorldParams } from "../gen/params.ts";
-import { standinClimate, standinHeights, standinHydro, standinShore } from "./standin-land.ts";
+import { runSchedule } from "../gen/erode.ts";
+import { standinClimate, standinDrown, standinHydro, standinShore } from "./standin-land.ts";
 
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
 export const SHORE = { none: 0, beach: 1, rocky: 2, cliff: 3, cove: 4 } as const;
@@ -70,8 +71,10 @@ export interface BakeWorldInput {
   params: WorldParams;
   plan: Plan;
   seed: number;
-  /** Eroded ground on G, units. STAND-IN when absent. */
+  /** Eroded ground on G, units (gen/erode.ts runSchedule().g). Run here when absent. */
   heights?: ArrayLike<number>;
+  /** True once the heights are already drowned with a sea bed (S3, S6). STAND-IN drowning when false. */
+  drowned?: boolean;
   /** Lakes, rivers and HAND on G. STAND-IN when absent. */
   hydro?: HydroInput;
   /** Shore classes on G. STAND-IN when absent. */
@@ -86,13 +89,9 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   if (n % 256 !== 0) throw new Error(`the bake needs a world of whole 256-cell tiles, not ${n}`);
   if (plan.n !== cN) throw new Error("plan grid does not match params");
 
-  const ground = new Float32Array(gN * gN);
-  if (inp.heights) {
-    if (inp.heights.length !== gN * gN) throw new Error("heights must be on G");
-    for (let i = 0; i < ground.length; i++) ground[i] = inp.heights[i];
-  } else {
-    ground.set(standinHeights(p, plan, seed));
-  }
+  const eroded = inp.heights ?? runSchedule(plan, p, seed).g;
+  if (eroded.length !== gN * gN) throw new Error("heights must be on G");
+  const ground = inp.drowned ? Float32Array.from(eroded) : standinDrown(eroded, gN);
 
   // The stand-in hydrology fills small pits, so it may raise the ground.
   const hydro = inp.hydro ?? standinHydro(ground, gN, n);

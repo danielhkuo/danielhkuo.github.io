@@ -3,42 +3,10 @@
 // gen/erode.ts, gen/hydro.ts, gen/coast.ts and gen/climate.ts land, and each
 // function is replaced by passing the real stage's output to buildBakeWorld.
 
-import { upsampleBSpline } from "../core/bspline.ts";
 import { fbm } from "../core/noise.ts";
-import { NB8_DX, NB8_DY, wrap, wrapIndex } from "../core/torus.ts";
-import { accumulate, makeJitter, priorityFlood, receivers, type Jitter } from "../gen/flood.ts";
-import type { WorldParams } from "../gen/params.ts";
-import type { Plan } from "../gen/plan.ts";
+import { NB8_DX, NB8_DY, wrapIndex } from "../core/torus.ts";
+import { accumulate, priorityFlood, receivers } from "../gen/flood.ts";
 import type { ClimateInput, HydroInput } from "./world.ts";
-
-/** One implicit stream-power step (Braun & Willett) with a light diffusion sweep. */
-function erodeStep(
-  h: Float64Array, n: number, isSea: Uint8Array, u: Float64Array, k: Float64Array, d: Float64Array,
-  dt: number, areaPerNode: number, nodeSize: number, jitter: Jitter, eps: number,
-): void {
-  const { filled, order } = priorityFlood(h, n, isSea, eps);
-  const { rcv, dist } = receivers(filled, n, isSea, jitter);
-  const area = accumulate(order, rcv, isSea, null);
-  for (let q = 0; q < order.length; q++) {
-    const i = order[q];
-    if (isSea[i]) continue;
-    const r = rcv[i];
-    const f = (k[i] * dt * Math.sqrt(area[i] * areaPerNode)) / (dist[i] * nodeSize);
-    const next = (filled[i] + u[i] * dt + f * h[r]) / (1 + f);
-    h[i] = Math.max(next, h[r] + eps);
-  }
-  // Hillslope diffusion: one explicit sweep, kept stable by the clamp.
-  const prev = new Float64Array(h);
-  for (let y = 0; y < n; y++) {
-    const yn = wrap(y - 1, n) * n, ys = wrap(y + 1, n) * n, row = y * n;
-    for (let x = 0; x < n; x++) {
-      const i = row + x;
-      if (isSea[i]) continue;
-      const c = Math.min(0.2, (d[i] * dt) / (nodeSize * nodeSize));
-      h[i] += c * (prev[row + wrap(x - 1, n)] + prev[row + wrap(x + 1, n)] + prev[yn + x] + prev[ys + x] - 4 * prev[i]);
-    }
-  }
-}
 
 /** Chamfer (3–4) distance in nodes from every node to the nearest node where `src` is set, capped. */
 function chamfer(src: Uint8Array, n: number, cap: number): Float32Array {
@@ -62,51 +30,15 @@ function chamfer(src: Uint8Array, n: number, cap: number): Float32Array {
 }
 
 /**
- * STAND-IN for S2–S6: a short stream-power run on C, then on G, drowned by 3
- * units, with a shelving sea bed. Returns ground heights on G.
+ * STAND-IN for S3 and S6: drowns eroded heights on G by 3 units and shelves
+ * the sea bed away from the shore. Returns ground heights on G.
  */
-export function standinHeights(p: WorldParams, plan: Plan, seed: number): Float32Array {
-  const { cN, gN } = p;
-  const big = p.n > 2048;
-
-  // --- C ---
-  const isSeaC = new Uint8Array(cN * cN);
-  const hC = new Float64Array(cN * cN);
-  for (let i = 0; i < hC.length; i++) {
-    if (plan.uplift[i] <= 0) { isSeaC[i] = 1; hC[i] = -1; } else hC[i] = 0.05 + 0.5 * plan.uplift[i];
-  }
-  const jitC = makeJitter(cN, p.erode.jitter, seed);
-  const cSteps = big ? 70 : 110;
-  for (let s = 0; s < cSteps; s++) erodeStep(hC, cN, isSeaC, plan.uplift, plan.k, plan.d, p.erode.dtC, 1, 1, jitC, p.erode.eps);
-
-  // --- G ---
-  const up = (a: Float64Array) => upsampleBSpline(a, cN, 2);
-  const h = up(hC), u = up(plan.uplift), k = up(plan.k), d = up(plan.d);
-  const isSea = new Uint8Array(gN * gN);
-  const period = Math.max(4, Math.round(p.n / 48));
-  for (let y = 0; y < gN; y++) for (let x = 0; x < gN; x++) {
-    const i = y * gN + x;
-    if (h[i] <= 0.02) { isSea[i] = 1; h[i] = -1; continue; }
-    h[i] *= 1 + p.erode.upsampleNoise * 4 * fbm((x * period) / gN, (y * period) / gN, period, 3, 0.5, seed ^ 0x51ab);
-  }
-  const jitG = makeJitter(gN, p.erode.jitter, seed + 1);
-  const gSteps = big ? 10 : 36;
-  for (let s = 0; s < gSteps; s++) erodeStep(h, gN, isSea, u, k, d, p.erode.dtG, 0.25, 0.5, jitG, p.erode.eps);
-
-  // Fit the tallest land under the cap, drown, and shelve the sea bed.
-  let top = 0;
-  for (let i = 0; i < h.length; i++) if (h[i] > top) top = h[i];
-  const scale = top > 128 ? 128 / top : 1;
+export function standinDrown(g: ArrayLike<number>, gN: number): Float32Array {
   const land = new Uint8Array(gN * gN);
-  for (let i = 0; i < h.length; i++) {
-    h[i] = isSea[i] ? -1 : h[i] * scale - 3;
-    if (h[i] > 0) land[i] = 1;
-  }
+  for (let i = 0; i < land.length; i++) if (g[i] - 3 > 0) land[i] = 1;
   const off = chamfer(land, gN, 60);
   const out = new Float32Array(gN * gN);
-  for (let i = 0; i < h.length; i++) {
-    out[i] = land[i] ? h[i] : -Math.min(24, 0.3 + 0.48 * (off[i] - 0.5));
-  }
+  for (let i = 0; i < out.length; i++) out[i] = land[i] ? g[i] - 3 : -Math.min(24, 0.3 + 0.48 * (off[i] - 0.5));
   return out;
 }
 
