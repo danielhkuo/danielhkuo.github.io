@@ -31,10 +31,12 @@ export const DENSITY = {
   pastureTree: 0.02,
   meadowTree: 0.006,
   marshTree: 0.012,
+  /** Crowns per cell of hedge: close enough to read as a row, loose enough to break. */
+  hedge: 0.4,
   shrub: 0.05,
   alderBank: 0.3,
-  boulder: 0.04,
-  flower: 0.03,
+  boulder: 0.02,
+  flower: 0.02,
 } as const;
 
 /** One world height unit is one screen row and a world row is 0.8 of one, so a crown of height h hides 1.25 h cells to its north. */
@@ -55,8 +57,9 @@ const FLOWER_OY = 19;
 const SCATTER_SEED = 0x5ca77e4;
 const DRIFT_SEED = 0xf10e4;
 const CLUMP_SEED = 0xc0b5e;
+const HEDGE_SEED = 0x4ed6e;
 /** Sparse scatter outside a clump is this share of its peak density. */
-const CLUMP_FLOOR = 0.08;
+const CLUMP_FLOOR = 0.03;
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -78,6 +81,7 @@ export function treeDensity(c: CoverInput, groundMat: number): number {
   if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c);
   if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c);
   if (groundMat === M.marsh) return DENSITY.marshTree;
+  if (groundMat === M.hedge) return DENSITY.hedge;
   if (inTriple(groundMat, M.scrubCool)) return DENSITY.shrub * (0.5 + 0.5 * clamp01(c.moisture / 0.3));
   return 0;
 }
@@ -85,15 +89,16 @@ export function treeDensity(c: CoverInput, groundMat: number): number {
 /** Boulders per cell: scree, and the stonier parts of moor, heath and alpine ground. */
 export function boulderDensity(c: CoverInput, groundMat: number): number {
   if (groundMat === M.scree || groundMat === M.screeSlate) return DENSITY.boulder;
-  if (inTriple(groundMat, M.moorCool) || inTriple(groundMat, M.heathCool)) return DENSITY.boulder * (0.25 + 0.75 * clamp01(c.debris));
-  if (inTriple(groundMat, M.alpineCool) || groundMat === M.snowLate) return DENSITY.boulder * 0.5 * clamp01(c.debris);
+  // Elsewhere stones lie only where debris reaches: no debris, no boulders.
+  if (inTriple(groundMat, M.moorCool) || inTriple(groundMat, M.heathCool)) return DENSITY.boulder * 0.7 * clamp01(c.debris * 2);
+  if (inTriple(groundMat, M.alpineCool) || groundMat === M.snowLate) return DENSITY.boulder * 0.5 * clamp01(c.debris * 2);
   return 0;
 }
 
 /** Peak flower density on this ground; drifts thin it further. */
 export function flowerDensity(groundMat: number): number {
+  // Hay meadows and alpine meadows flower; grazed pasture does not.
   if (inTriple(groundMat, M.meadowCool) || inTriple(groundMat, M.alpineCool)) return DENSITY.flower;
-  if (inTriple(groundMat, M.pastureCool) || groundMat === M.hay) return DENSITY.flower * 0.3;
   return 0;
 }
 
@@ -151,13 +156,26 @@ export function scatterAt(
 
   const treeRoll = maskAt(mask, x, y, TREE_OX, TREE_OY);
 
-  // A line of alders along the north bank of a farmland river.
-  if (south < 8 && farmed(c, groundMat) && treeRoll < DENSITY.alderBank) {
+  // Alders along the north bank of a farmland river, in loose clumps, and
+  // only where the river is a river: a tree by every rill reads as a comb.
+  if (south < 8 && c.riverWide === 1 && farmed(c, groundMat) && treeRoll < DENSITY.alderBank * clump(x, y, n, 0.23)) {
     const r = 1.2 + 0.6 * u1;
     const gap = south - r;
     if (gap >= 1 + (h32 & 1) && gap <= ALDER_REACH) {
       return { x: cx, y: cy, r, h: 1.2 * r + 1.5, mat: M.alder, shape: 0 };
     }
+  }
+
+  if (groundMat === M.hedge) {
+    // A hedge: a row of small crowns with gaps, the odd hedgerow tree standing over it; whole stretches are missing.
+    if (treeRoll >= DENSITY.hedge) return null;
+    const hp = Math.max(1, Math.round(n / 28));
+    if (gradNoise(((x + 0.5) * hp) / n, ((y + 0.5) * hp) / n, hp, HEDGE_SEED) < -0.22) return null;
+    const tree = u4 > 0.93;
+    const r = tree ? 1.6 + 0.7 * u1 : 0.9 + 0.5 * u1;
+    const h = tree ? 1.2 * r + 1.5 : 1.3 + u3;
+    if (north < northReach(r, h, 0) || south - r < 1) return null;
+    return { x: cx, y: cy, r, h, mat: tree ? M.broadleafMid : M.hedgeCrown, shape: 0 };
   }
 
   const density = treeDensity(c, groundMat);
@@ -198,17 +216,18 @@ export function scatterAt(
   const rockRoll = maskAt(mask, x, y, ROCK_OX, ROCK_OY);
   const rocks = boulderDensity(c, groundMat);
   if (rockRoll < rocks && rockRoll < rocks * clump(x, y, n, 0.37)) {
-    const r = 0.6 + 0.7 * u1;
-    const h = 1 + u4;
+    // Small and uneven: a boulder field, not a row of headstones.
+    const r = 0.5 + 0.7 * u1 * u1;
+    const h = 0.8 + 0.9 * u4;
     if (north < northReach(r, h, 0) || south < r) return null;
     return { x: cx, y: cy, r, h, mat: M.boulder, shape: 0 };
   }
 
   const flowers = flowerDensity(groundMat);
   if (flowers > 0 && maskAt(mask, x, y, FLOWER_OX, FLOWER_OY) < flowers) {
-    // Flowers come in drifts 30–60 cells across, not as an even sprinkle.
-    const p = Math.max(1, Math.round(n / 48));
-    const drift = clamp01(0.35 + 2.2 * gradNoise(((x + 0.5) * p) / n, ((y + 0.5) * p) / n, p, DRIFT_SEED));
+    // Flowers come in drifts a dozen or two cells across, with bare meadow between: never an even sprinkle.
+    const p = Math.max(1, Math.round(n / 36));
+    const drift = clamp01(4 * (gradNoise(((x + 0.5) * p) / n, ((y + 0.5) * p) / n, p, DRIFT_SEED) - 0.2));
     if (maskAt(mask, x, y, FLOWER_OX, FLOWER_OY) < flowers * drift) {
       return { x: x + 0.5, y: y + 0.5, r: 0.5, h: 0, mat: u1 < 0.6 ? M.flowerPale : M.flowerMauve, shape: 0 };
     }

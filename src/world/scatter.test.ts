@@ -39,7 +39,7 @@ function patch(ground: number, over: Partial<CoverInput> = {}, size = 256, river
   return out;
 }
 
-test("peak densities: broadleaf 0.20, conifer 0.22, boulders at most 0.04, flowers at most 0.03", () => {
+test("peak densities: broadleaf 0.20, conifer 0.22; boulders and flowers are few", () => {
   const cells = 256 * 256;
   const broadleaf = patch(M.floorBroadleaf);
   const conifer = patch(M.floorConifer);
@@ -49,17 +49,20 @@ test("peak densities: broadleaf 0.20, conifer 0.22, boulders at most 0.04, flowe
   for (const s of conifer) assert.ok(s.mat >= M.coniferCool && s.mat <= M.coniferWarm);
   for (const ground of [M.scree, M.moorMid, M.heathMid]) {
     const rocks = patch(ground, { debris: 1 });
-    assert.ok(rocks.length > 0 && rocks.length / cells <= 0.04, `${MATERIAL_NAMES[ground]} ${rocks.length / cells}`);
+    assert.ok(rocks.length > 0 && rocks.length / cells <= 0.012, `${MATERIAL_NAMES[ground]} ${rocks.length / cells}`);
     for (const s of rocks) assert.equal(s.mat, M.boulder);
   }
   const pasture = patch(M.pastureMid).filter((s) => isCanopy[s.mat] === 1);
   assert.ok(pasture.length > 0 && pasture.length / cells <= 0.02, `pasture trees ${pasture.length / cells}`);
   const flowers = patch(M.meadowMid).filter((s) => s.mat === M.flowerPale || s.mat === M.flowerMauve);
-  assert.ok(flowers.length > 0 && flowers.length / cells <= 0.03, `flowers ${flowers.length / cells}`);
+  assert.ok(flowers.length > 0 && flowers.length / cells <= 0.008, `flowers ${flowers.length / cells}`);
+  // Grazed pasture has none, and stones lie only where debris reaches.
+  assert.equal(patch(M.pastureMid).filter((s) => s.mat === M.flowerPale || s.mat === M.flowerMauve).length, 0);
+  assert.equal(patch(M.moorMid, { debris: 0 }).filter((s) => s.mat === M.boulder).length, 0);
   assert.equal(DENSITY.broadleaf, 0.2);
   assert.equal(DENSITY.conifer, 0.22);
   assert.equal(DENSITY.pastureTree, 0.02);
-  assert.equal(DENSITY.boulder, 0.04);
+  assert.ok(DENSITY.boulder <= 0.04 && DENSITY.flower <= 0.03);
 });
 
 test("density is monotone: more moisture never loses a tree, more wind never gains one", () => {
@@ -129,7 +132,7 @@ test("crowns are wider than tall: broadleaf h = 0.6 d + 1.5 with r 1.5–3, coni
   }
   for (const s of broadleaf) assert.ok(s.h <= 8);
   for (const s of patch(M.scree)) {
-    assert.ok(s.h >= 1 && s.h <= 2, `boulder ${s.h} tall`);
+    assert.ok(s.h >= 0.8 && s.h <= 2, `boulder ${s.h} tall`);
     assert.ok(s.r <= 1.3);
   }
 });
@@ -194,12 +197,12 @@ test("boulders stay out of the river's sight line too", () => {
   }
 });
 
-test("farmland rivers get a line of alders along the north bank", () => {
+test("riverside alders stand in loose clumps on the north bank of a real river, never along a rill", () => {
   const river = 128;
   for (const ground of [M.wheat, M.ley, M.hay, M.meadowMid]) {
-    const stamps = patch(ground, { region: HOME }, 256, river).filter((s) => isCanopy[s.mat] === 1);
+    const stamps = patch(ground, { region: HOME, riverWide: 1 }, 256, river, 0, 1024).filter((s) => isCanopy[s.mat] === 1);
     const alders = stamps.filter((s) => s.mat === M.alder);
-    assert.ok(alders.length >= 20, `${MATERIAL_NAMES[ground]}: ${alders.length} alders along 256 cells`);
+    assert.ok(alders.length >= 6 && alders.length < 256 * 0.5, `${MATERIAL_NAMES[ground]}: ${alders.length} alders along 256 cells`);
     const columns = new Set<number>();
     for (const s of alders) {
       const row = Math.floor(s.y) - 1024;
@@ -208,16 +211,48 @@ test("farmland rivers get a line of alders along the north bank", () => {
       assert.ok(gap >= 1 && gap <= 3, `alder crown ${gap} from the bank`);
       columns.add(Math.floor(s.x));
     }
-    // A broken line, not a wall and not a clump: spread along the whole reach.
+    // Clumps with open bank between them: not a single file down the whole reach.
     const xs = [...columns].sort((a, b) => a - b);
     let widest = 0;
     for (let i = 1; i < xs.length; i++) widest = Math.max(widest, xs[i] - xs[i - 1]);
-    assert.ok(widest < 40, `gap of ${widest} cells in the alder line`);
-    assert.ok(alders.length < 256 * 0.8);
+    assert.ok(widest >= 12, `the longest open bank is only ${widest} cells`);
+    // A stream one cell wide carries none.
+    assert.equal(patch(ground, { region: HOME, riverWide: 0 }, 256, river, 0, 1024).filter((s) => s.mat === M.alder).length, 0);
+    assert.equal(patch(ground, { region: HOME }, 256, river, 0, 1024).filter((s) => s.mat === M.alder).length, 0);
   }
   // No river, no alders; and none on unfarmed ground.
-  assert.equal(patch(M.wheat, { region: HOME }).filter((s) => s.mat === M.alder).length, 0);
-  assert.equal(patch(M.scree, {}, 256, river).filter((s) => s.mat === M.alder).length, 0);
+  assert.equal(patch(M.wheat, { region: HOME, riverWide: 1 }).filter((s) => s.mat === M.alder).length, 0);
+  assert.equal(patch(M.scree, { riverWide: 1 }, 256, river).filter((s) => s.mat === M.alder).length, 0);
+});
+
+test("a hedge is a broken row of small crowns, with the odd hedgerow tree and whole stretches missing", () => {
+  const cells = 256 * 256;
+  const crowns = patch(M.hedge, {}, 256, -1, 0, 0);
+  const share = crowns.length / cells;
+  assert.ok(share > 0.2 && share < 0.4, `${share} of hedge cells carry a crown`);
+  let small = 0;
+  for (const s of crowns) {
+    assert.ok(s.mat === M.hedgeCrown || s.mat === M.broadleafMid);
+    if (s.mat === M.hedgeCrown) {
+      small++;
+      assert.ok(s.r <= 1.4 && s.h <= 2.3, `a hedge crown of radius ${s.r}, height ${s.h}`);
+    }
+  }
+  assert.ok(small / crowns.length > 0.88);
+  // Not canopy: the bake inks canopy against ground, and a hedge must not become an inked outline.
+  assert.equal(isCanopy[M.hedgeCrown], 0);
+  // Stretches eight cells long and more with no hedge at all.
+  const grid = new Uint8Array(cells);
+  for (const s of crowns) grid[Math.floor(s.y) * 256 + Math.floor(s.x)] = 1;
+  let empty = 0;
+  for (let by = 0; by < 256; by += 8) {
+    for (let bx = 0; bx < 256; bx += 8) {
+      let any = 0;
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) any += grid[(by + y) * 256 + bx + x];
+      if (any === 0) empty++;
+    }
+  }
+  assert.ok(empty >= 60 && empty < 500, `${empty} of 1024 blocks have no hedge`);
 });
 
 /** Normalised autocorrelation of an occupancy grid at one lag, on the torus. */
