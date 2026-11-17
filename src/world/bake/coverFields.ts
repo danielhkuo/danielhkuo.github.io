@@ -35,6 +35,8 @@ export interface CoverFields {
   form: Float32Array;
   /** As relief, on the smoothed ground against a ring CURVE_R cells out: positive on ridges and spurs, negative in corries and valley heads. */
   curve: Float32Array;
+  /** The aspect of the land's form: −1 where it faces south … 1 where it faces north, 0 on the flat. Gullies do not turn it. */
+  north: Float32Array;
 }
 
 /** The form is the ground averaged over a square this many cells either way. */
@@ -63,6 +65,7 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
   const relief = new Float32Array(W * H);
   const steep = new Float32Array(W * H);
   const curve = new Float32Array(W * H);
+  const north = new Float32Array(W * H);
 
   // The form: a box mean, each cell summed in the same order whatever the window, so windows agree to the bit.
   const R = SMOOTH_R, far = CURVE_R + 1;
@@ -99,6 +102,10 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
           smooth[i - ca] + smooth[i + ca] + smooth[i - ca * W] + smooth[i + ca * W] +
           smooth[i - cb - cb * W] + smooth[i + cb - cb * W] + smooth[i - cb + cb * W] + smooth[i + cb + cb * W];
         curve[i] = g - ring / 8;
+        // Aspect over a four-cell baseline, so it turns as slowly as the form does.
+        const ax = smooth[i + 2] - smooth[i - 2], ay = smooth[i + 2 * W] - smooth[i - 2 * W];
+        const al = Math.sqrt(ax * ax + ay * ay);
+        north[i] = al > 0.08 ? ay / al : al > 0 ? (ay / al) * (al / 0.08) : 0;
       }
     }
   }
@@ -133,7 +140,7 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
       cells.push(i);
     }
   }
-  if (cells.length === 0) return { cliffAbove, relief, steep, curve, form: smooth };
+  if (cells.length === 0) return { cliffAbove, relief, steep, curve, form: smooth, north };
 
   // Each step carries the strength of every cell marked in the last step to
   // the cells below it: in full straight down the fall line, less to either
@@ -175,5 +182,5 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
     }
     cells = touched;
   }
-  return { cliffAbove, relief, steep, curve, form: smooth };
+  return { cliffAbove, relief, steep, curve, form: smooth, north };
 }

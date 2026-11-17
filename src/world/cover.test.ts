@@ -50,6 +50,18 @@ function none(over: Partial<CoverInput>, lo: number, hi: number): void {
   for (const id of patch(over)) assert.ok(id < lo || id > hi, `${MATERIAL_NAMES[id]} from ${JSON.stringify(over)}`);
 }
 
+/** Open hill ground: grass moor, its bracken beds and its gorse. */
+function openMoor(id: number): boolean {
+  return (id >= M.moorCool && id <= M.moorWarm) || id === M.bracken || id === M.gorse;
+}
+
+/** The share of a 64 × 64 block of one input, sampled every `step` cells, that `is` holds for. */
+function shareOf(over: Partial<CoverInput>, is: (id: number) => boolean, step = 3): number {
+  let hit = 0;
+  for (let i = 0; i < 4096; i++) if (is(cover(cell({ ...over, x: 900 + step * (i & 63), y: 4100 + step * (i >> 6) }), MASK))) hit++;
+  return hit / 4096;
+}
+
 test("the mask is the committed 256² blue noise", () => {
   assert.equal(MASK.length, 65536);
 });
@@ -81,88 +93,87 @@ test("rocky shores get a shingle line and a rock bench", () => {
   none({ shore: 2, e: 3, slope: 0.2, rock: 0 }, M.rockHard, M.cliffSlate);
 });
 
-test("snow: height, aspect, hollows and slope; caps and couloirs, bare ribs and south faces", () => {
-  only({ e: 120, hand: 60 }, M.snow);
-  // North faces hold it lower; south faces need far more height. The line wanders by a dozen units either way.
-  only({ e: 86, northness: 1, hand: 60 }, M.snow);
-  none({ e: 88, northness: -1, hand: 60 }, M.snow, M.snow);
-  // So do faces turned from the north-west sun.
-  only({ e: 94, westness: -1, northness: 0, hand: 60 }, M.snow);
-  none({ e: 74, westness: 1, northness: 0, hand: 60 }, M.snow, M.snow);
+test("snow: height above a wandering line; lower in shade, on crests, cirque headwalls and couloir heads; never in a valley", () => {
+  const snow = (over: Partial<CoverInput>): number => shareOf({ hand: 60, ...over }, (id) => id === M.snow);
+  only({ e: 125, hand: 60 }, M.snow);
+  none({ e: 80, hand: 60 }, M.snow, M.snow);
   none({ e: 58, hand: 60 }, M.snow, M.snowLate);
-  // It lingers in couloirs and corries below the snowline, and thins on a crest or a spur.
-  const share = (over: Partial<CoverInput>): number => {
-    let snow = 0;
-    for (let i = 0; i < 4096; i++) if (cover(cell({ hand: 60, ...over, x: 900 + 3 * (i & 63), y: 4100 + 3 * (i >> 6) }), MASK) === M.snow) snow++;
-    return snow / 4096;
-  };
-  assert.ok(share({ e: 76, relief: -4 }) > share({ e: 76 }) + 0.2, "a couloir carries snow below the line");
-  assert.ok(share({ e: 80, curve: -1.5 }) > share({ e: 80 }) + 0.2, "a corrie gathers snow");
-  assert.ok(share({ e: 88, curve: 0.9 }) < share({ e: 88 }) - 0.2, "a spur loses its snow");
-  // How far a gully carries its snow differs from gully to gully: some carry it far, some hardly at all.
-  const low = share({ e: 70, relief: -4 });
-  assert.ok(low > 0.15 && low < 0.85, `snow in gullies ten units under the line: ${low}`);
-  // Steep ground sheds it, so ribs and gully walls show through: sooner on the sunny side, later in a couloir.
-  none({ e: 120, slope: 0.98, hand: 60, rock: 2 }, M.snow, M.snowLate);
-  only({ e: 120, slope: 0.58, northness: 1, hand: 60 }, M.snow);
-  assert.ok(patch({ e: 125, slope: 0.64, northness: -1, hand: 60, rock: 0 }).has(M.rockHard));
-  only({ e: 120, slope: 0.9, relief: -2, hand: 60 }, M.snow);
-  // A narrow crest is blown clear, whether it is sharp or a rounded ridge: no white strip along an arête.
-  none({ e: 120, slope: 0.5, relief: 2, hand: 60 }, M.snow, M.snowLate);
-  none({ e: 120, slope: 0.3, curve: 2, hand: 60 }, M.snow, M.snowLate);
+  // A face turned north holds it lower than one turned south, and the form's aspect is what counts where it is known.
+  only({ e: 112, northness: 1, hand: 60 }, M.snow);
+  none({ e: 90, northness: -1, hand: 60 }, M.snow, M.snow);
+  assert.ok(snow({ e: 99, northness: -1, formNorth: 1 }) > snow({ e: 99, northness: 1, formNorth: -1 }) + 0.3, "aspect is read off the form");
+  // Caps sit on crests, in cirques and at couloir heads: each lowers the line.
+  assert.ok(snow({ e: 96, curve: 2.4 }) > snow({ e: 96 }) + 0.3, "a convex crest carries a cap");
+  assert.ok(snow({ e: 96, curve: -2, slope: 0.68 }) > snow({ e: 96, slope: 0.68 }) + 0.3, "a cirque headwall gathers snow");
+  assert.ok(snow({ e: 96, relief: -1, slope: 0.68 }) > snow({ e: 96, slope: 0.68 }) + 0.2, "a couloir head holds snow");
+  // A valley floor or a gully bottom is never white at the snowline's own height, and a gentle hollow is green longer than a face.
+  for (const hand of [0.2, 1, 3]) none({ e: 99, hand }, M.snow, M.snow);
+  none({ e: 99, hand: 1, curve: 2.4 }, M.snow, M.snow);
+  none({ e: 99, hand: 1, curve: -2, slope: 0.68, relief: -1 }, M.snow, M.snow);
+  assert.ok(snow({ e: 108, hand: 1 }) < snow({ e: 108 }) - 0.5, "the valley term");
+  assert.ok(snow({ e: 100, curve: -2, slope: 0.2 }) < snow({ e: 100, slope: 0.2 }) - 0.15, "a gentle hollow");
+  // Steep ground sheds it, a sunny face sooner than a shaded one, and a rib sooner than the couloir beside it.
+  assert.ok(snow({ e: 108, slope: 1.05 }) < snow({ e: 108, slope: 0.5 }) - 0.5, "steep ground sheds");
+  assert.ok(snow({ e: 106, slope: 0.85, northness: -1 }) < snow({ e: 106, slope: 0.85, northness: 1 }) - 0.5, "the sunny side sheds sooner");
+  assert.ok(snow({ e: 108, slope: 0.85, relief: 1 }) < snow({ e: 108, slope: 0.85, relief: -1 }) - 0.3, "ribs show through");
 });
 
-test("above the snowline, ground that sheds its snow is bare rock, bedded, with snow on its ledges", () => {
+test("at the snowline, ground that sheds its snow is bare rock, bedded, with snow on its ledges", () => {
   const seen = new Set<number>();
-  let snow = 0, total = 0;
+  let snow = 0, rock = 0, total = 0;
   for (let y = 0; y < 120; y++) {
     for (let x = 0; x < 120; x++) {
-      // A south face at slope 0.75, all of it well above the snowline.
-      const h = 150 - 0.25 * y;
-      const id = cover(cell({ x: 2000 + x, y: 3000 + y, e: h, form: h, slope: 0.75, steep: 0.75, northness: -1, hand: 60, rock: 0 }), MASK);
+      // A south face at slope 0.95, across the snowline.
+      const h = 121 - 0.08 * y;
+      const id = cover(cell({ x: 2000 + x, y: 3000 + y, e: h, form: h, slope: 0.95, steep: 0.95, northness: -1, hand: 60, rock: 0 }), MASK);
       seen.add(id);
       total++;
       if (id === M.snow) snow++;
+      if (id === M.rockHard || id === M.cliffHard) rock++;
     }
   }
-  for (const id of seen) assert.ok(id === M.snow || id === M.rockHard || id === M.cliffHard, MATERIAL_NAMES[id]);
+  for (const id of seen) assert.ok(id === M.snow || id === M.snowLate || id === M.rockHard || id === M.cliffHard, MATERIAL_NAMES[id]);
   assert.ok(seen.has(M.rockHard) && seen.has(M.cliffHard), "steps and benches");
-  assert.ok(snow / total > 0.03 && snow / total < 0.4, `snow on ${snow / total} of the face`);
+  assert.ok(rock / total > 0.5, `rock on ${rock / total} of the face`);
+  assert.ok(snow / total > 0.02 && snow / total < 0.45, `snow on ${snow / total} of the face`);
 });
 
-test("the snow's edge is clean: a hard, wandering line with no speckle", () => {
-  // A slope rising to the north through the snowline.
+test("the snow's edge is feathered over a few cells and wanders: no stair steps, no contour line, no field of static", () => {
+  // A slope rising to the north through the snowline, at a mountain's own gradient.
   const size = 220;
   const snow = new Uint8Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const id = cover(cell({ x: 900 + x, y: 4100 + y, e: 95 - y * 0.12, hand: 60, slope: 0.3 }), MASK);
+      const id = cover(cell({ x: 900 + x, y: 4100 + y, e: 112 - y * 0.12, hand: 60, slope: 0.3 }), MASK);
       snow[y * size + x] = id === M.snow ? 1 : 0;
     }
   }
-  let lonely = 0;
-  let white = 0;
+  let lonely = 0, white = 0;
   const edgeRows = new Set<number>();
-  for (let y = 1; y < size - 1; y++) {
-    for (let x = 1; x < size - 1; x++) {
+  const bands: number[] = [];
+  for (let x = 1; x < size - 1; x++) {
+    let first = -1, last = -1;
+    for (let y = 1; y < size - 1; y++) {
       const i = y * size + x;
       white += snow[i];
       const same = (snow[i - 1] === snow[i] ? 1 : 0) + (snow[i + 1] === snow[i] ? 1 : 0) + (snow[i - size] === snow[i] ? 1 : 0) + (snow[i + size] === snow[i] ? 1 : 0);
-      if (same <= 1) lonely++;
-      if (snow[i] !== snow[i + size]) edgeRows.add(y);
+      if (same === 0) lonely++;
+      if (snow[i] !== snow[i + size]) {
+        edgeRows.add(y);
+        if (first < 0) first = y;
+        last = y;
+      }
     }
+    bands.push(last - first);
   }
   assert.ok(white > 2000 && white < size * size - 2000, "the patch must straddle the snowline");
-  // (A tongue's very tip may be a single cell: three in fifty thousand is not a speckled edge.)
-  assert.ok(lonely <= 3, `${lonely} speckles along the snow's edge`);
+  // The feather is a band in every column, a few cells deep on a slope this gentle; isolated cells are few.
+  bands.sort((a, b) => a - b);
+  const median = bands[bands.length >> 1];
+  assert.ok(median >= 1 && median <= 14, `the edge is ${median} cells deep`);
+  assert.ok(lonely < 0.004 * size * size, `${lonely} lone cells`);
   // The line wanders: it is not one row.
-  assert.ok(edgeRows.size >= 6, `the snowline lies on ${edgeRows.size} rows`);
-  // The mask plays no part in it.
-  const flat = new Uint8Array(65536).fill(7);
-  for (let i = 0; i < 400; i++) {
-    const c = cell({ x: 900 + i * 3, y: 4100 + i, e: 80 + (i % 20), hand: 60 });
-    assert.equal(cover(c, flat) === M.snow, cover(c, MASK) === M.snow);
-  }
+  assert.ok(edgeRows.size >= 12, `the snowline lies on ${edgeRows.size} rows`);
 });
 
 test("bare rock is the exception: true cliffs, high exposed summits, and nothing merely steep", () => {
@@ -197,11 +208,12 @@ test("bare rock is the exception: true cliffs, high exposed summits, and nothing
 });
 
 test("merely steep ground is heather, bracken or rough grass, by height, wind and aspect", () => {
-  // Low and sheltered: bracken on the sunny side, grass in the shade.
+  // Low and sheltered: bracken on the sunny side; in the shade rough grass, pasture in the home lowland and moor on the hill.
   only({ slope: 0.7, e: 15, hand: 40, wind: 0.2, northness: -1 }, M.bracken);
-  family({ slope: 0.7, e: 15, hand: 40, wind: 0.2, northness: 1 }, M.pastureCool);
+  family({ slope: 0.7, e: 15, hand: 40, wind: 0.2, northness: 1, region: HOME }, M.pastureCool);
+  for (const id of patch({ slope: 0.7, e: 15, hand: 40, wind: 0.2, northness: 1 })) assert.ok(openMoor(id), MATERIAL_NAMES[id]);
   // High or wind-blown: heath and moor.
-  for (const id of patch({ slope: 0.7, e: 60, hand: 40, wind: 0.2, northness: -1 })) assert.ok(id >= M.heathCool && id <= M.moorWarm, MATERIAL_NAMES[id]);
+  for (const id of patch({ slope: 0.7, e: 60, hand: 40, wind: 0.2, northness: -1 })) assert.ok((id >= M.heathCool && id <= M.heathWarm) || openMoor(id), MATERIAL_NAMES[id]);
 });
 
 test("crag bands: thin ribbons of rock along the contour of steep ground, not slabs", () => {
@@ -261,43 +273,45 @@ test("where two rock classes meet, the line between their stones is bent, not ru
   assert.ok(new Set(edge).size >= 4, `the line sits at ${new Set(edge).size} columns`);
 });
 
-test("scree: talus fans below real cliffs, a buff wash with a lobed edge and a few clustered stones; never a stipple", () => {
+test("scree: pale talus where the rockfall lies and in fans under cliffs; graded stones, bigger at the toe; never on a face", () => {
   const fanAt = (id: number): boolean => id === M.scree || id === M.screeSlate || id === M.screeStone;
-  for (const id of patch({ cliffAbove: 0.95, slope: 0.6, rock: 2 })) assert.ok(id === M.scree || id === M.screeStone, MATERIAL_NAMES[id]);
-  for (const id of patch({ cliffAbove: 0.95, slope: 0.6, rock: 2, region: SLATE })) assert.ok(id === M.screeSlate || id === M.screeStone, MATERIAL_NAMES[id]);
-  // The fan thins down its length: lobes, then nothing.
-  const share = (cliffAbove: number, of: (id: number) => boolean = fanAt): number => {
-    let n = 0;
-    for (let i = 0; i < 4096; i++) if (of(cover(cell({ cliffAbove, slope: 0.6, rock: 2, x: 100 + (i & 63), y: 200 + (i >> 6) }), MASK))) n++;
-    return n / 4096;
-  };
-  assert.ok(share(0.95) > 0.97, `foot ${share(0.95)}`);
-  assert.ok(share(0.35) > 0.2 && share(0.35) < 0.8, `toe ${share(0.35)}`);
-  assert.ok(share(0.15) < share(0.35) && share(0.35) < share(0.95));
-  assert.equal(share(0.05), 0);
-  // Stones are few, pale, and lie in clusters.
-  const stones = share(0.95, (id) => id === M.screeStone);
-  assert.ok(stones > 0.005 && stones < 0.1, `stones on ${stones} of a fan`);
-  // The edge is drawn clean: across a fan fading over 80 rows, hardly a cell stands alone.
-  const W = 160, H = 80;
-  const fan = new Uint8Array(W * H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) fan[y * W + x] = fanAt(cover(cell({ cliffAbove: 1 - y / H, slope: 0.6, rock: 2, x: 5000 + x, y: 900 + y }), MASK)) ? 1 : 0;
-  let lonely = 0;
-  for (let y = 1; y < H - 1; y++) {
-    for (let x = 1; x < W - 1; x++) {
-      const i = y * W + x;
-      const same = (fan[i - 1] === fan[i] ? 1 : 0) + (fan[i + 1] === fan[i] ? 1 : 0) + (fan[i - W] === fan[i] ? 1 : 0) + (fan[i + W] === fan[i] ? 1 : 0);
-      if (same === 0) lonely++;
+  const high = { e: 84, hand: 20, slope: 0.6, rock: 2 };
+  // The generator's rockfall debris is scree, and so is the foot of a true cliff.
+  for (const id of patch({ ...high, debris: 0.95 })) assert.ok(id === M.scree || id === M.screeStone, MATERIAL_NAMES[id]);
+  for (const id of patch({ ...high, debris: 0.95, region: SLATE })) assert.ok(id === M.screeSlate || id === M.screeStone, MATERIAL_NAMES[id]);
+  for (const id of patch({ ...high, cliffAbove: 1 })) assert.ok(id === M.scree || id === M.screeStone, MATERIAL_NAMES[id]);
+  // The fan thins with the debris: lobes, then scattered stones, then nothing.
+  const share = (debris: number, over: Partial<CoverInput> = {}): number => shareOf({ ...high, debris, ...over }, fanAt, 1);
+  assert.ok(share(0.95) > 0.97, `thick ${share(0.95)}`);
+  assert.ok(share(0.4) > 0.15 && share(0.4) < 0.85, `edge ${share(0.4)}`);
+  assert.ok(share(0.25) < share(0.4) && share(0.4) < share(0.6));
+  assert.equal(share(0.1), 0);
+  // Low down the fan is grown over: the same debris is bare high up and green at the foot of the hills.
+  assert.equal(share(0.6, { e: 12 }), 0);
+  assert.ok(share(0.6, { e: 84 }) > 0.9);
+  // Stones are dots a tone under the wash: fine and few at the head, in clusters at the toe by the stream.
+  const stones = (hand: number): number => shareOf({ ...high, debris: 0.95, hand }, (id) => id === M.screeStone, 1);
+  assert.ok(stones(30) > 0.04 && stones(30) < 0.2, `stones on ${stones(30)} of the head`);
+  assert.ok(stones(4) > 1.6 * stones(30) && stones(4) < 0.5, `stones on ${stones(4)} of the toe`);
+  // At the toe they lie in blocks: more of them have a stone beside them than fine dots would.
+  const beside = (hand: number): number => {
+    let pairs = 0, all = 0;
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      const at = (dx: number): number => cover(cell({ ...high, debris: 0.95, hand, x: 5000 + x + dx, y: 900 + y }), MASK);
+      if (at(0) !== M.screeStone) continue;
+      all++;
+      if (at(1) === M.screeStone) pairs++;
     }
-  }
-  assert.ok(lonely <= 16, `${lonely} lone cells along the fan's edge`);
-  // No cliff above: no scree, however steep and however much debris the generator left.
-  none({ cliffAbove: 0, debris: 0, slope: 0.6, rock: 2 }, M.scree, M.screeSlate);
-  none({ cliffAbove: 0, debris: 0.95, slope: 0.6, rock: 2 }, M.scree, M.screeSlate);
-  none({ cliffAbove: 0, debris: 0.95, slope: 0.6, rock: 2 }, M.screeStone, M.screeStone);
-  // Flat ground under a cliff is not a fan, and neither is ground past the angle of rest.
-  none({ cliffAbove: 0.95, slope: 0.1, rock: 2 }, M.scree, M.screeSlate);
-  none({ cliffAbove: 0.95, slope: 1.0, rock: 2, e: 30, hand: 40 }, M.scree, M.screeSlate);
+    return pairs / all;
+  };
+  assert.ok(beside(4) > beside(30) + 0.15, `clusters: ${beside(4)} at the toe, ${beside(30)} at the head`);
+  // No debris and no cliff above: no scree, however steep.
+  none({ ...high, cliffAbove: 0, debris: 0 }, M.scree, M.screeSlate);
+  none({ ...high, cliffAbove: 0, debris: 0 }, M.screeStone, M.screeStone);
+  // Flat ground is not a fan, and ground steep enough to be hatched as a face is the face.
+  none({ ...high, debris: 0.95, slope: 0.1 }, M.scree, M.screeSlate);
+  none({ ...high, debris: 0.95, slope: 1.2 }, M.scree, M.screeSlate);
+  none({ ...high, debris: 0.95, slope: 1.2 }, M.screeStone, M.screeStone);
 });
 
 test("shore plants: marram on dunes, saltmarsh cut by creeks; sand only on beaches and cove backs", () => {
@@ -313,26 +327,36 @@ test("shore plants: marram on dunes, saltmarsh cut by creeks; sand only on beach
 });
 
 test("late snow lies under the permanent snow", () => {
-  // Climbing any one hillside: its own cover, then a band of late snow some ten units deep, then snow.
+  // Climbing any one hillside: its own cover, then a band of late snow a few units deep, then snow.
   for (const region of [SKERRY, HIGHLAND]) {
     for (let k = 0; k < 24; k++) {
       let late = -1, snow = -1;
-      for (let e = 56; e <= 125; e++) {
+      const ids: number[] = [];
+      for (let e = 56; e <= 128; e++) {
         const id = cover(cell({ e, hand: 50, region, x: 3000 + 41 * k, y: 500 + 29 * k }), MASK);
+        ids[e] = id;
         if (id === M.snowLate && late < 0) late = e;
         if (id === M.snow && snow < 0) snow = e;
-        if (snow >= 0) assert.equal(id, M.snow, "nothing but snow above the snowline");
-        else if (late >= 0) assert.equal(id, M.snowLate, "late snow is one band");
       }
-      assert.ok(late > 0 && snow - late >= 9 && snow - late <= 11, `late snow from ${late}, snow from ${snow}`);
+      assert.ok(late > 0 && snow > late && snow - late >= 2 && snow - late <= 9, `late snow from ${late}, snow from ${snow}`);
+      for (let e = 56; e <= 128; e++) {
+        if (e < late) assert.ok(ids[e] !== M.snow && ids[e] !== M.snowLate);
+        // The feather is a few units deep; past it there is nothing but snow.
+        if (e > snow + 4) assert.equal(ids[e], M.snow, "nothing but snow above the snowline");
+        if (e > late && e < snow) assert.equal(ids[e], M.snowLate, "late snow is one band");
+      }
     }
   }
 });
 
-test("alpine meadow: highland or lake country, cold, gentle", () => {
-  family({ e: 63, hand: 40, region: HIGHLAND }, M.alpineCool);
-  family({ e: 63, hand: 40, region: LAKES }, M.alpineCool);
-  family({ e: 63, hand: 40, region: [0, 0.4, 0, 0.4, 0, 0.2] }, M.alpineCool);
+test("alpine meadow: highland or lake country, cold, gentle; in patches, never a band under every crest", () => {
+  const alpine = (id: number): boolean => id >= M.alpineCool && id <= M.alpineWarm;
+  for (const region of [HIGHLAND, LAKES, [0, 0.4, 0, 0.4, 0, 0.2]]) {
+    const share = shareOf({ e: 63, hand: 40, region }, alpine);
+    assert.ok(share > 0.25 && share < 0.8, `alpine meadow on ${share}`);
+    // Between the meadows the hill keeps its moor.
+    for (const id of patch({ e: 63, hand: 40, region })) assert.ok(alpine(id) || openMoor(id) || (id >= M.heathCool && id <= M.heathWarm) || (id >= M.pastureCool && id <= M.pastureWarm), MATERIAL_NAMES[id]);
+  }
   none({ e: 63, hand: 40, region: HOME }, M.alpineCool, M.alpineWarm);
   none({ e: 63, hand: 40, slope: 0.75, region: HIGHLAND }, M.alpineCool, M.alpineWarm);
   none({ e: 40, hand: 40, region: HIGHLAND }, M.alpineCool, M.alpineWarm);
@@ -340,35 +364,74 @@ test("alpine meadow: highland or lake country, cold, gentle", () => {
 
 test("heath: wind-blown ground and the tops of valley country; heather where dry or slaty, moor where wet", () => {
   family({ wind: 0.8, moisture: 0.05, region: SLATE }, M.heathCool);
-  family({ wind: 0.8, moisture: 0.95 }, M.moorCool);
+  for (const id of patch({ wind: 0.8, moisture: 0.95 })) assert.ok(openMoor(id), MATERIAL_NAMES[id]);
   family({ wind: 0.2, hand: 45, region: SLATE, moisture: 0.3 }, M.heathCool);
   // High HAND alone is not heath outside valley country.
   none({ wind: 0.2, hand: 45 }, M.heathCool, M.moorWarm);
 });
 
-test("forest: lower valley sides, moist, sheltered; conifer where it is cold", () => {
-  const wood = { hand: 12, slope: 0.3, moisture: 0.7, wind: 0.2 };
-  only({ ...wood, e: 20 }, M.floorBroadleaf);
-  only({ ...wood, e: 57 }, M.floorConifer);
-  for (const no of [{ hand: 0.5 }, { hand: 45 }, { slope: 0.02 }, { slope: 0.88 }, { moisture: 0.3 }, { wind: 0.6 }, { e: 65 }]) {
-    none({ ...wood, e: 20, ...no }, M.floorBroadleaf, M.floorConifer);
+test("grass moor has grain: bracken beds, gorse in groups and tussocky grass, none of it spread evenly", () => {
+  const moor = { wind: 0.7, moisture: 0.95, e: 30, slope: 0.4, hand: 12 };
+  const bracken = shareOf(moor, (id) => id === M.bracken);
+  const gorse = shareOf(moor, (id) => id === M.gorse);
+  assert.ok(bracken > 0.04 && bracken < 0.4, `bracken on ${bracken}`);
+  assert.ok(gorse > 0.004 && gorse < 0.12, `gorse on ${gorse}`);
+  // All three grass tones show within one small patch of moor.
+  const tones = new Set<number>();
+  for (let i = 0; i < 1024; i++) {
+    const id = cover(cell({ ...moor, x: 2100 + (i & 31), y: 800 + (i >> 5) }), MASK);
+    if (id >= M.moorCool && id <= M.moorWarm) tones.add(id);
   }
+  assert.equal(tones.size, 3);
+  // High on the hill it is grass alone.
+  assert.equal(shareOf({ ...moor, e: 85 }, (id) => id === M.bracken || id === M.gorse), 0);
+});
+
+test("upland woods are copses and hangers: clumps that cross the spurs, feathered at the edge, thinned by wind, drought, steepness and cold", () => {
+  const wood = { hand: 12, slope: 0.3, moisture: 0.7, wind: 0.2, e: 20 };
+  const isWood = (id: number): boolean => id === M.floorBroadleaf || id === M.floorConifer;
+  const share = (over: Partial<CoverInput>): number => shareOf({ ...wood, ...over }, isWood, 4);
+  const base = share({});
+  assert.ok(base > 0.3 && base < 0.85, `woods on ${base} of good ground`);
+  // Height above the stream hardly counts: no strip up every gully.
+  assert.ok(Math.abs(share({ hand: 4 }) - share({ hand: 22 })) < 0.08);
+  // Clumps, not speckle: a wood cell's neighbour is nearly always wood.
+  let woodCells = 0, kept = 0;
+  for (let y = 0; y < 200; y++) for (let x = 0; x < 200; x++) {
+    if (!isWood(cover(cell({ ...wood, x: 400 + x, y: 5000 + y }), MASK))) continue;
+    woodCells++;
+    if (isWood(cover(cell({ ...wood, x: 401 + x, y: 5000 + y }), MASK))) kept++;
+  }
+  assert.ok(kept / woodCells > 0.85, `${kept / woodCells} of wood cells have wood to their east`);
+  // Never on ground too dry, too wind-blown, too steep or too cold; less of it in the wind, on steep ground, in the sun and by the stream.
+  for (const no of [{ moisture: 0.3 }, { wind: 0.85 }, { slope: 1.15 }, { e: 90, hand: 5 }]) assert.equal(share(no), 0, JSON.stringify(no));
+  assert.ok(share({ wind: 0.6 }) < base - 0.15, "wind");
+  assert.ok(share({ slope: 0.9 }) < share({ slope: 0.6 }) - 0.1, "steepness");
+  assert.ok(share({ slope: 0.5, northness: -1 }) < share({ slope: 0.5, northness: 1 }) - 0.05, "aspect");
+  assert.ok(share({ e: 66 }) < base - 0.1 && share({ e: 66 }) > 0, "the tree line is a wide feather");
+  // Highland and lake country carry their tree line lower.
+  assert.equal(share({ e: 66, region: HIGHLAND }), 0);
+  // The home lowland keeps its own woods: there the valley sides are wooded whatever the copse mask says.
+  none({ ...wood, region: HOME, hand: 45 }, M.floorBroadleaf, M.floorConifer);
 });
 
 test("the conifer line is a wide belt of mixed wood", () => {
   const wood = { hand: 12, slope: 0.3, moisture: 0.7, wind: 0.2 };
   const share = (e: number): number => {
-    let conifer = 0;
-    for (let i = 0; i < 1024; i++) {
-      if (cover(cell({ ...wood, e, x: 200 + (i & 31), y: 300 + (i >> 5) }), MASK) === M.floorConifer) conifer++;
+    let conifer = 0, all = 0;
+    for (let i = 0; i < 4096; i++) {
+      const id = cover(cell({ ...wood, e, x: 200 + 2 * (i & 63), y: 300 + 2 * (i >> 6) }), MASK);
+      if (id === M.floorConifer) conifer++;
+      if (id === M.floorConifer || id === M.floorBroadleaf) all++;
     }
-    return conifer / 1024;
+    assert.ok(all > 400, `too little wood at ${e} to judge`);
+    return conifer / all;
   };
-  assert.equal(share(33), 0);
-  assert.ok(share(40) > 0.1 && share(40) < 0.4);
-  assert.ok(share(45) > 0.4 && share(45) < 0.6);
-  assert.ok(share(50) > 0.6 && share(50) < 0.9);
-  assert.equal(share(57), 1);
+  assert.equal(share(25), 0);
+  assert.ok(share(40) > 0.05 && share(40) < 0.45, `${share(40)}`);
+  assert.ok(share(45) > 0.3 && share(45) < 0.7, `${share(45)}`);
+  assert.ok(share(50) > 0.55 && share(50) < 0.95, `${share(50)}`);
+  assert.equal(share(62), 1);
 });
 
 /** What a field cell may be: a crop or its texture, grass, a copse floor, or the boundary. */
@@ -573,12 +636,20 @@ test("rule order: the first match wins", () => {
   only({ ...all, water: 3 }, M.river);
   only(all, M.snow);
   only({ ...all, e: 58, slope: 1.6 }, M.cliffHard);
-  for (const id of patch({ ...all, e: 58 })) assert.ok(id === M.scree || id === M.screeStone, MATERIAL_NAMES[id]);
-  family({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3 }, M.alpineCool);
-  for (const id of patch({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3, region: SKERRY })) {
-    assert.ok(id >= M.heathCool && id <= M.moorWarm, MATERIAL_NAMES[id]);
+  for (const id of patch({ ...all, e: 58, debris: 0.95 })) assert.ok(id === M.scree || id === M.screeStone, MATERIAL_NAMES[id]);
+  {
+    const seen = patch({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3 });
+    assert.ok(seen.has(M.alpineCool) || seen.has(M.alpineMid) || seen.has(M.alpineWarm));
+    for (const id of seen) assert.ok((id >= M.alpineCool && id <= M.heathWarm) || openMoor(id), MATERIAL_NAMES[id]);
   }
-  only({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3, region: SKERRY, wind: 0.2 }, M.floorConifer);
+  for (const id of patch({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3, region: SKERRY })) {
+    assert.ok((id >= M.heathCool && id <= M.heathWarm) || openMoor(id), MATERIAL_NAMES[id]);
+  }
+  {
+    // Out of the wind the same hillside is wood wherever a copse stands, and conifer at that height.
+    const seen = patch({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3, region: SKERRY, wind: 0.2 });
+    assert.ok(seen.has(M.floorConifer) && !seen.has(M.floorBroadleaf), names(seen).join());
+  }
   family({ ...all, e: 58, rock: 2, cliffAbove: 0, slope: 0.3, region: SKERRY, wind: 0.2, moisture: 0.1 }, M.scrubCool);
   // Sand beats the forest that would grow on the same low ground; late snow beats alpine meadow.
   only({ shore: 1, e: 0.6, slope: 0.12, exposure: 0.2, hand: 12, moisture: 0.7 }, M.sand);
@@ -586,14 +657,18 @@ test("rule order: the first match wins", () => {
     let e = 60;
     while (cover(cell({ e, hand: 40, region: HIGHLAND }), MASK) !== M.snowLate) e++;
     const below = cover(cell({ e: e - 1, hand: 40, region: HIGHLAND }), MASK);
-    assert.ok(below >= M.alpineCool && below <= M.alpineWarm, MATERIAL_NAMES[below]);
+    assert.ok((below >= M.alpineCool && below <= M.heathWarm) || openMoor(below), MATERIAL_NAMES[below]);
   }
   // Where people farm the field decides: farmland beats forest on gentle ground.
   for (const id of patch({ slope: 0.11, hand: 6, moisture: 0.7, region: HOME })) assert.ok(enclosed(id) && id !== M.wall, MATERIAL_NAMES[id]);
   // The floodplain is left to flood: it is never a field.
   only({ slope: 0.005, hand: 0.05, e: 5, region: HOME }, M.reeds);
   // Woods keep the ground too steep to plough.
-  only({ slope: 0.3, hand: 6, moisture: 0.7, region: SLATE }, M.floorBroadleaf);
+  {
+    const seen = patch({ slope: 0.3, hand: 6, moisture: 0.7, region: SLATE });
+    assert.ok(seen.has(M.floorBroadleaf));
+    for (const id of seen) assert.ok(isCrop[id] === 0 && id !== M.hedge && id !== M.wall, MATERIAL_NAMES[id]);
+  }
   // In the home lowland that ground is wood and open down by turns, and never a field.
   let wood = 0, down = 0;
   for (let i = 0; i < 4096; i++) {
@@ -614,21 +689,21 @@ function flips(row: boolean[]): number[] {
   return out;
 }
 
-test("jitter makes every border a speckled band, never a line (scree and snow, whose edges are drawn clean, apart)", () => {
+test("jitter makes every border a speckled band, never a line", () => {
   // Each sweep crosses one threshold over 400 cells, at about the field's natural gradient.
   const tri = (id: number, base: number): boolean => id >= base && id <= base + 2;
   const sweeps: { name: string; at: (t: number) => Partial<CoverInput>; is: (id: number) => boolean; min: number }[] = [
     { name: "cliff", at: (t) => ({ slope: 1.2 + 0.3 * t, rock: 0 }), is: (id) => id === M.cliffHard, min: 3 },
-    { name: "alpine", at: (t) => ({ e: 49 + 12 * t, hand: 40, region: HIGHLAND }), is: (id) => tri(id, M.alpineCool), min: 10 },
-    { name: "heath", at: (t) => ({ wind: 0.4 + 0.3 * t }), is: (id) => id >= M.heathCool && id <= M.moorWarm, min: 12 },
-    { name: "forest", at: (t) => ({ moisture: 0.36 + 0.08 * t }), is: (id) => id === M.floorBroadleaf, min: 3 },
+    { name: "alpine", at: (t) => ({ e: 49 + 12 * t, hand: 40, region: HIGHLAND, y: 4587 }), is: (id) => tri(id, M.alpineCool), min: 10 },
+    { name: "heath", at: (t) => ({ wind: 0.4 + 0.3 * t }), is: (id) => (id >= M.heathCool && id <= M.heathWarm) || openMoor(id), min: 12 },
+    { name: "forest", at: (t) => ({ moisture: 0.36 + 0.08 * t, region: HOME, hand: 20, y: 4356 }), is: (id) => id === M.floorBroadleaf, min: 3 },
     { name: "reeds", at: (t) => ({ hand: 0.05 + 0.4 * t, slope: 0.005 }), is: (id) => id === M.reeds, min: 4 },
     { name: "scrub", at: (t) => ({ moisture: 0.24 + 0.12 * t }), is: (id) => tri(id, M.scrubCool), min: 8 },
     { name: "sand", at: (t) => ({ shore: 1, e: 0.7 + 1 * t, exposure: 0.1, slope: 0.1, hand: 1 }), is: (id) => id === M.sand, min: 2 },
   ];
   for (const s of sweeps) {
     const row: boolean[] = [];
-    for (let i = 0; i < 400; i++) row.push(s.is(cover(cell({ ...s.at(i / 399), x: 700 + i, y: 4321 }), MASK)));
+    for (let i = 0; i < 400; i++) row.push(s.is(cover(cell({ x: 700 + i, y: 4321, ...s.at(i / 399) }), MASK)));
     const f = flips(row);
     assert.notEqual(row[0], row[399], `${s.name}: the sweep must cross the border`);
     assert.ok(f.length >= 3, `${s.name}: ${f.length} flip(s) is a contour line, not a band`);
@@ -642,7 +717,7 @@ test("without jitter the same sweep flips once: the band comes from the mask", (
   const row: boolean[] = [];
   for (let i = 0; i < 400; i++) {
     const id = cover(cell({ wind: 0.4 + (0.3 * i) / 399, x: 700 + i, y: 4321 }), flat);
-    row.push(id >= M.heathCool && id <= M.moorWarm);
+    row.push((id >= M.heathCool && id <= M.heathWarm) || openMoor(id));
   }
   assert.equal(flips(row).length, 1);
 });

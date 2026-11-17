@@ -85,6 +85,13 @@ export interface CoverInput {
    * negative in corries and valley heads.
    */
   curve?: number;
+  /**
+   * Optional (bake/coverFields.ts): the aspect of the land's form, as
+   * northness is the cell's: −1 faces south … 1 faces north. Gullies do not
+   * turn it, so snow and woods judged on it do not speckle. Without it the
+   * cover uses `northness`.
+   */
+  formNorth?: number;
 }
 
 /** A crown or rock stamped into height and material by the bake. */
