@@ -39,6 +39,32 @@ export interface WorldParams {
   regions: { blend: readonly [number, number] };
   /** S7 hydrology on G (see gen/hydro.ts HydroParams). */
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
+  /** S7 rivers (see gen/rivers.ts RiverParams). Pixel-scale lengths are in cells and never scale. */
+  rivers: {
+    qScale: number;
+    smoothPasses: number;
+    simplify: number;
+    chaikin: number;
+    spacing: number;
+    meanderSlope: number;
+    meanderFade: number;
+    meanderMinWidth: number;
+    omega: readonly [number, number];
+    omegaFullWidth: number;
+    lambdaMin: number;
+    lambdaPerWidth: number;
+    wobble: number;
+    oxbowEvery: number;
+    oxbowMinWidth: number;
+    floorLift: number;
+    floorRise: number;
+    bankBase: number;
+    bankPerWidth: number;
+    fallDrop: number;
+    fallStandout: number;
+    rapidsDrop: number;
+    rapidsMaxCut: number;
+  };
   erode: {
     cSteps: number;
     gSteps: number;
@@ -82,6 +108,35 @@ export function paramsFor(n: number): WorldParams {
     // Tuned 2026-11-17: mean land rain ~0.93, windward up to ~1.9, lee ~0.6.
     // Lakes ≥ 120 cells (7.5 G nodes); a channel drains ≥ 40 node-rains.
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
+    // Tuned 2026-11-17 on the 6400 world, where the largest river carries
+    // ~14 000 node-rains: 420 makes it 6 px and leaves 92 % of channel nodes
+    // at 1 px. Smaller worlds have smaller basins, so the scale shrinks with
+    // them and a test world still grows rivers wide enough to meander.
+    rivers: {
+      qScale: 420 * s,
+      smoothPasses: 3,
+      simplify: 0.75,
+      chaikin: 2,
+      spacing: 1,
+      meanderSlope: 0.012,
+      meanderFade: 3,
+      meanderMinWidth: 2,
+      omega: [0.6, 1.2],
+      omegaFullWidth: 4,
+      lambdaMin: 20,
+      lambdaPerWidth: 12,
+      wobble: 0.45,
+      oxbowEvery: 5,
+      oxbowMinWidth: 3,
+      floorLift: 0.5,
+      floorRise: 0.02,
+      bankBase: 0.5,
+      bankPerWidth: 0.3,
+      fallDrop: 4,
+      fallStandout: 1.6,
+      rapidsDrop: 2,
+      rapidsMaxCut: 6,
+    },
     erode: {
       cSteps: 150,
       gSteps: 60,
