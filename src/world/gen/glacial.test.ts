@@ -141,5 +141,6 @@ test("no seam at the wrap, and the same seed gives the same result", () => {
   assert.deepEqual(again.tarns, out.tarns);
   assert.deepEqual(again.dams, out.dams);
   const other = glacial(h, n, ctx, p, 43);
-  assert.notDeepEqual(other.tarns, out.tarns);
+  // The mini-world's highland has room for one tarn, so another seed may place the same one: compare every feature.
+  assert.notDeepEqual([other.lakes, other.tarns, other.dams], [out.lakes, out.tarns, out.dams]);
 });

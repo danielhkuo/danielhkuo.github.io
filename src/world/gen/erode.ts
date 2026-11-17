@@ -19,6 +19,18 @@ export interface ErodeState {
   rain: Float64Array | null;
   eps: number;
   diffusionSweeps: number;
+  /**
+   * Threshold slope per node, as the greatest drop to the receiver per node of distance, or null for none.
+   * Ground a river has undercut past it fails at once (landslides), so valley sides stand at the threshold
+   * and the crests between two valleys come down with their floors.
+   */
+  sc?: Float64Array | null;
+  /**
+   * The threshold is for a node draining `scArea` nodes; one draining A stands at (scArea / A)^¼ of it, held within
+   * `scRange`. Ribs that drain only themselves stand steeper than the gullies between them, so a face is fluted.
+   */
+  scArea?: number;
+  scRange?: readonly [number, number];
 }
 
 export interface StepStats {
@@ -40,6 +52,9 @@ export function erodeStep(s: ErodeState, dt: number): StepStats {
   const k = s.k;
   const isSea = s.isSea;
   const eps = s.eps;
+  const sc = s.sc ?? null;
+  const scArea = s.scArea ?? 0;
+  const scLo = s.scRange ? s.scRange[0] : 1, scHi = s.scRange ? s.scRange[1] : 1;
   let upliftFlux = 0;
   let erosionFlux = 0;
   for (let p = 0; p < order.length; p++) {
@@ -49,7 +64,16 @@ export function erodeStep(s: ErodeState, dt: number): StepStats {
     const udt = uplift[i]! * dt;
     const F = (k[i]! * dt * Math.sqrt(area[i]!)) / dist[i]!;
     const hr = h[rcv[i]!]!;
-    const hNew = Math.max((hi + udt + F * hr) / (1 + F), hr + eps);
+    let hNew = Math.max((hi + udt + F * hr) / (1 + F), hr + eps);
+    if (sc !== null) {
+      let steep = 1;
+      if (scArea > 0) {
+        steep = Math.sqrt(Math.sqrt(scArea / area[i]!));
+        steep = steep < scLo ? scLo : steep > scHi ? scHi : steep;
+      }
+      const limit = hr + steep * sc[i]! * dist[i]!;
+      if (hNew > limit) hNew = limit;
+    }
     h[i] = hNew;
     upliftFlux += udt;
     erosionFlux += hi + udt - hNew;
@@ -127,6 +151,11 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
     }
   }
 
+  // Threshold slopes by rock, in height per node.
+  const scC = new Float64Array(cCount);
+  const cellsPerC = p.n / cN;
+  for (let i = 0; i < cCount; i++) scC[i] = p.erode.sc[plan.rock[i]!]! * cellsPerC;
+
   const state: ErodeState = {
     n: cN,
     h,
@@ -138,6 +167,9 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
     rain: null,
     eps: p.erode.eps,
     diffusionSweeps: p.erode.diffusionSweeps,
+    sc: scC,
+    scArea: p.erode.scArea / (cellsPerC * cellsPerC),
+    scRange: p.erode.scRange,
   };
 
   let stepsC = 0;
@@ -157,8 +189,23 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
   const gUplift = upsampleBSpline(upliftC, cN, 2);
   const gK = upsampleBSpline(plan.k, cN, 2);
   const gD = upsampleBSpline(plan.d, cN, 2);
+  const gSc = upsampleBSpline(scC, cN, 2);
   const gCount = gN * gN;
-  for (let i = 0; i < gCount; i++) gD[i]! *= 4;
+  // Rock is not uniform: knots and beds of `grain` cells stand steeper and wear slower, weak ones the reverse, so
+  // gullies find their own lines and faces break into crags and benches instead of planes.
+  const grainPeriod = Math.max(1, Math.round(p.n / p.erode.grainCells));
+  const grainAmp = p.erode.grain;
+  for (let y = 0; y < gN; y++) {
+    const fy = (y * grainPeriod) / gN;
+    const row = y * gN;
+    for (let x = 0; x < gN; x++) {
+      const i = row + x;
+      gD[i]! *= 4;
+      const hard = grainAmp * Math.max(-1, Math.min(1, 1.7 * fbm((x * grainPeriod) / gN, fy, grainPeriod, 3, 0.6, seed + 3)));
+      gSc[i]! *= 0.5 * (1 + hard);
+      gK[i]! *= 1 - hard;
+    }
+  }
 
   const noise = p.erode.upsampleNoise;
   for (let y = 0; y < gN; y++) {
@@ -186,6 +233,8 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
   state.k = gK;
   state.d = gD;
   state.isSea = isSea;
+  state.sc = gSc;
+  state.scArea = p.erode.scArea / ((p.n / gN) * (p.n / gN));
   state.jitter = makeJitter(gN, p.erode.jitter, seed + 2);
 
   let steadinessG = 0;
