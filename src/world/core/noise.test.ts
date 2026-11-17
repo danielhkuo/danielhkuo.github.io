@@ -84,3 +84,10 @@ test("isotropic", () => {
   const mean = (e[0] + e[1] + e[2] + e[3]) / 4;
   for (const v of e) assert.ok(Math.abs(v / mean - 1) <= 0.1, `${e.map((v) => (v / mean).toFixed(3))}`);
 });
+
+test("golden: fbm over a 64² grid", async () => {
+  const { sha256Hex } = await import("../testing/sha.ts");
+  const a = new Float64Array(64 * 64);
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) a[y * 64 + x] = fbm(x / 8, y / 8, 8, 6, 0.5, 7);
+  assert.equal(sha256Hex(a), "75bbd37c0977dbb4867633b0149958631142a1ff1e44f4f9f67f7a1844ad26c2");
+});
