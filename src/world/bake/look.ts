@@ -26,6 +26,13 @@ export function stillFlags(): Uint8Array {
   return out;
 }
 
+/** Snow, lit by its true normals. */
+export function snowFlags(): Uint8Array {
+  const out = new Uint8Array(256);
+  out[M.snow] = out[M.snowLate] = 1;
+  return out;
+}
+
 /** The world's look for a world of n cells, drawn through `palette`. */
 export function worldLook(n: number, palette: Palette): Look {
   return {
@@ -34,5 +41,8 @@ export function worldLook(n: number, palette: Palette): Look {
     isWater, isCanopy, palette,
     isStill: stillFlags(),
     noInk: noInkFlags(),
+    isSnow: snowFlags(),
+    turf: M.pastureCool,
+    barSand: M.sandPale,
   };
 }

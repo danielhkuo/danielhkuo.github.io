@@ -10,7 +10,7 @@
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { buildTile, F_CANOPY, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
-import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
+import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkCrests, inkOcclusion, newPainted, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
 import { imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint } from "./lines.ts";
@@ -258,6 +258,7 @@ export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles
   drawMarks(world, p);
   inkOcclusion(p);
   inkCliffs(p, look.isStill ?? look.isWater);
+  inkCrests(p);
   hatch(p, mask);
   return pack(p, look, mask, MX, MT, w, h);
 }

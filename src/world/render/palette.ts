@@ -42,7 +42,10 @@ export const TERRAIN_CHROMA_CAP = 0.09;
 
 const INK: Lch = [0.24, 0.03, 60];
 const PAPER: Lch = [0.955, 0.02, 90];
-const SNOW: Lch = [0.965, 0.008, 250];
+/** Flat snow is a hair warm, so the light end of its ramp is cream and only its shade is blue. */
+const SNOW: Lch = [0.962, 0.006, 100];
+/** Snow: a long, even fall into blue shade and a short rise to cream. */
+const SNOWY = { drop: 0.3, rise: 0.7, cool: 0.07, warm: 0.045, ramp: "land" } as const;
 
 const RAD = Math.PI / 180;
 
@@ -200,8 +203,8 @@ function buildSpecs(): Spec[] {
   set(M.shingle, all([0.8, 0.015, 85]), STONE);
 
   // Snow; late snow melts to fellfield in summer.
-  set(M.snow, all(SNOW), PALE);
-  set(M.snowLate, [SNOW, [0.73, 0.03, 118], SNOW, SNOW], PALE);
+  set(M.snow, all(SNOW), SNOWY);
+  set(M.snowLate, [SNOW, [0.73, 0.03, 118], SNOW, SNOW], SNOWY);
 
   // Rock.
   set(M.rockHard, all([0.68, 0.012, 265]), STONE);

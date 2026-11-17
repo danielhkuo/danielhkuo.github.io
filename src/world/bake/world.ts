@@ -33,6 +33,37 @@ export interface RiverIndex {
   segments: Uint32Array;
 }
 
+/** A closed polygon in cells, in its own unwrapped frame (wrap by n): even-odd fill, no repeated closing vertex. */
+export interface Patch {
+  /** x, y per vertex, quarter-cell snapped. */
+  outline: Float32Array;
+  /** Bounding box in whole cells: [x0, x1) × [y0, y1). */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Ponds: the height of the still water. */
+  level: number;
+}
+
+/** A patch from an outline; a closing vertex that repeats the first is dropped. */
+export function patchOf(outline: ArrayLike<number>, level: number): Patch {
+  let m = Math.floor(outline.length / 2);
+  if (m > 1 && outline[0] === outline[2 * m - 2] && outline[1] === outline[2 * m - 1]) m--;
+  const v = new Float32Array(2 * m);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < m; k++) {
+    const x = outline[2 * k], y = outline[2 * k + 1];
+    v[2 * k] = x;
+    v[2 * k + 1] = y;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  return { outline: v, x0: Math.floor(x0), y0: Math.floor(y0), x1: Math.floor(x1) + 1, y1: Math.floor(y1) + 1, level };
+}
+
 export interface BakeWorld {
   /** Cells a side; a multiple of 256. */
   n: number;
@@ -64,6 +95,10 @@ export interface BakeWorld {
   rivers: RiverIndex;
   /** Waterfalls: x, y (cells), drop (units) each. */
   falls: Float32Array;
+  /** Oxbow ponds: still water with a soft shore. */
+  ponds?: readonly Patch[];
+  /** Point bars: pale sand inside large bends. */
+  bars?: readonly Patch[];
 
   // --- C grid, cN² each ---
   moisture: Float32Array;
@@ -218,7 +253,8 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     if (r.order <= 1 && reachLength(r.vertices) < MIN_STREAM) continue;
     lines.push({ vertices: r.endsIn === "sea" ? runToSea(r.vertices, ground, gN) : r.vertices, stride: 4 });
   }
-  // Oxbows are not drawn until the rivers stage hands over pond polygons.
+  const ponds = rivers.oxbows.filter((o) => o.outline.length >= 6).map((o) => patchOf(o.outline, o.level));
+  const bars = rivers.bars.filter((b) => b.outline.length >= 6).map((b) => patchOf(b.outline, 0));
 
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,
@@ -228,6 +264,7 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     stamps: land.stamps,
     rivers: riverIndex(lines, n),
     falls: Float32Array.from(rivers.falls.flatMap((f) => [f.x, f.y, f.drop])),
+    ponds, bars,
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
     built: settlement ? indexBuilt(settlement.built, n) : undefined,
