@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyStamps, applyStampsTo, type CoveStamp, coveAt, inCove, type Stamp, stampReach } from "./stamps.ts";
+import { applyStamps, applyStampsTo, type CoveStamp, coveAt, type CreekStamp, inCove, inCreek, type Stamp, stampReach } from "./stamps.ts";
 
 const cut: Stamp = { kind: "cut", x: 100, y: 100, r: 20, level: -2, fall: 0.1, cap: 12, slope: 0.8, reach: 40 };
 const stack: Stamp = { kind: "stack", x: 60, y: 140, r: 6, top: 18, ux: 1, uy: 0, lobe: 0, apron: 3 };
@@ -193,6 +193,115 @@ test("a delta builds a low fan into the sea, split by its distributaries, with s
   assert.equal(at(h, n, 10, 20), -20);
   // Land behind the mouth is not touched.
   assert.equal(at(h, n, 60, 110), 3);
+});
+
+// ── The low shore: strand, berm, ledge, creek ───────────────────────────────
+
+// The waterline through (60, 100), sea to the west.
+const strand: Stamp = { kind: "strand", x: 60, y: 100, nx: -1, ny: 0, r: 5, slope: 0.04 };
+const berm: Stamp = { kind: "berm", x: 40, y: 40, inner: 10, outer: 15, top: 1.45 };
+const ledge: Stamp = { kind: "ledge", x: 40, y: 150, land: 3, base: 0.45, rise: 0.5 / 3, shelf: 8, shelfSlope: 0.04 };
+// A creek with its mouth at (40, 100), winding east.
+const creek: CreekStamp = { kind: "creek", x: 40, y: 100, ax: 1, ay: 0, len: 40, width: 1.4, top: 1.6, seed: 31 };
+const LOW: Stamp[] = [creek, beach, strand, ledge, berm];
+
+test("a strand cuts the land seaward of its line to shallow water and nothing else", () => {
+  const n = 200, h = field(n, 5);
+  applyStamps(h, n, 1, [strand]);
+  for (let y = 90; y < 110; y++) for (let x = 45; x < 75; x++) {
+    const dx = x + 0.5 - 60, dy = y + 0.5 - 100, v = at(h, n, x, y);
+    if (dx < 0 && dx * dx + dy * dy <= 25) assert.ok(v < 0 && v > -0.3 && Math.abs(v + 0.03 - 0.04 * dx) < 1e-9, `(${x}, ${y}) ${v}`);
+    else assert.equal(v, 5, `(${x}, ${y})`);
+  }
+  // Water is left alone.
+  const sea = new Float64Array(n * n).fill(-7);
+  applyStamps(sea, n, 1, [strand]);
+  for (let i = 0; i < sea.length; i++) assert.equal(sea[i], -7);
+});
+
+test("a berm ends the sand on a ring where the land behind lies as low as the beach", () => {
+  const n = 200, h = field(n, 0.5);
+  // A second beach along the shore: its sand overlaps the first one's berm.
+  const next: Stamp = { ...beach, y: 52 };
+  applyStamps(h, n, 1, [berm, beach, next]);
+  let ring = 0;
+  for (let y = 20; y < 75; y++) for (let x = 40; x < 60; x++) {
+    const d = Math.hypot(x + 0.5 - 40, y + 0.5 - 40), d2 = Math.hypot(x + 0.5 - 40, y + 0.5 - 52), v = at(h, n, x, y);
+    if (d <= 10 || d2 <= 10) assert.ok(v >= 0.5 && v < 1.1, `sand at (${x}, ${y}) stands at ${v}`);
+    else if (d <= 15) { assert.equal(v, 1.45, `berm at (${x}, ${y})`); ring++; }
+    else assert.equal(v, 0.5);
+  }
+  assert.ok(ring > 30);
+  // Ground that already stands higher, and the sea, are left alone.
+  const high = field(n, 9);
+  applyStamps(high, n, 1, [berm]);
+  assert.deepEqual(high, field(n, 9));
+});
+
+test("a ledge is a narrow strand of shingle: cut like a beach, three cells wide", () => {
+  const n = 200, h = field(n, 6);
+  applyStamps(h, n, 1, [ledge]);
+  assert.ok(Math.abs(at(h, n, 41, 150) - (0.45 + (0.5 / 3) * Math.hypot(1.5, 0.5))) < 1e-9);
+  assert.ok(at(h, n, 42, 150) < 0.95);
+  assert.equal(at(h, n, 44, 150), 6);
+  assert.ok(at(h, n, 38, 150) > -0.04 * 2 && at(h, n, 38, 150) < 0, "a shelf off the strand");
+});
+
+test("a creek winds inland from its mouth and branches, cut only into low ground", () => {
+  const n = 200, h = field(n, 0.8);
+  applyStamps(h, n, 1, [creek]);
+  let wet = 0;
+  const rows = new Set<number>();
+  for (let y = 0; y < n; y++) for (let x = 40; x < n; x++) {
+    if (at(h, n, x, y) > 0) continue;
+    wet++;
+    rows.add(y);
+    assert.ok(inCreek(creek, x + 0.5 - 40, y + 0.5 - 100));
+    assert.ok(x < 40 + 40 && Math.abs(y - 100) < 30, `creek water at (${x}, ${y})`);
+  }
+  assert.ok(wet > 60 && wet < 400, `${wet} creek cells`);
+  assert.ok(rows.size >= 12, "branches reach to either side of the stem");
+  // The stem does not break: every column of its length holds water.
+  for (let x = 40; x < 78; x++) {
+    let any = false;
+    for (let y = 80; y < 120 && !any; y++) any = at(h, n, x, y) < 0;
+    assert.ok(any, `the creek breaks at x = ${x}`);
+  }
+  // Another seed, another creek.
+  const other = field(n, 0.8);
+  applyStamps(other, n, 1, [{ ...creek, seed: 32 }]);
+  assert.notDeepEqual(other, h);
+  // Ground above its top is not cut: the creek ends where the marsh does.
+  const high = field(n, 2);
+  applyStamps(high, n, 1, [creek]);
+  assert.deepEqual(high, field(n, 2));
+});
+
+test("creeks and berms are finer than a node: only a grid of cells takes them", () => {
+  const coarse = new Float64Array(50 * 50).fill(0.8), before = coarse.slice();
+  applyStamps(coarse, 50, 4, [creek, berm]);
+  assert.deepEqual(coarse, before);
+});
+
+test("the low shore's stamps are idempotent, keep within reach, and do not depend on list order", () => {
+  const n = 200, once = field(n, 0.8), twice = field(n, 0.8), shuffled = field(n, 0.8);
+  applyStamps(once, n, 1, LOW);
+  applyStamps(twice, n, 1, LOW);
+  applyStamps(twice, n, 1, LOW);
+  applyStamps(shuffled, n, 1, [...LOW].reverse());
+  assert.deepEqual(twice, once);
+  assert.deepEqual(shuffled, once);
+  for (const s of LOW) {
+    const land = new Float64Array(n * n).fill(0.8), sea = new Float64Array(n * n).fill(-20);
+    const moved = { ...s, x: 100, y: 100 } as Stamp;
+    applyStamps(land, n, 1, [moved]);
+    applyStamps(sea, n, 1, [moved]);
+    const reach = stampReach(moved);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      if (land[y * n + x] === 0.8 && sea[y * n + x] === -20) continue;
+      assert.ok(Math.hypot(x + 0.5 - 100, y + 0.5 - 100) <= reach + 1e-9, `${s.kind} reaches (${x}, ${y})`);
+    }
+  }
 });
 
 test("a mouth changes nothing", () => {

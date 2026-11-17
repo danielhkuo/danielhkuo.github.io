@@ -119,6 +119,60 @@ export interface DeltaStamp {
   seed: number;
 }
 
+/** Ledge: a strand of shingle on a low rocky shore. Cut like a beach, but narrow, and kept apart so sand can be told from stone. */
+export interface LedgeStamp extends Omit<BeachStamp, "kind"> {
+  kind: "ledge";
+}
+
+/**
+ * Berm: the low ridge the sea throws up at the back of a beach or a shingle strand. Ground
+ * between `inner` and `outer` of (x, y) is raised to `top`, so the sand ends on a line at cell
+ * size even where the land behind lies as low as the beach. Beach and ledge stamps are applied
+ * after it and win where they overlap. Only the bake's cells see it: on the generator's grid it would dam every stream.
+ */
+export interface BermStamp {
+  kind: "berm";
+  x: number;
+  y: number;
+  inner: number;
+  outer: number;
+  top: number;
+}
+
+/**
+ * Strand: the waterline at one shore node. Land within r of (x, y) on the seaward side of the
+ * line through it (normal (nx, ny), pointing to sea) is cut to shallow water, so the shore
+ * follows a smooth line at cell size and not the outline of the nodes.
+ */
+export interface StrandStamp {
+  kind: "strand";
+  x: number;
+  y: number;
+  nx: number;
+  ny: number;
+  r: number;
+  /** The bed falls away from the line at this slope. */
+  slope: number;
+}
+
+/**
+ * Creek: a tidal channel through saltmarsh. (x, y) is its mouth on the shore and (ax, ay) points
+ * inland. A winding stem `len` long with three branches, cut only into ground under `top`, so it
+ * ends where the marsh does. It is narrower than a node: only the bake's cells see it.
+ */
+export interface CreekStamp {
+  kind: "creek";
+  x: number;
+  y: number;
+  ax: number;
+  ay: number;
+  len: number;
+  /** Half-width at the mouth, cells. */
+  width: number;
+  top: number;
+  seed: number;
+}
+
 /** River mouth, recorded for the river stage; it does not change heights. */
 export interface MouthStamp {
   kind: "mouth";
@@ -132,7 +186,7 @@ export interface MouthStamp {
   form: "delta" | "estuary" | "plain";
 }
 
-export type Stamp = CutStamp | StackStamp | CoveStamp | BeachStamp | EstuaryStamp | DeltaStamp | MouthStamp;
+export type Stamp = CutStamp | StackStamp | CoveStamp | BeachStamp | EstuaryStamp | DeltaStamp | StrandStamp | LedgeStamp | BermStamp | CreekStamp | MouthStamp;
 
 /** Past the shelf the beach's sea bed falls away this many times faster, down to the open bathymetry. */
 const SHELF_DROP = 4;
@@ -155,6 +209,14 @@ const FLATS = 1.8;
 const FLATS_RISE = 0.08;
 /** A delta's silt apron: its centre along the axis and its radius, in fan radii, and its depth at the rim. */
 const PRODELTA: readonly [number, number, number] = [0.5, 1.2, 3.5];
+/** Water at a strand's line and in a creek is this deep. */
+const STRAND_DEPTH = 0.03;
+const CREEK_DEPTH = 0.12;
+/** A creek's stem wanders this share of its length to either side; a branch leaves it at about 55°. */
+const CREEK_WANDER = 0.16;
+const CREEK_TURN: readonly [number, number] = [0.574, 0.819];
+/** A creek is never narrower than this half-width, so it does not break between cells. */
+const CREEK_MIN = 0.55;
 
 export interface StampGrid {
   /** Grid size in nodes. */
@@ -191,11 +253,18 @@ export function stampReach(s: Stamp): number {
     case "cove":
       return Math.max(s.len, s.tail) + 2 * s.width;
     case "beach":
+    case "ledge":
       return Math.max(s.land, (DEEP / s.shelfSlope + SHELF_DROP * s.shelf) / (1 + SHELF_DROP));
     case "estuary":
       return s.len + FLATS * 1.3 * s.sea;
     case "delta":
       return s.r * (PRODELTA[0] + PRODELTA[1]);
+    case "strand":
+      return s.r;
+    case "berm":
+      return s.outer;
+    case "creek":
+      return 1.2 * s.len + s.width + 1;
     default:
       return 0;
   }
@@ -230,6 +299,29 @@ export function coveAt(s: CoveStamp, dx: number, dy: number): { u: number; q: nu
 export function inCove(s: CoveStamp, px: number, py: number, period: number, grow: number): boolean {
   const c = coveAt(s, torusDelta(s.x, px, period), torusDelta(s.y, py, period));
   return c.q < grow && c.u > -0.5 * s.tail;
+}
+
+/** True when a point (dx, dy from the creek's mouth) lies in its stem or in one of its branches. */
+export function inCreek(s: CreekStamp, dx: number, dy: number): boolean {
+  const u = dx * s.ax + dy * s.ay;
+  if (u < -s.width || u > s.len) return false;
+  const v = dy * s.ax - dx * s.ay;
+  const centre = (w: number): number => CREEK_WANDER * s.len * wobble((3 * w) / s.len, 0, s.seed) * smooth((3 * w) / s.len);
+  const t = Math.max(0, u) / s.len;
+  if (Math.abs(v - centre(Math.max(0, u))) < Math.max(CREEK_MIN, s.width * (1 - 0.6 * t))) return true;
+  for (let k = 0; k < 3; k++) {
+    const u0 = s.len * (0.2 + 0.22 * k);
+    const side = (hash2(k, 7, s.seed) & 1) === 0 ? 1 : -1;
+    const len = s.len * (0.45 - 0.08 * k);
+    const ru = u - u0;
+    const rv = v - centre(u0);
+    const bu = ru * CREEK_TURN[0] + side * rv * CREEK_TURN[1];
+    if (bu <= 0 || bu >= len) continue;
+    const bv = side * rv * CREEK_TURN[0] - ru * CREEK_TURN[1];
+    const q = bu / len;
+    if (Math.abs(bv - 0.2 * len * wobble(3 * q, k + 1, s.seed) * smooth(3 * q)) < Math.max(CREEK_MIN, 0.8 * s.width * (1 - 0.7 * q))) return true;
+  }
+  return false;
 }
 
 /** New height of ground at height h, offset (dx, dy) cells from the stamp. */
@@ -267,7 +359,8 @@ function stamped(s: Stamp, h: number, dx: number, dy: number): number {
       if (u > front) return h > 0 ? Math.min(h, 0.4 + COVE_ROCK[1] * (u - front)) : h;
       return Math.min(h, -(COVE_MIN + (s.depth - COVE_MIN) * (1 - Math.max(0, u) / front)));
     }
-    case "beach": {
+    case "beach":
+    case "ledge": {
       const d = Math.sqrt(dx * dx + dy * dy);
       if (h > 0) return d <= s.land ? Math.min(h, s.base + s.rise * d) : h;
       return Math.max(h, -s.shelfSlope * (d + SHELF_DROP * Math.max(0, d - s.shelf)));
@@ -310,13 +403,25 @@ function stamped(s: Stamp, h: number, dx: number, dy: number): number {
       if (dc >= PRODELTA[1] * s.r) return h;
       return Math.max(h, -(COVE_MIN + PRODELTA[2] * smooth((dc - 0.45 * s.r) / ((PRODELTA[1] - 0.45) * s.r))));
     }
+    case "strand": {
+      if (h <= 0 || dx * dx + dy * dy > s.r * s.r) return h;
+      const u = dx * s.nx + dy * s.ny;
+      return u > 0 ? -(STRAND_DEPTH + s.slope * u) : h;
+    }
+    case "berm": {
+      if (h <= 0 || h >= s.top) return h;
+      const d2 = dx * dx + dy * dy;
+      return d2 > s.inner * s.inner && d2 <= s.outer * s.outer ? s.top : h;
+    }
+    case "creek":
+      return h > 0 && h < s.top && inCreek(s, dx, dy) ? -CREEK_DEPTH : h;
     default:
       return h;
   }
 }
 
 /** Kinds are applied in this order whatever the order of the list. */
-const ORDER: readonly Stamp["kind"][] = ["cut", "estuary", "cove", "beach", "delta", "stack"];
+const ORDER: readonly Stamp["kind"][] = ["strand", "cut", "estuary", "cove", "berm", "ledge", "beach", "delta", "creek", "stack"];
 
 function applyOne(h: Float64Array | Float32Array, g: StampGrid, s: Stamp, sx: number, sy: number, wrapX: boolean, wrapY: boolean): void {
   const c = g.cellsPerNode;
@@ -354,6 +459,8 @@ export function applyStampsTo(h: Float64Array | Float32Array, g: StampGrid, stam
   const wrapX = spanX === g.period;
   const wrapY = spanY === g.period;
   for (const kind of ORDER) {
+    // Creeks and berms are narrower than a node: a coarse grid would only catch them here and there.
+    if ((kind === "creek" || kind === "berm") && g.cellsPerNode > 1) continue;
     for (const s of stamps) {
       if (s.kind !== kind) continue;
       const reach = stampReach(s);

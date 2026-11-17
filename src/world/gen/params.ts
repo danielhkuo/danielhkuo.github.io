@@ -122,8 +122,8 @@ export interface WorldParams {
     /** Shores facing within 60° of east or west (|facing·east| > gateCos), or north, are capped at gateCap. */
     gateCap: number;
     gateCos: number;
-    /** Land behind a cap may rise from it at this slope. */
-    capSlope: number;
+    /** Land behind a cap may rise from it at a slope in this range, varying along the shore. Kept clear of 0.8, the camera's row factor: a face at that slope draws as one ruled line. */
+    capSlope: readonly [number, number];
     /** A cut shore at least this tall is classed cliff; lower is rocky shore. */
     minCliff: number;
     stackArea: readonly [number, number];
@@ -150,7 +150,50 @@ export interface WorldParams {
     coveSpacing: number;
     /** Smallest drainage (cells²) that counts as a channel at the coast. */
     channelArea: number;
+    /**
+     * S6.0 The sea evens out a soft shore: the land mask is blurred over r[0] and r[1] cells and the shore follows the
+     * blur where `rock` (hard, medium, soft) and a noise of `noiseCells` allow; the noise maps [noise[0], noise[1]] to
+     * none … all, times `region` per archetype (home, highland, slate, lakes, karst, skerry). Water shallower than `fill` silts up to ground[0]…ground[1]; land lower than `trim` is lost to a bed `bed` deep.
+     */
+    even: { r: readonly [number, number]; rock: readonly [number, number, number]; region: readonly number[]; noiseCells: number; noise: readonly [number, number]; fill: number; trim: number; ground: readonly [number, number]; bed: number };
+    /** Sea share is also taken within bayR, for the small bays and points headlandR misses. */
+    bayR: number;
+    /** A shore more convex than this (0 straight, 1 a point in open water) is a tip: it holds no sand. */
+    tip: number;
+    /** A shore more exposed than beachE holds no sand; a bay head may be beachBay more exposed. */
     beachE: number;
+    beachBay: number;
+    /** Sand is a score: bay head, shelter, the sea's supply (a noise of sandCells), a river beside it, rock (hard, medium, soft), region; less `mud` where marsh would grow. */
+    sandScore: { bay: number; shelter: number; supply: number; fed: number; rock: readonly [number, number, number]; region: number; mud: number };
+    sandCells: number;
+    /** Width of the sand, inland from the waterline: least and greatest. Its back stands at beachTop. */
+    beachWidth: readonly [number, number];
+    beachTop: number;
+    /** The berm behind the sand: its width, and how far it stands over beachTop. */
+    berm: readonly [number, number];
+    /** A low rocky shore's shingle strand: its width, the height at the water and at its back, the bank behind it, and its shelf. */
+    ledge: { width: number; base: number; top: number; bank: number; shelf: number };
+    /** A low tip is a rock ledge in hard or medium rock, or where it is more exposed than ledgeE. */
+    ledgeE: number;
+    /** A shore with no sand, more exposed than shingleE, is a shingle strand where a noise passes `shingle`. */
+    shingleE: number;
+    shingle: number;
+    /** Dunes stand behind a beach at least duneBeach wide and at least duneE exposed, on ground under duneTop; the band is duneWidth wide. */
+    duneE: number;
+    duneBeach: number;
+    duneWidth: readonly [number, number];
+    duneTop: number;
+    /** Saltmarsh: a shore no more exposed than marshE and no steeper than marshSlope, and ground within marshReach of it no higher than marshTop. */
+    marshE: number;
+    marshSlope: number;
+    marshReach: number;
+    marshTop: number;
+    /** Tidal creeks through the marsh: least distance apart, length, and half-width at the mouth. */
+    creekSpacing: number;
+    creekLen: readonly [number, number];
+    creekWidth: number;
+    /** shoreDist, sandWidth and duneWidth are set within this many cells of the shore. */
+    shoreReach: number;
     beachSlope: number;
     /** A channel draining at least beachFeedArea (cells²) feeds sand to shores within beachMouth cells of its mouth; they may be as steep as beachFed. */
     beachFed: number;
@@ -158,8 +201,8 @@ export interface WorldParams {
     beachMouth: number;
     /** Multiplier on both slope limits per archetype: home, highland, slate, lakes, karst, skerry. */
     beachRegion: readonly number[];
-    beachLand: number;
     beachBase: number;
+    /** Slope of the sand at the back of a cove. */
     beachRise: number;
     shelf: number;
     shelfSlope: number;
@@ -283,7 +326,7 @@ export function paramsFor(n: number): WorldParams {
       cliffCap: 45,
       gateCap: 12,
       gateCos: 0.5,
-      capSlope: 0.8 / s,
+      capSlope: [0.5 / s, 0.72 / s],
       minCliff: 5,
       stackArea: [8 * s * s, 120 * s * s],
       stackNoise: 0.8,
@@ -301,13 +344,37 @@ export function paramsFor(n: number): WorldParams {
       coveArea: 2000 * s * s,
       coveSpacing: 260 * s,
       channelArea: 1024 * s * s,
+      even: { r: [16 * s, 44 * s], rock: [0.8, 0.9, 1], region: [0.45, 1, 1, 1, 1, 0], noiseCells: 300 * s, noise: [0.25, 0.6], fill: 3, trim: 3, ground: [0.3, 1.1], bed: 0.3 },
+      bayR: 20 * s,
+      tip: 0.2,
       beachE: 0.35,
+      beachBay: 0.07,
+      sandScore: { bay: 0.5, shelter: 0.25, supply: 0.55, fed: 0.2, rock: [0, 0.05, 0.12], region: 0.15, mud: 0.7 },
+      sandCells: 360 * s,
+      beachWidth: [2.5 * s, 12 * s],
+      beachTop: 1.1,
+      berm: [5 * s, 0.35],
+      ledge: { width: 3 * s, base: 0.45, top: 0.95, bank: 1.85, shelf: 8 * s },
+      ledgeE: 0.25,
+      shingleE: 0.15,
+      shingle: 0.2,
+      duneE: 0.14,
+      duneBeach: 8 * s,
+      duneWidth: [6 * s, 18 * s],
+      duneTop: 4,
+      marshE: 0.1,
+      marshSlope: 0.06 / s,
+      marshReach: 28 * s,
+      marshTop: 1.2,
+      creekSpacing: 48 * s,
+      creekLen: [18 * s, 44 * s],
+      creekWidth: 1.4 * s,
+      shoreReach: 64 * s,
       beachSlope: 0.15 / s,
       beachFed: 0.3 / s,
       beachFeedArea: 8000 * s * s,
       beachMouth: 40 * s,
       beachRegion: [2, 0.8, 1, 1, 1, 1],
-      beachLand: 10 * s,
       beachBase: 0.6,
       beachRise: 0.05 / s,
       shelf: 30 * s,

@@ -23,9 +23,14 @@ export interface Land {
   /** The same before coast stamps: the bake upsamples this and stamps at cell size. */
   base: Float64Array;
   isSea: Uint8Array;
-  /** Coastal exposure 0–1 and shore class (0 none, 1 beach, 2 rocky, 3 cliff, 4 cove) on G. */
+  /** Coastal exposure 0–1 and shore class (0 none, 1 beach, 2 rocky, 3 cliff, 4 cove, 5 dune, 6 saltmarsh) on G. */
   exposure: Float32Array;
   shoreClass: Uint8Array;
+  /** Smooth fields on G for drawing shore bands at cell size (see CoastResult): signed distance to the waterline, sand and dune widths in cells, and saltmarsh 0–1. */
+  shoreDist: Float32Array;
+  sandWidth: Float32Array;
+  duneWidth: Float32Array;
+  marsh: Float32Array;
   /** Coast stamps (cliff cuts, stacks, coves, beaches, mouths), in cells. */
   stamps: Stamp[];
   glacial: { lakes: GlacialFeature[]; tarns: GlacialFeature[]; dams: GlacialFeature[] };
@@ -74,6 +79,7 @@ export function makeLand(p: WorldParams, seed: number): Land {
   return {
     p, seed, plan, g: co.h, base: co.base, isSea: co.isSea, debris: t.debris, rock,
     exposure: co.exposure, shoreClass: co.shoreClass, stamps: co.stamps,
+    shoreDist: co.shoreDist, sandWidth: co.sandWidth, duneWidth: co.duneWidth, marsh: co.marsh,
     glacial: { lakes: gl.lakes, tarns: gl.tarns, dams: gl.dams },
     steps: { stepsC: r.stepsC, steadinessC: r.steadinessC, steadinessG: r.steadinessG, capScale },
   };
