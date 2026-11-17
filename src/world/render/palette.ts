@@ -1,6 +1,6 @@
-// The paint. For every material a 16-tone ramp built in OKLab: bluer and
-// cooler in shade, warmer in light. Shadow bits darken toward a blue-violet
-// shadow; ink bits mix toward a warm sepia-black. Time of day, season and
+// The paint. For every material a 16-tone ramp built in OKLab: cooler in shade
+// (teal under leaves, violet on stone and snow), warmer in light. Shadow bits
+// darken toward a blue-violet shadow that never reaches black; ink bits mix toward a warm sepia-black. Time of day, season and
 // overcast are transforms of the whole table, so the frame loop is a lookup:
 // out = PAL[(mat << 8) | light].
 //
@@ -42,10 +42,10 @@ export const TERRAIN_CHROMA_CAP = 0.09;
 
 const INK: Lch = [0.24, 0.03, 60];
 const PAPER: Lch = [0.955, 0.02, 90];
-/** Flat snow is a hair warm, so the light end of its ramp is cream and only its shade is blue. */
-const SNOW: Lch = [0.962, 0.006, 100];
-/** Snow: a long, even fall into blue shade and a short rise to cream. */
-const SNOWY = { drop: 0.3, rise: 0.7, cool: 0.07, warm: 0.045, ramp: "land" } as const;
+/** Snow is a cool blue-white wash, never the paper's cream: a shade bluer than the sky leaves it, and lighter than any sand. */
+const SNOW: Lch = [0.945, 0.02, 245];
+/** Snow: a long, even fall into blue-violet shade and a short rise to clean white. Its light takes no yellow. */
+const SNOWY = { drop: 0.3, rise: 0.75, cool: 0.068, coolHue: 272, warm: 0, ramp: "land" } as const;
 
 const RAD = Math.PI / 180;
 
@@ -145,6 +145,8 @@ interface Spec {
   rise: number;
   /** Chroma of the blue added in shade. */
   cool: number;
+  /** Hue of that shade colour; 265 (blue-violet) when absent. Vegetation shades toward teal, stone and snow toward violet. */
+  coolHue?: number;
   /** Chroma of the yellow added in light; 0.034 when absent. Rock warms to buff where lit. */
   warm?: number;
   /** "land" ramps run shade → light; "depth" ramps run shore → deep; "flow" ramps cycle. */
@@ -173,9 +175,10 @@ function evergreen(c: Lch): Seasons {
   return [[c[0] + 0.015, c[1] + 0.008, c[2] - 3], c, [c[0] - 0.005, c[1] - 0.004, c[2]], [c[0] - 0.02, c[1] - 0.012, c[2] + 6]];
 }
 
-const LAND = { drop: 0.46, rise: 0.5, cool: 0.05, ramp: "land" } as const;
-const CANOPY = { drop: 0.52, rise: 0.5, cool: 0.05, ramp: "land" } as const;
-const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, warm: 0.075, ramp: "land" } as const;
+// Vegetation shades toward teal and lights toward gold; stone and snow shade toward violet.
+const LAND = { drop: 0.5, rise: 0.58, cool: 0.055, coolHue: 238, warm: 0.046, ramp: "land" } as const;
+const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, ramp: "land" } as const;
+const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, coolHue: 278, warm: 0.075, ramp: "land" } as const;
 const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
 const LINE = { drop: 0.2, rise: 0.3, cool: 0.02, ramp: "land" } as const;
 
@@ -435,9 +438,15 @@ function applyGrade(c: Lab, g: Grade, overcast: number): Lab {
 
 // ---------------------------------------------------------------------------
 
-const SHADE_BLUE = lab([1, 1, 265]);
 const LIGHT_YELLOW = lab([1, 1, 95]);
-const SHADOW_VIOLET = lab([1, 0.045, 285]);
+const SHADOW_VIOLET = lab([1, 0.055, 285]);
+/** No shade or shadow falls below this lightness by much: darks are colour, and stay clear of the ink. */
+const DARK_KNEE = 0.36;
+
+/** Compresses the darks under DARK_KNEE, so the deepest shadow on the darkest wood is still a colour. */
+function liftDark(c: Lab): Lab {
+  return c[0] >= DARK_KNEE ? c : [DARK_KNEE - (DARK_KNEE - c[0]) * 0.42, c[1], c[2]];
+}
 
 /** The 16 tones of one material, before shadow and ink. */
 function ramp(spec: Spec, season: number): Lab[] {
@@ -463,16 +472,20 @@ function ramp(spec: Spec, season: number): Lab[] {
     out[15] = [0.975, base[1] * 0.22, base[2] * 0.22];
     return out;
   }
+  const blue = lab([1, 1, spec.coolHue ?? 265]);
   const shade: Lab = [
     base[0] * (1 - spec.drop),
-    base[1] * 0.9 + spec.cool * SHADE_BLUE[1],
-    base[2] * 0.9 + spec.cool * SHADE_BLUE[2],
+    base[1] * 0.9 + spec.cool * blue[1],
+    base[2] * 0.9 + spec.cool * blue[2],
   ];
   const light: Lab = [
     Math.min(0.99, base[0] + (1 - base[0]) * spec.rise + 0.02),
     base[1] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[1],
     base[2] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[2],
   ];
+  // The gold of the light never pushes a strong green to a game green.
+  const lc = Math.sqrt(light[1] * light[1] + light[2] * light[2]);
+  if (lc > 0.125) { light[1] *= 0.125 / lc; light[2] *= 0.125 / lc; }
   for (let t = 0; t < 16; t++) {
     out[t] = t <= FLAT_TONE
       ? mix(shade, base, Math.pow(t / FLAT_TONE, 0.9))
@@ -483,7 +496,10 @@ function ramp(spec: Spec, season: number): Lab[] {
 
 function shadowed(c: Lab, depth: number, overcast: number): Lab {
   if (depth === 0) return c;
-  const target: Lab = [c[0] * 0.52, c[1] * 0.7 + SHADOW_VIOLET[1], c[2] * 0.7 + SHADOW_VIOLET[2]];
+  // In the darks the colour stays what it was, a dark teal under trees: the lift leaves a shadow little lightness to darken with.
+  const v = smooth((c[0] - 0.3) / 0.25);
+  const k = 1 - 0.3 * v;
+  const target: Lab = [c[0] * 0.52, c[1] * k + v * SHADOW_VIOLET[1], c[2] * k + v * SHADOW_VIOLET[2]];
   return mix(c, target, SHADOW_MIX[depth] * (1 - 0.5 * overcast));
 }
 
@@ -500,7 +516,12 @@ export function buildPalette(o: PaletteOptions): Palette {
   const tones: Lab[][][] = new Array(MATERIAL_COUNT);
   for (let mat = 0; mat < MATERIAL_COUNT; mat++) {
     const r = ramp(SPECS[mat], o.season);
-    tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c) => applyGrade(shadowed(c, depth, overcast), g, overcast)));
+    // Water keeps its own depth ramp; land darks are lifted once, after shade and shadow have both been laid.
+    const land = SPECS[mat].ramp === "land";
+    tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c) => {
+      const s = shadowed(c, depth, overcast);
+      return applyGrade(land ? liftDark(s) : s, g, overcast);
+    }));
   }
 
   // Lift the river until it clears every vegetation it may cross, at each shadow depth.

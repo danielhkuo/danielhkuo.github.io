@@ -33,6 +33,16 @@ export function snowFlags(): Uint8Array {
   return out;
 }
 
+/** The light washes: meadow, mown and ripe fields, dune grass. Paper shows through them in flecks. */
+export function washFlags(): Uint8Array {
+  const out = new Uint8Array(256);
+  for (const m of [
+    M.meadowCool, M.meadowMid, M.meadowWarm, M.wheat, M.barley, M.hay, M.ley, M.stubble,
+    M.wheatRow, M.barleyRow, M.hayRow, M.leyStripe, M.stubbleRow, M.duneGrass,
+  ]) out[m] = 1;
+  return out;
+}
+
 /** The world's look for a world of n cells, drawn through `palette`. */
 export function worldLook(n: number, palette: Palette): Look {
   return {
@@ -42,6 +52,7 @@ export function worldLook(n: number, palette: Palette): Look {
     isStill: stillFlags(),
     noInk: noInkFlags(),
     isSnow: snowFlags(),
+    isWash: washFlags(),
     turf: M.pastureCool,
     barSand: M.sandPale,
   };

@@ -151,13 +151,21 @@ test("shadow darkens, toward blue-violet, never to black", () => {
     for (let shadow = 1; shadow < 4; shadow++) {
       const dark = oklabOf(at(pal, mat, FLAT_TONE, shadow));
       const before = oklabOf(at(pal, mat, FLAT_TONE, shadow - 1));
-      assert.ok(dark[0] < before[0] - 0.02, `${MATERIAL_NAMES[mat]}: shadow ${shadow} is not darker`);
+      // Dark woods and slate have little lightness left to give: their darks are compressed, so no shadow is black.
+      assert.ok(dark[0] < before[0] - (lit[0] > 0.55 ? 0.02 : 0.008), `${MATERIAL_NAMES[mat]}: shadow ${shadow} is not darker`);
       assert.ok(dark[2] < lit[2] + 0.004, `${MATERIAL_NAMES[mat]}: shadow ${shadow} is not bluer`);
     }
     // A coloured shadow: the deepest still holds over a third of the light, and more than the ink.
     const deep = oklabOf(at(pal, mat, FLAT_TONE, 3));
     assert.ok(deep[0] > lit[0] * 0.6 && deep[0] > 0.24, MATERIAL_NAMES[mat]);
   }
+  // Never black: the darkest tone of the darkest wood, in the deepest shadow, is a dark teal lighter than the ink.
+  for (const mat of LAND) {
+    const [L] = oklabOf(at(pal, mat, 0, 3));
+    assert.ok(L > 0.245, `${MATERIAL_NAMES[mat]}: tone 0 in deep shadow is ${L.toFixed(3)}`);
+  }
+  const [, wc, wh] = lch(at(pal, M.coniferCool, 2, 3));
+  assert.ok(wc > 0.03 && wh > 150 && wh < 260, `a wood's deep shade is ${wc.toFixed(3)} at ${wh.toFixed(0)}°`);
   // Blue-violet, seen on a neutral: pale rock in deep shadow.
   const [, C, h] = lch(at(pal, M.rockLime, FLAT_TONE, 3));
   assert.ok(C > 0.015 && h > 250 && h < 320, `shadow on limestone is ${C} at ${h}°`);
@@ -321,6 +329,30 @@ test("region accents: slate and heather, straw, limestone white and turquoise, s
   // Snow shade is blue.
   const snowShade = lch(at(pal, M.snow, 0));
   assert.ok(snowShade[2] > 230 && snowShade[2] < 280 && snowShade[1] > 0.025, `snow shade ${snowShade}`);
+});
+
+test("snow is a cool blue-white wash, apart from the paper and from sand", () => {
+  const pal = buildPalette(NOON);
+  const paper = oklabOf(pal[M.none << 8]);
+  for (const mat of [M.snow, M.snowLate]) {
+    if (snowCover(mat, NOON.season) < 1) continue;
+    for (let tone = 0; tone < 16; tone++) {
+      const c = oklabOf(at(pal, mat, tone));
+      // Never yellow, at any tone; and no tone sits within a just-visible step of the paper.
+      assert.ok(c[2] < 0.002, `snow tone ${tone} has b ${c[2].toFixed(3)}`);
+      const d = Math.hypot(c[0] - paper[0], c[1] - paper[1], c[2] - paper[2]);
+      assert.ok(d > 0.03, `snow tone ${tone} is ${d.toFixed(3)} from paper`);
+    }
+    // Flat snow is pale and plainly blue; lit snow is cleaner and lighter; shade is blue-violet and much deeper.
+    const flat = lch(at(pal, mat, FLAT_TONE)), lit = lch(at(pal, mat, 15)), shade = lch(at(pal, mat, 2));
+    assert.ok(flat[0] > 0.9 && flat[1] > 0.012 && flat[2] > 220 && flat[2] < 275, `flat snow ${flat}`);
+    assert.ok(lit[0] > flat[0] + 0.02 && lit[1] < flat[1], `lit snow ${lit}`);
+    assert.ok(shade[0] < flat[0] - 0.15 && shade[1] > 0.05 && shade[2] > 250 && shade[2] < 290, `snow shade ${shade}`);
+    for (const sand of [M.sand, M.sandPale]) {
+      const q = oklabOf(at(pal, sand, FLAT_TONE)), c = oklabOf(at(pal, mat, FLAT_TONE));
+      assert.ok(q[2] - c[2] > 0.02, "sand is yellower than snow");
+    }
+  }
 });
 
 test("water tone bits: the sea runs from turquoise shallows to deep blue, the river cycles", () => {

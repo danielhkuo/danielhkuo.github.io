@@ -64,6 +64,22 @@ test("flat ground sits at the base tone; slopes towards the sun are lighter, awa
   assert.ok(shade(-0.4, -0.4, 0, 120) < shade(-0.4, -0.4, 0, 10));
 });
 
+test("the light has no seam at the terminator: a steep face turning past side-on to the sun changes tone steadily", () => {
+  // Aspects every 2° round the compass on slopes from rolling to cliff, low and high.
+  for (const e of [5, 40, 110]) {
+    for (const slope of [0.2, 0.6, 1.2, 2]) {
+      let before = shade(slope, 0, 0, e), worst = 0;
+      for (let a = 2; a <= 360; a += 2) {
+        const t = shade(slope * Math.cos((a * Math.PI) / 180), slope * Math.sin((a * Math.PI) / 180), 0, e);
+        worst = Math.max(worst, Math.abs(t - before));
+        before = t;
+      }
+      // A tone is 1/18 of the range below flat: no 2° turn moves the light by a whole tone.
+      assert.ok(worst < 0.05, `slope ${slope} at height ${e}: a 2° turn moves the tone by ${worst.toFixed(3)}`);
+    }
+  }
+});
+
 test("the relief blur does not depend on where its window starts", () => {
   const n = 64, h = fixture(n, 4, 30), r = 8;
   const a = new Float32Array(n * n), b = new Float32Array(40 * 40);

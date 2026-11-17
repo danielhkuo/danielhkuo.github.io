@@ -14,6 +14,9 @@ export const SHADOW_REACH = 64;
 
 /** Heights are multiplied by this for the Lambert term only. */
 export const EXAGGERATE = 2.5;
+/** And by this much more on the lowest ground, easing off by LOWLAND_TOP: rolling lowland is gentler still, and must read in light too. */
+export const EXAGGERATE_LOW = 2;
+export const LOWLAND_TOP = 60;
 
 /** And by this on snow. */
 export const SNOW_LEAN = 1.8;
@@ -84,24 +87,35 @@ export function boxBlur(src: Float32Array, w: number, lo: number, hi: number, r:
  */
 export function shade(dhdx: number, dhdy: number, relief: number, e: number): number {
   // Lambert on exaggerated normals: the land is low and wide, and true normals barely turn.
-  const ex = dhdx * EXAGGERATE, ey = dhdy * EXAGGERATE;
+  const low = e >= LOWLAND_TOP ? 0 : e <= 0 ? 1 : 1 - e / LOWLAND_TOP;
+  const k = EXAGGERATE + EXAGGERATE_LOW * low * low;
+  const ex = dhdx * k, ey = dhdy * k;
   const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
   // Rescaled so flat ground sits at one half; the dark side keeps a little sky light.
   // How far the slope leans towards the sun. A lean past the sun's own angle stays fully lit:
   // exaggerated normals would otherwise darken the steep sunward faces again.
   const toward = -(ex * SUN_X + ey * SUN_Y);
-  let lam = toward >= 0
-    ? 0.5 + 0.38 * (toward > 0.45 ? 1 : toward / 0.45)
-    : 0.5 * (0.12 + (0.88 * ndotl) / SUN_Z);
-  if (lam < 0.03) lam = 0.03;
-  else if (lam > 0.5 && ndotl < SUN_Z) lam = Math.max(0.5, lam - 0.25 * (SUN_Z - ndotl));
+  let lam: number;
+  if (toward >= 0) {
+    // Full light from a lean of 0.45 towards the sun; on a steep face, from about 20° past side-on, so its terminator is not a knife edge.
+    const full = Math.max(0.45, 0.16 * Math.sqrt(ex * ex + ey * ey));
+    lam = 0.5 + 0.42 * (toward > full ? 1 : toward / full);
+    if (ndotl < SUN_Z) lam = Math.max(0.5, lam - 0.25 * (SUN_Z - ndotl));
+  } else {
+    // A face side-on to the sun sits at the flat tone, and darkens steadily as it turns away, to full shade at about 70° past it:
+    // the two sides of the terminator meet, so a slope that strikes along the sun's bearing shows no seam.
+    const turn = -toward / (0.42 * Math.sqrt(ex * ex + ey * ey));
+    const ease = turn >= 1 ? 1 : turn * turn * (3 - 2 * turn);
+    lam = 0.5 + (0.5 * (0.12 + (0.88 * ndotl) / SUN_Z) - 0.5) * ease;
+    if (lam < 0.03) lam = 0.03;
+  }
   // Relief: hollows and valley floors darken (ambient occlusion); crests lighten only a little, so they grow no rim.
   let rel = relief < 0 ? 0.5 + 0.065 * relief : 0.5 + 0.004 * relief;
   if (rel < 0.02) rel = 0.02;
   else if (rel > 0.53) rel = 0.53;
   const lit = 0.5 + 0.68 * (lam - 0.5) + 0.32 * (rel - 0.5);
-  // Contrast grows with height (after Imhof): lowland is soft, summits are crisp.
-  const contrast = 0.85 + (e < 0 ? 0 : e > 130 ? 130 : e) / 300;
+  // Contrast grows with height (after Imhof): lowland hills still read in light, summits are crisp.
+  const contrast = 1.02 + (e < 0 ? 0 : e > 130 ? 130 : e) / 340;
   const tone = BASE_TONE + (lit - 0.5) * contrast;
   // Keep clear of the ramp's two ends.
   return tone < 0.06 ? 0.06 : tone > 0.94 ? 0.94 : tone;
@@ -109,15 +123,15 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
 
 /**
  * Tone 0–1 of snow, from its own normal alone: flat snow sits at the base tone, a
- * slope turned to the sun runs up to cream, one turned away falls steadily
- * into blue shade, so ridges, couloirs and cirque walls model. Hollows darken
- * a little.
+ * slope turned to the sun runs up to a clean blue-white, one turned away falls
+ * steadily into blue-violet shade, so ridges, couloirs and cirque walls model.
+ * Couloirs and lee hollows sit a little deeper.
  */
 export function shadeSnow(dhdx: number, dhdy: number, relief: number): number {
   // Snowfields are broad and low: the normal is leaned a little, less than the land's, so no face saturates.
   const ex = dhdx * SNOW_LEAN, ey = dhdy * SNOW_LEAN;
   const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
   let tone = ndotl >= SUN_Z ? BASE_TONE + (0.36 * (ndotl - SUN_Z)) / (1 - SUN_Z) : BASE_TONE - 0.66 * (SUN_Z - ndotl);
-  if (relief < 0) tone += relief < -10 ? -0.05 : 0.005 * relief;
+  if (relief < 0) tone += relief < -10 ? -0.09 : 0.009 * relief;
   return tone < 0.08 ? 0.08 : tone > 0.94 ? 0.94 : tone;
 }

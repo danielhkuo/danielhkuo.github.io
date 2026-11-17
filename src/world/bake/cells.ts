@@ -32,6 +32,8 @@ export interface Look {
   noInk?: Uint8Array;
   /** Per material id: 1 for snow, which is lit by its true normals. Optional. */
   isSnow?: Uint8Array;
+  /** 1 for the light washes the paper shows through: meadow, hay and corn. Optional: none when absent. */
+  isWash?: Uint8Array;
   /** The turf laid on the tops of sea stacks. Optional: the cover's own choice when absent. */
   turf?: number;
   /** The sand of a river's point bars. Optional: bars are not drawn when absent. */
@@ -70,6 +72,17 @@ export interface Cells {
 }
 
 // Margins round the core, in cells.
+/** A crest within this many cells of a lake that lies north, east or west of it is the bowl's lip. */
+const TARN_LIP = 12;
+
+/** Whether lake water lies within TARN_LIP cells of cell i to its north, east or west (never only to its south). */
+function besideLake(water: Uint8Array, W: number, i: number): boolean {
+  for (let d = 4; d <= TARN_LIP; d += 4) {
+    if (water[i - d * W] === 2 || water[i - d] === 2 || water[i + d] === 2 || water[i - d * W - d] === 2 || water[i - d * W + d] === 2) return true;
+  }
+  return false;
+}
+
 /** Trees shade at most this many diagonal steps. */
 const TREE_REACH = 4;
 /** A stamp reaches at most this far from the cell that placed it. */
@@ -936,7 +949,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
             // A cliff by the land's form, not by the cell's own slope: a gully's wall on a moderate slope takes no lip and no strokes.
             ax = fields.steep[i] >= FORM_CLIFF ? 2 : 1;
           }
-          ax |= crest[i] << AUX_CREST_SHIFT;
+          // The lip of a tarn's bowl is no crest line: only the headwall behind the water keeps one, so no tarn is ringed.
+          if (crest[i] !== 0 && !(lakes && besideLake(water, W, i))) ax |= crest[i] << AUX_CREST_SHIFT;
         }
         out.aux[o] = ax;
         if (deep) flags |= F_DEEP;

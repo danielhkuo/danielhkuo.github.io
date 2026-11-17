@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { fieldWorld, loadMask, M_SEA, M_TREE, plainLook } from "../testing/bakefix.ts";
 import { F_CANOPY, F_QUIET } from "./cells.ts";
 import { bakeWindow, depthBase, tileCache } from "./chunk.ts";
-import { INK_FULL, inkOcclusion, newPainted } from "./ink.ts";
+import { evenLines, INK_FULL, INK_SOFT, inkCliffs, inkCrests, inkOcclusion, newPainted, TARN_LEVEL } from "./ink.ts";
+import { AUX_CREST_SHIFT, F_CLIFF } from "./cells.ts";
 
 const mask = loadMask();
 const N = 512;
@@ -93,4 +94,59 @@ test("a coast takes a thin line where land meets the sea, and the sea takes none
     else if (b.mat(c, r + 1) === M_SEA) { assert.ok(b.ink(c, r) > 0); coast++; }
   }
   assert.equal(coast, 128);
+});
+
+test("a dashed crest is evened into one line of one weight that tapers at its ends", () => {
+  const p = newPainted(0, 0, 64, 16);
+  // A break along row 8 from column 10 to 50, inked full in dashes of three with gaps of two.
+  for (let c = 10; c <= 50; c++) {
+    p.hidden[8 * 64 + c] = 12;
+    if ((c - 10) % 5 < 3) p.ink[8 * 64 + c] = INK_FULL;
+  }
+  evenLines(p);
+  for (let c = 10; c <= 50; c++) assert.ok(p.ink[8 * 64 + c] !== 0, `gap at column ${c}`);
+  for (let c = 14; c <= 46; c++) assert.equal(p.ink[8 * 64 + c], INK_FULL, `weight at column ${c}`);
+  assert.equal(p.ink[8 * 64 + 10], INK_SOFT);
+  assert.equal(p.ink[8 * 64 + 50], INK_SOFT);
+  // Nothing is inked off the break.
+  let off = 0;
+  for (let i = 0; i < p.ink.length; i++) if (p.ink[i] !== 0 && p.hidden[i] === 0) off++;
+  assert.equal(off, 0);
+});
+
+test("a crest is inked only where the land breaks behind it", () => {
+  const p = newPainted(0, 0, 32, 8);
+  for (let c = 0; c < 32; c++) for (let r = 0; r < 8; r++) { p.y[r * 32 + c] = 100 + r; p.height[r * 32 + c] = 50; }
+  // A crest across the view on row 4: the left half hides a row behind it, the right half hides nothing.
+  for (let c = 4; c < 28; c++) {
+    p.aux[4 * 32 + c] = 1 << AUX_CREST_SHIFT;
+    if (c < 16) p.hidden[4 * 32 + c] = 1;
+  }
+  inkCrests(p);
+  for (let c = 4; c < 28; c++) assert.equal(p.ink[4 * 32 + c], c < 16 ? INK_SOFT : 0, `column ${c}`);
+});
+
+test("a tarn takes a light line under its headwall only; a lowland lake a broken far shore; neither a ring", () => {
+  const still = new Uint8Array(256);
+  still[3] = 1;
+  for (const level of [TARN_LEVEL + 20, 5]) {
+    const p = newPainted(0, 0, 40, 20);
+    p.mat.fill(1);
+    p.height.fill(level + 1);
+    // Water in rows 8–12, columns 10–29; the far shore's left half is a cliff.
+    for (let r = 8; r <= 12; r++) for (let c = 10; c < 30; c++) { p.mat[r * 40 + c] = 3; p.height[r * 40 + c] = level; }
+    for (let c = 10; c < 20; c++) p.flags[7 * 40 + c] = F_CLIFF;
+    inkCliffs(p, still);
+    let far = 0;
+    for (let i = 0; i < p.ink.length; i++) {
+      if (p.ink[i] === 0) continue;
+      const r = Math.floor(i / 40), c = i % 40;
+      assert.equal(r, 7, `ink off the far shore at ${c},${r}`);
+      assert.equal(p.ink[i], INK_SOFT);
+      if (c >= 20) far++;
+    }
+    for (let c = 10; c < 20; c++) assert.equal(p.ink[7 * 40 + c], INK_SOFT, `headwall at ${c}`);
+    if (level > TARN_LEVEL) assert.equal(far, 0, "a tarn's gentle shore is bare");
+    else assert.ok(far >= 4 && far < 10, `a lake's gentle far shore is broken (${far})`);
+  }
 });

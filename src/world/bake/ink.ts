@@ -31,6 +31,9 @@ export const LIP_RUN = 9;
 /** From a wall this tall the lip's ink is full; a shorter crag's is soft. */
 export const LIP_FULL = 16;
 
+/** Standing water above this height is a tarn: its shore is inked only under a steep bank. */
+export const TARN_LEVEL = 40;
+
 /** A painted window: one entry per bake pixel, row-major, w × h. */
 export interface Painted {
   w: number;
@@ -128,28 +131,85 @@ export function inkCliffs(p: Painted, isStill: Uint8Array): void {
       const j = isStill[mat[i + w]] === 1 ? i + w : c > 0 && isStill[mat[i - 1]] === 1 ? i - 1 : c + 1 < w && isStill[mat[i + 1]] === 1 ? i + 1 : -1;
       if (j < 0) continue;
       if (height[j] > 0.5) {
-        // A lake or tarn: a light, broken line along the far shore only, never a ring.
-        if (j === i + w && (((x0 + c + 2 * (r0 + r)) % 5) + 5) % 5 < 3) ink[i] = INK_SOFT;
+        // A lake or tarn takes a light line along the far shore only, never a ring: under a steep bank (a cirque's
+        // headwall) the line is whole; a lowland lake's gentle far shore keeps a broken one; a tarn's gentle shore none.
+        if (j !== i + w) continue;
+        if ((f & F_CLIFF) !== 0) ink[i] = INK_SOFT;
+        else if (height[j] < TARN_LEVEL && (((x0 + c + 2 * (r0 + r)) % 5) + 5) % 5 < 3) ink[i] = INK_SOFT;
       } else ink[i] = (f & F_SEACLIFF) !== 0 ? INK_FULL : INK_SOFT;
     }
   }
 }
 
 /**
- * Crest lines: the topmost pixel of a cell that stands on a ridge (cells.ts marks them) takes ink even where
- * nothing is hidden behind it, so a range keeps its skeleton under snow and on slopes too gentle to occlude.
+ * Crest lines. A cell that stands on a ridge (cells.ts marks them) takes ink where the land really breaks there,
+ * even by less than occlusion ink asks for: a crest across the view where at least one row is hidden behind it, a
+ * crest running away from the camera where the pixel beside it shows ground well behind and below. A crest over
+ * open ground that hides nothing, such as the top of a broad snow dome, is left to the light.
  */
 export function inkCrests(p: Painted): void {
-  const { w, h, flags, ink, aux, y } = p;
+  const { w, h, flags, ink, aux, y, hidden, height } = p;
   for (let r = 1; r < h; r++) {
     for (let c = 0; c < w; c++) {
       const i = r * w + c;
       if (ink[i] !== 0 || (flags[i] & (F_QUIET | F_CANOPY)) !== 0) continue;
       const v = (aux[i] >> AUX_CREST_SHIFT) & 3;
       if (v === 0) continue;
-      // A crest that runs away from the camera is a column of cells, each a pixel or two tall: both are inked, so the line is whole.
-      if (y[i - w] === y[i] && (v !== 3 || r < 2 || y[i - 2 * w] === y[i])) continue;
-      ink[i] = v === 2 ? INK_FULL : INK_SOFT;
+      if (v === 3) {
+        const lim = y[i] - INK_MIN_HIDDEN, top = height[i] - 2;
+        if ((c > 0 && y[i - 1] <= lim && height[i - 1] <= top) || (c + 1 < w && y[i + 1] <= lim && height[i + 1] <= top)) ink[i] = INK_SOFT;
+      } else if (hidden[i] !== 0 && y[i - w] !== y[i]) ink[i] = INK_SOFT;
+    }
+  }
+}
+
+/**
+ * Evens the lines occlusion and crests have laid, so a ridge is one line of one weight and not a run of dashes:
+ * gaps of a pixel or two along a real break are closed, each pixel takes the weight of the line around it, and
+ * the last two pixels of a line step down to soft, so it tapers out. Reads 7 columns and 4 rows around a pixel.
+ */
+export function evenLines(p: Painted): void {
+  const { w, h, flags, ink, hidden } = p;
+  const src = Uint8Array.from(ink);
+  // Close gaps: a pixel on a break, with ink within two columns on both sides (a row up or down at most).
+  for (let r = 1; r + 1 < h; r++) {
+    for (let c = 2; c + 2 < w; c++) {
+      const i = r * w + c;
+      if (src[i] !== 0 || hidden[i] === 0 || (flags[i] & (F_QUIET | F_CANOPY)) !== 0) continue;
+      let left = 0, right = 0;
+      for (let dr = -w; dr <= w; dr += w) {
+        left = Math.max(left, src[i + dr - 1], src[i + dr - 2]);
+        right = Math.max(right, src[i + dr + 1], src[i + dr + 2]);
+      }
+      // The gap takes the lighter of the two weights it joins.
+      if (left !== 0 && right !== 0) ink[i] = left < right ? left : right;
+    }
+  }
+  // One weight along a line: the mean of the ink within three columns and two rows, the line's hidden rows deciding.
+  const filled = Uint8Array.from(ink);
+  const level = new Uint8Array(w * h);
+  for (let r = 2; r + 2 < h; r++) {
+    for (let c = 3; c + 3 < w; c++) {
+      const i = r * w + c;
+      if (filled[i] === 0) continue;
+      let sum = 0, count = 0;
+      for (let dr = -2; dr <= 2; dr++) for (let dc = -3; dc <= 3; dc++) {
+        const v = filled[i + dr * w + dc];
+        if (v !== 0) { sum += v; count++; }
+      }
+      const mean = sum / count;
+      level[i] = mean >= 2.5 ? INK_SOLID : mean >= 1.5 ? INK_FULL : INK_SOFT;
+    }
+  }
+  // Taper: a line's end pixel has at most two inked pixels in the 5 × 5 round it, the next at most three.
+  for (let r = 2; r + 2 < h; r++) {
+    for (let c = 3; c + 3 < w; c++) {
+      const i = r * w + c;
+      const v = level[i];
+      if (v === 0) continue;
+      let near = -1;
+      if (v > INK_SOFT) for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) if (level[i + dr * w + dc] !== 0) near++;
+      ink[i] = v > INK_SOFT && near <= 2 ? INK_SOFT : v > INK_SOFT && near === 3 ? v - 1 : v;
     }
   }
 }

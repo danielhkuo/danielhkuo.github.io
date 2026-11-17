@@ -10,7 +10,7 @@
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { buildTile, F_CANOPY, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
-import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkCrests, inkOcclusion, newPainted, type Painted } from "./ink.ts";
+import { CANOPY_MIN_DROP, evenLines, hatch, INK_MIN_DROP, inkCliffs, inkCrests, inkOcclusion, newPainted, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
 import { imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint } from "./lines.ts";
@@ -26,8 +26,11 @@ export const CHUNK_ROWS = 320;
 
 // Margins painted round a window so that ink and lines inside it never depend on where it was cut.
 const MX = 8;
-const MT = 26;
+const MT = 32;
 const MB = 8;
+
+/** Of 256: the share of a light wash's pixels, inside a patch of grain, where the paper shows through. */
+export const PAPER_FLECK = 44;
 
 /** A hidden cell projects at least this far below the top of what hides it. */
 const HIDE_MARGIN = 1;
@@ -227,6 +230,7 @@ function drawLines(index: RiverIndex, n: number, tiles: TileSource, p: Painted, 
 function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, w: number, h: number): Uint32Array {
   const out = new Uint32Array(w * h);
   const base = depthBase(p.r0 + mt);
+  const wash = look.isWash;
   for (let r = 0; r < h; r++) {
     const R = p.r0 + mt + r;
     for (let c = 0; c < w; c++) {
@@ -241,6 +245,15 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
         const d = (l - Math.floor(BASE_TONE * 255 + 0.5)) / 255;
         tone = Math.floor(FLAT_TONE + d * (d < 0 ? 2 * FLAT_TONE : 2 * (15 - FLAT_TONE)) + (mask[(R & 255) * 256 + ((p.x0 + mx + c) & 255)] + 0.5) / 256);
         tone = tone < 0 ? 0 : tone > 15 ? 15 : tone;
+        // Paper through a light wash: where the brush skipped the paper's tooth, the wash is a tone or two thinner.
+        // The flecks gather in loose patches (the mask read at a quarter scale), so they are grain and not stipple.
+        if (wash !== undefined && wash[m] === 1 && tone >= FLAT_TONE - 2 && tone < 14 && (f & F_SHADOW) === 0 && p.ink[i] === 0) {
+          const X = p.x0 + mx + c;
+          if (mask[(((R >> 2) + 37) & 255) * 256 + (((X >> 2) + 201) & 255)] > 120) {
+            const g = mask[((R + 61) & 255) * 256 + ((X + 113) & 255)];
+            if (g < PAPER_FLECK) tone += g < PAPER_FLECK >> 1 ? 2 : 1;
+          }
+        }
       }
       const light = tone | ((f & F_SHADOW) << LIGHT_SHADOW_SHIFT) | (p.ink[i] << LIGHT_INK_SHIFT);
       const depth = (p.y[i] - base) * 8;
@@ -257,8 +270,9 @@ export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles
   drawRoads(world, tiles, p);
   drawMarks(world, p);
   inkOcclusion(p);
-  inkCliffs(p, look.isStill ?? look.isWater);
   inkCrests(p);
+  evenLines(p);
+  inkCliffs(p, look.isStill ?? look.isWater);
   hatch(p, mask);
   return pack(p, look, mask, MX, MT, w, h);
 }
