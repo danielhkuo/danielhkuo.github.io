@@ -623,8 +623,9 @@ function lighthouseCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[
     tally.pass(L.seen);
     if (level + BOX.lighthouse.h > r.heightCap) continue;
     tally.pass(L.cap);
-    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: open * 2 + c.exposure[i] + face / 5 - Math.abs(level - 22) / 40 });
+    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: open * 2 + c.exposure[i] + face / 5 - Math.abs(level - 22) / 40 - (c.islandSize[c.island[i]] < 400 ? 2 : 0) });
   }
+  // A headland a path can reach comes first: a skerry too small for a road scores as a stack does.
   // Stacks with a top wide enough carry a lighthouse and no road.
   for (const s of c.stacks) {
     if (0.6 * s.r < r.lighthouse.stackTop || s.top < 8 || s.top + BOX.lighthouse.h > r.heightCap) continue;

@@ -240,11 +240,11 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
         const fx = x + ox, fy = y + oy;
         let ok = true, lo = Infinity, hi = -Infinity;
         for (let dy = -10; dy <= 10 && ok; dy += 5) for (let dx = -22; dx <= 22; dx += 11) {
-          if (!dry(w, fx + dx, fy + dy) || w.c.slope[node(w.c, fx + dx, fy + dy)] > 0.5) { ok = false; break; }
+          if (!dry(w, fx + dx, fy + dy) || w.c.slope[node(w.c, fx + dx, fy + dy)] > 0.9) { ok = false; break; }
           const g = groundAt(w, fx + dx, fy + dy);
           lo = Math.min(lo, g); hi = Math.max(hi, g);
         }
-        if (!ok || hi - lo > 14) continue;
+        if (!ok || hi - lo > 24) continue;
         w.structures.push(S.standAt(S.cornFields(46, 20, seed), fx, fy, 0));
         break;
       }
