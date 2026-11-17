@@ -36,12 +36,27 @@ export interface RiverParams {
   /** Wavelength is max(lambdaMin, lambdaPerWidth · w), in cells. */
   lambdaMin: number;
   lambdaPerWidth: number;
-  /** Share by which each loop's amplitude and length vary. */
+  /** Share by which each bend's amplitude and length vary. */
   wobble: number;
-  /** One loop in this many is cut off and left as an oxbow pond … */
+  /** Peak lean of a bend's heading at its apex, radians. */
+  skew: number;
+  /** At most one bend in this many is cut off and left as an oxbow … */
   oxbowEvery: number;
+  /** … at most this many on one river … */
+  oxbowMax: number;
   /** … on rivers at least this wide. */
   oxbowMinWidth: number;
+  /** Point bars form inside large bends of rivers at least this wide. */
+  barMinWidth: number;
+  /** Sideways wander of streams that do not meander: cells at width 1 … */
+  wiggle: number;
+  /** … with a wavelength drifting within this range, in cells. */
+  wiggleLambda: readonly [number, number];
+  /** A stream running within half a width plus this of a larger one joins it there. */
+  mergeGap: number;
+  /** A first-order runnel is dropped when, for combShare of its length, a parallel stream runs within this many cells (0 keeps all). */
+  combSpacing: number;
+  combShare: number;
   /** Valley floor is level + floorLift + floorRise · d at d cells from the river. */
   floorLift: number;
   floorRise: number;
@@ -91,25 +106,42 @@ export interface Fall {
 export interface Oxbow {
   /** The reach it was cut from. */
   reach: number;
+  /** Width of the river that left it. */
   width: number;
+  /** Height of its still water. */
   level: number;
-  /** x, y per vertex, in the reach's unwrapped frame. */
+  /** Centreline of the crescent: x, y per vertex, in the reach's unwrapped frame. */
   vertices: Float32Array;
+  /** The crescent itself: a closed polygon, x, y per vertex in cells (the last joins the first), same frame. */
+  outline: Float32Array;
+}
+
+/** Sand on the inside bank of a large bend. */
+export interface PointBar {
+  reach: number;
+  /** A closed polygon, x, y per vertex in cells (the last joins the first), in the reach's unwrapped frame. */
+  outline: Float32Array;
 }
 
 export interface RiversResult {
   reaches: Reach[];
   falls: Fall[];
   oxbows: Oxbow[];
+  bars: PointBar[];
   /** hydro.ground with valley floors flattened and beds cut; no land node is a pit. */
   ground: Float64Array;
 }
 
 const VERTEX = 4;
+const FLOOR_MAX_CUT = 5;
 const MAX_OMEGA = 1.5;
 /** tan² 60°: a step faces south when dy > 0 and dx² ≤ 3·dy². */
 const SOUTH_TAN2 = 3;
-const TRUNK_WINDOW = 16;
+/** Vertex spacing of finished lines, in cells; joins are kept JOIN_GAP vertices apart. */
+const LINE_STEP = 1.5;
+const JOIN_GAP = 4;
+/** Bucket size of the vertex index, in cells. */
+const BUCKET = 8;
 
 export function riverWidth(q: number, qScale: number): number {
   return Math.max(1, Math.min(6, Math.round(Math.sqrt(q / qScale))));
@@ -153,13 +185,17 @@ export interface MeanderSpec {
   omega: number;
   lambda: number;
   width: number;
+  /** Half the width of flat valley floor here, in cells; loops stay inside it. Omit for open ground. */
+  room?: number;
 }
 
 export interface MeanderOptions {
   /** ω, λ and river width at valley distance u. */
   spec: (u: number) => MeanderSpec;
-  /** Share by which loops vary; 0 gives the pure sine-generated curve. */
+  /** Share by which each bend's amplitude and length vary; 0 gives the pure sine-generated curve. */
   wobble: number;
+  /** Peak heading skew, radians: bends lean by up to this. Needs rng. */
+  skew?: number;
   /** Grow from and return to the axis, so the ends join what is up- and downstream. */
   taper: boolean;
   /** Multiplies every amplitude. */
@@ -167,9 +203,14 @@ export interface MeanderOptions {
   /** Step along the river, in cells. */
   step: number;
   rng: Rng | null;
-  /** 0 for no oxbows. */
+  /** One oxbow at most per this many bends (0 for none) … */
   oxbowEvery: number;
+  /** … and never more than this many on the stretch … */
+  oxbowMax?: number;
+  /** … on rivers at least this wide. */
   oxbowMinWidth: number;
+  /** Point bars form inside bends of rivers at least this wide; 0 or omitted for none. */
+  barMinWidth?: number;
 }
 
 export interface Meander {
@@ -179,7 +220,10 @@ export interface Meander {
   u: number[];
   /** Loop amplitude around each point. */
   amp: number[];
-  oxbows: { x: number[]; y: number[]; u: number; width: number }[];
+  /** Cut-off loops: a centreline and the closed outline of the crescent of still water. */
+  oxbows: { x: number[]; y: number[]; ox: number[]; oy: number[]; u: number; width: number }[];
+  /** Sand inside the larger bends: closed outlines. */
+  bars: { ox: number[]; oy: number[]; u: number }[];
 }
 
 /** Largest index i with a[i] ≤ v, clamped to [0, a.length − 2]. */
@@ -194,11 +238,15 @@ function segmentAt(a: ArrayLike<number>, v: number): number {
   return lo;
 }
 
+/** Half-angle of an oxbow's arc: 100°. */
+const OXBOW_ARC = (100 * PI) / 180;
+
 /**
  * A sine-generated curve laid along a valley axis: the heading is the axis
- * direction turned by ±ω·cos φ, with φ running half a turn per loop. Loops are
+ * direction turned by ±ω·cos φ, with φ running half a turn per bend. Bends are
  * planned by amplitude so the river crosses the axis every half wave and
- * cannot drift off it. Null when the axis is too short for a loop.
+ * cannot drift off it; each has its own length, amplitude and lean. Null when
+ * the axis is too short for a loop.
  */
 export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: MeanderOptions): Meander | null {
   const m = ax.length;
@@ -237,40 +285,73 @@ export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: Me
   const len: number[] = [];
   const amp: number[] = [];
   const wid: number[] = [];
+  const room: number[] = [];
   const at: number[] = [0];
+  // Neighbouring bends share a slow swell, and now and then the river runs nearly straight for a few.
+  let swell = 0;
+  let calm = 0;
+  const vary = (): number => {
+    if (!rng) return 1;
+    swell = 0.6 * swell + 0.4 * rnd();
+    if (calm > 0) calm--;
+    else if (rng.float() < 0.07) calm = 2 + rng.int(3);
+    return Math.max(0.15, 1 + o.wobble * (0.75 * rnd() + 0.75 * swell)) * (calm > 0 ? 0.2 : 1);
+  };
   const first = o.spec(0);
-  amp.push((first.lambda * meanderMeans(first.omega)[0] * (1 + o.wobble * rnd())) / 4);
+  amp.push((first.lambda * meanderMeans(first.omega)[0] * vary()) / 4);
   wid.push(first.width);
+  room.push(first.room === undefined ? Infinity : first.room);
   let ue = 0;
   while (ue < U && len.length < 4096) {
     const sp = o.spec(ue);
     const [sm, cm] = meanderMeans(sp.omega);
-    const l = 0.5 * sp.lambda * (1 + 0.6 * o.wobble * rnd());
+    const l = 0.5 * sp.lambda * Math.max(0.4, 1 + 0.8 * o.wobble * rnd());
     len.push(l);
     ue += l * cm;
-    amp.push((sp.lambda * sm * (1 + o.wobble * rnd())) / 4);
+    amp.push((sp.lambda * sm * vary()) / 4);
     wid.push(sp.width);
+    room.push(sp.room === undefined ? Infinity : sp.room);
     at.push(ue);
   }
   const K = len.length;
   if (K < (o.taper ? 3 : 1)) return null;
 
-  const cut: { j: number; full: number }[] = [];
   for (let j = 0; j <= K; j++) {
     let a = amp[j] * o.scale;
     if (o.taper) a *= Math.min(1, j / 2, (K - j) / 2);
-    // Keep each loop inside the bend of the axis so the offset curve cannot fold.
+    // Keep each loop inside the bend of the axis so the offset curve cannot fold, and inside the valley.
     const uj = (at[j] * U) / ue;
     const half = len[Math.min(j, K - 1)];
     let kmax = 0;
     for (let i = segmentAt(ua, uj - half); i < m && ua[i] <= uj + half; i++) if (kappa[i] > kmax) kmax = kappa[i];
     if (kmax > 0) a = Math.min(a, 0.5 / kmax);
-    if (rng && o.oxbowEvery > 0 && o.taper && j >= 2 && j <= K - 2 && wid[j] >= o.oxbowMinWidth && rng.int(o.oxbowEvery) === 0) {
-      cut.push({ j, full: a });
-      a *= 0.35;
-    }
-    amp[j] = a;
+    amp[j] = Math.min(a, room[j]);
   }
+
+  // Oxbows: rare, on the largest free bends of a wide river, where the floor has room for one.
+  const cut: { j: number; full: number }[] = [];
+  const cutAt = new Uint8Array(K + 1);
+  if (rng && o.oxbowEvery > 0 && o.taper) {
+    const want = Math.min(o.oxbowMax === undefined ? 2 : o.oxbowMax, Math.floor(K / o.oxbowEvery));
+    for (let tries = 0; tries < want * 4 && cut.length < want && K > 4; tries++) {
+      const j = 2 + rng.int(K - 3);
+      const w = wid[j];
+      const r = Math.max(4.5, Math.min(14, 0.75 * amp[j]));
+      const spread = amp[j] * 0.35 + w / 2 + 3 + 2 * Math.max(1.25, 0.4 * w) + 1.17 * r;
+      if (w < o.oxbowMinWidth || amp[j] < Math.max(5, 1.5 * w) || room[j] < spread) continue;
+      let clear = true;
+      for (let c = 0; c < cut.length; c++) if (Math.abs(cut[c].j - j) < 4) clear = false;
+      if (!clear) continue;
+      cut.push({ j, full: amp[j] });
+      cutAt[j] = 1;
+      amp[j] *= 0.35;
+    }
+  }
+
+  // Each apex leans: the heading there is off the axis by this much.
+  const lean = new Float64Array(K + 1);
+  const skew = o.skew === undefined ? 0 : o.skew;
+  if (rng && skew > 0) for (let j = 1; j < K; j++) lean[j] = skew * (0.3 + 0.7 * rng.float()) * Math.min(1, amp[j] / 3);
 
   const om = new Float64Array(K);
   let advance = 0;
@@ -293,7 +374,10 @@ export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: Me
     const h = l / steps;
     const sg = k % 2 === 0 ? sign0 : -sign0;
     for (let i = 0; i < steps; i++) {
-      const a = sg * om[k] * pcos(-PI / 2 + (PI * (i + 0.5)) / steps);
+      const f0 = (i + 0.5) / steps;
+      const phi = -PI / 2 + PI * f0;
+      // The third harmonic skews the bend (Kinoshita); it is continuous across apexes.
+      const a = sg * (om[k] * pcos(phi) + (lean[k] + (lean[k + 1] - lean[k]) * f0) * psin(3 * phi));
       u += h * pcos(a);
       v += h * psin(a);
       pu.push(u);
@@ -306,7 +390,7 @@ export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: Me
   const uEnd = u;
   const vEnd = o.taper ? v : 0;
 
-  const out: Meander = { x: [], y: [], u: [], amp: pa, oxbows: [] };
+  const out: Meander = { x: [], y: [], u: [], amp: pa, oxbows: [], bars: [] };
   const count = pu.length;
   for (let i = 0; i < count; i++) {
     const uu = Math.max(0, Math.min(U, (pu[i] * U) / uEnd));
@@ -332,7 +416,7 @@ export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: Me
     out.y[count - 1] = ay[m - 1];
   }
 
-  // The cut-off loop: a horseshoe standing outside the shortened bend.
+  // The cut-off loop: a crescent of still water standing clear of the shortened bend.
   for (let c = 0; c < cut.length; c++) {
     const i = apex[cut[c].j];
     const uu = pu[i];
@@ -345,19 +429,77 @@ export function meanderAlong(ax: ArrayLike<number>, ay: ArrayLike<number>, o: Me
     const tys = ty[s];
     const side = pv[i] < 0 ? -1 : 1;
     const w = wid[cut[c].j];
-    const r = Math.max(3.5, 0.6 * cut[c].full * fit);
-    const vc = pv[i] + side * (r / 2 + w / 2 + 2);
-    const n = Math.max(8, Math.ceil(4.2 * r));
-    const ox: number[] = [];
-    const oy: number[] = [];
+    const r = Math.max(4.5, Math.min(14, 0.75 * cut[c].full * fit));
+    const h0 = Math.max(1.25, 0.4 * w);
+    const vc = pv[i] + side * (w / 2 + 3 + h0 + 0.17 * r);
+    const n = Math.max(10, Math.ceil(2 * OXBOW_ARC * r));
+    const mid: number[][] = [[], []];
+    const outer: number[][] = [[], []];
+    const inner: number[][] = [[], []];
     for (let k = 0; k <= n; k++) {
-      const alpha = (-2 * PI) / 3 + (4 * PI * k) / (3 * n);
-      const du = r * psin(alpha);
-      const dv = vc + side * r * pcos(alpha);
-      ox.push(cx + du * txs - dv * tys);
-      oy.push(cy + du * tys + dv * txs);
+      const e = (2 * k) / n - 1;
+      const alpha = OXBOW_ARC * e;
+      const hw = h0 * (0.25 + 0.75 * (1 - e * e));
+      const sa = psin(alpha);
+      const ca = pcos(alpha);
+      const put = (dst: number[][], rho: number): void => {
+        const du = rho * sa;
+        const dv = vc + side * rho * ca;
+        dst[0].push(cx + du * txs - dv * tys);
+        dst[1].push(cy + du * tys + dv * txs);
+      };
+      put(mid, r);
+      put(outer, r + hw);
+      if (k > 0 && k < n) put(inner, r - hw);
     }
-    out.oxbows.push({ x: ox, y: oy, u: uu, width: w });
+    const ox = outer[0].concat(inner[0].reverse());
+    const oy = outer[1].concat(inner[1].reverse());
+    out.oxbows.push({ x: mid[0], y: mid[1], ox, oy, u: uu, width: w });
+  }
+
+  // Point bars: a sliver of sand on the inside bank around each large apex.
+  const barMin = o.barMinWidth === undefined ? 0 : o.barMinWidth;
+  for (let j = 1; barMin > 0 && j < K; j++) {
+    const w = wid[j];
+    if (w < barMin || cutAt[j] || amp[j] * fit < w + 2) continue;
+    const i = apex[j];
+    const from = i - Math.round(0.3 * (apex[j] - apex[j - 1]));
+    const to = i + Math.round(0.3 * (apex[j + 1] - apex[j]));
+    if (to - from < 4) continue;
+    // The inside of the bend is the side the axis lies on.
+    const s = segmentAt(ua, pu[i]);
+    const side = pv[i] < 0 ? -1 : 1;
+    const inX = side * ty[s];
+    const inY = -side * tx[s];
+    const reach = Math.max(2, 0.7 * w) + 0.5;
+    const ex: number[] = [];
+    const ey: number[] = [];
+    const fx: number[] = [];
+    const fy: number[] = [];
+    for (let k = from; k <= to; k++) {
+      const a = Math.max(0, k - 1);
+      const b = Math.min(count - 1, k + 1);
+      let nx = -(out.y[b] - out.y[a]);
+      let ny = out.x[b] - out.x[a];
+      const nl = Math.sqrt(nx * nx + ny * ny);
+      if (!(nl > 0)) continue;
+      if (nx * inX + ny * inY < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      nx /= nl;
+      ny /= nl;
+      const e = (2 * (k - from)) / (to - from) - 1;
+      const near = w / 2 + 0.25;
+      ex.push(out.x[k] + nx * near);
+      ey.push(out.y[k] + ny * near);
+      if (k > from && k < to) {
+        const far = near + reach * (0.2 + 0.8 * (1 - e * e));
+        fx.push(out.x[k] + nx * far);
+        fy.push(out.y[k] + ny * far);
+      }
+    }
+    out.bars.push({ ox: ex.concat(fx.reverse()), oy: ey.concat(fy.reverse()), u: pu[i] });
   }
   return out;
 }
@@ -383,6 +525,21 @@ function segmentHit(a0x: number, a0y: number, a1x: number, a1y: number, b0x: num
   const s = cross(qx, qy, rx, ry) / den;
   if (t < 0 || t > 1 || s < 0 || s > 1) return null;
   return [t, s];
+}
+
+/** True when no two edges of the closed polygon touch, other than neighbours at their shared vertex. */
+export function polygonIsSimple(x: ArrayLike<number>, y: ArrayLike<number>): boolean {
+  const m = x.length;
+  if (m < 3) return false;
+  for (let i = 0; i < m; i++) {
+    const i1 = (i + 1) % m;
+    for (let j = i + 2; j < m; j++) {
+      if (i === 0 && j === m - 1) continue;
+      const j1 = (j + 1) % m;
+      if (segmentHit(x[i], y[i], x[i1], y[i1], x[j], y[j], x[j1], y[j1])) return false;
+    }
+  }
+  return true;
 }
 
 /** True when two segments of the polyline that do not share a vertex cross. */
@@ -529,6 +686,8 @@ interface Path {
   /** The path it joins, and where along that path's line (vertex index + share). */
   parent: number;
   joinPos: number;
+  /** Water level of the river it joins, at the confluence: this path's water is never below it. */
+  floor: number;
   /** Positions along this line where other paths join. */
   joins: number[];
   /** Start position and id of each reach cut from the line. */
@@ -599,13 +758,77 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
       gx = x;
       gy = y;
     }
-    paths.push({ nodes, terminal, end, px, py, line: { x: [], y: [], t: [], a: [] }, parent: -1, joinPos: 0, joins: [], cutPos: [], cutReach: [] });
+    paths.push({ nodes, terminal, end, px, py, line: { x: [], y: [], t: [], a: [] }, parent: -1, joinPos: 0, floor: 0, joins: [], cutPos: [], cutReach: [] });
   }
 
   // Trunks before their tributaries: a parent always carries more water at its foot.
   const footQ = new Float64Array(paths.length);
   for (let i = 0; i < paths.length; i++) footQ[i] = -q[paths[i].nodes[paths[i].nodes.length - 1]];
   const pathOrder = sortIndicesBy(footQ);
+
+  // --- Combs: on a planar slope every runnel is a channel. Drop first-order
+  // runnels that have a larger parallel stream close beside them. Largest
+  // first, so what is kept is spaced between one and two combSpacings.
+  const dropped = new Uint8Array(paths.length);
+  if (p.combSpacing > 0) {
+    const hasTributary = new Uint8Array(paths.length);
+    const dirX = new Float32Array(nn);
+    const dirY = new Float32Array(nn);
+    for (let i = 0; i < paths.length; i++) {
+      const { nodes, px, py, end, terminal } = paths[i];
+      if (end === END_REACH) hasTributary[pathOf[terminal]] = 1;
+      const m = nodes.length;
+      for (let k = 0; k < m; k++) {
+        const a = Math.max(0, k - 3);
+        const b = Math.min(m, k + 3);
+        const dx = px[b] - px[a];
+        const dy = py[b] - py[a];
+        const len = Math.sqrt(dx * dx + dy * dy);
+        dirX[nodes[k]] = len > 0 ? dx / len : 0;
+        dirY[nodes[k]] = len > 0 ? dy / len : 0;
+      }
+    }
+    const R = Math.round(p.combSpacing / 4);
+    // 1 once a path is settled as kept; everything that is not a bare runnel is kept from the start.
+    const kept = new Uint8Array(paths.length);
+    for (let i = 0; i < paths.length; i++) {
+      const nodes = paths[i].nodes;
+      if (hasTributary[i] || wNode[nodes[nodes.length - 1]] > 1) kept[i] = 1;
+    }
+    for (let oi = 0; oi < pathOrder.length; oi++) {
+      const pid = pathOrder[oi];
+      const path = paths[pid];
+      const m = path.nodes.length;
+      if (kept[pid]) continue;
+      const parentId = path.end === END_REACH ? pathOf[path.terminal] : -1;
+      let beside = 0;
+      for (let k = 0; k < m; k++) {
+        const node = path.nodes[k];
+        const x = node % gN;
+        const y = (node - x) / gN;
+        const ux = dirX[node];
+        const uy = dirY[node];
+        let found = false;
+        for (let dy = -R; dy <= R && !found; dy++) {
+          for (let dx = -R; dx <= R && !found; dx++) {
+            const d2 = dx * dx + dy * dy;
+            if (d2 === 0 || d2 > R * R) continue;
+            const j = wrap(y + dy, gN) * gN + wrap(x + dx, gN);
+            if (!channel[j]) continue;
+            const other = pathOf[j];
+            if (other === pid || other === parentId || !kept[other]) continue;
+            if (dirX[j] * ux + dirY[j] * uy < 0.8) continue;
+            // Beside it, not ahead of it or behind.
+            const along = dx * ux + dy * uy;
+            if (along * along <= 0.5 * d2) found = true;
+          }
+        }
+        if (found) beside++;
+      }
+      if (beside >= p.combShare * m) dropped[pid] = 1;
+      else kept[pid] = 1;
+    }
+  }
 
   // --- Levels on the node chain. Receivers come first in `order`.
   const south = new Uint8Array(nn);
@@ -688,55 +911,56 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
     return isSea[i] === 1 || lakeId[i] >= 0;
   };
 
-  const pending: { path: number; t: number; x: number[]; y: number[]; width: number }[] = [];
+  const pending: { path: number; t: number; x: number[]; y: number[]; ox: number[]; oy: number[]; width: number }[] = [];
+  const pendingBars: { path: number; t: number; ox: number[]; oy: number[] }[] = [];
+
+  // Every vertex of every finished line, in buckets, so a later stream can find the rivers near it.
+  const nb = n / BUCKET;
+  const bucket = new Int32Array(nb * nb).fill(-1);
+  const ixNext: number[] = [];
+  const ixX: number[] = [];
+  const ixY: number[] = [];
+  const ixPath: number[] = [];
+  const ixPos: number[] = [];
+  const addToIndex = (pid: number, line: Line): void => {
+    for (let i = 0; i < line.x.length; i++) {
+      const x = wrap(line.x[i], n);
+      const y = wrap(line.y[i], n);
+      const b = Math.min(nb - 1, Math.floor(y / BUCKET)) * nb + Math.min(nb - 1, Math.floor(x / BUCKET));
+      ixNext.push(bucket[b]);
+      bucket[b] = ixX.length;
+      ixX.push(x);
+      ixY.push(y);
+      ixPath.push(pid);
+      ixPos.push(i);
+    }
+  };
+  /** Calls f(entry, distance²) for indexed vertices in the buckets around (x, y); covers any radius up to BUCKET. */
+  const nearby = (x: number, y: number, f: (e: number, d2: number) => void): void => {
+    const wx = wrap(x, n);
+    const wy = wrap(y, n);
+    const bx = Math.min(nb - 1, Math.floor(wx / BUCKET));
+    const by = Math.min(nb - 1, Math.floor(wy / BUCKET));
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let e = bucket[wrap(by + oy, nb) * nb + wrap(bx + ox, nb)]; e >= 0; e = ixNext[e]) {
+          const dx = torusDelta(wx, ixX[e], n);
+          const dy = torusDelta(wy, ixY[e], n);
+          f(e, dx * dx + dy * dy);
+        }
+      }
+    }
+  };
 
   // --- Geometry, trunks first.
   for (let oi = 0; oi < pathOrder.length; oi++) {
     const pid = pathOrder[oi];
+    if (dropped[pid]) continue;
     const path = paths[pid];
     const m = path.nodes.length;
     const rx = Array.from(path.px);
     const ry = Array.from(path.py);
-
-    // A tributary ends on its trunk's finished line, not on the node.
-    let parent: Path | null = null;
-    let shiftX = 0;
-    let shiftY = 0;
-    let joinPos = 0;
-    if (path.end === END_REACH) {
-      const parentId = pathOf[path.terminal];
-      parent = paths[parentId];
-      path.parent = parentId;
-      const pl = parent.line;
-      const tc = idxOf[path.terminal];
-      const last = pl.t.length - 1;
-      if (tc >= pl.t[last]) {
-        joinPos = last;
-      } else {
-        const s = segmentAt(pl.t, tc);
-        const span = pl.t[s + 1] - pl.t[s];
-        joinPos = s + (span > 0 ? (tc - pl.t[s]) / span : 0);
-      }
-      joinPos = snapJoin(parent, joinPos);
-      const [jx, jy] = pointOn(pl, joinPos);
-      shiftX = n * Math.round((rx[m] - jx) / n);
-      shiftY = n * Math.round((ry[m] - jy) / n);
-      const dx = jx + shiftX - rx[m];
-      const dy = jy + shiftY - ry[m];
-      const reach = Math.max(12, 3 * Math.sqrt(dx * dx + dy * dy));
-      let back = 0;
-      for (let k = m; k >= 0; k--) {
-        if (k < m) {
-          const sx = path.px[k + 1] - path.px[k];
-          const sy = path.py[k + 1] - path.py[k];
-          back += Math.sqrt(sx * sx + sy * sy);
-        }
-        const f = 1 - back / reach;
-        if (f <= 0) break;
-        rx[k] += dx * f;
-        ry[k] += dy * f;
-      }
-    }
+    let oxbowsLeft = p.oxbowMax;
 
     rx[0] = quarter(rx[0]);
     ry[0] = quarter(ry[0]);
@@ -826,7 +1050,7 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
           sub.a.push(0);
         }
         addAt(tEnd);
-        const made = tEnd > k0 ? meanderRun(sub, path, flat, key) : null;
+        const made = tEnd > k0 ? meanderRun(sub, path, flat, key, oxbowsLeft) : null;
         if (made) {
           for (let i = from; i < ia; i++) {
             if (line.t[i] >= k0) break;
@@ -842,6 +1066,8 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
             next.a.push(made.line.a[i]);
           }
           for (let i = 0; i < made.oxbows.length; i++) pending.push({ path: pid, ...made.oxbows[i] });
+          for (let i = 0; i < made.bars.length; i++) pendingBars.push({ path: pid, ...made.bars[i] });
+          oxbowsLeft -= made.oxbows.length;
           from = ib;
           while (from < line.t.length && line.t[from] <= tEnd) from++;
         }
@@ -856,102 +1082,188 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
       line = next;
     }
 
-    // Join the trunk where the tributary first meets it.
-    if (parent) {
-      line = resample(line, 1.5);
-      const pl = parent.line;
+    line = wiggle(line, path);
+
+    // Join the first larger river this one comes up beside, else the one the hydrology sends it to.
+    let target = -1;
+    let targetPos = 0;
+    let cutAt = line.x.length - 1;
+    let run = 0;
+    for (let i = 1; i < line.x.length && target < 0; i++) {
+      const sx = line.x[i] - line.x[i - 1];
+      const sy = line.y[i] - line.y[i - 1];
+      run += Math.sqrt(sx * sx + sy * sy);
+      if (run < 8) continue;
+      let best = Infinity;
+      const own = profile(path, line.t[i]);
+      nearby(line.x[i], line.y[i], (e, d2) => {
+        if (d2 >= best) return;
+        const other = paths[ixPath[e]];
+        const tOther = other.line.t[ixPos[e]];
+        const reachOf = widthAt(other, tOther) / 2 + p.mergeGap;
+        // Only a river at about this one's level: water does not climb, and one far below is across a drop.
+        const theirs = profile(other, tOther);
+        if (d2 >= reachOf * reachOf || theirs > own + 1 || theirs < own - 4) return;
+        best = d2;
+        target = ixPath[e];
+        targetPos = ixPos[e];
+        cutAt = i;
+      });
+    }
+    if (target < 0 && path.end === END_REACH) {
+      target = pathOf[path.terminal];
+      const pl = paths[target].line;
       const tc = idxOf[path.terminal];
-      let ia = segmentAt(pl.t, tc - TRUNK_WINDOW);
-      let ib = Math.min(pl.t.length - 1, segmentAt(pl.t, tc + TRUNK_WINDOW) + 1);
-      if (pl.t[ia] > tc - TRUNK_WINDOW) ia = 0;
-      if (ib < ia + 1) ib = ia + 1;
-      let s0 = 0;
-      const lastT = line.t[line.t.length - 1];
-      while (s0 + 2 < line.t.length && line.t[s0 + 1] < lastT - TRUNK_WINDOW) s0++;
-      let hitSeg = -1;
-      let hitA = 0;
-      let hitPos = 0;
-      for (let s = s0; s + 1 < line.x.length && hitSeg < 0; s++) {
-        const a0x = line.x[s] - shiftX;
-        const a0y = line.y[s] - shiftY;
-        const a1x = line.x[s + 1] - shiftX;
-        const a1y = line.y[s + 1] - shiftY;
-        for (let r = ia; r < ib; r++) {
-          const hit = segmentHit(a0x, a0y, a1x, a1y, pl.x[r], pl.y[r], pl.x[r + 1], pl.y[r + 1]);
-          if (hit && (hitSeg < 0 || hit[0] < hitA)) {
-            hitSeg = s;
-            hitA = hit[0];
-            hitPos = r + hit[1];
-          }
-        }
-        if (hitSeg >= 0 || s + 2 >= line.x.length) continue;
-        // Or runs so close beside it that the two would touch: join at the nearest point.
-        let near = Infinity;
-        let nearPos = 0;
-        for (let r = ia; r < ib; r++) {
-          const sx = pl.x[r + 1] - pl.x[r];
-          const sy = pl.y[r + 1] - pl.y[r];
-          const len2 = sx * sx + sy * sy;
-          const f = len2 > 0 ? Math.max(0, Math.min(1, ((a1x - pl.x[r]) * sx + (a1y - pl.y[r]) * sy) / len2)) : 0;
-          const dx = a1x - pl.x[r] - sx * f;
-          const dy = a1y - pl.y[r] - sy * f;
-          const reachOf = widthAt(parent, pl.t[r]) / 2 + 3;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < reachOf * reachOf && d2 < near) {
-            near = d2;
-            nearPos = r + f;
-          }
-        }
-        if (near < Infinity) {
-          hitSeg = s;
-          hitA = 1;
-          hitPos = nearPos;
-        }
+      const last = pl.t.length - 1;
+      if (tc >= pl.t[last]) {
+        targetPos = last;
+      } else {
+        const s = segmentAt(pl.t, tc);
+        const span = pl.t[s + 1] - pl.t[s];
+        targetPos = s + (span > 0 ? (tc - pl.t[s]) / span : 0);
       }
-      if (hitSeg >= 0) {
-        joinPos = snapJoin(parent, hitPos);
-        const tHit = line.t[hitSeg] + (line.t[hitSeg + 1] - line.t[hitSeg]) * hitA;
-        line.x.length = hitSeg + 1;
-        line.y.length = hitSeg + 1;
-        line.t.length = hitSeg + 1;
-        line.a.length = hitSeg + 1;
-        line.x.push(0);
-        line.y.push(0);
-        line.t.push(tHit);
-        line.a.push(0);
+    }
+    if (target >= 0) {
+      const par = paths[target];
+      const pos = staggerJoin(par, targetPos);
+      const [jx, jy] = pointOn(par.line, pos);
+      line.x.length = cutAt + 1;
+      line.y.length = cutAt + 1;
+      line.t.length = cutAt + 1;
+      line.a.length = cutAt + 1;
+      // Bend the tail over to the confluence, which is in the other river's frame.
+      const ex = line.x[cutAt];
+      const ey = line.y[cutAt];
+      const endX = jx + n * Math.round((ex - jx) / n);
+      const endY = jy + n * Math.round((ey - jy) / n);
+      const dx = endX - ex;
+      const dy = endY - ey;
+      const reach = Math.max(10, 3 * Math.sqrt(dx * dx + dy * dy));
+      const back = new Float64Array(cutAt + 1);
+      for (let i = cutAt - 1; i >= 0; i--) {
+        const sx = line.x[i + 1] - line.x[i];
+        const sy = line.y[i + 1] - line.y[i];
+        back[i] = back[i + 1] + Math.sqrt(sx * sx + sy * sy);
       }
-      const [jx, jy] = pointOn(pl, joinPos);
-      const e = line.x.length - 1;
-      line.x[e] = jx + shiftX;
-      line.y[e] = jy + shiftY;
-      path.joinPos = joinPos;
-      parent.joins.push(joinPos);
+      for (let i = 0; i < cutAt; i++) {
+        const f = 1 - back[i] / reach;
+        if (f <= 0) continue;
+        line.x[i] += dx * f;
+        line.y[i] += dy * f;
+      }
+      line.x[cutAt] = endX;
+      line.y[cutAt] = endY;
+      line.x[0] = quarter(line.x[0]);
+      line.y[0] = quarter(line.y[0]);
+      path.parent = target;
+      path.joinPos = pos;
+      path.floor = Math.max(par.floor, profile(par, pointOn(par.line, pos)[2]));
+      par.joins.push(pos);
     }
     path.line = line;
+    addToIndex(pid, line);
   }
 
-  /** Tributaries that meet a trunk within a cell of each other share one confluence. */
-  function snapJoin(parent: Path, pos: number): number {
-    for (let i = 0; i < parent.joins.length; i++) if (Math.abs(parent.joins[i] - pos) < 0.75) return parent.joins[i];
-    return pos;
+  /** Sideways wander for streams too small or too steep to meander, so none runs ruler-straight. */
+  function wiggle(src: Line, path: Path): Line {
+    const l = resample(src, LINE_STEP);
+    const count = l.x.length;
+    if (count < 6 || !(p.wiggle > 0)) return l;
+    const step = new Float64Array(count);
+    for (let i = 1; i < count; i++) {
+      const dx = l.x[i] - l.x[i - 1];
+      const dy = l.y[i] - l.y[i - 1];
+      step[i] = Math.sqrt(dx * dx + dy * dy);
+    }
+    // Arc distance to the nearest point that must not move: an end, or a meander.
+    const free = new Float64Array(count);
+    for (let i = 1; i < count - 1; i++) free[i] = l.a[i] > 0 ? 0 : free[i - 1] + step[i];
+    for (let i = count - 2; i > 0; i--) free[i] = Math.min(free[i], free[i + 1] + step[i + 1]);
+    const KNOT = 24;
+    let lamA = rng.range(p.wiggleLambda[0], p.wiggleLambda[1]);
+    let lamB = rng.range(p.wiggleLambda[0], p.wiggleLambda[1]);
+    let ampA = rng.range(0.7, 1.3);
+    let ampB = rng.range(0.7, 1.3);
+    const phase0 = rng.float() * 2 * PI;
+    const phase1 = rng.float() * 2 * PI;
+    let since = 0;
+    let phase = 0;
+    const ox = new Float64Array(count);
+    const oy = new Float64Array(count);
+    for (let i = 1; i < count - 1; i++) {
+      since += step[i];
+      if (since >= KNOT) {
+        since -= KNOT;
+        lamA = lamB;
+        ampA = ampB;
+        lamB = rng.range(p.wiggleLambda[0], p.wiggleLambda[1]);
+        ampB = rng.range(0.7, 1.3);
+      }
+      const f = since / KNOT;
+      phase += (step[i] * 2 * PI) / (lamA + (lamB - lamA) * f);
+      const weight = Math.min(1, free[i] / 5);
+      if (weight <= 0) continue;
+      const nx = -(l.y[i + 1] - l.y[i - 1]);
+      const ny = l.x[i + 1] - l.x[i - 1];
+      const nl = Math.sqrt(nx * nx + ny * ny);
+      if (!(nl > 0)) continue;
+      const size = p.wiggle * (0.75 + 0.25 * widthAt(path, l.t[i])) * (ampA + (ampB - ampA) * f) * weight;
+      const d = size * (psin(phase + phase0) + 0.25 * psin(2.3 * phase + phase1));
+      ox[i] = (nx / nl) * d;
+      oy[i] = (ny / nl) * d;
+    }
+    for (let i = 0; i < count; i++) {
+      l.x[i] += ox[i];
+      l.y[i] += oy[i];
+    }
+    return l;
   }
+
+  /** A free place for a confluence near `pos` on a line: no two within JOIN_GAP vertices, none at either end. */
+  function staggerJoin(par: Path, pos: number): number {
+    const last = par.line.x.length - 1;
+    const lo = last < 2 * JOIN_GAP ? last / 2 : JOIN_GAP;
+    const hi = last < 2 * JOIN_GAP ? last / 2 : last - JOIN_GAP;
+    const free = (c: number): boolean => {
+      for (let i = 0; i < par.joins.length; i++) if (Math.abs(par.joins[i] - c) < JOIN_GAP - 1e-9) return false;
+      return true;
+    };
+    const base = Math.max(lo, Math.min(hi, pos));
+    for (let k = 0; k <= 60; k++) {
+      const down = Math.max(lo, Math.min(hi, base + k * JOIN_GAP));
+      if (free(down)) return down;
+      const up = Math.max(lo, Math.min(hi, base - k * JOIN_GAP));
+      if (free(up)) return up;
+    }
+    return base;
+  }
+
+  type RunOxbow = { t: number; x: number[]; y: number[]; ox: number[]; oy: number[]; width: number };
+  type RunBar = { t: number; ox: number[]; oy: number[] };
 
   /** A meander along the smoothed axis of a stretch of line, ending where the stretch ends. */
-  function meanderRun(sub: Line, path: Path, flat: Float32Array, key: number): { line: Line; oxbows: { t: number; x: number[]; y: number[]; width: number }[] } | null {
+  function meanderRun(sub: Line, path: Path, flat: Float32Array, key: number, oxbowMax: number): { line: Line; oxbows: RunOxbow[]; bars: RunBar[] } | null {
     const axis = resample(sub, 1);
     const count = axis.x.length;
     if (count < 8) return null;
-    const specAt = (t: number): MeanderSpec => {
+    const room = new Float64Array(count).fill(Infinity);
+    const specAt = (t: number, i: number): MeanderSpec => {
       const w = widthAt(path, t);
       const share = Math.max(0, Math.min(1, (w - 2) / (p.omegaFullWidth - 2)));
       // Flatness between the two nodes around t, so loops grow and die away smoothly.
       const k = Math.max(0, Math.min(flat.length - 1, Math.floor(t)));
       const k2 = Math.min(flat.length - 1, k + 1);
-      const strength = flat[k] + (flat[k2] - flat[k]) * Math.max(0, Math.min(1, t - k));
-      return { width: w, lambda: Math.max(p.lambdaMin, p.lambdaPerWidth * w), omega: (p.omega[0] + (p.omega[1] - p.omega[0]) * share) * strength };
+      const f = Math.max(0, Math.min(1, t - k));
+      const strength = flat[k] + (flat[k2] - flat[k]) * f;
+      // Wavelength follows the discharge itself, not the rounded width, and widens with the valley floor.
+      const qa = q[path.nodes[k]];
+      const fluid = Math.max(1, Math.min(6, Math.sqrt((qa + (q[path.nodes[k2]] - qa) * f) / p.qScale)));
+      const base = Math.max(p.lambdaMin, p.lambdaPerWidth * fluid);
+      const lambda = base * Math.max(0.7, Math.min(1.35, 0.7 + (0.6 * room[i]) / base));
+      return { width: w, lambda, omega: (p.omega[0] + (p.omega[1] - p.omega[0]) * share) * strength, room: 0.9 * room[i] };
     };
     // The valley axis: the channel with bends shorter than a loop smoothed away.
-    const lambda = specAt(axis.t[count >> 1]).lambda;
+    const lambda = specAt(axis.t[count >> 1], count >> 1).lambda;
     const passes = Math.min(120, Math.round((lambda * lambda) / 40));
     for (let pass = 0; pass < passes; pass++) {
       let prevX = axis.x[0];
@@ -977,17 +1289,51 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
       const span = ua[s + 1] - ua[s];
       return axis.t[s] + (axis.t[s + 1] - axis.t[s]) * (span > 0 ? Math.max(0, Math.min(1, (u - ua[s]) / span)) : 0);
     };
+    // Room: how far the flat floor runs to either side of the axis before it meets a wall or water.
+    const probe = (x: number, y: number, dx: number, dy: number, top: number): number => {
+      for (let d = 4; d < 48; d += 4) {
+        const i = wrap(Math.floor((y + dy * d) / 4), gN) * gN + wrap(Math.floor((x + dx * d) / 4), gN);
+        if (isSea[i] || lakeId[i] >= 0 || hydro.ground[i] > top) return d - 2;
+      }
+      return 48;
+    };
+    const raw = new Float64Array(count);
+    for (let i = 0; i < count; i++) {
+      const a = Math.max(0, i - 1);
+      const b = Math.min(count - 1, i + 1);
+      const dx = axis.x[b] - axis.x[a];
+      const dy = axis.y[b] - axis.y[a];
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (!(len > 0)) continue;
+      const top = routed(path, Math.min(path.nodes.length, Math.floor(axis.t[i] + 0.5))) + 3;
+      raw[i] = 0.5 * (probe(axis.x[i], axis.y[i], -dy / len, dx / len, top) + probe(axis.x[i], axis.y[i], dy / len, -dx / len, top));
+    }
+    for (let i = 0; i < count; i++) {
+      let sum = 0;
+      let cnt = 0;
+      for (let j = Math.max(0, i - 6); j <= Math.min(count - 1, i + 6); j++) {
+        sum += raw[j];
+        cnt++;
+      }
+      room[i] = Math.max(1, sum / cnt);
+    }
     const scales = [1, 0.6, 0.35];
     for (let attempt = 0; attempt < scales.length; attempt++) {
       const made = meanderAlong(axis.x, axis.y, {
-        spec: (u) => specAt(tAt(u)),
+        spec: (u) => {
+          const i = segmentAt(ua, u);
+          return specAt(tAt(u), ua[i + 1] - u < u - ua[i] ? i + 1 : i);
+        },
         wobble: p.wobble,
+        skew: p.skew,
         taper: true,
         scale: scales[attempt],
         step: 0.75,
         rng: rngFor(key, "meander"),
         oxbowEvery: p.oxbowEvery,
+        oxbowMax: Math.max(0, oxbowMax),
         oxbowMinWidth: p.oxbowMinWidth,
+        barMinWidth: p.barMinWidth,
       });
       if (!made) return null;
       let ok = true;
@@ -999,14 +1345,21 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
       for (let i = 0; i < made.x.length; i++) out.t.push(tAt(made.u[i]));
       out.t[0] = sub.t[0];
       out.t[out.t.length - 1] = sub.t[sub.t.length - 1];
-      const oxbows: { t: number; x: number[]; y: number[]; width: number }[] = [];
+      const oxbows: RunOxbow[] = [];
       for (let i = 0; i < made.oxbows.length; i++) {
         const ox = made.oxbows[i];
         let dry = true;
-        for (let k = 0; k < ox.x.length && dry; k++) if (wet(ox.x[k], ox.y[k])) dry = false;
-        if (dry) oxbows.push({ t: tAt(ox.u), x: ox.x, y: ox.y, width: ox.width });
+        for (let k = 0; k < ox.ox.length && dry; k++) if (wet(ox.ox[k], ox.oy[k])) dry = false;
+        if (dry) oxbows.push({ t: tAt(ox.u), x: ox.x, y: ox.y, ox: ox.ox, oy: ox.oy, width: ox.width });
       }
-      return { line: out, oxbows };
+      const bars: RunBar[] = [];
+      for (let i = 0; i < made.bars.length; i++) {
+        const bar = made.bars[i];
+        let dry = true;
+        for (let k = 0; k < bar.ox.length && dry; k++) if (wet(bar.ox[k], bar.oy[k])) dry = false;
+        if (dry) bars.push({ t: tAt(bar.u), ox: bar.ox, oy: bar.oy });
+      }
+      return { line: out, oxbows, bars };
     }
     return null;
   }
@@ -1023,6 +1376,7 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
   const reachAmp: number[][] = [];
   for (let oi = 0; oi < pathOrder.length; oi++) {
     const pid = pathOrder[oi];
+    if (dropped[pid]) continue;
     const path = paths[pid];
     const line = path.line;
     const last = line.x.length - 1;
@@ -1087,7 +1441,7 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
           fine.y[i] = quarter(fine.y[i]);
         }
         ws.push(widthAt(path, fine.t[i]));
-        ls.push(profile(path, fine.t[i]));
+        ls.push(Math.max(path.floor, profile(path, fine.t[i])));
       }
       const id = reaches.length;
       const isLast = c + 1 === cuts.length;
@@ -1180,30 +1534,63 @@ export function rivers(input: RiversInput, p: RiverParams, seed: number): Rivers
     reaches[r].vertices = v;
   }
 
-  // --- Oxbow ponds take the level of the river beside them.
+  // --- Oxbows and point bars: placed on their reach, and kept only where no river runs through them.
+  /** The reach of a path that holds position t on its node chain, and the vertex there. */
+  const locate = (path: Path, t: number): [number, number] | null => {
+    for (let c = 0; c < path.cutReach.length; c++) {
+      const fine = reachLine[path.cutReach[c]];
+      if (fine.t[fine.t.length - 1] < t) continue;
+      let at = 0;
+      while (at + 1 < fine.t.length && fine.t[at] < t) at++;
+      return [path.cutReach[c], at];
+    }
+    return null;
+  };
+  /** A closed outline, quarter-snapped; null if it crosses itself or comes within `margin` of any river's bank. */
+  const outlineOf = (ox: number[], oy: number[], margin: number): Float32Array | null => {
+    const v = new Float32Array(ox.length * 2);
+    const cx: number[] = [];
+    const cy: number[] = [];
+    let clear = true;
+    for (let k = 0; k < ox.length && clear; k++) {
+      v[k * 2] = quarter(ox[k]);
+      v[k * 2 + 1] = quarter(oy[k]);
+      cx.push(v[k * 2]);
+      cy.push(v[k * 2 + 1]);
+      nearby(ox[k], oy[k], (e, d2) => {
+        const other = paths[ixPath[e]];
+        const reachOf = widthAt(other, other.line.t[ixPos[e]]) / 2 + margin;
+        if (d2 < reachOf * reachOf) clear = false;
+      });
+    }
+    if (!clear || ox.length < 4) return null;
+    return polygonIsSimple(cx, cy) ? v : null;
+  };
   const oxbows: Oxbow[] = [];
   for (let i = 0; i < pending.length; i++) {
     const ox = pending[i];
-    const path = paths[ox.path];
-    let r = -1;
-    let at = 0;
-    for (let c = 0; c < path.cutReach.length && r < 0; c++) {
-      const fine = reachLine[path.cutReach[c]];
-      if (fine.t[fine.t.length - 1] < ox.t) continue;
-      r = path.cutReach[c];
-      while (at + 1 < fine.t.length && fine.t[at] < ox.t) at++;
-    }
-    if (r < 0) continue;
+    const where = locate(paths[ox.path], ox.t);
+    if (!where) continue;
+    const outline = outlineOf(ox.ox, ox.oy, 2);
+    if (!outline) continue;
     const v = new Float32Array(ox.x.length * 2);
     for (let k = 0; k < ox.x.length; k++) {
       v[k * 2] = quarter(ox.x[k]);
       v[k * 2 + 1] = quarter(ox.y[k]);
     }
-    oxbows.push({ reach: r, width: Math.max(1, ox.width - 1), level: reachLevel[r][at], vertices: v });
+    oxbows.push({ reach: where[0], width: ox.width, level: reachLevel[where[0]][where[1]], vertices: v, outline });
+  }
+  const bars: PointBar[] = [];
+  for (let i = 0; i < pendingBars.length; i++) {
+    const bar = pendingBars[i];
+    const where = locate(paths[bar.path], bar.t);
+    if (!where) continue;
+    const outline = outlineOf(bar.ox, bar.oy, -0.2);
+    if (outline) bars.push({ reach: where[0], outline });
   }
 
   const ground = conform(hydro, isSea, gN, reaches, reachAmp, oxbows, p);
-  return { reaches, falls, oxbows, ground };
+  return { reaches, falls, oxbows, bars, ground };
 }
 
 /** Valley floors, then beds, then any pit the edits left is filled. */
@@ -1252,7 +1639,8 @@ function conform(hydro: HydroResult, isSea: Uint8Array, gN: number, reaches: Rea
     }
   }
   for (let i = 0; i < nn; i++) {
-    if (weight[i] > 0 && !isSea[i] && lakeId[i] < 0) ground[i] += weight[i] * (target[i] - ground[i]);
+    // A floor is flattened; a wall standing well above it is left as the valley side.
+    if (weight[i] > 0 && !isSea[i] && lakeId[i] < 0 && ground[i] - target[i] <= FLOOR_MAX_CUT) ground[i] += weight[i] * (target[i] - ground[i]);
   }
 
   // Beds: the ground under the water is never above it.

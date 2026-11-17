@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PI, pcos, psin } from "../core/psin.ts";
+import { rngFor } from "../core/rng.ts";
 import { wrap } from "../core/torus.ts";
 import { runSchedule } from "./erode.ts";
 import { priorityFlood } from "./flood.ts";
 import { type HydroParams, hydrology } from "./hydro.ts";
 import { paramsFor } from "./params.ts";
 import { planWorld } from "./plan.ts";
-import { meanderAlong, meanderMeans, rasterizeRivers, type Reach, type RiverParams, type RiversResult, riverWidth, rivers, selfIntersects } from "./rivers.ts";
+import { meanderAlong, meanderMeans, polygonIsSimple, rasterizeRivers, type Reach, type RiverParams, type RiversResult, riverWidth, rivers, selfIntersects } from "./rivers.ts";
 
 const HP: HydroParams = { rainBase: 1, orographic: 0, recharge: 1, depletion: 0, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 64 };
 const RP: RiverParams = { ...paramsFor(6400).rivers };
@@ -48,6 +49,52 @@ function length(x: ArrayLike<number>, y: ArrayLike<number>): number {
   return s;
 }
 
+/** A closed outline is quarter-snapped, simple, and encloses at least `minArea` cells. */
+function checkPolygon(o: Float32Array, minArea: number) {
+  const m = o.length / 2;
+  assert.ok(m >= 6, `${m} vertices`);
+  const x: number[] = [], y: number[] = [];
+  let area = 0;
+  for (let i = 0; i < m; i++) {
+    assert.equal(o[i * 2] * 4, Math.round(o[i * 2] * 4));
+    assert.equal(o[i * 2 + 1] * 4, Math.round(o[i * 2 + 1] * 4));
+    x.push(o[i * 2]); y.push(o[i * 2 + 1]);
+    const j = (i + 1) % m;
+    area += o[i * 2] * o[j * 2 + 1] - o[j * 2] * o[i * 2 + 1];
+  }
+  assert.ok(polygonIsSimple(x, y), "outline crosses itself");
+  assert.ok(Math.abs(area) / 2 >= minArea, `area ${Math.abs(area) / 2}`);
+}
+
+/** Least gap between an outline's vertices and the bank of any river, in cells. */
+function clearance(o: Float32Array, reaches: Reach[], n: number): number {
+  let least = Infinity;
+  for (const r of reaches) for (let i = 0; i < r.vertices.length; i += 4) for (let k = 0; k < o.length; k += 2) {
+    const dx = wrap(o[k] - r.vertices[i] + n / 2, n) - n / 2, dy = wrap(o[k + 1] - r.vertices[i + 1] + n / 2, n) - n / 2;
+    least = Math.min(least, Math.sqrt(dx * dx + dy * dy) - r.vertices[i + 2] / 2);
+  }
+  return least;
+}
+
+/** Longest stretch of a 1 px stream that keeps to one row or one column (within half a cell), in cells. */
+function longestRuledRun(reaches: Reach[]): number {
+  let worst = 0;
+  for (const r of reaches) for (const axis of [0, 1]) {
+    const v = r.vertices, c = count(r);
+    for (let s = 0; s < c; s++) {
+      if (v[s * 4 + 2] !== 1) continue;
+      let lo = v[s * 4 + axis], hi = lo, e = s;
+      while (e + 1 < c && v[(e + 1) * 4 + 2] === 1) {
+        const a = v[(e + 1) * 4 + axis];
+        if (Math.max(hi, a) - Math.min(lo, a) > 0.5) break;
+        lo = Math.min(lo, a); hi = Math.max(hi, a); e++;
+      }
+      worst = Math.max(worst, Math.abs(v[e * 4 + 1 - axis] - v[s * 4 + 1 - axis]));
+    }
+  }
+  return worst;
+}
+
 /** The invariants every river network must hold. */
 function checkNetwork(res: RiversResult, n: number, lakeLevels: number[] = []) {
   const { reaches } = res;
@@ -82,6 +129,31 @@ function checkNetwork(res: RiversResult, n: number, lakeLevels: number[] = []) {
       if (r.endsIn === "lake") assert.ok(v[end + 3] >= lakeLevels[r.lake] - 1e-4);
       else assert.equal(r.lake, -1);
     }
+  }
+  // No starbursts: at most two streams meet at one point, and one leaves it.
+  const meet = new Map<string, number>(), leave = new Map<string, number>();
+  for (const r of reaches) {
+    const v = r.vertices, end = v.length - 4;
+    const start = `${wrap(v[0], n)},${wrap(v[1], n)}`;
+    leave.set(start, (leave.get(start) ?? 0) + 1);
+    if (r.endsIn !== "reach") continue;
+    const key = `${wrap(v[end], n)},${wrap(v[end + 1], n)}`;
+    meet.set(key, (meet.get(key) ?? 0) + 1);
+  }
+  for (const [key, c] of meet) {
+    assert.ok(c <= 2, `${c} streams meet at ${key}`);
+    assert.equal(leave.get(key), 1, `${leave.get(key)} streams leave ${key}`);
+  }
+  // Still water and sand are simple polygons on a reach that exists, clear of every channel.
+  for (const o of res.oxbows) {
+    assert.ok(reaches[o.reach]);
+    assert.ok(o.width >= 3);
+    checkPolygon(o.outline, 10);
+    assert.ok(clearance(o.outline, reaches, n) >= 1.5, "an oxbow touches a river");
+  }
+  for (const b of res.bars) {
+    assert.ok(reaches[b.reach]);
+    checkPolygon(b.outline, 2);
   }
   // Following downstream always ends, at the sea or a lake.
   for (const r of reaches) {
@@ -201,6 +273,83 @@ test("a river runs into a lake and out again by its outlet", () => {
   assert.ok(out[0].order >= Math.max(...into.map((r) => r.order)));
 });
 
+test("oxbows are rare, detached crescents; point bars sit inside bends", () => {
+  let oxbows = 0, bars = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const res = run("south", 0, seed);
+    checkNetwork(res, N);
+    assert.ok(res.oxbows.length <= 2, `seed ${seed}: ${res.oxbows.length} oxbows on one river`);
+    oxbows += res.oxbows.length;
+    bars += res.bars.length;
+    for (const o of res.oxbows) {
+      // A crescent, not a ring: its centreline does not close on itself.
+      const v = o.vertices, e = v.length - 2;
+      assert.ok(Math.sqrt((v[e] - v[0]) ** 2 + (v[e + 1] - v[1]) ** 2) >= 6);
+    }
+    // A bar hugs its own river: within two widths of the channel, never across it.
+    for (const b of res.bars) {
+      const gap = clearance(b.outline, res.reaches, N);
+      assert.ok(gap >= -0.5 && gap <= 2, `bar ${gap} cells from its bank`);
+    }
+  }
+  assert.ok(oxbows >= 1 && bars >= 1, `${oxbows} oxbows, ${bars} bars in 12 worlds`);
+
+  // On a long open valley the cap still holds, and a narrow river leaves none.
+  const ax = Array.from({ length: 3001 }, (_, i) => i), ay = ax.map(() => 0);
+  const spec = (width: number) => () => ({ omega: 1.1, lambda: 12 * width, width });
+  const opts = { wobble: 0.5, skew: 0.3, taper: true, scale: 1, step: 0.75, oxbowEvery: 8, oxbowMinWidth: 3, barMinWidth: 3 };
+  for (let seed = 1; seed <= 6; seed++) {
+    const wide = meanderAlong(ax, ay, { ...opts, spec: spec(4), rng: rngFor(seed, "t") });
+    assert.ok(wide && wide.oxbows.length >= 1 && wide.oxbows.length <= 2);
+    const narrow = meanderAlong(ax, ay, { ...opts, spec: spec(2), rng: rngFor(seed, "t") });
+    assert.ok(narrow && narrow.oxbows.length === 0 && narrow.bars.length === 0);
+  }
+});
+
+test("bends differ: wavelength and amplitude vary from one to the next", () => {
+  const ax = Array.from({ length: 2001 }, (_, i) => i), ay = ax.map(() => 0);
+  const m = meanderAlong(ax, ay, { spec: () => ({ omega: 1.1, lambda: 48, width: 4 }), wobble: 0.5, skew: 0.3, taper: true, scale: 1, step: 0.75, rng: rngFor(3, "t"), oxbowEvery: 0, oxbowMinWidth: 3 });
+  assert.ok(m);
+  assert.equal(selfIntersects(m.x, m.y), false);
+  // Apexes: turning points of the offset from the axis.
+  const peaks: number[] = [], gaps: number[] = [];
+  let last = 0;
+  for (let i = 1; i + 1 < m.y.length; i++) {
+    if ((m.y[i] - m.y[i - 1]) * (m.y[i + 1] - m.y[i]) < 0 && Math.abs(m.y[i]) > 0.5) {
+      peaks.push(Math.abs(m.y[i]));
+      if (last) gaps.push(m.x[i] - last);
+      last = m.x[i];
+    }
+  }
+  assert.ok(peaks.length >= 20);
+  const spread = (a: number[]) => { const mean = a.reduce((p, c) => p + c, 0) / a.length; return Math.sqrt(a.reduce((p, c) => p + (c - mean) ** 2, 0) / a.length) / mean; };
+  assert.ok(spread(peaks) >= 0.25, `amplitude varies ${spread(peaks)}`);
+  assert.ok(spread(gaps) >= 0.2, `spacing varies ${spread(gaps)}`);
+});
+
+test("small streams wander: no ruled run on a 1 px stream, and combs are thinned", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const res = run("south", 0, seed);
+    assert.ok(longestRuledRun(res.reaches) <= 20, `seed ${seed}: ruled for ${longestRuledRun(res.reaches)} cells`);
+  }
+  // A planar slope: every column is a channel. Unthinned they merge only by touching; thinned, few remain.
+  const h = new Float64Array(GN * GN), isSea = new Uint8Array(GN * GN);
+  for (let y = 0; y < GN; y++) for (let x = 0; x < GN; x++) {
+    const i = y * GN + x, along = GN - 5 - y;
+    if (along < 0) { isSea[i] = 1; h[i] = -3; } else h[i] = 0.3 + 0.2 * along + 0.003 * ((x * 37 + y * 11) % 7);
+  }
+  const hy = hydrology(h, GN, isSea, HP);
+  let channelColumns = 0;
+  for (let x = 0; x < GN; x++) channelColumns += hy.channel[(GN - 6) * GN + x];
+  assert.ok(channelColumns > 60);
+  const res = rivers({ g: h, gN: GN, isSea, hydro: hy }, RP, 5);
+  checkNetwork(res, N);
+  const mouths = res.reaches.filter((r) => r.endsIn === "sea").length;
+  assert.ok(mouths >= 3 && mouths <= 14, `${mouths} mouths from ${channelColumns} runnels`);
+  const all = rivers({ g: h, gN: GN, isSea, hydro: hy }, { ...RP, combSpacing: 0, mergeGap: 0 }, 5);
+  assert.ok(all.reaches.filter((r) => r.endsIn === "sea").length > 60);
+});
+
 test("a reach that crosses the seam carries on unwrapped", () => {
   const res = run("east");
   checkNetwork(res, N);
@@ -248,14 +397,15 @@ test("a generated world: every reach leads to the sea, levels fall, and the resu
   assert.ok(a.reaches.some((r) => r.endsIn === "reach") && a.reaches.some((r) => r.endsIn === "sea"));
   assert.ok(a.reaches.some((r) => r.order >= 2));
   for (const r of a.reaches) assert.equal(selfIntersects(xs(r), ys(r)), false, `reach ${r.id} crosses itself`);
+  assert.ok(longestRuledRun(a.reaches) <= 20, `ruled for ${longestRuledRun(a.reaches)} cells`);
 
-  // Every channel node the hydrology found is on a river.
+  // The channels the hydrology found are on rivers, bar the runnels thinned from combs.
   const mask = rasterizeRivers(a.reaches, p.n);
   let wet = 0;
   for (let i = 0; i < mask.length; i++) if (mask[i]) wet++;
   let channels = 0;
   for (let i = 0; i < hy.channel.length; i++) channels += hy.channel[i];
-  assert.ok(wet >= channels * 3, `${wet} river cells for ${channels} channel nodes`);
+  assert.ok(wet >= channels * 2, `${wet} river cells for ${channels} channel nodes`);
 
   const filled = priorityFlood(a.ground, s.gN, s.isSea, 0).filled;
   for (let i = 0; i < filled.length; i++) if (hy.lakeId[i] < 0) assert.ok(filled[i] - a.ground[i] <= 1e-9);
@@ -269,4 +419,5 @@ test("a generated world: every reach leads to the sea, levels fall, and the resu
   assert.deepEqual(b.ground, a.ground);
   assert.deepEqual(b.falls, a.falls);
   assert.deepEqual(b.oxbows, a.oxbows);
+  assert.deepEqual(b.bars, a.bars);
 });

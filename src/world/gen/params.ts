@@ -58,8 +58,16 @@ export interface WorldParams {
     lambdaMin: number;
     lambdaPerWidth: number;
     wobble: number;
+    skew: number;
     oxbowEvery: number;
+    oxbowMax: number;
     oxbowMinWidth: number;
+    barMinWidth: number;
+    wiggle: number;
+    wiggleLambda: readonly [number, number];
+    mergeGap: number;
+    combSpacing: number;
+    combShare: number;
     floorLift: number;
     floorRise: number;
     bankBase: number;
@@ -216,9 +224,20 @@ export function paramsFor(n: number): WorldParams {
       omegaFullWidth: 4,
       lambdaMin: 20,
       lambdaPerWidth: 12,
-      wobble: 0.45,
-      oxbowEvery: 5,
+      // Round 2, tuned 2026-11-17 on 6400 crops: bends vary by half, lean, and
+      // oxbows are at most two to a river; small streams wander instead of
+      // running straight; runnels closer than 48 cells on one slope are thinned.
+      wobble: 0.5,
+      skew: 0.3,
+      oxbowEvery: 8,
+      oxbowMax: 2,
       oxbowMinWidth: 3,
+      barMinWidth: 3,
+      wiggle: 1.6,
+      wiggleLambda: [16, 34],
+      mergeGap: 4,
+      combSpacing: 40,
+      combShare: 0.6,
       floorLift: 0.5,
       floorRise: 0.02,
       bankBase: 0.5,
