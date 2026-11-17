@@ -56,7 +56,7 @@ function blurAxisY(src: Float32Array, dst: Float32Array, n: number, radius: numb
 
 /** Separable box blur on an n × n torus, `radius` nodes, `passes` times (3 passes ≈ Gaussian). */
 export function blurTorus(a: Float32Array, n: number, radius: number, passes: number): Float32Array {
-  let cur = new Float32Array(a);
+  const cur = new Float32Array(a);
   const tmp = new Float32Array(n * n);
   for (let pass = 0; pass < passes; pass++) {
     blurAxisX(cur, tmp, n, radius);

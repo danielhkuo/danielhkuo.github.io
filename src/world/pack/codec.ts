@@ -32,14 +32,14 @@ function zigzagDecode(z: number): number {
 
 async function deflateRaw(input: Uint8Array): Promise<Uint8Array> {
   const buf = await new Response(
-    new Blob([input]).stream().pipeThrough(new CompressionStream("deflate-raw")),
+    new Blob([input as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new CompressionStream("deflate-raw")),
   ).arrayBuffer();
   return new Uint8Array(buf);
 }
 
 async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   const buf = await new Response(
-    new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw")),
+    new Blob([compressed as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream("deflate-raw")),
   ).arrayBuffer();
   return new Uint8Array(buf);
 }
@@ -114,7 +114,7 @@ export async function decodeBytes(bytes: Uint8Array, length: number): Promise<Ui
 
 /** SHA-256 hex of a typed array's bytes, via crypto.subtle. */
 export async function sha256(view: ArrayBufferView): Promise<string> {
-  const slice = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+  const slice = new Uint8Array(view.buffer, view.byteOffset, view.byteLength).slice();
   const digest = await crypto.subtle.digest("SHA-256", slice);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
