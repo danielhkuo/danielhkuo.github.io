@@ -155,11 +155,20 @@ export const MATERIAL = {
 
   /** Bracken: the warm olive of steep, sunny, unploughed hillsides; russet in autumn. */
   bracken: 89,
+
+  /** A stone lying on scree: a tone under the buff of the fan, never dark. */
+  screeStone: 90,
+  /** Marram on the dunes behind a beach: pale sage. */
+  duneGrass: 91,
+  /** Saltmarsh: grey-green turf at the tide's edge. */
+  saltmarsh: 92,
+  /** The muddy creeks that cut a saltmarsh. */
+  saltCreek: 93,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 90;
+export const MATERIAL_COUNT = 94;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -206,7 +215,7 @@ export const isVegetation: Uint8Array = flags([
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
-  M.hedge, M.hedgeCrown, M.bracken,
+  M.hedge, M.hedgeCrown, M.bracken, M.duneGrass, M.saltmarsh,
 ]);
 
 /** Made things: buildings, walls and paving. */
@@ -220,5 +229,5 @@ export const isGrass: Uint8Array = flags([
   ...triple(M.alpineCool), ...triple(M.moorCool),
   M.wheat, M.barley, M.ley, M.hay, M.reeds,
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow,
-  ...triple(M.meadowCool), ...triple(M.pastureCool),
+  ...triple(M.meadowCool), ...triple(M.pastureCool), M.duneGrass,
 ]);
