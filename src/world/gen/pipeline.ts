@@ -1,9 +1,12 @@
 // The generator's stages, in order. One place that says how a world is made.
 // Stages not built yet are marked; the bake supplies stand-ins for them.
 
+import { type Climate, climateFields } from "./climate.ts";
 import { runSchedule } from "./erode.ts";
+import { type HydroResult, hydrology } from "./hydro.ts";
 import type { WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
+import { rivers, type RiversResult } from "./rivers.ts";
 import { talus } from "./talus.ts";
 
 export interface Land {
@@ -51,4 +54,24 @@ export function makeLand(p: WorldParams, seed: number): Land {
     else if (g[i] <= 0) g[i] = p.erode.eps;
   }
   return { p, seed, plan, g, isSea: r.isSea, debris: t.debris, rock, steps: { stepsC: r.stepsC, steadinessC: r.steadinessC, steadinessG: r.steadinessG, capScale } };
+}
+
+export interface World {
+  land: Land;
+  /** Hydrology on the land (lakes, discharge, channels, HAND, rain). */
+  hydro: HydroResult;
+  /** River vectors, falls, oxbows; `rivers.ground` is the final ground on G. */
+  rivers: RiversResult;
+  /** Moisture and wind on C. */
+  climate: Climate;
+}
+
+/** Every built stage, in order. Later stages (coasts, sites, roads, parcels) slot in here. */
+export function makeWorld(p: WorldParams, seed: number): World {
+  const land = makeLand(p, seed);
+  const gN = p.gN;
+  const hydro = hydrology(land.g, gN, land.isSea, p.hydro);
+  const rv = rivers({ g: land.g, gN, isSea: land.isSea, hydro }, p.rivers, seed);
+  const climate = climateFields(rv.ground, hydro.rain, land.isSea, gN, p.climate);
+  return { land, hydro, rivers: rv, climate };
 }
