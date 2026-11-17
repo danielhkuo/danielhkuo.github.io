@@ -93,9 +93,9 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
   if (lam < 0.03) lam = 0.03;
   else if (lam > 0.5 && ndotl < SUN_Z) lam = Math.max(0.5, lam - 0.25 * (SUN_Z - ndotl));
   // Relief: hollows and valley floors darken (ambient occlusion); crests lighten only a little, so they grow no rim.
-  let rel = relief < 0 ? 0.5 + 0.065 * relief : 0.5 + 0.018 * relief;
+  let rel = relief < 0 ? 0.5 + 0.065 * relief : 0.5 + 0.004 * relief;
   if (rel < 0.02) rel = 0.02;
-  else if (rel > 0.62) rel = 0.62;
+  else if (rel > 0.53) rel = 0.53;
   const lit = 0.5 + 0.68 * (lam - 0.5) + 0.32 * (rel - 0.5);
   // Contrast grows with height (after Imhof): lowland is soft, summits are crisp.
   const contrast = 0.85 + (e < 0 ? 0 : e > 130 ? 130 : e) / 300;

@@ -126,9 +126,6 @@ export function riverIndex(lines: readonly RiverLine[], n: number): RiverIndex {
 /** First-order streams shorter than this, in cells, are not drawn. */
 export const MIN_STREAM = 60;
 
-/** Oxbows shorter than this, in cells, are not drawn. */
-export const MIN_OXBOW = 6;
-
 /**
  * A reach that ends at the sea is carried on along its last heading until it
  * is three cells into the water, so no stream stops short on the beach.
@@ -221,16 +218,7 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     if (r.order <= 1 && reachLength(r.vertices) < MIN_STREAM) continue;
     lines.push({ vertices: r.endsIn === "sea" ? runToSea(r.vertices, ground, gN) : r.vertices, stride: 4 });
   }
-  // Oxbows: cut-off loops, drawn as still ponds. The smallest are specks and are left out.
-  for (const o of rivers.oxbows) {
-    if (o.vertices.length < 4) continue;
-    let len = 0;
-    for (let k = 2; k < o.vertices.length; k += 2) len += Math.sqrt((o.vertices[k] - o.vertices[k - 2]) * (o.vertices[k] - o.vertices[k - 2]) + (o.vertices[k + 1] - o.vertices[k - 1]) * (o.vertices[k + 1] - o.vertices[k - 1]));
-    if (len < MIN_OXBOW) continue;
-    const v: number[] = [];
-    for (let k = 0; k < o.vertices.length; k += 2) v.push(o.vertices[k], o.vertices[k + 1], -Math.max(2, o.width));
-    lines.push({ vertices: v, stride: 3 });
-  }
+  // Oxbows are not drawn until the rivers stage hands over pond polygons.
 
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,

@@ -142,6 +142,8 @@ interface Spec {
   rise: number;
   /** Chroma of the blue added in shade. */
   cool: number;
+  /** Chroma of the yellow added in light; 0.034 when absent. Rock warms to buff where lit. */
+  warm?: number;
   /** "land" ramps run shade → light; "depth" ramps run shore → deep; "flow" ramps cycle. */
   ramp: "land" | "depth" | "flow";
   /** Depth ramps: mid and deep anchors, as offsets applied to the season colour. */
@@ -170,7 +172,7 @@ function evergreen(c: Lch): Seasons {
 
 const LAND = { drop: 0.46, rise: 0.5, cool: 0.05, ramp: "land" } as const;
 const CANOPY = { drop: 0.52, rise: 0.5, cool: 0.05, ramp: "land" } as const;
-const STONE = { drop: 0.44, rise: 0.55, cool: 0.045, ramp: "land" } as const;
+const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, warm: 0.075, ramp: "land" } as const;
 const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
 const LINE = { drop: 0.2, rise: 0.3, cool: 0.02, ramp: "land" } as const;
 
@@ -455,8 +457,8 @@ function ramp(spec: Spec, season: number): Lab[] {
   ];
   const light: Lab = [
     Math.min(0.99, base[0] + (1 - base[0]) * spec.rise + 0.02),
-    base[1] * 0.9 + 0.034 * LIGHT_YELLOW[1],
-    base[2] * 0.9 + 0.034 * LIGHT_YELLOW[2],
+    base[1] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[1],
+    base[2] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[2],
   ];
   for (let t = 0; t < 16; t++) {
     out[t] = t <= FLAT_TONE
