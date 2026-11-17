@@ -24,6 +24,8 @@ export const INK_FULL_HIDDEN = 10;
 export const INK_SOLID_HIDDEN = 24;
 /** A side silhouette is traced at most this many pixels below its crest. */
 export const CREST_REACH = 24;
+/** Hatching reaches this many pixels down from a cliff's lip. */
+export const LIP_HATCH = 7;
 /** A cliff lip is inked above a rock wall at least this tall. */
 export const LIP_RUN = 4;
 
@@ -142,13 +144,16 @@ export function hatch(p: Painted, mask: Uint8Array): void {
     // About one column in three carries strokes at all.
     const pick = hx & 255;
     const period = 11 + ((hx >>> 8) & 7), phase = (hx >>> 12) & 31;
+    // Rows since the cliff began in this column: hatching hangs from the lip and stops a little way down.
+    let below = LIP_HATCH;
     for (let r = 0; r < h; r++) {
       const i = r * w + c;
       const f = flags[i];
-      if ((f & (F_CLIFF | F_DEEP)) === 0 || ink[i] !== 0 || (f & (F_QUIET | F_CANOPY)) !== 0) continue;
-      // Only true cliffs are hatched, on their shade side or in deep shadow; moderate slopes take none.
-      const cliff = (f & F_CLIFF) !== 0 && aux[i] >= 2;
-      if (!cliff) continue;
+      const cliff = (f & F_CLIFF) !== 0 && aux[i] >= 2 && (f & (F_QUIET | F_CANOPY)) === 0;
+      if (!cliff) { below = 0; continue; }
+      below++;
+      // Only at the slope break: nothing over the open face below it.
+      if (below > LIP_HATCH || ink[i] !== 0) continue;
       if ((f & F_DEEP) === 0 && light[i] > 112) continue;
       if (pick > 100) continue;
       const R = r0 + r;

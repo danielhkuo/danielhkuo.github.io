@@ -74,8 +74,8 @@ export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
 export const STREAM_MAX_SLOPE = 0.9;
 /** Ground from this slope is gullied, up to GULLY_DEPTH units deep. */
-export const GULLY_SLOPE = 0.75;
-export const GULLY_DEPTH = 4;
+export const GULLY_SLOPE = 0.9;
+export const GULLY_DEPTH = 2.2;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
 export const CLIFF_SLOPE = 1.4;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
@@ -209,24 +209,24 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // Gullies: steep ground is incised along its fall line, a few units deep, so faces show ribs and
   // couloirs in their shading and their silhouettes. A pure function of the cell and the smooth ground.
   {
-    const cut = new Float32Array(count), per = n / 2;
+    const cut = new Float32Array(count), per = n / 4;
     for (let y = 1; y < H - 1; y++) {
-      const v = wrap(wy0 + y, n) / 2;
+      const v = wrap(wy0 + y, n) / 4;
       for (let x = 1; x < W - 1; x++) {
         const i = y * W + x, e = ground[i];
         if (e <= 1.5) continue;
         const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
         const s2 = dx * dx + dy * dy;
         if (s2 < GULLY_SLOPE * GULLY_SLOPE) continue;
-        const u = wrap(wx0 + x, n) / 2;
+        const u = wrap(wx0 + x, n) / 4;
         // Noise smeared four lattice steps along whichever axis the ground falls, so the grain runs downhill.
         let a: number;
-        // (Every lattice coordinate is the cell over 2, so the noise wraps with the world.)
-        if (dy * dy >= dx * dx) a = 0.5 * (gradNoise(u, v, per, 0x61b) + gradNoise(u, v + 2, per, 0x61b) + gradNoise(u, v + 4, per, 0x61b) + gradNoise(u, v + 6, per, 0x61b));
-        else a = 0.5 * (gradNoise(u, v, per, 0x7c3) + gradNoise(u + 2, v, per, 0x7c3) + gradNoise(u + 4, v, per, 0x7c3) + gradNoise(u + 6, v, per, 0x7c3));
+        // (Every lattice coordinate is the cell over 4, so the noise wraps with the world, and ribs are broad.)
+        if (dy * dy >= dx * dx) a = gradNoise(u, v, per, 0x61b) + gradNoise(u, v + 2, per, 0x61b);
+        else a = gradNoise(u, v, per, 0x7c3) + gradNoise(u + 2, v, per, 0x7c3);
         const ridge = a < 0 ? -a : a;
-        // Narrow cuts between broad ribs: deepest where the noise crosses zero.
-        const depth = ridge > 0.5 ? 0 : 1 - ridge * 2;
+        // A few narrow cuts between broad ribs: only where the noise crosses zero.
+        const depth = ridge > 0.3 ? 0 : 1 - ridge / 0.3;
         const steep = Math.sqrt(s2) - GULLY_SLOPE;
         cut[i] = depth * depth * GULLY_DEPTH * (steep > 0.6 ? 1 : steep / 0.6) * (e > 16 ? 1 : (e - 1.5) / 14.5);
       }
