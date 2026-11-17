@@ -26,11 +26,12 @@ test("cells: a window equals the same crop of a larger window, and of one a worl
   const w = generatedWorld(), look = standinLook();
   // Find a busy spot: a window that holds both a river and trees.
   let x0 = 0, y0 = 0, small = buildCells(w, look, mask, 0, 0, 64, 64);
-  for (let i = 0, tried = 0; i < w.riverWidth.length && tried < 60; i++) {
-    if (w.riverWidth[i] < 2) continue;
+  const rv = w.rivers.vertices;
+  for (let v = 0, tried = 0; v < rv.length && tried < 80; v += 4 * 40) {
+    if (rv[v + 2] < 2) continue;
     tried++;
-    x0 = 4 * (i % w.gN) - 30;
-    y0 = 4 * Math.floor(i / w.gN) - 30;
+    x0 = Math.floor(rv[v]) - 30;
+    y0 = Math.floor(rv[v + 1]) - 30;
     small = buildCells(w, look, mask, x0, y0, 64, 64);
     if (small.mat.includes(4) && small.mat.some((m) => look.isCanopy[m] === 1)) break;
   }

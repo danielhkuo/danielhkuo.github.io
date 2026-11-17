@@ -1,6 +1,6 @@
 // STAND-INS for generator stages that are not built yet. Everything in this
 // file is throwaway: it exists so the bake has believable land to draw until
-// gen/drown.ts and gen/coast.ts land, and each
+// gen/coast.ts lands, and each
 // function is replaced by passing the real stage's output to buildBakeWorld.
 
 import { fbm } from "../core/noise.ts";
@@ -28,15 +28,16 @@ function chamfer(src: Uint8Array, n: number, cap: number): Float32Array {
 }
 
 /**
- * STAND-IN for S3 and S6: drowns eroded heights on G by 3 units and shelves
- * the sea bed away from the shore. Returns ground heights on G.
+ * STAND-IN for S6's bathymetry: the sea bed shelves away from the shore.
+ * Land keeps the generator's ground. (S3 drowning is left to the generator:
+ * rivers already end at this coast.)
  */
-export function standinDrown(g: ArrayLike<number>, gN: number): Float32Array {
+export function standinSeaBed(g: ArrayLike<number>, isSea: Uint8Array, gN: number): Float32Array {
   const land = new Uint8Array(gN * gN);
-  for (let i = 0; i < land.length; i++) if (g[i] - 3 > 0) land[i] = 1;
+  for (let i = 0; i < land.length; i++) if (!isSea[i]) land[i] = 1;
   const off = chamfer(land, gN, 60);
   const out = new Float32Array(gN * gN);
-  for (let i = 0; i < out.length; i++) out[i] = land[i] ? g[i] - 3 : -Math.min(24, 0.3 + 0.48 * (off[i] - 0.5));
+  for (let i = 0; i < out.length; i++) out[i] = land[i] ? Math.max(g[i], 0.01) : -Math.min(24, 0.3 + 0.48 * (off[i] - 0.5));
   return out;
 }
 

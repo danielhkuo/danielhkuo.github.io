@@ -1,25 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fieldWorld, loadMask, M_RIVER, plainLook } from "../testing/bakefix.ts";
-import type { BakeWorld } from "./world.ts";
+import { riverIndex, type BakeWorld } from "./world.ts";
 import { bakeWindow, depthBase, tileCache } from "./chunk.ts";
 import { forEachRiverPoint } from "./lines.ts";
 
 const mask = loadMask();
 const N = 512;
 
-/** Lays a river along a chain of G nodes; each step must be to one of the 8 neighbours. */
+/** Lays a river through the centres of a chain of G nodes. */
 function layRiver(w: BakeWorld, nodes: [number, number][], width: number): void {
-  const dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
-  for (let k = 0; k + 1 < nodes.length; k++) {
-    const [x, y] = nodes[k], [nx, ny] = nodes[k + 1];
-    const d = dirs.findIndex(([dx, dy]) => dx === nx - x && dy === ny - y);
-    assert.ok(d >= 0);
-    const i = y * w.gN + x;
-    w.riverWidth[i] = width;
-    w.riverTo[i] = d;
-    w.riverRun[i] = (nodes.length - k) * 4;
-  }
+  const v: number[] = [];
+  for (const [gx, gy] of nodes) v.push(4 * gx + 2, 4 * gy + 2, width);
+  w.rivers = riverIndex([{ vertices: v, stride: 3 }], w.n);
 }
 
 /** A river that wanders east, south-east, south and south-west across the window. */

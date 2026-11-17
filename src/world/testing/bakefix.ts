@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import type { Look } from "../bake/cells.ts";
 import { blankWorld, buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { paramsFor } from "../gen/params.ts";
-import { planWorld } from "../gen/plan.ts";
 
 export const M_SEA = 1;
 export const M_RIVER = 4;
@@ -45,7 +44,7 @@ let generated: BakeWorld | null = null;
 export function generatedWorld(): BakeWorld {
   if (!generated) {
     const params = paramsFor(1280);
-    generated = buildBakeWorld({ params, plan: planWorld(params, 7), seed: 7 });
+    generated = buildBakeWorld({ params, seed: 7 });
   }
   return generated;
 }

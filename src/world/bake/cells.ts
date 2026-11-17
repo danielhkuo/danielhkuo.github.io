@@ -65,7 +65,7 @@ const SHELF = 8;
 /** Rivers are looked for this many cells due north and due south of a cell. */
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
-export const STREAM_MAX_SLOPE = 0.8;
+export const STREAM_MAX_SLOPE = 1.2;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
 export const CLIFF_SLOPE = 1.7;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
