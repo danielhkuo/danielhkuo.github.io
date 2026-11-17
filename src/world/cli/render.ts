@@ -6,12 +6,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Look } from "../bake/cells.ts";
-import { standinLook } from "../bake/standin.ts";
+import { worldLook } from "../bake/look.ts";
+import { buildPalette } from "../render/palette.ts";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { rngFor } from "../core/rng.ts";
 import { wrap, wrapIndex } from "../core/torus.ts";
 import { ARCHETYPE, paramsFor } from "../gen/params.ts";
-import { planWorld, type Plan } from "../gen/plan.ts";
+import { makeLand } from "../gen/pipeline.ts";
+import type { Plan } from "../gen/plan.ts";
 import { createView } from "../runtime/view.ts";
 import { encodePng } from "./png.ts";
 
@@ -133,11 +135,12 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const { n, seed } = opts;
   const t0 = performance.now();
   const params = paramsFor(n);
-  const plan = planWorld(params, seed);
-  const world = buildBakeWorld({ params, plan, seed });
+  const land = makeLand(params, seed);
+  const plan = land.plan;
+  const world = buildBakeWorld({ params, plan, seed, land });
   log(`world ${n} seed ${seed}: ${Math.round(performance.now() - t0)} ms`);
 
-  const look = opts.look ?? standinLook();
+  const look = opts.look ?? worldLook(n, buildPalette({ time: 0.5, season: 0.25, overcast: 0 }));
   const mask = loadBlueNoise();
   const view = createView(world, look, mask, { width: VIEW_W, height: VIEW_H, cacheChunks: 64 });
   const dir = opts.outDir ?? join(process.cwd(), ".cache", "world-renders", `${n}-${seed}`);

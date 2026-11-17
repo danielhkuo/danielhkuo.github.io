@@ -7,7 +7,7 @@
 
 import type { Plan } from "../gen/plan.ts";
 import type { WorldParams } from "../gen/params.ts";
-import { runSchedule } from "../gen/erode.ts";
+import { makeLand, type Land } from "../gen/pipeline.ts";
 import { hydrology, type HydroResult } from "../gen/hydro.ts";
 import { NB8_DX, NB8_DY, wrapIndex } from "../core/torus.ts";
 import { climateFields, type Climate } from "../gen/climate.ts";
@@ -67,7 +67,9 @@ export interface BakeWorldInput {
   params: WorldParams;
   plan: Plan;
   seed: number;
-  /** Eroded ground on G, units (gen/erode.ts runSchedule().g). Run here when absent. */
+  /** S2–S5 (gen/pipeline.ts makeLand()): capped, talus-worn ground and debris on G. Run here when absent. */
+  land?: Land;
+  /** Ground on G to use instead of the land's, units. */
   heights?: ArrayLike<number>;
   /** True once the heights are already drowned with a sea bed (S3, S6). STAND-IN drowning when false. */
   drowned?: boolean;
@@ -77,8 +79,9 @@ export interface BakeWorldInput {
   shore?: Uint8Array;
   /** S8 moisture and wind on C (gen/climate.ts climateFields()). Run here when absent. */
   climate?: Climate;
-  /** Coastal exposure and debris on C, 0–1. STAND-IN when absent. */
+  /** Coastal exposure on C, 0–1. STAND-IN when absent. */
   exposure?: Float32Array;
+  /** Debris on C, 0–1. From the land's talus layer when absent. */
   debris?: Float32Array;
 }
 
@@ -88,7 +91,8 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   if (n % 256 !== 0) throw new Error(`the bake needs a world of whole 256-cell tiles, not ${n}`);
   if (plan.n !== cN) throw new Error("plan grid does not match params");
 
-  const eroded = inp.heights ?? runSchedule(plan, p, seed).g;
+  const land = inp.land ?? (inp.heights && inp.debris ? null : makeLand(p, seed));
+  const eroded = inp.heights ?? (land as Land).g;
   if (eroded.length !== gN * gN) throw new Error("heights must be on G");
   const ground = inp.drowned ? Float32Array.from(eroded) : standinDrown(eroded, gN);
 
@@ -98,10 +102,10 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   // Hydrology fills the small basins; lake beds keep their depth.
   for (let i = 0; i < ground.length; i++) if (!isSea[i]) ground[i] = hr.ground[i];
   const hydro = fromHydro(hr, isSea, gN, n);
-  const shore = inp.shore ?? standinShore(ground, hydro.waterKind, gN);
   const climate = inp.climate ?? climateFields(hr.ground, hr.rain, isSea, gN, p.climate);
-  const standin = standinExposure(cN, seed);
-  const exposure = inp.exposure ?? standin.exposure, debris = inp.debris ?? standin.debris;
+  const exposure = inp.exposure ?? standinExposure(cN, seed);
+  const shore = inp.shore ?? standinShore(ground, hydro.waterKind, exposure, gN);
+  const debris = inp.debris ?? debrisOnC((land as Land).debris, gN);
 
   return {
     n, gN, cN, ground,
@@ -111,6 +115,17 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     moisture: climate.moisture, wind: climate.wind, exposure, debris,
     rock: plan.rock, regions: plan.regions,
   };
+}
+
+/** Talus debris on G as a 0–1 field on C: thick from about 3 units. */
+export function debrisOnC(debris: ArrayLike<number>, gN: number): Float32Array {
+  const cN = gN / 2, out = new Float32Array(cN * cN);
+  for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
+    const i = 2 * y * gN + 2 * x;
+    const v = (debris[i] + debris[i + 1] + debris[i + gN] + debris[i + gN + 1]) / 12;
+    out[y * cN + x] = v > 1 ? 1 : v;
+  }
+  return out;
 }
 
 /** Width in pixels of a channel carrying q node-rains. The largest rivers reach 5–6 px, most of the network 1 px. */

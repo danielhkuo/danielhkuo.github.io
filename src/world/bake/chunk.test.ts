@@ -5,7 +5,9 @@ import { createView } from "../runtime/view.ts";
 import { fieldWorld, generatedWorld, loadMask, M_LAND, plainLook } from "../testing/bakefix.ts";
 import { buildCells, upsampleGround } from "./cells.ts";
 import { bakeChunk, bakeWindow, CHUNK, depthBase, paint, tileCache } from "./chunk.ts";
-import { standinLook } from "./standin.ts";
+import { worldLook } from "./look.ts";
+
+const standinLook = () => worldLook(1280, new Uint32Array(65536));
 
 const mask = loadMask();
 
@@ -22,11 +24,16 @@ test("the ground upsample matches core/bspline.ts", () => {
 
 test("cells: a window equals the same crop of a larger window, and of one a world period away", () => {
   const w = generatedWorld(), look = standinLook();
-  // Find a busy spot: a river node on land.
-  let at = 0;
-  for (let i = 0; i < w.riverWidth.length; i++) if (w.riverWidth[i] > 1 && w.ground[i] > 8) { at = i; break; }
-  const x0 = 4 * (at % w.gN) - 30, y0 = 4 * Math.floor(at / w.gN) - 30;
-  const small = buildCells(w, look, mask, x0, y0, 64, 64);
+  // Find a busy spot: a window that holds both a river and trees.
+  let x0 = 0, y0 = 0, small = buildCells(w, look, mask, 0, 0, 64, 64);
+  for (let i = 0, tried = 0; i < w.riverWidth.length && tried < 60; i++) {
+    if (w.riverWidth[i] < 2) continue;
+    tried++;
+    x0 = 4 * (i % w.gN) - 30;
+    y0 = 4 * Math.floor(i / w.gN) - 30;
+    small = buildCells(w, look, mask, x0, y0, 64, 64);
+    if (small.mat.includes(4) && small.mat.some((m) => look.isCanopy[m] === 1)) break;
+  }
   const big = buildCells(w, look, mask, x0 - 37, y0 - 21, 128, 128);
   const far = buildCells(w, look, mask, x0 + w.n, y0 - 2 * w.n, 64, 64);
   let crowns = 0, river = 0;
@@ -37,7 +44,7 @@ test("cells: a window equals the same crop of a larger window, and of one a worl
       assert.equal(small[k][a], far[k][a], `${k} at ${x},${y} across the wrap`);
     }
     if (look.isCanopy[small.mat[a]]) crowns++;
-    if (small.mat[a] === 3) river++;
+    if (small.mat[a] === 4) river++;
   }
   assert.ok(crowns > 0 && river > 0, "the window holds trees and a river");
 });
@@ -98,11 +105,11 @@ test("the painter on a flat field shows, at every pixel, the nearest cell that p
     assert.equal(p.height[i], level);
     assert.equal(p.hidden[i], 0);
   }
-  // Flat ground at the base tone dithers between the two middle tones, with no shadow and no ink.
+  // Flat ground sits at FLAT_TONE, with no shadow and no ink.
   const px = bakeWindow(w, look, mask, tiles, x0, r0, W, H);
   for (const v of px) {
     const light = (v >>> 8) & 255;
-    assert.ok((light & 15) === 7 || (light & 15) === 8);
+    assert.equal(light & 15, 9);
     assert.equal(light >> 4, 0);
   }
 });
