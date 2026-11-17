@@ -226,7 +226,8 @@ export function paramsFor(n: number): WorldParams {
       // every valley narrower than ~70 cells.
       d: [0.03, 0.004, 0.01, 0.007, 0.012, 0.005],
     },
-    drown: { rise: 3 },
+    // 2, not the design's 3: at 3 the 6400 world fell to ~26 % land (target 30–35 %).
+    drown: { rise: 2 },
     glacial: {
       mask: 0.5,
       lakes: { count: [3, 6], length: [80 * s, 250 * s], depth: [6, 12], halfWidth: [12 * s, 22 * s], minArea: 1500 * s * s, minFloor: 4, step: 0.25, wall: 0.5 / s },

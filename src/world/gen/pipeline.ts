@@ -2,20 +2,32 @@
 // Stages not built yet are marked; the bake supplies stand-ins for them.
 
 import { type Climate, climateFields } from "./climate.ts";
+import { coast, coastContext } from "./coast.ts";
+import { drown } from "./drown.ts";
 import { runSchedule } from "./erode.ts";
+import { type GlacialFeature, glacial, glacialContext } from "./glacial.ts";
 import { type HydroResult, hydrology } from "./hydro.ts";
 import type { WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
+import type { Stamp } from "./stamps.ts";
 import { talus } from "./talus.ts";
 
 export interface Land {
   p: WorldParams;
   seed: number;
   plan: Plan;
-  /** Ground heights on G after erosion, the height cap and talus. */
+  /** Ground heights on G after erosion, cap, drowning, glacial imprint, talus and coasts (coast stamps applied). */
   g: Float64Array;
+  /** The same before coast stamps: the bake upsamples this and stamps at cell size. */
+  base: Float64Array;
   isSea: Uint8Array;
+  /** Coastal exposure 0–1 and shore class (0 none, 1 beach, 2 rocky, 3 cliff, 4 cove) on G. */
+  exposure: Float32Array;
+  shoreClass: Uint8Array;
+  /** Coast stamps (cliff cuts, stacks, coves, beaches, mouths), in cells. */
+  stamps: Stamp[];
+  glacial: { lakes: GlacialFeature[]; tarns: GlacialFeature[]; dams: GlacialFeature[] };
   /** Talus debris on G (scree is drawn where it is thick). */
   debris: Float64Array;
   /** Rock class on G (nearest C node). */
@@ -43,17 +55,27 @@ export function rockOnG(plan: Plan, gN: number): Uint8Array {
 export function makeLand(p: WorldParams, seed: number): Land {
   const plan = planWorld(p, seed);
   const r = runSchedule(plan, p, seed);
+  const gN = r.gN;
   const capScale = capLand(r.g, r.isSea, p.talus.cap);
-  // S3 drowning, S4 glacial, S6 coasts: in progress (stand-ins in bake/standin-land.ts).
-  const rock = rockOnG(plan, r.gN);
-  const t = talus(r.g, r.gN, rock, p.talus.repose, 4, p.talus.sweeps);
-  // Talus only moves land; keep the sea floor and the coastline where erosion left them.
-  const g = t.h;
-  for (let i = 0; i < g.length; i++) {
-    if (r.isSea[i]) g[i] = r.g[i];
-    else if (g[i] <= 0) g[i] = p.erode.eps;
+  // S3 drowning: valley mouths become inlets.
+  const dr = drown(r.g, gN, p.drown.rise);
+  // S4 glacial imprint: ribbon lakes, tarns, moraine dams, U-sections.
+  const gl = glacial(dr.h, gN, glacialContext(dr.h, gN, dr.isSea, plan, p), p, seed);
+  // S5 talus: slopes relax to repose; debris collects below.
+  const rock = rockOnG(plan, gN);
+  const t = talus(gl.h, gN, rock, p.talus.repose, 4, p.talus.sweeps);
+  for (let i = 0; i < t.h.length; i++) {
+    if (dr.isSea[i]) t.h[i] = gl.h[i];
+    else if (t.h[i] <= 0) t.h[i] = p.erode.eps;
   }
-  return { p, seed, plan, g, isSea: r.isSea, debris: t.debris, rock, steps: { stepsC: r.stepsC, steadinessC: r.steadinessC, steadinessG: r.steadinessG, capScale } };
+  // S6 coasts: exposure, cliffs, stacks, coves, beaches, shelf.
+  const co = coast(t.h, gN, coastContext(plan, gN), p, seed);
+  return {
+    p, seed, plan, g: co.h, base: co.base, isSea: co.isSea, debris: t.debris, rock,
+    exposure: co.exposure, shoreClass: co.shoreClass, stamps: co.stamps,
+    glacial: { lakes: gl.lakes, tarns: gl.tarns, dams: gl.dams },
+    steps: { stepsC: r.stepsC, steadinessC: r.steadinessC, steadinessG: r.steadinessG, capScale },
+  };
 }
 
 export interface World {

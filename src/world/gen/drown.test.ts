@@ -12,8 +12,8 @@ function valley(n: number): Float64Array {
   return h;
 }
 
-test("the default rise is 3 units", () => {
-  assert.equal(paramsFor(1024).drown.rise, 3);
+test("the default rise is 2 units (tuned from the design's 3 to keep land at 30–35 %)", () => {
+  assert.equal(paramsFor(1024).drown.rise, 2);
 });
 
 test("drowning re-zeroes: every height falls by the rise, and the sea is where the result is ≤ 0", () => {
