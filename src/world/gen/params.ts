@@ -108,8 +108,8 @@ export interface WorldParams {
     mask: number;
     /** `sill` is the share of a lake's depth made by a rock bar at its outlet (the rest is dug from the floor); the bar falls downstream at `sillSlope`; a fan shelves into the head at `fanSlope`; the floor is dug by at most `maxDig`, easing in over the first `head` of the reach. */
     lakes: { count: readonly [number, number]; length: readonly [number, number]; depth: readonly [number, number]; halfWidth: readonly [number, number]; minArea: number; minFloor: number; sill: number; sillSlope: number; fanSlope: number; maxDig: number; head: number };
-    /** A tarn lies in a cirque `length` long, at the head of a valley draining between `minArea` and `maxArea`, on ground whose fall is within `slope`; its headwall climbs at `wall` and its lip falls away at `fall` and more on steeper ground. */
-    tarns: { count: readonly [number, number]; length: readonly [number, number]; depth: number; minHeight: number; minArea: number; maxArea: number; slope: readonly [number, number]; wall: number; fall: number };
+    /** A tarn lies in a cirque `length` long, at the head of a valley draining between `minArea` and `maxArea`, on ground whose fall is within `slope`; its headwall climbs at `wall` and its lip falls away at `fall` and more on steeper ground; the old ground behind and beside the water is nowhere lower than `rise` against the water's level (negative: a shallow gully may notch it), and the site with the most is taken. */
+    tarns: { count: readonly [number, number]; length: readonly [number, number]; depth: number; minHeight: number; minArea: number; maxArea: number; slope: readonly [number, number]; wall: number; fall: number; rise: number };
     dams: { count: readonly [number, number]; height: readonly [number, number]; thickness: number; span: number; minArea: number; minFloor: number };
     /** U-section: half-width range, lowest floor, smallest drainage, and the wall's height at the half-width as a slope. */
     trough: { halfWidth: readonly [number, number]; minFloor: number; minArea: number; wall: number };
@@ -328,7 +328,7 @@ export function paramsFor(n: number): WorldParams {
     glacial: {
       mask: 0.5,
       lakes: { count: [3, 6], length: [80 * s, 250 * s], depth: [6, 12], halfWidth: [18 * s, 30 * s], minArea: 1500 * s * s, minFloor: 4, sill: 0.6, sillSlope: 0.25 / s, fanSlope: 0.05 / s, maxDig: 10, head: 0.2 },
-      tarns: { count: [4, 8], length: [30 * s, 48 * s], depth: 5, minHeight: 60, minArea: 640 * s * s, maxArea: 6000 * s * s, slope: [0.1 / s, 0.5 / s], wall: 1.6 / s, fall: 0.5 / s },
+      tarns: { count: [4, 8], length: [30 * s, 48 * s], depth: 5, minHeight: 60, minArea: 640 * s * s, maxArea: 6000 * s * s, slope: [0.1 / s, 0.5 / s], wall: 1.6 / s, fall: 0.5 / s, rise: -2 },
       dams: { count: [2, 4], height: [4, 8], thickness: 10 * s, span: 60 * s, minArea: 6000 * s * s, minFloor: 8 },
       trough: { halfWidth: [8 * s, 16 * s], minFloor: 35, minArea: 20000 * s * s, wall: 0.5 / s },
     },

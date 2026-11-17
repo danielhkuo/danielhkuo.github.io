@@ -62,6 +62,11 @@ const TARN_NODES = 5;
 const TARN_ASPECT: readonly [number, number] = [0.3, 0.42];
 /** The water stands this far above the old ground at the outlet. */
 const TARN_LIP = 0.3;
+/** Behind this share of the lake's length (from its back), the old ground within TARN_BAND nodes of the shore is what the headwall is cut from. */
+const TARN_BACK = 0.6;
+const TARN_BAND = 2;
+/** Each tarn is the best of this many sites that fit. */
+const TARN_PICKS = 8;
 /** A depression shallower than this is rounding, not a lake. */
 const DEPRESSION = 1e-3;
 
@@ -301,66 +306,94 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
   const tarnCount = pick(rng, tn.count);
   const changed: number[] = [];
   const heights: number[] = [];
-  for (let k = 0, tries = 0; k < tarnCount && tries < 4000 && tarnCands.length > 0; tries++) {
-    const c = tarnCands[rng.int(tarnCands.length)];
-    const len = Math.max(rng.range(tn.length[0], tn.length[1]), TARN_NODES * cpn);
-    const width = Math.max(len * rng.range(TARN_ASPECT[0], TARN_ASPECT[1]), 0.3 * TARN_NODES * cpn);
-    const stampSeed = rng.next();
-    if (blocked[c]) continue;
-    const x = c % n;
-    const y = (c - x) / n;
-    const q = Math.max(1, Math.round((0.5 * len) / cpn));
-    // Downhill along the lake's length.
-    const gx = out[wrapIndex(x - q, y, n)] - out[wrapIndex(x + q, y, n)];
-    const gy = out[wrapIndex(x, y - q, n)] - out[wrapIndex(x, y + q, n)];
-    const gl = Math.sqrt(gx * gx + gy * gy);
-    if (gl === 0) continue;
-    const ox = gx / gl;
-    const oy = gy / gl;
-    // Open within 60° of south (+y): the headwall faces the camera.
-    if (oy < 0.5) continue;
-    // A cirque needs a slope to cut its headwall from, but a wall would need a quarry.
-    const fall = gl / (2 * q * cpn);
-    if (fall < tn.slope[0] || fall > tn.slope[1]) continue;
-    const lip = wrapIndex(Math.round(x + (ox * 0.5 * len) / cpn), Math.round(y + (oy * 0.5 * len) / cpn), n);
-    if (isSea[lip] || regions[HL + lip] < g.mask || out[lip] >= out[c]) continue;
-    // The water stands at the old ground of the outlet: the lake is cut back into the slope, and only its lip is banked.
-    const level = out[lip] + TARN_LIP;
-    if (level - tn.depth < LAND_MIN) continue;
-    const far = TARN_REACH * len;
-    const stamp: CirqueStamp = { kind: "cirque", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, ax: ox, ay: oy, len, width, level, depth: tn.depth, wall: tn.wall, fall: tn.fall + 1.2 * fall, reach: far, seed: stampSeed };
-    const R = Math.ceil(stampReach(stamp) / cpn);
-    changed.length = 0;
-    heights.length = 0;
-    let fits = true;
-    let need = 0;
-    let wet = 0;
-    for (let dy = -R; dy <= R && fits; dy++) {
-      for (let dx = -R; dx <= R; dx++) {
-        const j = wrapIndex(x + dx, y + dy, n);
-        const v = stamped(stamp, out[j], dx * cpn, dy * cpn);
-        if (v === out[j]) continue;
-        const d = cirqueAt(stamp, dx * cpn, dy * cpn).d;
-        // Everything it moves is highland, and the wall and the lip both meet the slope within reach.
-        if (isSea[j] || regions[HL + j] < g.mask || blocked[j] || d > far - cpn) {
-          fits = false;
-          break;
+  let bestChanged: number[] = [];
+  let bestHeights: number[] = [];
+  let tries = 0;
+  for (let k = 0; k < tarnCount && tries < 4000 && tarnCands.length > 0; k++) {
+    // Of the first few sites that fit, the one with the most ground standing behind it: a valley head, not a gullied face.
+    let best: CirqueStamp | null = null;
+    let bestRise = 0;
+    let bestAt = 0;
+    for (let found = 0; found < TARN_PICKS && tries < 4000; tries++) {
+      const c = tarnCands[rng.int(tarnCands.length)];
+      const len = Math.max(rng.range(tn.length[0], tn.length[1]), TARN_NODES * cpn);
+      const width = Math.max(len * rng.range(TARN_ASPECT[0], TARN_ASPECT[1]), 0.3 * TARN_NODES * cpn);
+      const stampSeed = rng.next();
+      if (blocked[c]) continue;
+      const x = c % n;
+      const y = (c - x) / n;
+      const q = Math.max(1, Math.round((0.5 * len) / cpn));
+      // Downhill along the lake's length.
+      const gx = out[wrapIndex(x - q, y, n)] - out[wrapIndex(x + q, y, n)];
+      const gy = out[wrapIndex(x, y - q, n)] - out[wrapIndex(x, y + q, n)];
+      const gl = Math.sqrt(gx * gx + gy * gy);
+      if (gl === 0) continue;
+      const ox = gx / gl;
+      const oy = gy / gl;
+      // Open within 60° of south (+y): the headwall faces the camera.
+      if (oy < 0.5) continue;
+      // A cirque needs a slope to cut its headwall from, but a wall would need a quarry.
+      const fall = gl / (2 * q * cpn);
+      if (fall < tn.slope[0] || fall > tn.slope[1]) continue;
+      const lip = wrapIndex(Math.round(x + (ox * 0.5 * len) / cpn), Math.round(y + (oy * 0.5 * len) / cpn), n);
+      if (isSea[lip] || regions[HL + lip] < g.mask || out[lip] >= out[c]) continue;
+      // The water stands at the old ground of the outlet: the lake is cut back into the slope, and only its lip is banked.
+      const level = out[lip] + TARN_LIP;
+      if (level - tn.depth < LAND_MIN) continue;
+      const far = TARN_REACH * len;
+      const stamp: CirqueStamp = { kind: "cirque", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, ax: ox, ay: oy, len, width, level, depth: tn.depth, wall: tn.wall, fall: tn.fall + 1.2 * fall, reach: far, seed: stampSeed };
+      const R = Math.ceil(stampReach(stamp) / cpn);
+      changed.length = 0;
+      heights.length = 0;
+      let fits = true;
+      let need = 0;
+      let wet = 0;
+      // The lowest old ground in a band behind and beside the water, over the water: what the headwall is cut from.
+      let rise = Infinity;
+      for (let dy = -R; dy <= R && fits; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          const j = wrapIndex(x + dx, y + dy, n);
+          const at = cirqueAt(stamp, dx * cpn, dy * cpn);
+          const d = at.d;
+          const behind = at.t < TARN_BACK;
+          if (behind && d > 0 && d <= TARN_BAND * cpn) {
+            // A deep gully through the back or the rim beside it would leave the lake banked like a pond: the stamp's shoulder fills only a shallow one.
+            if (isSea[j] || out[j] < level + tn.rise) {
+              fits = false;
+              break;
+            }
+            if (out[j] - level < rise) rise = out[j] - level;
+          }
+          const v = stamped(stamp, out[j], dx * cpn, dy * cpn);
+          if (v === out[j]) continue;
+          // Everything it moves is highland, and the wall and the lip both meet the slope within reach.
+          if (isSea[j] || regions[HL + j] < g.mask || blocked[j] || d > far - cpn) {
+            fits = false;
+            break;
+          }
+          if (d < 0) wet++;
+          if (d > need) need = d;
+          changed.push(j);
+          heights.push(v);
         }
-        if (d < 0) wet++;
-        if (d > need) need = d;
-        changed.push(j);
-        heights.push(v);
       }
+      if (!fits || wet < TARN_NODES) continue;
+      found++;
+      if (best !== null && rise <= bestRise) continue;
+      best = { ...stamp, reach: need + cpn };
+      bestRise = rise;
+      bestAt = c;
+      bestChanged = changed.slice();
+      bestHeights = heights.slice();
     }
-    if (!fits || wet < TARN_NODES) continue;
-    for (let m = 0; m < changed.length; m++) {
-      out[changed[m]] = heights[m];
-      mask[changed[m]] = GLACIAL_MASK.tarn;
+    if (best === null) break;
+    for (let m = 0; m < bestChanged.length; m++) {
+      out[bestChanged[m]] = bestHeights[m];
+      mask[bestChanged[m]] = GLACIAL_MASK.tarn;
     }
-    cirques.push({ ...stamp, reach: need + cpn });
-    tarns.push({ kind: "tarn", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, size: 0.5 * len, depth: tn.depth, dx: ox, dy: oy });
-    block(blocked, n, x, y, (KEEP_APART * len) / cpn);
-    k++;
+    cirques.push(best);
+    tarns.push({ kind: "tarn", x: best.x, y: best.y, size: 0.5 * best.len, depth: tn.depth, dx: best.ax, dy: best.ay });
+    block(blocked, n, bestAt % n, Math.floor(bestAt / n), (KEEP_APART * best.len) / cpn);
   }
 
   // 4. Moraine dams: a bar across a valley whose sides rise above it within the span.

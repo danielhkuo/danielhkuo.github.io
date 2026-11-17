@@ -150,7 +150,9 @@ export interface SpitStamp {
  * either side) near its back under the headwall, and narrows to its outlet at the lip. Ground
  * behind and beside the lake is cut to a wall that climbs at `wall` until it meets the slope;
  * ground in front is banked to a low lip that falls away at `fall`, lowest on the axis, where
- * the water spills. Nothing rings the lake: the headwall is the back and the sides only.
+ * the water spills. Where the slope behind or beside the lake lies too low (a gully), it is
+ * banked to a shoulder a little higher than the lip. Nothing rings the lake: the headwall is
+ * the back and the sides only.
  */
 export interface CirqueStamp {
   kind: "cirque";
@@ -287,7 +289,9 @@ const CIRQUE_SHELF = 0.6;
 const CIRQUE_FOOT = 0.5;
 const CIRQUE_BENCH = 2;
 const LIP: readonly [number, number] = [0.15, 0.45];
-const LIP_CREST = 7;
+const LIP_CREST = 9;
+/** Behind and beside the lake the rim climbs this far over the lip within one crest's width, and holds it for another. */
+const SHOULDER = 2.5;
 /** Water at a strand's line and in a creek is this deep. */
 const STRAND_DEPTH = 0.03;
 const CREEK_DEPTH = 0.12;
@@ -709,7 +713,9 @@ export function stamped(s: Stamp, h: number, dx: number, dy: number): number {
         return s.level - 0.15 - s.depth * k * (2 - k) * (1 - 0.4 * t);
       }
       const outlet = smooth((at.t - 0.5) / 0.4) * (1 - smooth(at.off / 0.8));
-      const lip = s.level + LIP[1] - (LIP[1] - LIP[0]) * outlet - s.fall * Math.max(0, at.d - LIP_CREST);
+      // Behind and beside the water the rim is a shoulder: where a gully has notched the slope, the hollow still holds.
+      const back = 1 - smooth((at.t - 0.45) / 0.3);
+      const lip = s.level + LIP[1] - (LIP[1] - LIP[0]) * outlet + SHOULDER * back * Math.min(1, at.d / LIP_CREST) - s.fall * Math.max(0, at.d - LIP_CREST * (1 + back));
       const wall = s.level + CIRQUE_FOOT + s.wall * Math.max(0, at.d - CIRQUE_BENCH) + 0.04 * at.d;
       const banked = h > lip ? h : lip;
       return banked < wall ? banked : wall;
