@@ -89,6 +89,8 @@ export const GULLY_SLOPE = 0.9;
 export const GULLY_DEPTH = 2.2;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
 export const CLIFF_SLOPE = 1.4;
+/** And its smoothed form (coverFields `steep`) must be this steep for the cell to be hatched and lipped as a cliff. */
+export const FORM_CLIFF = 1.3;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
 export const STEEP_SLOPE = 1.15;
 /** A crest stands at least this far over the ground CREST_REACH cells to either side of it; from CREST_FULL its line is full ink. */
@@ -617,21 +619,28 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   let shoreD: Uint8Array | null = null;
   if (anySea) {
     shoreD = new Uint8Array(gW * gH);
+    // The ring's classes over the node window and two nodes round it.
+    const rw = gW + 4, rh = gH + 4, ring = new Uint8Array(rw * rh);
+    for (let j = 0; j < rh; j++) {
+      const row = wrap(gya + j - 2, gN) * gN;
+      for (let q = 0; q < rw; q++) ring[j * rw + q] = shore[row + wrap(gxa + q - 2, gN)];
+    }
     for (let j = 0; j < gH; j++) for (let q = 0; q < gW; q++) {
-      let cls = shore[wrap(gya + j, gN) * gN + wrap(gxa + q, gN)];
+      const at = (j + 2) * rw + q + 2;
+      let cls = ring[at];
       if (cls === 0) {
         let bd = 99;
         for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
           const d = dx * dx + dy * dy;
           if (d >= bd) continue;
-          const v = shore[wrap(gya + j + dy, gN) * gN + wrap(gxa + q + dx, gN)];
+          const v = ring[at + dy * rw + dx];
           if (v !== 0) { bd = d; cls = v; }
         }
       }
       shoreD[j * gW + q] = cls;
     }
   }
-  const shW = new Float64Array(5);
+  const shW = new Float64Array(8);
 
   for (let y = 0; y < ch; y++) {
     const wy = wy0 + cOff + y;
@@ -659,13 +668,13 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const s00 = shoreD[a], s10 = shoreD[a + 1], s01 = shoreD[a + gW], s11 = shoreD[a + gW + 1];
         if (s00 === s10 && s00 === s01 && s00 === s11) sh = s00;
         else {
-          shW[1] = 0; shW[2] = 0; shW[3] = 0; shW[4] = 0;
+          shW.fill(0);
           shW[s00] += (1 - gfx) * (1 - gfy); shW[s10] += gfx * (1 - gfy); shW[s01] += (1 - gfx) * gfy; shW[s11] += gfx * gfy;
           let most = 0;
-          for (let k = 1; k < 5; k++) if (shW[k] > most) { most = shW[k]; sh = k; }
+          for (let k = 1; k < 8; k++) if (shW[k] > most) { most = shW[k]; sh = k; }
         }
-        // Sand and shingle keep to a strip along the water whose width wanders; a cliffed coast takes the whole band.
-        if (sh !== 0 && sh !== 3 && inland[i] > 3 * (BEACH_BAND + BEACH_WANDER * gradNoise(wrap(wx0 + cOff + x, n) / 32, c.y / 32, n / 32, 0xb3ac))) sh = 0;
+        // Sand and shingle keep to a strip along the water whose width wanders; cliffs, dunes and saltmarsh take the whole band.
+        if (sh !== 0 && sh !== 3 && sh < 5 && inland[i] > 3 * (BEACH_BAND + BEACH_WANDER * gradNoise(wrap(wx0 + cOff + x, n) / 32, c.y / 32, n / 32, 0xb3ac))) sh = 0;
       }
       shoreAt[i] = sh;
 
@@ -924,7 +933,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           if (slope[i] >= STEEP_SLOPE) {
             // Steep ground is hatched: sparsely from STEEP_SLOPE, densely on true cliffs. The level rides in aux.
             flags |= F_CLIFF;
-            ax = slope[i] >= CLIFF_SLOPE ? 2 : 1;
+            // A cliff by the land's form, not by the cell's own slope: a gully's wall on a moderate slope takes no lip and no strokes.
+            ax = fields.steep[i] >= FORM_CLIFF ? 2 : 1;
           }
           ax |= crest[i] << AUX_CREST_SHIFT;
         }
