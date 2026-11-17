@@ -26,6 +26,8 @@ export const INK_SOLID_HIDDEN = 24;
 export const CREST_REACH = 24;
 /** Hatching reaches this many pixels down from a cliff's lip. */
 export const LIP_HATCH = 7;
+/** Of 256: the share of columns that carry hatching at all. */
+export const HATCH_PICK = 44;
 /** A cliff lip is inked above a rock wall at least this tall. */
 export const LIP_RUN = 5;
 /** From a wall this tall the lip's ink is full; a shorter crag's is soft. */
@@ -160,8 +162,8 @@ export function inkCliffs(p: Painted, isStill: Uint8Array): void {
       const i = r * w + c;
       if (face(i) || !face(i + w)) continue;
       if ((flags[i] & (F_QUIET | F_CANOPY)) !== 0 || y[i + w] - y[i] > 3) continue;
-      // A lip is where gentler ground breaks into the wall: a ledge of steep rock inside a face is not one.
-      if ((flags[i] & F_CLIFF) !== 0 && (aux[i] & AUX_ROCK) !== 0) continue;
+      // A lip is where the ground above breaks into the wall: a ledge or a bench of rock inside a face is not one.
+      if ((aux[i] & AUX_ROCK) !== 0) continue;
       let run = 1;
       while (run < LIP_FULL && r + 1 + run < h && face(i + w + run * w)) run++;
       if (run >= LIP_RUN) lip[i] = run >= LIP_FULL ? INK_FULL : INK_SOFT;
@@ -323,7 +325,7 @@ export function hatch(p: Painted, mask: Uint8Array): void {
   for (let c = 0; c < w; c++) {
     const X = x0 + c;
     const hx = hash2(X, 17, 0x4a7c);
-    // About one column in four carries strokes at all.
+    // About one column in six carries strokes at all.
     const pick = hx & 255;
     const period = 11 + ((hx >>> 8) & 7), phase = (hx >>> 12) & 31;
     // Rows since the cliff began in this column: hatching hangs from the lip and stops a little way down.
@@ -331,14 +333,14 @@ export function hatch(p: Painted, mask: Uint8Array): void {
     for (let r = 0; r < h; r++) {
       const i = r * w + c;
       const f = flags[i];
-      // Rock is drawn by its strata (rockFaces); strokes are for steep ground that is not bare rock.
-      const cliff = (f & F_CLIFF) !== 0 && (aux[i] & AUX_STEEP) >= 2 && (aux[i] & AUX_ROCK) === 0 && (f & (F_QUIET | F_CANOPY)) === 0;
+      // A wall is drawn by its strata (rockFaces); strokes are for steep ground and for headwalls that are not walls.
+      const cliff = (f & F_CLIFF) !== 0 && (aux[i] & AUX_STEEP) >= 2 && ((aux[i] & AUX_ROCK) === 0 || p.span[i] < WALL_SPAN) && (f & (F_QUIET | F_CANOPY)) === 0;
       if (!cliff) { below = 0; continue; }
       below++;
       // Only at the slope break: nothing over the open face below it.
       if (below > LIP_HATCH || ink[i] !== 0) continue;
       if ((f & F_DEEP) === 0 && light[i] > 100) continue;
-      if (pick > 64) continue;
+      if (pick > HATCH_PICK) continue;
       const R = r0 + r;
       // Strokes of 3–8 px with gaps, each band of the column offset by a second hash; blue noise frays their ends.
       const band = Math.floor((R + phase) / period);
@@ -388,6 +390,11 @@ export function rockFaces(p: Painted): void {
         l = sum / count;
         // Ink traced down a column inside the face is a picket; the face's own lines replace it.
         if (ink[i] !== 0 && hidden[i] === 0 && rock[i - 1] === 2 && rock[i + 1] === 2) ink[i] = 0;
+      } else if ((aux[i] & AUX_STEEP) >= 2) {
+        // A headwall's gullies light every other column: most of that goes, so the face is modelled and not striped.
+        let sum = 0, count = 0;
+        for (let dc = -3; dc <= 3; dc++) if (rock[i + dc] !== 0) { sum += src[i + dc]; count++; }
+        l += 0.75 * (sum / count - l);
       }
       // Lines are drawn only where the wall runs on to both sides: a lone tall cell in a broken face takes none.
       const whole = kind === 2 && rock[i - 1] === 2 && rock[i + 1] === 2;
