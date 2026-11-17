@@ -12,7 +12,7 @@ import { NB8_DX, NB8_DY, torusDelta, wrapIndex } from "../core/torus.ts";
 import { boxBlur, drainage, nearestSource, nodeAt, regionsOn, rockOn } from "./field.ts";
 import { ARCHETYPE_COUNT, type WorldParams } from "./params.ts";
 import type { Plan } from "./plan.ts";
-import { applyStamps, type CoveStamp, inCove, type Stamp } from "./stamps.ts";
+import { applyStamps, type CoveStamp, deltaAt, inCove, spitCentre, type SpitStamp, type Stamp, stampReach } from "./stamps.ts";
 
 export interface CoastContext {
   /** Rock class per node (0 hard, 1 medium, 2 soft) on the same grid as the heights. */
@@ -237,8 +237,13 @@ const MARSH_FRAY = 0.25;
 /** Sand needs this score; SAND_SPAN more gives the widest beach. */
 const SAND_SCORE = 0.3;
 const SAND_SPAN = 0.5;
-/** Share of a delta's radius past which its fan is beach; inside it is marsh. */
-const FAN_RIM = 0.7;
+/** Share of the way to a delta's front past which its fan is sand, on the seaward side only; the rest is marsh. A noise of FAN_CELLS (of the 6400 world) feathers the line by FAN_FRAY. */
+const FAN_RIM = 0.8;
+const FAN_CELLS = 28;
+const FAN_FRAY = 0.12;
+/** Longshore drift follows the prevailing wind, which blows from the south-west: a shore must run at least DRIFT_MIN along it to carry sand. */
+const DRIFT: readonly [number, number] = [0.7071067811865476, -0.7071067811865476];
+const DRIFT_MIN = 0.25;
 
 /**
  * S6.0 The sea evens out a soft shore. The land mask is blurred at two radii; where the rock is
@@ -679,8 +684,11 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
       if (e < c.deltaE && w >= c.deltaWidth) {
         form = "delta";
         const t = (w - c.deltaWidth) / Math.max(1, 6 - c.deltaWidth);
+        // The flow splits in two or in three; each distributary is given where its mouth lies across the fan.
         const channels = rng.float() < 0.5 ? [rng.range(-0.75, -0.35), rng.range(0.3, 0.75)] : [rng.range(-0.85, -0.5), rng.range(-0.15, 0.15), rng.range(0.5, 0.85)];
-        stamps.push({ kind: "delta", x: mx, y: my, ax: dx, ay: dy, r: c.deltaR[0] + (c.deltaR[1] - c.deltaR[0]) * t, spread: rng.range(1, 1.4), top: c.deltaTop, channels, channel: 0.5 * w * scale + 0.6 * scale, seed: formSeed });
+        // Drift along the shore the fan is built from: its mouth bars lean that way.
+        const along = -dy * DRIFT[0] + dx * DRIFT[1];
+        stamps.push({ kind: "delta", x: mx, y: my, ax: dx, ay: dy, r: c.deltaR[0] + (c.deltaR[1] - c.deltaR[0]) * t, spread: rng.range(1, 1.4), top: c.deltaTop, channels, channel: 0.5 * w * scale + 0.6 * scale, drift: along > DRIFT_MIN ? 1 : along < -DRIFT_MIN ? -1 : 0, seed: formSeed });
       } else {
         form = "estuary";
         const len = c.estuaryLen * (0.6 + 0.2 * w);
@@ -823,6 +831,54 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     stamps.push({ kind: "creek", x: px[s], y: py[s], ax: -nx[s], ay: -ny[s], len: rng.range(c.creekLen[0], c.creekLen[1]), width: c.creekWidth * rng.range(0.8, 1.2), top: c.marshTop + 0.4, seed: rng.next() });
   }
 
+  // Spits. Where a beach's shore turns away from the drift, the sand carries on into open water:
+  // a strand that bows, tapers, and hooks round at its tip toward the land. The widest beaches build them first.
+  const sp = c.spit;
+  const spitSlots: number[] = [];
+  const spitKeys: number[] = [];
+  for (let s = 0; s < count; s++) {
+    const e = shore.e[shore.nodes[s]];
+    if (width[s] < sp.beach || retreat[s] > 0 || inCoveAt[shore.nodes[s]] || e < sp.e[0] || e > sp.e[1]) continue;
+    if (Math.abs(-ny[s] * DRIFT[0] + nx[s] * DRIFT[1]) < DRIFT_MIN) continue;
+    spitSlots.push(s);
+    spitKeys.push(-width[s] * (1 + e));
+  }
+  const spits: SpitStamp[] = [];
+  for (const m of sortIndicesBy(spitKeys)) {
+    const s = spitSlots[m];
+    let clear = true;
+    for (const o of spits) {
+      const ox = torusDelta(o.x, px[s], p.n);
+      const oy = torusDelta(o.y, py[s], p.n);
+      if (ox * ox + oy * oy < sp.spacing * sp.spacing) {
+        clear = false;
+        break;
+      }
+    }
+    if (!clear) continue;
+    const down = -ny[s] * DRIFT[0] + nx[s] * DRIFT[1] > 0 ? 1 : -1;
+    const ax = -ny[s] * down;
+    const ay = nx[s] * down;
+    // The tip recurves to the land's side: the side of the heading the shore's inward normal lies on.
+    const hook = -ny[s] * ax + nx[s] * ay > 0 ? 1 : -1;
+    const lane = shore.nodes[s];
+    const len = sp.len[0] + (sp.len[1] - sp.len[0]) * (0.5 + 0.5 * noiseAt(px[s], py[s], c.sandCells, 0x5a));
+    const stamp: SpitStamp = { kind: "spit", x: px[s], y: py[s], ax, ay, hook, len, width: Math.max(1.2, sp.width * Math.min(1.3, 0.7 + width[s] / c.beachWidth[1])), top: sp.top, seed: (noiseSeed ^ Math.imul(lane + 1, 0x9e3779b1)) >>> 0 };
+    // Open water along its whole length and to both sides of it: the shore has turned away, and a bay lies behind.
+    const side = 1.5 * cpn;
+    for (let u = side; u <= len && clear; u += cpn) {
+      const v = spitCentre(stamp, u);
+      for (let k = -1; k <= 1 && clear; k++) {
+        if (k !== 0 && u < 3 * cpn) continue;
+        const w = v + k * side;
+        if (!isSea0[nodeAt(stamp.x + ax * u - ay * w, stamp.y + ay * u + ax * w, cpn, n)]) clear = false;
+      }
+    }
+    if (!clear) continue;
+    spits.push(stamp);
+    stamps.push(stamp);
+  }
+
   // 8. Bathymetry from the cut shoreline, then the stamps.
   // Stacks stand in deep water: they are left out of the distance to land.
   const cut = new Float64Array(h);
@@ -892,7 +948,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   const fan = new Uint8Array(nn);
   for (const s of stamps) {
     if (s.kind !== "delta") continue;
-    const R = Math.ceil((1.4 * s.r) / cpn);
+    const R = Math.ceil(stampReach(s) / cpn);
     const ni = nodeAt(s.x, s.y, cpn, n);
     const ox0 = ni % n;
     const oy0 = (ni - ox0) / n;
@@ -900,9 +956,14 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
       for (let ox = -R; ox <= R; ox++) {
         const j = wrapIndex(ox0 + ox, oy0 + oy, n);
         if (!isSea0[j] || cut[j] <= 0) continue;
-        const dx = torusDelta(s.x, (ox0 + ox + 0.5) * cpn, p.n);
-        const dy = torusDelta(s.y, (oy0 + oy + 0.5) * cpn, p.n);
-        fan[j] = dx * dx + dy * dy > FAN_RIM * FAN_RIM * s.r * s.r ? SHORE.beach : SHORE.marsh;
+        const x = (ox0 + ox + 0.5) * cpn;
+        const y = (oy0 + oy + 0.5) * cpn;
+        const at = deltaAt(s, torusDelta(s.x, x, p.n), torusDelta(s.y, y, p.n));
+        // Off the fan this is a mouth bar: sand, like any land the sea has given up.
+        if (at.e >= 1) continue;
+        // Sand lies along the front, where the waves work it; the rest of the fan is marsh, and the line between them wanders.
+        const rim = FAN_RIM + FAN_FRAY * noiseAt(x, y, FAN_CELLS * scale, 0x59);
+        fan[j] = at.e > rim && at.u > 0.35 * Math.sqrt(at.u * at.u + at.v * at.v) ? SHORE.beach : SHORE.marsh;
       }
     }
   }

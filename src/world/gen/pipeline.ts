@@ -11,7 +11,7 @@ import type { WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
 import { settle, type SettleOptions, type Settlement } from "./settle.ts";
-import type { Stamp } from "./stamps.ts";
+import { applyStamps, type Stamp } from "./stamps.ts";
 import { talus } from "./talus.ts";
 
 export interface Land {
@@ -31,7 +31,7 @@ export interface Land {
   sandWidth: Float32Array;
   duneWidth: Float32Array;
   marsh: Float32Array;
-  /** Coast stamps (cliff cuts, stacks, coves, beaches, mouths), in cells. */
+  /** The tarns' cirques, then the coast stamps (cliff cuts, stacks, coves, beaches, deltas, spits, mouths), in cells. */
   stamps: Stamp[];
   glacial: { lakes: GlacialFeature[]; tarns: GlacialFeature[]; dams: GlacialFeature[] };
   /** Talus debris on G (scree is drawn where it is thick). */
@@ -74,11 +74,13 @@ export function makeLand(p: WorldParams, seed: number): Land {
     if (dr.isSea[i]) t.h[i] = gl.h[i];
     else if (t.h[i] <= 0) t.h[i] = p.erode.eps;
   }
+  // Scree does not soften a cirque: its headwall and lip are cut again, as the bake will cut them at cell size.
+  applyStamps(t.h, gN, p.n / gN, gl.cirques);
   // S6 coasts: exposure, cliffs, stacks, coves, beaches, shelf.
   const co = coast(t.h, gN, coastContext(plan, gN), p, seed);
   return {
     p, seed, plan, g: co.h, base: co.base, isSea: co.isSea, debris: t.debris, rock,
-    exposure: co.exposure, shoreClass: co.shoreClass, stamps: co.stamps,
+    exposure: co.exposure, shoreClass: co.shoreClass, stamps: [...gl.cirques, ...co.stamps],
     shoreDist: co.shoreDist, sandWidth: co.sandWidth, duneWidth: co.duneWidth, marsh: co.marsh,
     glacial: { lakes: gl.lakes, tarns: gl.tarns, dams: gl.dams },
     steps: { stepsC: r.stepsC, steadinessC: r.steadinessC, steadinessG: r.steadinessG, capScale },
