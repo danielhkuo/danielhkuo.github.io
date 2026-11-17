@@ -683,7 +683,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const mottle = (1 - mfy) * (mott[ma] + (mott[ma + 1] - mott[ma]) * mfx) + mfy * (mott[ma + mW] + (mott[ma + mW + 1] - mott[ma + mW]) * mfx);
         // Tone follows the sea bed: a wide pale shelf in a shallow bay, dark water straight under a cliff.
         // Only the cell on the shore itself is foam.
-        const far = 1 + depth * 0.75 + mottle * (depth < 4 ? depth / 4 : 1);
+        const deep = 1 + depth * 0.5 + mottle * (depth < 4 ? depth / 4 : 1);
+        const far = deep > 14 ? 14 : deep;
         const v = Math.floor(d < 0.5 ? 0 : far < 1 ? 1 : far + dither - 0.5);
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;
