@@ -117,7 +117,8 @@ export function builtRules(n: number): SiteRules {
     abbey: { ...r.abbey, above: [8, 45] },
     lighthouse: { ...r.lighthouse, open: 180, exposure: 0.5, cliff: [6, 35] },
     windmill: { ...r.windmill, prominence: 4, wind: 0.5, height: [12, 60] },
-    cathedral: { hand: 8, slope: 0.1, floor: 32, hills: 12, hillsWithin: 400, river: [20, 120] },
+    // A true valley floor comes first: the river may be further off and the floor narrower, but hills stand close on both sides.
+    cathedral: { hand: 5, slope: 0.1, floor: 32, hills: 12, hillsWithin: 320, river: [20, 320] },
     yew: { prominence: [4, 18], alone: 80 },
     town: { ...r.town, rise: [6, 70], beach: 12, mouthWithin: 400, fetch: 200 },
   };
@@ -622,8 +623,9 @@ function lighthouseCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[
     tally.pass(L.seen);
     if (level + BOX.lighthouse.h > r.heightCap) continue;
     tally.pass(L.cap);
-    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: open * 2 + c.exposure[i] + face / 5 - Math.abs(level - 22) / 40 });
+    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: open * 2 + c.exposure[i] + face / 5 - Math.abs(level - 22) / 40 - (c.islandSize[c.island[i]] < 400 ? 2 : 0) });
   }
+  // A headland a path can reach comes first: a skerry too small for a road scores as a stack does.
   // Stacks with a top wide enough carry a lighthouse and no road.
   for (const s of c.stacks) {
     if (0.6 * s.r < r.lighthouse.stackTop || s.top < 8 || s.top + BOX.lighthouse.h > r.heightCap) continue;
@@ -688,7 +690,7 @@ function cathedralCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[]
   const out: Cand[] = [];
   const L = {
     floor: `valley floor (HAND < ${r.cathedral.hand}, s < ${r.cathedral.slope})`,
-    wide: `floor at least ${r.cathedral.floor} wide`,
+    wide: `floor at least ${r.cathedral.floor} wide, 100 from the sea`,
     river: `river ${r.cathedral.river[0]}–${r.cathedral.river[1]} away`,
     hills: `hills ≥ ${r.cathedral.hills} on both sides within ${r.cathedral.hillsWithin}`,
     seen: "no ground to the south hides it",
@@ -709,6 +711,10 @@ function cathedralCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[]
       if (!c.isSea[j] && c.lakeId[j] < 0 && c.hand[j] < r.cathedral.hand + 2 && c.slope[j] < 2 * r.cathedral.slope) floor++;
     }
     if (floor < 0.8 * count) continue;
+    // Inland: a valley, not a shore.
+    let shore = false;
+    for (let q = 8; q <= 24 && !shore; q += 8) for (let k = 0; k < 16; k++) if (c.isSea[idx(c, Math.floor(gx + 0.5 + RX[k] * q), Math.floor(gy + 0.5 + RY[k] * q))]) { shore = true; break; }
+    if (shore) continue;
     tally.pass(L.wide);
     let river = Infinity, rdx = 0, rdy = 0;
     for (let dy = -reachN; dy <= reachN; dy++) for (let dx = -reachN; dx <= reachN; dx++) {

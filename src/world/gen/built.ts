@@ -16,6 +16,8 @@ export interface Structure {
   h: number;
   /** The height its tops are measured from: the pad it stands on. */
   base: number;
+  /** Planted things (orchards, groves): tops are measured from the ground under each cell, not from `base`. */
+  onGround?: boolean;
   /** Per cell: height of the top above `base`; 0 where nothing stands. */
   top: Float32Array;
   /** Per cell: material of what stands there. */

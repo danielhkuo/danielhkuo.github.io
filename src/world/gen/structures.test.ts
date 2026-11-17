@@ -39,7 +39,8 @@ function wellFormed(s: Structure, name: string): void {
   for (let k = 0; k < s.marks.length; k += 5) {
     const [x, y, z, mat, tone] = s.marks.slice(k, k + 5);
     assert.ok(Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < s.w && y < s.h, `${name}: mark ${x},${y} lies in the raster`);
-    assert.ok(z >= 1 && isBuilt[mat] === 1 && tone > 0 && tone < 256, `${name}: mark ${x},${y},${z}`);
+    // Built materials at a fixed light; the one exception is the river showing at the foot of a bridge's arch.
+    assert.ok(z >= 1 && ((isBuilt[mat] === 1 && tone > 0 && tone < 256) || (mat === M.river && z === 1)), `${name}: mark ${x},${y},${z}`);
   }
 }
 
@@ -146,12 +147,23 @@ test("a bridge: a deck from bank to bank, parapets, a hump over the water and ar
   // Arches: shade marks on the south face, none through the piers at the ends.
   const arch = b.marks.filter((_, k) => k % 5 === 3 && b.marks[k] === M.opening).length;
   assert.ok(arch >= 12, `arch marks ${arch}`);
+  const cols = new Set<number>();
+  let water = 0;
   for (let k = 0; k < b.marks.length; k += 5) {
     assert.equal(b.marks[k + 1], 201 - b.y, "on the south parapet's face");
-    assert.ok(b.marks[k] > 102 - b.x && b.marks[k] < 124 - b.x);
+    if (b.marks[k + 3] === M.stoneDark) continue;
+    assert.ok(b.marks[k] > 102 - b.x && b.marks[k] < 124 - b.x, "arches stand between the abutments");
+    cols.add(b.marks[k]);
+    if (b.marks[k + 3] === M.river) { water++; assert.equal(b.marks[k + 2], 1); }
   }
+  // One to three openings with a pier between: runs of arch columns separated by solid ones.
+  let runs = 0;
+  for (const x of cols) if (!cols.has(x - 1)) runs++;
+  assert.ok(runs >= 1 && runs <= 3, `${runs} arches`);
+  assert.equal(water, cols.size, "the river shows at the foot of every arch column");
   // A low footbridge has no room for arches.
-  assert.equal(bridge(100, 200, 110, 200, 4, 5, 5, 4, 1).marks.length, 0);
+  const low = bridge(100, 200, 110, 200, 4, 5, 5, 4, 1);
+  assert.equal(low.marks.filter((_, k) => k % 5 === 3 && (low.marks[k] === M.opening || low.marks[k] === M.river)).length, 0);
 });
 
 test("builders are deterministic", () => {
