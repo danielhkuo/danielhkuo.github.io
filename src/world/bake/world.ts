@@ -8,6 +8,7 @@
 
 import { wrap } from "../core/torus.ts";
 import type { WorldParams } from "../gen/params.ts";
+import { type BuiltIndex, indexBuilt } from "../gen/built.ts";
 import { makeWorld, type World } from "../gen/pipeline.ts";
 import type { Stamp as CoastStamp } from "../gen/stamps.ts";
 import { standinSeaBed } from "./standin-land.ts";
@@ -73,6 +74,11 @@ export interface BakeWorld {
   rock: Uint8Array;
   /** Six planes of cN², archetype-major, summing to 1 per node. */
   regions: Float32Array;
+
+  /** What people built: structures, pads and terraces. Absent on a wild world. */
+  built?: BuiltIndex;
+  /** Roads and paths, indexed like rivers; a vertex's width is 2 for a road, 1 for a path. */
+  roads?: RiverIndex;
 }
 
 /** One river polyline: x, y, width per vertex (cells, unwrapped; any consistent frame). */
@@ -183,13 +189,14 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   const { n, gN, cN } = p;
   if (n % 256 !== 0) throw new Error(`the bake needs a world of whole 256-cell tiles, not ${n}`);
   const w = inp.world ?? makeWorld(p, seed);
-  const { land, hydro, rivers, climate } = w;
+  const { land, hydro, rivers, climate, settlement } = w;
   const isSea = land.isSea;
 
   // The rivers stage's ground is final. The coast stage shelves the sea bed; a flat one gets the stand-in.
   let deepest = 0;
-  for (let i = 0; i < isSea.length; i++) if (isSea[i] && rivers.ground[i] < deepest) deepest = rivers.ground[i];
-  const ground = deepest < -2 ? Float32Array.from(rivers.ground) : standinSeaBed(rivers.ground, isSea, gN);
+  const final = settlement ? settlement.ground : rivers.ground;
+  for (let i = 0; i < isSea.length; i++) if (isSea[i] && final[i] < deepest) deepest = final[i];
+  const ground = deepest < -2 ? Float32Array.from(final) : standinSeaBed(final, isSea, gN);
   for (let i = 0; i < ground.length; i++) if (!isSea[i] && ground[i] <= 0) ground[i] = 0.01;
   const waterLevel = new Float32Array(gN * gN), waterKind = new Uint8Array(gN * gN), hand = new Float32Array(gN * gN);
   for (let i = 0; i < waterKind.length; i++) {
@@ -223,7 +230,16 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     falls: Float32Array.from(rivers.falls.flatMap((f) => [f.x, f.y, f.drop])),
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
+    built: settlement ? indexBuilt(settlement.built, n) : undefined,
+    roads: settlement ? riverIndex(settlement.built.roads.map((r) => ({ vertices: roadVertices(r.vertices, r.width), stride: 3 })), n) : undefined,
   };
+}
+
+/** x, y, width triples from a road's x, y pairs. */
+function roadVertices(xy: readonly number[], width: number): number[] {
+  const out: number[] = [];
+  for (let k = 0; k + 1 < xy.length; k += 2) out.push(xy[k], xy[k + 1], width);
+  return out;
 }
 
 /** A blank world of the given size: flat ground at `level`, no water, no rivers, one region. For tests and fixtures. */

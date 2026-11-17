@@ -78,13 +78,38 @@ function dft2Real(img: Float32Array, size: number): { re: Float64Array; im: Floa
 }
 
 /**
- * Grid gate: mean power at axis-aligned frequencies (kx = 0 or ky = 0, DC excluded,
- * |k| ≤ size/4) divided by the median power of all other frequencies in the same radius.
- * A grid-free image scores about 1; the pass mark is ≤ 1.5. `size` must be a power of two.
+ * Grid gate: high-pass the image (subtract a 9 × 9 toroidal box blur), then over the
+ * annulus size/8 ≤ |k| ≤ size/2 compare mean power at axis-aligned frequencies
+ * (kx = 0 or ky = 0) with the median power of the rest. Large-scale terrain structure
+ * is ignored; pixel lattices and row/column banding are caught. A grid-free image
+ * scores about 1; the pass mark is ≤ 1.5. `size` must be a power of two.
  */
 export function gridScore(img: Float32Array, size: number): number {
-  const { re, im } = dft2Real(img, size);
-  const half = size / 4;
+  const highPass = new Float32Array(img.length);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let blur = 0;
+      for (let dy = -4; dy <= 4; dy++) {
+        const ny = (y + dy + size) % size;
+        for (let dx = -4; dx <= 4; dx++) {
+          const nx = (x + dx + size) % size;
+          blur += img[ny * size + nx]!;
+        }
+      }
+      highPass[y * size + x] = img[y * size + x]! - blur / 81;
+    }
+  }
+
+  for (let x = 0; x < size; x++) {
+    let colMean = 0;
+    for (let y = 0; y < size; y++) colMean += highPass[y * size + x]!;
+    colMean /= size;
+    for (let y = 0; y < size; y++) highPass[y * size + x]! -= colMean;
+  }
+
+  const { re, im } = dft2Real(highPass, size);
+  const rMin = size / 8;
+  const rMax = size / 2;
   const axisPow: number[] = [];
   const otherPow: number[] = [];
 
@@ -93,7 +118,7 @@ export function gridScore(img: Float32Array, size: number): number {
     for (let kx = 0; kx < size; kx++) {
       const skx = kx <= size / 2 ? kx : kx - size;
       const radius = Math.sqrt(skx * skx + sky * sky);
-      if (radius <= 0 || radius > half) continue;
+      if (radius < rMin || radius > rMax) continue;
 
       const idx = ky * size + kx;
       const pow = re[idx]! * re[idx]! + im[idx]! * im[idx]!;
