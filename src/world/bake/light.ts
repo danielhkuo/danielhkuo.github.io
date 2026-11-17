@@ -21,6 +21,11 @@ export const LOWLAND_TOP = 60;
 /** And by this on snow. */
 export const SNOW_LEAN = 1.8;
 
+/** Upland tones part round the terminator by up to this much, easing in between these heights. */
+export const UPLAND_PART = 0.22;
+export const UPLAND_LOW = 22;
+export const UPLAND_HIGH = 60;
+
 /** The tone flat, unshadowed ground takes, 0–1. */
 export const BASE_TONE = 0.5;
 
@@ -116,7 +121,12 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
   const lit = 0.5 + 0.68 * (lam - 0.5) + 0.32 * (rel - 0.5);
   // Contrast grows with height (after Imhof): lowland hills still read in light, summits are crisp.
   const contrast = 1.02 + (e < 0 ? 0 : e > 130 ? 130 : e) / 340;
-  const tone = BASE_TONE + (lit - 0.5) * contrast;
+  let x = (lit - 0.5) * contrast;
+  x = x < -0.5 ? -0.5 : x > 0.5 ? 0.5 : x;
+  // On the uplands the tones are drawn apart round the terminator, so a face is in light or in shade and the hills
+  // do not sit in one middle value: an S-curve that leaves flat ground and the two ends where they were.
+  const up = e <= UPLAND_LOW ? 0 : e >= UPLAND_HIGH ? 1 : (e - UPLAND_LOW) / (UPLAND_HIGH - UPLAND_LOW);
+  const tone = BASE_TONE + x * (1 + UPLAND_PART * up * (1 - 4 * x * x));
   // Keep clear of the ramp's two ends.
   return tone < 0.06 ? 0.06 : tone > 0.94 ? 0.94 : tone;
 }

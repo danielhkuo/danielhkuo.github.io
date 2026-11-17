@@ -43,6 +43,13 @@ export function washFlags(): Uint8Array {
   return out;
 }
 
+/** Bare rock, whose walls the bake draws as strata: tops, benches and faces of every rock; not scree. */
+export function rockFlags(): Uint8Array {
+  const out = new Uint8Array(256);
+  for (const m of [M.rockHard, M.rockSed, M.rockLime, M.rockSlate, M.cliffHard, M.cliffSed, M.cliffLime, M.cliffSlate]) out[m] = 1;
+  return out;
+}
+
 /** The world's look for a world of n cells, drawn through `palette`. */
 export function worldLook(n: number, palette: Palette): Look {
   return {
@@ -55,5 +62,8 @@ export function worldLook(n: number, palette: Palette): Look {
     isWash: washFlags(),
     turf: M.pastureCool,
     barSand: M.sandPale,
+    isRock: rockFlags(),
+    apron: M.shingle,
+    apronRock: M.boulder,
   };
 }

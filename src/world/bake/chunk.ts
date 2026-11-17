@@ -1,7 +1,7 @@
 // Pixel chunks: the painter. Cells are projected to bake pixels
 // (x, floor(4y/5) − height), nearest first, so each pixel is written once.
-// Then rivers are drawn as lines in pixel space, ink and hatching are laid,
-// and tone is dithered per bake pixel.
+// Then rivers are drawn as lines in pixel space, ink is laid, rock faces are
+// drawn in their beds, and tone is dithered per bake pixel.
 //
 // Bake pixel: material | light << 8 | depth << 16, with
 // light = tone | shadow << 4 | ink << 6 and depth in eighths of a world row
@@ -9,8 +9,8 @@
 
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
-import { buildTile, F_CANOPY, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
-import { CANOPY_MIN_DROP, evenLines, hatch, INK_MIN_DROP, inkCliffs, inkCrests, inkOcclusion, newPainted, type Painted } from "./ink.ts";
+import { AUX_CREST_SHIFT, buildTile, F_CANOPY, F_CLIFF, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
+import { SPAN_CAP, CANOPY_MIN_DROP, evenLines, hatch, inkCliffs, inkCrests, inkOcclusion, landBreaks, newPainted, rockFaces, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
 import { imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint } from "./lines.ts";
@@ -27,10 +27,15 @@ export const CHUNK_ROWS = 320;
 // Margins painted round a window so that ink and lines inside it never depend on where it was cut.
 const MX = 8;
 const MT = 32;
-const MB = 8;
+// Below: a lip reads the wall LIP_FULL rows under it, is evened over LIP_SEEK rows and joined over as many again, and
+// every cell in reach must be whole to SPAN_CAP.
+const MB = 32;
 
 /** Of 256: the share of a light wash's pixels, inside a patch of grain, where the paper shows through. */
 export const PAPER_FLECK = 44;
+
+/** The crest bits of a land cell's aux. */
+const CREST_BITS = 3 << AUX_CREST_SHIFT;
 
 /** A hidden cell projects at least this far below the top of what hides it. */
 const HIDE_MARGIN = 1;
@@ -73,7 +78,7 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
     let tile: Cells | null = null, tyNow = -1;
     let top = h;
     // The cell that owns row `top`: its height, its float projection, and the rows hidden behind it so far.
-    let nearH = 0, nearF = Infinity, hid = 0;
+    let nearH = 0, nearF = Infinity, hid = 0, low = Infinity;
     for (let y = yLast; y >= yFirst && top > 0; y--) {
       const wy = wrap(y, n);
       const ty = wy >> 8;
@@ -83,13 +88,27 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
       const f = 0.8 * y - H;
       const t = Math.floor((4 * y) / 5) - r0 - Math.floor(H + 0.5);
       if (t >= top) {
-        if (f > nearF + HIDE_MARGIN) hid++;
+        if (f > nearF + HIDE_MARGIN) {
+          hid++;
+          if (H < low) low = H;
+        }
         continue;
       }
       if (top < h && hid > 0) {
+        const k = top * w + c;
+        let breaks: boolean;
         // A crown is small, so its edge needs a little less hidden behind it than a ridge does.
-        const need = (p.flags[top * w + c] & F_CANOPY) !== 0 ? CANOPY_MIN_DROP : INK_MIN_DROP;
-        if (nearH - H >= need) p.hidden[top * w + c] = hid > 255 ? 255 : hid;
+        if ((p.flags[k] & F_CANOPY) !== 0) breaks = nearH - H >= CANOPY_MIN_DROP;
+        else {
+          // A crest or a steep face at the pixel, or within two rows nearer the camera, makes the break a firm one.
+          let firm = false;
+          for (let q = 0; q < 3 && top + q < h && !firm; q++) {
+            const j = k + q * w;
+            firm = (p.flags[j] & F_QUIET) === 0 && ((p.flags[j] & F_CLIFF) !== 0 || (p.aux[j] & CREST_BITS) !== 0);
+          }
+          breaks = landBreaks(hid, nearH - H, nearH - low, firm);
+        }
+        if (breaks) p.hidden[k] = hid > 255 ? 255 : hid;
       }
       const from = t > 0 ? t : 0;
       const m = (tile as Cells).mat[ti], l = (tile as Cells).light[ti], fl = (tile as Cells).flags[ti], a = (tile as Cells).aux[ti];
@@ -101,11 +120,14 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
         p.aux[i] = a;
         p.y[i] = y;
         p.height[i] = H;
+        p.wall[i] = r - t > 255 ? 255 : r - t;
+        p.span[i] = top - t > SPAN_CAP ? SPAN_CAP : top - t;
       }
       top = from;
       nearH = H;
       nearF = f;
       hid = 0;
+      low = Infinity;
     }
   }
   return p;
@@ -182,6 +204,8 @@ function drawLines(index: RiverIndex, n: number, tiles: TileSource, p: Painted, 
     p.aux[i] = a;
     p.flags[i] = (p.flags[i] & F_SHADOW) | F_QUIET;
     p.hidden[i] = 0;
+    p.wall[i] = 0;
+    p.span[i] = 1;
   };
 
   forEachLinePoint(index, x0, yFirst, x0 + w, yLast, (x, y, width0, _run, first) => {
@@ -205,14 +229,9 @@ function drawLines(index: RiverIndex, n: number, tiles: TileSource, p: Painted, 
     const seen = oy >= cy - 1 && 0.8 * cy - H <= 0.8 * oy - p.height[i] + HIDE_MARGIN && (p.flags[i] & F_CANOPY) === 0;
     if (!seen) { prev = false; return; }
     const m = (tile as Cells).mat[ti], a = (tile as Cells).aux[ti];
-    const rad = width > 1 ? width / 2 : 0;
-    const stamp = (sc: number, sr: number): void => {
-      if (rad === 0) { plot(sc, sr, cy, 4, m, a); return; }
-      const k = Math.floor(rad);
-      for (let dr = -k; dr <= k; dr++) for (let dc = -k; dc <= k; dc++) {
-        if (dc * dc + dr * dr * 1.5625 <= rad * rad) plot(sc + dc, sr + dr, cy, 4 + width, m, a);
-      }
-    };
+    // Only the curve itself is drawn here, to keep a line whole where rows of cells fall on one row of pixels: a wide
+    // river's banks are the cells' own, cut to the curve at cell size. (Discs stamped per point made stair-stepped banks.)
+    const stamp = (sc: number, sr: number): void => plot(sc, sr, cy, 4 + (width > 1 ? width : 0), m, a);
     if (prev && (c !== px || r !== py)) {
       const dc = c - px, dr = r - py;
       const steps = Math.max(dc < 0 ? -dc : dc, dr < 0 ? -dr : dr);
@@ -238,8 +257,13 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
       const m = p.mat[i];
       const f = p.flags[i];
       let tone: number;
-      if (look.isWater[m] === 1) tone = p.aux[i] & 15;
-      else {
+      if (look.isWater[m] === 1) {
+        tone = p.aux[i] & 15;
+        // A stream that drops down a wall is a fall: broken white water.
+        if (tone >= 8 && tone < 15 && p.wall[i] >= 2 && (look.isStill === undefined || look.isStill[m] === 0)) {
+          tone = mask[((R + 23) & 255) * 256 + ((p.x0 + mx + c + 71) & 255)] < 190 ? 15 : 14;
+        }
+      } else {
         const l = p.light[i];
         // Flat, unshaded ground sits at FLAT_TONE; darks have the longer run of the ramp.
         const d = (l - Math.floor(BASE_TONE * 255 + 0.5)) / 255;
@@ -273,6 +297,7 @@ export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles
   inkCrests(p);
   evenLines(p);
   inkCliffs(p, look.isStill ?? look.isWater);
+  rockFaces(p);
   hatch(p, mask);
   return pack(p, look, mask, MX, MT, w, h);
 }

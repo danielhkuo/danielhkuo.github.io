@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT, type Palette, type PaletteOptions } from "../look/contract.ts";
 import { isVegetation, isWater, MATERIAL as M, MATERIAL_COUNT, MATERIAL_NAMES } from "../look/materials.ts";
 import {
-  buildPalette, FLAT_TONE, lstar, oklabOf, RESERVED, RESERVED_SECTOR, RIVER_GUARD_TONE, RIVER_MARGIN, snowCover,
+  buildPalette, FLAT_TONE, lstar, oklabOf, RESERVED, RESERVED_SECTOR, RIVER_GUARD_TONE, RIVER_MARGIN, snowCover, STREAM_TONE, STREAM_TONES,
   TERRAIN_CHROMA_CAP,
 } from "./palette.ts";
 
@@ -56,8 +56,11 @@ test("rivers are at least 15 L* lighter than any vegetation they cross, in every
   let tightest = Infinity;
   everyPalette((pal, o, label) => {
     for (let shadow = 0; shadow < 4; shadow++) {
+      // The flow tones and the foam; a 1 px stream (tones 8–14) is a dark line and has its own test.
       let river = Infinity;
-      for (let tone = 0; tone < 16; tone++) river = Math.min(river, lstar(at(pal, M.river, tone, shadow)));
+      for (let tone = 0; tone < 16; tone++) {
+        if (tone < STREAM_TONE || tone >= STREAM_TONE + STREAM_TONES) river = Math.min(river, lstar(at(pal, M.river, tone, shadow)));
+      }
       for (let mat = 0; mat < MATERIAL_COUNT; mat++) {
         if (isVegetation[mat] === 0 || snowCover(mat, o.season) > 0.25) continue;
         for (let tone = 0; tone <= RIVER_GUARD_TONE; tone++) {
@@ -74,6 +77,25 @@ test("rivers are at least 15 L* lighter than any vegetation they cross, in every
   assert.equal(RIVER_MARGIN, 15);
   assert.ok(RIVER_GUARD_TONE >= FLAT_TONE - 3);
   assert.ok(tightest < 25, "the guard should bind somewhere, or the river is washed out for nothing");
+});
+
+test("a stream is a dark line of water: under the river, never near white, lighter where the ground it crosses is lit", () => {
+  everyPalette((pal, _o, label) => {
+    let flow = Infinity;
+    for (let tone = 0; tone < STREAM_TONE; tone++) flow = Math.min(flow, lstar(at(pal, M.river, tone)));
+    for (let tone = STREAM_TONE; tone < STREAM_TONE + STREAM_TONES; tone++) {
+      const L = lstar(at(pal, M.river, tone));
+      assert.ok(L < flow - 4, `${label}: stream tone ${tone} (${L.toFixed(1)}) is not under the river (${flow.toFixed(1)})`);
+      if (tone > STREAM_TONE) assert.ok(L >= lstar(at(pal, M.river, tone - 1)), `${label}: stream tone ${tone} is darker than the one before`);
+    }
+  });
+  const pal = buildPalette(NOON);
+  const dark = lch(at(pal, M.river, STREAM_TONE)), light = lch(at(pal, M.river, STREAM_TONE + STREAM_TONES - 1));
+  assert.ok(dark[0] > 0.4 && light[0] < 0.76 && light[0] - dark[0] > 0.15, `stream runs ${dark[0]} to ${light[0]}`);
+  // Under the flat tone of every open ground a stream crosses when both are in the same light: tone 8 + k is drawn on ground of about tone 2k + 3.
+  for (const mat of [M.meadowMid, M.pastureMid, M.moorMid, M.alpineMid, M.scree]) {
+    assert.ok(lch(at(pal, M.river, STREAM_TONE + 3))[0] < lch(at(pal, mat, FLAT_TONE))[0] - 0.05, `stream on ${MATERIAL_NAMES[mat]}`);
+  }
 });
 
 test("the river stays water-coloured: blue, and not blown out to white by day", () => {
