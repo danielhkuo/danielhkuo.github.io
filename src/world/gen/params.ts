@@ -20,6 +20,10 @@ export interface ArchetypeSpec {
   peak: number;
   /** Relative odds of hard, medium and soft rock within the island. */
   rockBias: readonly [number, number, number];
+  /** Inclusive range of ridges: fold belts on an island, islets in a skerry cluster. */
+  ridges: readonly [number, number];
+  /** Width of a rock stripe across strike, in cells. */
+  stripeWidth: readonly [number, number];
 }
 
 export interface WorldParams {
@@ -29,9 +33,9 @@ export interface WorldParams {
   cores: { poissonR: number; archetypes: readonly ArchetypeSpec[] };
   /** tan 25°: spines run within 25° of west–east. */
   strike: { maxSlope: number };
-  spine: { segments: readonly [number, number]; ridges: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
+  spine: { segments: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
   uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number };
-  rock: { stripeWidth: readonly [number, number]; kMul: readonly [number, number, number]; kBase: number; warpCells: number };
+  rock: { kMul: readonly [number, number, number]; kBase: number; warpCells: number };
   regions: { blend: readonly [number, number] };
   erode: {
     cSteps: number;
@@ -60,18 +64,18 @@ export function paramsFor(n: number): WorldParams {
     cores: {
       poissonR: 900 * s,
       archetypes: [
-        { id: A.highland, count: [1, 1], diameter: [2600 * s, 3000 * s], aspect: 0.7, peak: 130, rockBias: [0.7, 0.25, 0.05] },
-        { id: A.home, count: [1, 1], diameter: [1900 * s, 2200 * s], aspect: 0.75, peak: 50, rockBias: [0.15, 0.4, 0.45] },
-        { id: A.lakes, count: [1, 1], diameter: [1700 * s, 2000 * s], aspect: 0.75, peak: 95, rockBias: [0.25, 0.6, 0.15] },
-        { id: A.slate, count: [1, 1], diameter: [1300 * s, 1600 * s], aspect: 0.6, peak: 65, rockBias: [0.5, 0.0, 0.5] },
-        { id: A.karst, count: [2, 2], diameter: [1000 * s, 1300 * s], aspect: 0.7, peak: 45, rockBias: [0.85, 0.15, 0.0] },
-        { id: A.skerry, count: [5, 7], diameter: [180 * s, 380 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0] },
+        { id: A.highland, count: [1, 1], diameter: [3400 * s, 3800 * s], aspect: 0.45, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [4, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.home, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: 0.5, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.lakes, count: [1, 1], diameter: [2700 * s, 3100 * s], aspect: 0.48, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.slate, count: [1, 1], diameter: [2400 * s, 2800 * s], aspect: 0.45, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [4, 5], stripeWidth: [150 * s, 300 * s] },
+        { id: A.karst, count: [2, 2], diameter: [2000 * s, 2400 * s], aspect: 0.5, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.skerry, count: [5, 7], diameter: [320 * s, 720 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
       ],
     },
     strike: { maxSlope: 0.4663076581549986 },
-    spine: { segments: [3, 6], ridges: [2, 3], ridgeGap: 170 * s, bend: 0.25, plateau: 0.35 },
+    spine: { segments: [3, 6], ridgeGap: 120 * s, bend: 0.25, plateau: 0.35 },
     uplift: { scale: 1e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
-    rock: { stripeWidth: [300 * s, 600 * s], kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
+    rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
     regions: { blend: [100 * s, 200 * s] },
     erode: {
       cSteps: 150,
