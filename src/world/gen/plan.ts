@@ -34,46 +34,88 @@ export interface Plan {
 }
 
 // Shape constants that are not world parameters. Lengths are in cells of the
-// 6400 world and scale with n.
+// 6400 world and scale with n; noise feature sizes are whole periods of it.
 
-/** Half-width at a ridge's two ends as a share of its half-width amidships: belts are spindles, not stadiums. */
-const TAPER = 0.5;
-/**
- * Ridges stand this share of a belt's full width apart (or ridgeGap, if that
- * is wider), so neighbouring belts meet on their shoulders: the uplift keeps a
- * valley between them and the island stays one piece of land.
- */
-const RIDGE_SPACING = 0.6;
+/** Half-width at a belt's two ends as a share of its half-width amidships: belts are spindles. */
+const TAPER = 0.35;
+/** The spine bows across strike by up to these shares of the island's length: one arc, plus an S. */
+const BOW_ARC: readonly [number, number] = [0.05, 0.13];
+const BOW_S = 0.07;
+/** Each control segment of the spine is drawn as this many straight pieces of a smooth curve. */
+const SPINE_PIECES = 3;
 /** An island's own strike may lean this far (as a slope) from the global strike. */
 const LEAN = 0.1;
-/** Flanking ridges run this share of the main spine's length. */
-const FLANK_LENGTH: readonly [number, number] = [0.5, 0.9];
-/** …and are this share of its width. */
-const FLANK_WIDTH: readonly [number, number] = [0.6, 1];
-/** Coast warp: the normalised distance to a ridge is scaled by 1 ± this, by strike-stretched noise. */
-const COAST_WARP = 0.3;
-const COAST_OCTAVES = 3;
+/**
+ * Secondary belts flank the spine en echelon. A belt stands this share of the
+ * two half-widths from the belt inside it: under 1 they meet on their
+ * shoulders, where the uplift is low, so the col between them sits near sea
+ * level and drowning can notch or split it.
+ */
+const BELT_SPACING: readonly [number, number] = [0.45, 0.9];
+/** Width, length (first rank, then outer ranks) and height of a secondary belt as shares of the spine's. */
+const BELT_WIDTH: readonly [number, number] = [0.45, 0.95];
+const BELT_LENGTH: readonly [number, number] = [0.45, 0.8];
+const OUTER_LENGTH: readonly [number, number] = [0.25, 0.55];
+const BELT_HEIGHT: readonly [number, number] = [0.55, 0.9];
+/** A secondary belt may overhang the end of the belt inside it by this share of its own length. */
+const OVERHANG = 0.3;
+/** A secondary belt drifts towards or away from the spine along its length by up to this slope. */
+const BELT_DRIFT = 0.12;
+
+/** Coast: the distance to a ridge is scaled by bay noise (large) and cove noise (small). */
+const BAY_CELLS = 900;
+const BAY_WARP = 0.5;
+const COVE_CELLS = 190;
+const COVE_WARP = 0.28;
+const BITE_MIN = 0.5;
 /**
  * Fibre shear: the land is sampled at a point slid along strike by noise that
  * changes quickly across strike and slowly along it. Belt ends interfinger as
  * headlands and rias; flanks, which run along strike, stay straight.
  */
-const FIBRE_SHIFT = 420;
-const FIBRE_SHARE = 0.2;
+const FIBRE_SHIFT = 380;
+const FIBRE_SHARE = 0.12;
 const FIBRE_CELLS = 320;
 const FIBRE_STRETCH = 6;
 const FIBRE_OCTAVES = 2;
-const UPLIFT_OCTAVES = 4;
+
+/**
+ * Uplift across a belt. From the coast in, a lowland ramp climbs to LOWLAND of
+ * the belt's height over a share of the half-width that varies along the
+ * coast (cliffed here, a plain there); then the flank rises to the plateau
+ * and a little more to the crest.
+ */
+const LOWLAND = 0.13;
+const LOWLAND_CELLS = 1280;
+const LOWLAND_SHARE: readonly [number, number] = [0.1, 0.45];
+const CREST = 0.3;
+/** Summits and cols: uplift dips by up to this share along the ridges, in patches of SUMMIT_CELLS. */
+const SUMMIT = 0.12;
+const SUMMIT_CELLS = 490;
+const UPLIFT_OCTAVES = 3;
+const UPLIFT_GAIN = 0.75;
+
+/** The home island's town bay: a bite out of the south coast, east of centre, ringed by lowland. */
+const BAY_RADIUS = 0.1;
+const BAY_LOWLAND = 0.22;
+const HOME_LOWLAND = 0.1;
+
 /** Rock stripes are displaced across strike by up to this many warp features. */
 const STRIPE_WARP = 0.5;
 /** Open water kept between island outlines at placement, and between a skerry and anything. */
 const CHANNEL = 260;
 const SKERRY_CHANNEL = 110;
 /** Gain that brings strike-averaged noise back to the spread of plain gradient noise. */
-const BLUR_GAIN = 2.4;
+const BLUR_GAIN = 2.6;
+/** Gain that brings plain fbm to about [−1, 1]. */
+const FBM_GAIN = 1.7;
 
 function smoothstep(t: number): number {
   return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 /**
@@ -116,7 +158,7 @@ function strikeNoise(n: number, period: number, octaves: number, gain: number, s
       const ex = m[k * 6 + 4], ey = m[k * 6 + 5];
       let s = 0;
       for (let j = -taps; j <= taps; j++) s += gradNoise(X + j * ex, Y + j * ey, period, seeds[k]);
-      s = Math.max(-1, Math.min(1, (s / (2 * taps + 1)) * BLUR_GAIN));
+      s = clamp((s / (2 * taps + 1)) * BLUR_GAIN, -1, 1);
       total += (ridge ? 1 - Math.abs(s) : s) * weight;
       weightSum += weight;
       weight *= gain;
@@ -130,7 +172,8 @@ function strikeNoise(n: number, period: number, octaves: number, gain: number, s
  * One ridge and its belt: a polyline in cells relative to the core. The belt's
  * half-width is `half` amidships and tapers along a parabola to TAPER · half
  * at the ends; `a` is each vertex's along-strike position, `mid` and `len`
- * the ridge's middle and length on that axis.
+ * the ridge's middle and length on that axis. `height` scales its uplift.
+ * (cx, cy, rad) is a circle that holds every vertex.
  */
 interface Ridge {
   x: Float64Array;
@@ -139,15 +182,22 @@ interface Ridge {
   mid: number;
   len: number;
   half: number;
+  height: number;
+  cx: number;
+  cy: number;
+  rad: number;
 }
 
 interface Island {
   core: Core;
   spec: ArchetypeSpec;
+  length: number;
   ridges: Ridge[];
-  /** Half-width of one ridge's belt amidships, in cells. */
+  /** Half-width of the main belt amidships, in cells. */
   half: number;
-  /** Largest |x| or |y| the outline reaches from the core, with a margin. */
+  /** Land can lie this far outside the unwarped outline. */
+  near: number;
+  /** Largest |x| or |y| the land reaches from the core. */
   reach: number;
   /** Middle of the outline relative to the core, and its half-extents, along and across the global strike. */
   midAlong: number;
@@ -161,6 +211,12 @@ interface Island {
   across: Float64Array;
   /** Largest fibre shift, in cells. */
   fibre: number;
+  /** Town bay, relative to the core; bayR is 0 where there is none. */
+  bayX: number;
+  bayY: number;
+  bayR: number;
+  /** Added to the lowland share everywhere on the island. */
+  lowland: number;
   blend: number;
   stripeWidth: number;
   stripePhase: number;
@@ -186,8 +242,8 @@ function drawRock(rng: Rng, odds: readonly [number, number, number], banned: num
   return last;
 }
 
-/** The across-strike offset of a spine, given as (along, across) vertices, at an along-strike position. */
-function spineAcross(al: Float64Array, ac: Float64Array, a: number): number {
+/** The across-strike offset of a polyline, given as (along, across) vertices, at an along-strike position. */
+function acrossAt(al: Float64Array, ac: Float64Array, a: number): number {
   const last = al.length - 1;
   if (a <= al[0]) return ac[0];
   for (let i = 0; i < last; i++) {
@@ -196,76 +252,209 @@ function spineAcross(al: Float64Array, ac: Float64Array, a: number): number {
   return ac[last];
 }
 
-/** An island's shape about a core at the origin; placeIslands gives the core its place. */
-function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: number, slope: number): Island {
-  const s = p.n / 6400;
-  const width = length * spec.aspect;
-  const ridgeCount = p.spine.ridges[0] + rng.int(p.spine.ridges[1] - p.spine.ridges[0] + 1);
-  // Each ridge carries its own belt, the flanking ones narrower; together they span the island's width.
-  const flankShare = new Float64Array(ridgeCount);
-  let shares = 0;
-  for (let r = 1; r < ridgeCount; r++) {
-    flankShare[r] = rng.range(FLANK_WIDTH[0], FLANK_WIDTH[1]);
-    shares += flankShare[r];
+/** A belt's half-width at an along-strike position. */
+function halfAt(r: Ridge, a: number): number {
+  const q = Math.min(1, Math.abs((2 * (a - r.mid)) / r.len));
+  return r.half * (TAPER + (1 - TAPER) * (1 - q * q));
+}
+
+function makeRidge(a: Float64Array, c: Float64Array, half: number, height: number, ux: number, uy: number): Ridge {
+  const m = a.length;
+  const x = new Float64Array(m), y = new Float64Array(m);
+  let cx = 0, cy = 0;
+  for (let i = 0; i < m; i++) {
+    x[i] = a[i] * ux - c[i] * uy;
+    y[i] = a[i] * uy + c[i] * ux;
+    cx += x[i] / m;
+    cy += y[i] / m;
   }
-  const half = width / ((1 + RIDGE_SPACING) * shares + (ridgeCount === 2 ? 1 + RIDGE_SPACING : 2 * RIDGE_SPACING));
+  let rad = 0;
+  for (let i = 0; i < m; i++) rad = Math.max(rad, Math.sqrt((x[i] - cx) * (x[i] - cx) + (y[i] - cy) * (y[i] - cy)));
+  return { x, y, a, mid: (a[0] + a[m - 1]) / 2, len: a[m - 1] - a[0], half, height, cx, cy, rad };
+}
+
+/** The island's own strike: the global one, leaning a little, still inside ±maxSlope. */
+function ownStrike(p: WorldParams, rng: Rng, slope: number): [number, number] {
+  const own = clamp(slope + rng.range(-LEAN, LEAN), -p.strike.maxSlope, p.strike.maxSlope);
+  const norm = Math.sqrt(1 + own * own);
+  return [1 / norm, own / norm];
+}
+
+/**
+ * The fold belts of an island, about a core at the origin: one bowed spine
+ * the length of the island, and secondary belts stepping out en echelon on
+ * both sides, shorter, narrower and lower. Returns the spine's control
+ * polyline as (along, across) too.
+ */
+function buildBelts(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: number, ux: number, uy: number): { ridges: Ridge[]; al: Float64Array; ac: Float64Array; dal: Float64Array; dac: Float64Array } {
+  const width = length * spec.aspect;
+  const count = spec.ridges[0] + rng.int(spec.ridges[1] - spec.ridges[0] + 1);
+
+  // Lay the secondaries out in units of the spine's half-width and length.
+  const side0 = rng.float() < 0.5 ? 1 : -1;
+  const side = new Int8Array(count), parent = new Int32Array(count);
+  const share = new Float64Array(count), len = new Float64Array(count), mid = new Float64Array(count);
+  const step = new Float64Array(count), offset = new Float64Array(count), height = new Float64Array(count);
+  share[0] = 1;
+  len[0] = 1;
+  height[0] = 1;
+  let outerPlus = 0, outerMinus = 0;
+  let extPlus = 1, extMinus = 1;
+  for (let k = 1; k < count; k++) {
+    side[k] = k % 2 === 1 ? side0 : -side0;
+    parent[k] = side[k] > 0 ? outerPlus : outerMinus;
+    const par = parent[k];
+    share[k] = rng.range(BELT_WIDTH[0], BELT_WIDTH[1]) * (par === 0 ? 1 : 0.85);
+    len[k] = par === 0 ? rng.range(BELT_LENGTH[0], BELT_LENGTH[1]) : rng.range(OUTER_LENGTH[0], OUTER_LENGTH[1]);
+    const room = Math.max(0, len[par] / 2 - (0.5 - OVERHANG) * len[k]);
+    mid[k] = clamp(mid[par] + rng.range(-1, 1) * room, -0.5 + len[k] / 2, 0.5 - len[k] / 2);
+    step[k] = rng.range(BELT_SPACING[0], BELT_SPACING[1]) * (share[par] + share[k]);
+    offset[k] = offset[par] + step[k];
+    height[k] = rng.range(BELT_HEIGHT[0], BELT_HEIGHT[1]) * height[par];
+    if (side[k] > 0) {
+      outerPlus = k;
+      extPlus = Math.max(extPlus, offset[k] + share[k]);
+    } else {
+      outerMinus = k;
+      extMinus = Math.max(extMinus, offset[k] + share[k]);
+    }
+  }
+  const half = width / (extPlus + extMinus);
   const run = length - 2 * TAPER * half;
+
+  // The spine's control polyline in (along, across): an arc and an S, so it
+  // bows; only inner vertices leave the strike line, so its ends stay on it.
   const segs = p.spine.segments[0] + rng.int(p.spine.segments[1] - p.spine.segments[0] + 1);
   const segLen = run / segs;
-
-  // The island's own strike: the global one, leaning a little, still inside ±maxSlope.
-  const maxSlope = p.strike.maxSlope;
-  const own = Math.max(-maxSlope, Math.min(maxSlope, slope + rng.range(-LEAN, LEAN)));
-  const norm = Math.sqrt(1 + own * own);
-  const ux = 1 / norm, uy = own / norm, vx = -uy, vy = ux;
-
-  // Main spine in (along, across); only inner vertices bend, so its ends stay on strike.
+  const arc = (rng.float() < 0.5 ? 1 : -1) * rng.range(BOW_ARC[0], BOW_ARC[1]) * length;
+  const ess = rng.range(-BOW_S, BOW_S) * length;
   const al = new Float64Array(segs + 1), ac = new Float64Array(segs + 1);
   for (let i = 0; i <= segs; i++) {
     const inner = i > 0 && i < segs;
-    al[i] = -run / 2 + (i + (inner ? rng.range(-0.2, 0.2) : 0)) * segLen;
-    ac[i] = inner ? rng.range(-p.spine.bend, p.spine.bend) * segLen : 0;
+    al[i] = -run / 2 + (i + (inner ? rng.range(-0.15, 0.15) : 0)) * segLen;
+    const q = (2 * al[i]) / run;
+    ac[i] = inner ? (1 - q * q) * (arc + 2.6 * ess * q) + rng.range(-p.spine.bend, p.spine.bend) * segLen * 0.3 : 0;
   }
+  // The belts follow a smooth curve through the control points (Catmull–Rom).
+  const dal = new Float64Array(segs * SPINE_PIECES + 1), dac = new Float64Array(segs * SPINE_PIECES + 1);
+  for (let i = 0; i < segs; i++) {
+    const p0 = ac[Math.max(i - 1, 0)], p1 = ac[i], p2 = ac[i + 1], p3 = ac[Math.min(i + 2, segs)];
+    for (let j = 0; j < SPINE_PIECES; j++) {
+      const t = j / SPINE_PIECES;
+      dal[i * SPINE_PIECES + j] = al[i] + t * (al[i + 1] - al[i]);
+      dac[i * SPINE_PIECES + j] = 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
+    }
+  }
+  dal[segs * SPINE_PIECES] = al[segs];
+  dac[segs * SPINE_PIECES] = ac[segs];
   // Slide the spine across strike so it passes through the core.
-  const centre = spineAcross(al, ac, 0);
+  const centre = acrossAt(dal, dac, 0);
   for (let i = 0; i <= segs; i++) ac[i] -= centre;
+  for (let i = 0; i < dac.length; i++) dac[i] -= centre;
 
-  const toRidge = (a: Float64Array, c: Float64Array, mid: number, len: number, halfWidth: number): Ridge => {
-    const x = new Float64Array(a.length), y = new Float64Array(a.length);
-    for (let i = 0; i < a.length; i++) {
-      x[i] = a[i] * ux + c[i] * vx;
-      y[i] = a[i] * uy + c[i] * vy;
+  const ridges: Ridge[] = [makeRidge(dal, dac, half, 1, ux, uy)];
+  const cells = new Float64Array(count);
+  for (let k = 1; k < count; k++) {
+    cells[k] = cells[parent[k]] + Math.max(p.spine.ridgeGap, step[k] * half);
+    const pieces = Math.max(3, Math.round(segs * SPINE_PIECES * len[k]));
+    const drift = rng.range(-BELT_DRIFT, BELT_DRIFT);
+    const a = new Float64Array(pieces + 1), c = new Float64Array(pieces + 1);
+    for (let j = 0; j <= pieces; j++) {
+      a[j] = (mid[k] - len[k] / 2 + (j / pieces) * len[k]) * run;
+      c[j] = acrossAt(dal, dac, a[j]) + side[k] * cells[k] + drift * (a[j] - mid[k] * run);
     }
-    return { x, y, a, mid, len, half: halfWidth };
-  };
+    ridges.push(makeRidge(a, c, half * share[k], height[k], ux, uy));
+  }
+  return { ridges, al, ac, dal, dac };
+}
 
-  const ridges: Ridge[] = [toRidge(al, ac, 0, run, half)];
-  const firstSide = rng.float() < 0.5 ? 1 : -1;
-  const echelon = rng.float() < 0.5 ? 1 : -1;
-  for (let r = 1; r < ridgeCount; r++) {
-    // Flanking ridges are shorter, follow the spine's bends, and step en
-    // echelon: one reaches towards each end of the island.
-    const side = r === 1 ? firstSide : -firstSide;
-    const len = run * rng.range(FLANK_LENGTH[0], FLANK_LENGTH[1]);
-    const shift = (side * echelon * rng.range(0.5, 1) * (run - len)) / 2;
-    const flankHalf = half * flankShare[r];
-    const offset = side * Math.max(p.spine.ridgeGap, RIDGE_SPACING * (half + flankHalf));
-    const fa = new Float64Array(segs + 1), fc = new Float64Array(segs + 1);
-    for (let i = 0; i <= segs; i++) {
-      fa[i] = shift - len / 2 + (i * len) / segs;
-      fc[i] = spineAcross(al, ac, fa[i]) + offset + rng.range(-p.spine.bend, p.spine.bend) * (len / segs) * 0.4;
+/**
+ * A skerry cluster about a core at the origin: one islet on the core and up
+ * to five more scattered within the cluster's ellipse, none too close to
+ * another, of mixed size, shape, lean and height. A cluster of one is a lone stack.
+ */
+function buildCluster(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: number, ux: number, uy: number): { ridges: Ridge[]; al: Float64Array; ac: Float64Array; dal: Float64Array; dac: Float64Array } {
+  const count = spec.ridges[0] + rng.int(spec.ridges[1] - spec.ridges[0] + 1);
+  const radius = length / 2;
+  const segs = p.spine.segments[0] + rng.int(p.spine.segments[1] - p.spine.segments[0] + 1);
+  const run = length * rng.range(0.25, 0.45);
+  const half = (run * rng.range(0.3, 0.6)) / 2;
+  const al = new Float64Array(segs + 1), ac = new Float64Array(segs + 1);
+  for (let i = 0; i <= segs; i++) {
+    const inner = i > 0 && i < segs;
+    al[i] = -run / 2 + (i * run) / segs;
+    ac[i] = inner ? rng.range(-p.spine.bend, p.spine.bend) * (run / segs) * 0.6 : 0;
+  }
+  const centre = acrossAt(al, ac, 0);
+  for (let i = 0; i <= segs; i++) ac[i] -= centre;
+  const ridges: Ridge[] = [makeRidge(al, ac, half, 1, ux, uy)];
+
+  const pa = new Float64Array(count), pc = new Float64Array(count);
+  let placed = 1;
+  for (let k = 1; k < count; k++) {
+    const isletLen = length * rng.range(0.08, 0.3);
+    const isletHalf = (isletLen * rng.range(0.35, 0.9)) / 2;
+    const lean = rng.range(-0.3, 0.3), kink = rng.range(-0.2, 0.2), height = rng.range(0.45, 1);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const a = rng.range(-1, 1), c = rng.range(-1, 1);
+      if (a * a + c * c > 1) continue;
+      let ok = true;
+      for (let o = 0; o < placed && ok; o++) {
+        const da = a - pa[o], dc = c - pc[o];
+        if (da * da + dc * dc < 0.3) ok = false;
+      }
+      if (!ok) continue;
+      pa[placed] = a;
+      pc[placed] = c;
+      placed++;
+      const ma = a * radius, mc = c * radius * spec.aspect;
+      const ia = new Float64Array([ma - isletLen / 2, ma, ma + isletLen / 2]);
+      const ic = new Float64Array([mc - (lean * isletLen) / 2, mc + kink * isletLen, mc + (lean * isletLen) / 2]);
+      ridges.push(makeRidge(ia, ic, isletHalf, height, ux, uy));
+      break;
     }
-    ridges.push(toRidge(fa, fc, shift, len, flankHalf));
+  }
+  return { ridges, al, ac, dal: al, dac: ac };
+}
+
+/** An island's shape about a core at the origin; placeIslands gives the core its place. */
+function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: number, slope: number): Island {
+  const s = p.n / 6400;
+  const [ux, uy] = ownStrike(p, rng, slope);
+  const skerry = spec.id === ARCHETYPE.skerry;
+  const built = skerry ? buildCluster(p, rng, spec, length, ux, uy) : buildBelts(p, rng, spec, length, ux, uy);
+  const ridges = built.ridges;
+  const half = ridges[0].half;
+  const fibre = Math.min(FIBRE_SHIFT * s, FIBRE_SHARE * length);
+
+  // Town bay: on the south coast (+across), east of the core, its centre just off the outline.
+  let bayX = 0, bayY = 0, bayR = 0;
+  if (spec.id === ARCHETYPE.home) {
+    const a = rng.range(0.02, 0.28) * ridges[0].len;
+    let edge = -Infinity;
+    for (const r of ridges) {
+      if (Math.abs(a - r.mid) > 0.42 * r.len) continue;
+      const c = new Float64Array(r.a.length);
+      for (let i = 0; i < c.length; i++) c[i] = r.y[i] * ux - r.x[i] * uy;
+      edge = Math.max(edge, acrossAt(r.a, c, a) + halfAt(r, a));
+    }
+    bayR = BAY_RADIUS * length;
+    const c = edge + 0.1 * bayR;
+    bayX = a * ux - c * uy;
+    bayY = a * uy + c * ux;
   }
 
   const gn = Math.sqrt(1 + slope * slope);
   const gx = 1 / gn, gy = slope / gn;
+  let maxHalf = 0;
+  for (const r of ridges) maxHalf = Math.max(maxHalf, r.half);
+  const near = fibre + (1 / BITE_MIN - 1) * maxHalf + 8 * s;
   let reach = 0, loA = Infinity, hiA = -Infinity, loB = Infinity, hiB = -Infinity;
   for (const r of ridges) {
     for (let i = 0; i < r.x.length; i++) {
       reach = Math.max(reach, Math.abs(r.x[i]) + r.half, Math.abs(r.y[i]) + r.half);
       const a = r.x[i] * gx + r.y[i] * gy, b = r.y[i] * gx - r.x[i] * gy;
-      const end = i === 0 || i === r.x.length - 1 ? r.half * TAPER : 0;
+      const end = r.half * TAPER;
       loA = Math.min(loA, a - end);
       hiA = Math.max(hiA, a + end);
       loB = Math.min(loB, b - r.half);
@@ -275,7 +464,7 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: numb
 
   // Rock stripes across strike. A class with odds of a half or less never
   // takes two stripes running, so slate alternates and hard karst may repeat.
-  const stripeWidth = rng.range(p.rock.stripeWidth[0], p.rock.stripeWidth[1]);
+  const stripeWidth = rng.range(spec.stripeWidth[0], spec.stripeWidth[1]);
   const stripeHalf = Math.ceil(p.n / stripeWidth) + 3;
   const stripes = new Uint8Array(2 * stripeHalf + 1);
   let prev = -1;
@@ -284,21 +473,28 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: numb
     prev = drawRock(rng, spec.rockBias, banned);
     stripes[i] = prev;
   }
+
   return {
-    core: { x: 0, y: 0, archetype: spec.id, radius: length / 2, spine: new Float64Array(2 * (segs + 1)) },
+    core: { x: 0, y: 0, archetype: spec.id, radius: length / 2, spine: new Float64Array(built.al.length * 2) },
     spec,
+    length,
     ridges,
     half,
-    reach: reach + 300 * s,
+    near,
+    reach: reach + near,
     midAlong: (loA + hiA) / 2,
     midAcross: (loB + hiB) / 2,
     extAlong: (hiA - loA) / 2,
     extAcross: (hiB - loB) / 2,
     ux,
     uy,
-    along: al,
-    across: ac,
-    fibre: Math.min(FIBRE_SHIFT * s, FIBRE_SHARE * length),
+    along: built.dal,
+    across: built.dac,
+    fibre,
+    bayX,
+    bayY,
+    bayR,
+    lowland: spec.id === ARCHETYPE.home ? HOME_LOWLAND : 0,
     blend: rng.range(p.regions.blend[0], p.regions.blend[1]),
     stripeWidth,
     stripePhase: rng.float(),
@@ -308,51 +504,78 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: numb
   };
 }
 
-/** Results of measuring one point against one island. */
-let outEdge = 0;
-let outT = 0;
-
-/**
- * Distance from a point (relative to the core) to the island's ridges: outEdge
- * is the distance to the unwarped outline in cells (negative inside), outT the
- * distance to the nearest ridge as a share of the half-width there. Both only
- * ever lower the values already held.
- */
-function measure(isl: Island, px: number, py: number): void {
-  let edge = outEdge, t = outT;
-  for (const r of isl.ridges) {
-    const x = r.x, y = r.y, a = r.a;
-    for (let i = 0; i + 1 < x.length; i++) {
-      const ax = x[i], ay = y[i];
-      const bx = x[i + 1] - ax, by = y[i + 1] - ay;
-      const qx = px - ax, qy = py - ay;
-      let tau = (qx * bx + qy * by) / (bx * bx + by * by);
-      tau = tau < 0 ? 0 : tau > 1 ? 1 : tau;
-      const ex = qx - tau * bx, ey = qy - tau * by;
-      const dist = Math.sqrt(ex * ex + ey * ey);
-      const q = Math.min(1, Math.abs((2 * (a[i] + tau * (a[i + 1] - a[i]) - r.mid)) / r.len));
-      const hw = r.half * (TAPER + (1 - TAPER) * (1 - q * q));
-      if (dist - hw < edge) edge = dist - hw;
-      if (dist < t * hw) t = dist / hw;
-    }
-  }
-  outEdge = edge;
-  outT = t;
+/** The other image of a min-image offset that might be nearer to something `reach` wide. */
+function otherImage(d: number, n: number, reach: number): number {
+  const far = n / 2 - reach;
+  return d >= 0 ? (d > far ? d - n : d) : d < -far ? d + n : d;
 }
 
-/** measure() against the nearest image of the island; near the far side of the torus that is not always the image whose core is nearest. */
-function measureTorus(isl: Island, dx: number, dy: number, n: number): void {
-  const far = n / 2 - isl.reach;
-  const dx2 = dx > far ? dx - n : dx < -far ? dx + n : dx;
-  const dy2 = dy > far ? dy - n : dy < -far ? dy + n : dy;
-  outEdge = Infinity;
-  outT = Infinity;
-  measure(isl, dx, dy);
-  if (dx2 !== dx) measure(isl, dx2, dy);
-  if (dy2 !== dy) {
-    measure(isl, dx, dy2);
-    if (dx2 !== dx) measure(isl, dx2, dy2);
+/** Distance from a point (relative to the core) to the island's unwarped outline, in cells; negative inside. Never above `best`. */
+function edgeAt(isl: Island, px: number, py: number, best: number): number {
+  let edge = best;
+  for (const r of isl.ridges) {
+    const ox = px - r.cx, oy = py - r.cy;
+    if (Math.sqrt(ox * ox + oy * oy) - r.rad - r.half >= edge) continue;
+    const x = r.x, y = r.y, a = r.a;
+    for (let i = 0; i + 1 < x.length; i++) {
+      const bx = x[i + 1] - x[i], by = y[i + 1] - y[i];
+      const qx = px - x[i], qy = py - y[i];
+      const tau = clamp((qx * bx + qy * by) / (bx * bx + by * by), 0, 1);
+      const ex = qx - tau * bx, ey = qy - tau * by;
+      const e = Math.sqrt(ex * ex + ey * ey) - halfAt(r, a[i] + tau * (a[i + 1] - a[i]));
+      if (e < edge) edge = e;
+    }
   }
+  return edge;
+}
+
+/** edgeAt() against the nearest image of the island on the torus. */
+function edgeTorus(isl: Island, dx: number, dy: number, n: number): number {
+  const dx2 = otherImage(dx, n, isl.reach), dy2 = otherImage(dy, n, isl.reach);
+  let e = edgeAt(isl, dx, dy, Infinity);
+  if (dx2 !== dx) e = edgeAt(isl, dx2, dy, e);
+  if (dy2 !== dy) {
+    e = edgeAt(isl, dx, dy2, e);
+    if (dx2 !== dx) e = edgeAt(isl, dx2, dy2, e);
+  }
+  return e;
+}
+
+/** Uplift across a belt as a share of its height, from `f` (0 at the coast, 1 on the ridge) and the lowland share. */
+function profile(f: number, lowland: number, plateau: number): number {
+  if (f <= 0) return 0;
+  if (f < lowland) return (LOWLAND * f) / lowland;
+  const top = Math.max(1 - plateau, lowland + 0.05);
+  const rise = smoothstep((f - lowland) / (top - lowland));
+  const crest = f > top ? (f - top) / (1 - top) : 0;
+  return LOWLAND + (1 - LOWLAND) * rise * (1 - CREST + CREST * crest);
+}
+
+/**
+ * The island's uplift at a point (relative to the core) as a share of its
+ * peak: the best belt's profile. `bite` scales distances to the ridges, `cut`
+ * is taken off f. Never below `best`.
+ */
+function reliefAt(isl: Island, px: number, py: number, bite: number, cut: number, lowland: number, plateau: number, best: number): number {
+  let rel = best;
+  for (const r of isl.ridges) {
+    const ox = px - r.cx, oy = py - r.cy;
+    if ((Math.sqrt(ox * ox + oy * oy) - r.rad) * bite >= r.half) continue;
+    const x = r.x, y = r.y, a = r.a;
+    let t = Infinity;
+    for (let i = 0; i + 1 < x.length; i++) {
+      const bx = x[i + 1] - x[i], by = y[i + 1] - y[i];
+      const qx = px - x[i], qy = py - y[i];
+      const tau = clamp((qx * bx + qy * by) / (bx * bx + by * by), 0, 1);
+      const ex = qx - tau * bx, ey = qy - tau * by;
+      const hw = halfAt(r, a[i] + tau * (a[i + 1] - a[i]));
+      const dist = Math.sqrt(ex * ex + ey * ey);
+      if (dist < t * hw) t = dist / hw;
+    }
+    const v = r.height * profile(1 - t * bite - cut, lowland, plateau);
+    if (v > rel) rel = v;
+  }
+  return rel;
 }
 
 /** Draws the quota of islands, largest first, and gives each core its place by Poisson disk. */
@@ -383,40 +606,46 @@ function placeIslands(p: WorldParams, rng: Rng, slope: number): Island[] {
   const midX = new Float64Array(islands.length), midY = new Float64Array(islands.length);
   for (let c = 0; c < islands.length; c++) {
     const isl = islands[c];
-    let done = false;
-    for (let attempt = 0; attempt < attempts && !done; attempt++) {
-      // Cores sit on node centres. Outlines keep a channel of open water apart
-      // for the first half of the attempts; after that the channel, then the
-      // outlines, give way, down to the bare Poisson radius.
+    // Best candidate: of the attempts that keep the Poisson radius, take the
+    // one whose outline stands clearest of the others, measured against the
+    // sum of the two outlines' half-extents plus a channel of open water.
+    let bestX = 0, bestY = 0, bestScore = -Infinity;
+    for (let attempt = 0; attempt < attempts; attempt++) {
       const x = (rng.int(p.cN) + 0.5) * cell, y = (rng.int(p.cN) + 0.5) * cell;
       const mx = x + isl.midAlong * ux - isl.midAcross * uy, my = y + isl.midAlong * uy + isl.midAcross * ux;
-      const ease = Math.min(1, (2 * (attempts - attempt)) / attempts);
-      let ok = true;
-      for (let o = 0; o < c && ok; o++) {
+      let score = 1e9;
+      for (let o = 0; o < c && score > -Infinity; o++) {
         const other = islands[o];
         const cx = torusDelta(other.core.x, x, p.n), cy = torusDelta(other.core.y, y, p.n);
-        if (cx * cx + cy * cy < r2) ok = false;
+        if (cx * cx + cy * cy < r2) {
+          score = -Infinity;
+          break;
+        }
         const skerry = isl.spec.id === ARCHETYPE.skerry || other.spec.id === ARCHETYPE.skerry;
         const channel = (skerry ? SKERRY_CHANNEL : CHANNEL) * s;
-        const a = (isl.extAlong + other.extAlong + channel) * ease, b = (isl.extAcross + other.extAcross + channel) * ease;
+        const a = isl.extAlong + other.extAlong + channel, b = isl.extAcross + other.extAcross + channel;
         const dx = torusDelta(midX[o], mx, p.n), dy = torusDelta(midY[o], my, p.n);
         const along = dx * ux + dy * uy, across = dy * ux - dx * uy;
-        if ((along * along) / (a * a) + (across * across) / (b * b) < 1) ok = false;
+        score = Math.min(score, (along * along) / (a * a) + (across * across) / (b * b));
       }
-      if (ok) {
-        isl.core.x = x;
-        isl.core.y = y;
-        midX[c] = mx;
-        midY[c] = my;
-        const main = isl.ridges[0];
-        for (let i = 0; i < main.x.length; i++) {
-          isl.core.spine[2 * i] = x + main.x[i];
-          isl.core.spine[2 * i + 1] = y + main.y[i];
-        }
-        done = true;
+      if (score > bestScore) {
+        bestScore = score;
+        bestX = x;
+        bestY = y;
       }
     }
-    if (!done) throw new Error(`cannot place cores: no room for core ${c + 1} of ${islands.length} at spacing ${p.cores.poissonR}`);
+    if (bestScore === -Infinity) throw new Error(`cannot place cores: no room for core ${c + 1} of ${islands.length} at spacing ${p.cores.poissonR}`);
+    isl.core.x = bestX;
+    isl.core.y = bestY;
+    midX[c] = bestX + isl.midAlong * ux - isl.midAcross * uy;
+    midY[c] = bestY + isl.midAlong * uy + isl.midAcross * ux;
+    const al = isl.core.spine.length / 2;
+    const main = isl.ridges[0];
+    const stride = (main.x.length - 1) / (al - 1);
+    for (let i = 0; i < al; i++) {
+      isl.core.spine[2 * i] = bestX + main.x[i * stride];
+      isl.core.spine[2 * i + 1] = bestY + main.y[i * stride];
+    }
   }
   return islands;
 }
@@ -427,7 +656,7 @@ export function planWorld(p: WorldParams, seed: number): Plan {
 
   // One strike for the whole world, as a slope: direction (1, slope) / √(1 + slope²).
   const slope = rng.range(-p.strike.maxSlope, p.strike.maxSlope);
-  const upliftSeed = rng.next(), coastSeed = rng.next(), warpSeed = rng.next(), fibreSeed = rng.next();
+  const upliftSeed = rng.next(), baySeed = rng.next(), coveSeed = rng.next(), lowSeed = rng.next(), summitSeed = rng.next(), warpSeed = rng.next(), fibreSeed = rng.next();
   const norm = Math.sqrt(1 + slope * slope);
   const ux = 1 / norm, uy = slope / norm;
 
@@ -435,10 +664,9 @@ export function planWorld(p: WorldParams, seed: number): Plan {
 
   // Feature sizes are rounded so each noise has a whole number of periods round the world.
   const featurePeriod = Math.max(1, Math.round(n / p.uplift.featureCells));
-  const grain = strikeNoise(n, featurePeriod, UPLIFT_OCTAVES, 0.5, p.uplift.stretch, ux, uy, upliftSeed);
-  const coast = strikeNoise(n, featurePeriod, COAST_OCTAVES, 0.55, p.uplift.stretch, ux, uy, coastSeed);
-  const fibrePeriod = Math.max(1, Math.round(6400 / FIBRE_CELLS));
-  const fibre = strikeNoise(n, fibrePeriod, FIBRE_OCTAVES, 0.55, FIBRE_STRETCH, ux, uy, fibreSeed);
+  const grain = strikeNoise(n, featurePeriod, UPLIFT_OCTAVES, UPLIFT_GAIN, p.uplift.stretch, ux, uy, upliftSeed);
+  const fibre = strikeNoise(n, Math.round(6400 / FIBRE_CELLS), FIBRE_OCTAVES, 0.55, FIBRE_STRETCH, ux, uy, fibreSeed);
+  const bayPeriod = Math.round(6400 / BAY_CELLS), covePeriod = Math.round(6400 / COVE_CELLS), lowPeriod = Math.round(6400 / LOWLAND_CELLS), summitPeriod = Math.round(6400 / SUMMIT_CELLS);
   const warpPeriod = Math.max(1, Math.round(n / p.rock.warpCells));
   const warpAmp = STRIPE_WARP * p.rock.warpCells;
 
@@ -460,15 +688,15 @@ export function planWorld(p: WorldParams, seed: number): Plan {
       let total = 0, owner = 0, ownerEdge = Infinity, anyNear = false;
       for (let c = 0; c < islands.length; c++) {
         const isl = islands[c];
-        measureTorus(isl, torusDelta(isl.core.x, x, n), torusDelta(isl.core.y, y, n), n);
-        edgeOf[c] = outEdge;
-        if (outEdge < isl.fibre + isl.half) anyNear = true;
-        if (outEdge < ownerEdge) {
-          ownerEdge = outEdge;
+        const edge = edgeTorus(isl, torusDelta(isl.core.x, x, n), torusDelta(isl.core.y, y, n), n);
+        edgeOf[c] = edge;
+        if (edge < isl.near) anyNear = true;
+        if (edge < ownerEdge) {
+          ownerEdge = edge;
           owner = c;
         }
         // Membership: 1 at the outline, rising inland, halving one blend out to sea.
-        const q = outEdge / isl.blend;
+        const q = edge / isl.blend;
         const w = q <= 0 ? 1 + q * q : 1 / (1 + q * q);
         weights[isl.core.archetype] += w;
         total += w;
@@ -483,30 +711,50 @@ export function planWorld(p: WorldParams, seed: number): Plan {
       d[i] = mix;
 
       if (anyNear) {
-        const bite = 1 + COAST_WARP * coast.signed(x, y);
+        const bay = clamp(FBM_GAIN * fbm((x * bayPeriod) / n, (y * bayPeriod) / n, bayPeriod, 2, 0.5, baySeed), -1, 1);
+        const cove = clamp(FBM_GAIN * fbm((x * covePeriod) / n, (y * covePeriod) / n, covePeriod, 2, 0.5, coveSeed), -1, 1);
+        const bite = Math.max(BITE_MIN, 1 + BAY_WARP * bay + COVE_WARP * cove);
+        const low = clamp(FBM_GAIN * gradNoise((x * lowPeriod) / n, (y * lowPeriod) / n, lowPeriod, lowSeed), -1, 1);
+        const lowShare = LOWLAND_SHARE[0] + (LOWLAND_SHARE[1] - LOWLAND_SHARE[0]) * (0.5 + 0.5 * low);
         const slide = fibre.signed(x, y);
         let best = 0;
         for (let c = 0; c < islands.length; c++) {
           const isl = islands[c];
-          if (edgeOf[c] >= isl.fibre + isl.half) continue;
-          const shift = isl.fibre * slide;
-          measureTorus(isl, torusDelta(isl.core.x, x, n) + shift * isl.ux, torusDelta(isl.core.y, y, n) + shift * isl.uy, n);
-          const t = outT * bite;
-          if (t >= 1) continue;
-          const plateau = 1 - smoothstep((t - p.spine.plateau) / (1 - p.spine.plateau));
-          best = Math.max(best, isl.amp * plateau);
+          if (edgeOf[c] >= isl.near) continue;
+          // The shear fades to nothing on the ridge lines, so a core never leaves its spine.
+          const shift = isl.fibre * slide * clamp(1 + edgeOf[c] / isl.half, 0, 1);
+          const dx = torusDelta(isl.core.x, x, n) + shift * isl.ux, dy = torusDelta(isl.core.y, y, n) + shift * isl.uy;
+          let cut = 0, lowland = lowShare + isl.lowland;
+          if (isl.bayR > 0) {
+            const bx = dx - isl.bayX, by = dy - isl.bayY;
+            const q = Math.sqrt(bx * bx + by * by) / isl.bayR;
+            cut = 1 - smoothstep(q);
+            lowland += BAY_LOWLAND * (1 - smoothstep(q / 2.4));
+          }
+          lowland = Math.min(lowland, 0.55);
+          const dx2 = otherImage(dx, n, isl.reach), dy2 = otherImage(dy, n, isl.reach);
+          let rel = reliefAt(isl, dx, dy, bite, cut, lowland, p.spine.plateau, 0);
+          if (dx2 !== dx) rel = reliefAt(isl, dx2, dy, bite, cut, lowland, p.spine.plateau, rel);
+          if (dy2 !== dy) {
+            rel = reliefAt(isl, dx, dy2, bite, cut, lowland, p.spine.plateau, rel);
+            if (dx2 !== dx) rel = reliefAt(isl, dx2, dy2, bite, cut, lowland, p.spine.plateau, rel);
+          }
+          best = Math.max(best, isl.amp * rel);
         }
-        if (best > 0) uplift[i] = best * (p.uplift.base + p.uplift.ridgedAmp * grain.ridged(x, y));
+        if (best > 0) {
+          const summit = clamp(FBM_GAIN * fbm((x * summitPeriod) / n, (y * summitPeriod) / n, summitPeriod, 2, 0.5, summitSeed), -1, 1);
+          uplift[i] = best * (1 - SUMMIT * (0.5 - 0.5 * summit)) * (p.uplift.base + p.uplift.ridgedAmp * grain.ridged(x, y));
+        }
       }
 
       // Rock: stripes across the owning island's strike. They follow the
-      // spine's bends and wander by the warp noise.
+      // spine's bow and wander by the warp noise.
       const isl = islands[owner];
       const dx = torusDelta(isl.core.x, x, n), dy = torusDelta(isl.core.y, y, n);
       const along = dx * isl.ux + dy * isl.uy;
-      const across = dy * isl.ux - dx * isl.uy - spineAcross(isl.along, isl.across, along) + warpAmp * fbm((x * warpPeriod) / n, (y * warpPeriod) / n, warpPeriod, 2, 0.5, warpSeed);
+      const across = dy * isl.ux - dx * isl.uy - acrossAt(isl.along, isl.across, along) + warpAmp * fbm((x * warpPeriod) / n, (y * warpPeriod) / n, warpPeriod, 2, 0.5, warpSeed);
       const stripe = Math.floor(across / isl.stripeWidth + isl.stripePhase) + isl.stripeHalf;
-      rock[i] = isl.stripes[Math.max(0, Math.min(isl.stripes.length - 1, stripe))];
+      rock[i] = isl.stripes[clamp(stripe, 0, isl.stripes.length - 1)];
       k[i] = p.rock.kBase * p.rock.kMul[rock[i]];
     }
   }
