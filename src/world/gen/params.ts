@@ -37,6 +37,8 @@ export interface WorldParams {
   uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number };
   rock: { kMul: readonly [number, number, number]; kBase: number; warpCells: number };
   regions: { blend: readonly [number, number] };
+  /** S7 hydrology on G (see gen/hydro.ts HydroParams). */
+  hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
   erode: {
     cSteps: number;
     gSteps: number;
@@ -77,6 +79,9 @@ export function paramsFor(n: number): WorldParams {
     uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
     rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
     regions: { blend: [100 * s, 200 * s] },
+    // Tuned 2026-11-17: mean land rain ~0.93, windward up to ~1.9, lee ~0.6.
+    // Lakes ≥ 120 cells (7.5 G nodes); a channel drains ≥ 40 node-rains.
+    hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
     erode: {
       cSteps: 150,
       gSteps: 60,
