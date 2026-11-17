@@ -66,6 +66,8 @@ const SHORE_CAP = 15;
 const SHORE_BAND = 9;
 /** Shore-distance tones run this many cells out; deeper tones follow the sea bed. */
 const SHELF = 8;
+/** The cover is told the way to the nearest river within this many cells. */
+const RIVER_OFFSET = 8;
 /** Rivers are looked for this many cells due north and due south of a cell. */
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
@@ -251,6 +253,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 5. Rivers: the cells under each curve, the flow phase there, and the distance to the nearest.
   const riv = new Int16Array(count).fill(big);
   const phase = new Uint8Array(count);
+  /** River cells of a river at least 2 cells wide: the ones that carry riverside trees. */
+  const wide = new Uint8Array(count);
   let rivers = false;
   forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run) => {
     const r = width / 2, r2 = r * r;
@@ -275,6 +279,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const ph = width === 1 ? 8 : Math.floor(run) & 7;
         if (riv[i] !== 0 || ph < phase[i]) phase[i] = ph;
         riv[i] = 0;
+        if (width >= 2) wide[i] = 1;
         rivers = true;
       }
     }
@@ -317,6 +322,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
   const sight = { north: Infinity, south: Infinity };
+  // Distance to the nearest river in any direction, for the cover's field boundaries. River cells stay 0.
+  if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_OFFSET - 1);
 
   // 6. Cover, then scatter stamped into a crown layer.
   const cw = w + COVER_N + COVER_S, ch = h + COVER_N + COVER_S;
@@ -328,7 +335,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0 };
   const cc = cN * cN;
   const rockW = new Float64Array(3);
   // Stamps may only touch cells whose crowns matter: the core, TREE_REACH to the north-west and one cell round.
@@ -379,6 +386,23 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.e = e;
       c.slope = s;
       c.northness = s > 1e-6 ? dy / s : 0;
+      c.westness = s > 1e-6 ? dx / s : 0;
+      // The way from the nearest river to here: the gradient of the river distance, scaled to that distance.
+      c.riverDx = 0;
+      c.riverDy = 0;
+      c.riverWide = 0;
+      if (rivers) {
+        if (rivS[i] !== 255 && wide[i + rivS[i] * W] === 1) c.riverWide = 1;
+        else if (rivN[i] !== 255 && wide[i - rivN[i] * W] === 1) c.riverWide = 1;
+      }
+      if (rivers && riv[i] > 0 && riv[i] < 3 * RIVER_OFFSET) {
+        const rx = riv[i + 1] - riv[i - 1], ry = riv[i + W] - riv[i - W];
+        const rl = Math.sqrt(rx * rx + ry * ry);
+        if (rl > 0) {
+          c.riverDx = (rx / rl) * (riv[i] / 3);
+          c.riverDy = (ry / rl) * (riv[i] / 3);
+        }
+      }
       c.hand = ha + (hb - ha) * gfy;
       c.moisture = w00 * moisture[c00] + w10 * moisture[c10] + w01 * moisture[c01] + w11 * moisture[c11];
       c.wind = w00 * wind[c00] + w10 * wind[c10] + w01 * wind[c01] + w11 * wind[c11];

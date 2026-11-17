@@ -104,11 +104,25 @@ export const MATERIAL = {
   path: 60,
   hedge: 61,
   wall: 62,
+
+  // Field texture: the furrow, row or swath lines drawn across a crop, and
+  // the stubble a cut field leaves. Each is a tone or two from its field.
+  wheatRow: 63,
+  barleyRow: 64,
+  leyStripe: 65,
+  hayRow: 66,
+  ploughRow: 67,
+  vineRow: 68,
+  stubble: 69,
+  stubbleRow: 70,
+
+  /** The small crowns of a hedge. Not canopy: a hedge is never inked. */
+  hedgeCrown: 71,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 63;
+export const MATERIAL_COUNT = 72;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -141,7 +155,10 @@ export const isCanopy: Uint8Array = flags([
 export const isLine: Uint8Array = flags([M.road, M.path, M.hedge, M.wall]);
 
 /** Parcel crops. */
-export const isCrop: Uint8Array = flags([M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine]);
+export const isCrop: Uint8Array = flags([
+  M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine,
+  M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
+]);
 
 /** Anything green a river may cross: the river must stay 15 L* lighter than all of these. */
 export const isVegetation: Uint8Array = flags([
@@ -149,14 +166,16 @@ export const isVegetation: Uint8Array = flags([
   M.floorBroadleaf, M.floorConifer,
   ...triple(M.broadleafCool), ...triple(M.coniferCool), M.alder, M.shrub,
   M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine,
+  M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
-  M.hedge,
+  M.hedge, M.hedgeCrown,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */
 export const isGrass: Uint8Array = flags([
   ...triple(M.alpineCool), ...triple(M.moorCool),
   M.wheat, M.barley, M.ley, M.hay, M.reeds,
+  M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow,
   ...triple(M.meadowCool), ...triple(M.pastureCool),
 ]);

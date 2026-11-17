@@ -37,6 +37,24 @@ export interface CoverInput {
   water: number;
   /** Shore class from the coast stage: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */
   shore: number;
+  /**
+   * Optional: the x-part of the unit uphill direction, as northness is its
+   * y-part (∂h/∂x ÷ slope). With it, parcels and furrows follow the contour.
+   */
+  westness?: number;
+  /**
+   * Optional: offset in cells from the nearest river cell to this one; 0, 0
+   * on the river and where none lies within 8 cells. With it, a river is a
+   * field boundary and trees keep the river in view.
+   */
+  riverDx?: number;
+  riverDy?: number;
+  /**
+   * Optional: 1 when the river in sight due north or south of this cell is at
+   * least 2 cells wide. Only such rivers carry riverside trees; a line of
+   * trees along every rill reads as a comb.
+   */
+  riverWide?: number;
 }
 
 /** A crown or rock stamped into height and material by the bake. */
