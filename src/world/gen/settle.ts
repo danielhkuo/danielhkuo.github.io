@@ -55,6 +55,8 @@ export interface SettleOptions extends PlaceOptions {
   rules?: SiteRules;
   /** Ids of the sites that hold a project's landmark; the rest hold a small unnamed feature. Absent: every site holds its landmark. */
   occupied?: ReadonlySet<string>;
+  /** Lay the road network (default). Off, sites and buildings are placed without it: quick, for tuning their look. */
+  lanes?: boolean;
 }
 
 const MATS = { path: M.path, road: M.road, retaining: M.stone, yard: M.pastureWarm, vine: M.vine };
@@ -137,20 +139,26 @@ export function bridge(ax: number, ay: number, bx: number, by: number, water: nu
     if (off > 0.95) S.put(s, i, j, deck + 0.9, M.stone, S.T_FLAT);
     else S.put(s, i, j, deck, M.road, 150);
   }
-  // The south face, column by column: stone, with the arches cut as shade.
-  const wetLen = wet + 2, count = Math.max(1, Math.floor(wetLen / 8 + 0.5)), bay = wetLen / count, a = bay / 2 - 0.8;
+  // The south face, column by column: stone under a string course, with one to three round arches cut as
+  // shade and the river showing at their feet.
+  const wetLen = Math.min(len - 2, wet + 2), count = Math.max(1, Math.min(3, Math.floor(wetLen / 8 + 0.5))), bay = wetLen / count, a = bay / 2 - 0.9;
   for (let i = 0; i < w; i++) {
     const j = S.faceRow(s, i);
     if (j < 0) continue;
     const k = j * w + i;
     s.mat[k] = M.stone;
     s.tone[k] = S.T_WALL;
+    const top = s.top[k];
+    if (top >= 4.5) S.mark(s, i, j, Math.floor(top - 1), M.stoneDark, 108);
     const along = (tAt[k] - 0.5) * len + wetLen / 2;
-    if (along < 0 || along > wetLen || a < 1) continue;
+    if (along < 0 || along > wetLen || a < 1.2) continue;
     const v = along - (Math.floor(along / bay) + 0.5) * bay;
     if (Math.abs(v) > a) continue;
-    const rise = (s.top[k] - 2.4) * Math.sqrt(1 - (v * v) / (a * a));
-    for (let z = 1; z <= rise; z++) S.mark(s, i, j, z, M.opening, 120);
+    // A semicircle on a short springing, kept clear of the parapet.
+    const rise = Math.min(top - 2.6, 1 + a * Math.sqrt(1 - (v * v) / (a * a)));
+    if (rise < 2) continue;
+    S.mark(s, i, j, 1, M.river, 0);
+    for (let z = 2; z <= rise; z++) S.mark(s, i, j, z, M.opening, z >= rise - 1 ? 128 : 104);
   }
   return s;
 }
@@ -182,7 +190,7 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
     const sp = site.span;
     const half = Math.sqrt((sp.bx - sp.ax) * (sp.bx - sp.ax) + (sp.by - sp.ay) * (sp.by - sp.ay)) / 2;
     const deckA = Math.max(groundAt(w, sp.ax, sp.ay), sp.water + 2) + 0.4, deckB = Math.max(groundAt(w, sp.bx, sp.by), sp.water + 2) + 0.4;
-    w.structures.push(bridge(sp.ax, sp.ay, sp.bx, sp.by, sp.water, deckA, deckB, 2 * half - 10, 7.5));
+    w.structures.push(bridge(sp.ax, sp.ay, sp.bx, sp.by, sp.water, deckA, deckB, 2 * half - 5, 8.5));
     if (!occupied) standFeature(w, site, sp.ax + (sp.ax < sp.bx ? -9 : 9), sp.ay + 6);
     return;
   }
@@ -191,6 +199,11 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
     return;
   }
   if (!occupied) {
+    if (site.type === "town" && site.harbour) {
+      // A free town site keeps its shore: a jetty where the harbour would be.
+      standFeature(w, site, site.harbour.x, site.harbour.y - 6);
+      return;
+    }
     addConform(w, flat(x, y, 6, 6, true, level, 5));
     block(w, x, y, 6, 6);
     standFeature(w, site, x, y);
@@ -198,8 +211,11 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
   }
   switch (site.type) {
     case "abbey":
-      addConform(w, flat(x, y, 16, 13, false, level, 9));
+      addConform(w, flat(x, y, 17, 14, false, level, 10));
       block(w, x, y, 15, 12);
+      // Woods to the north, an orchard on the slope to the south; the abbey last, so nothing overgrows it.
+      w.structures.push(S.standAt(S.grove(52, 16, seed), x - 2, y - 23, 0));
+      w.structures.push(S.standAt(S.orchard(38, 15, seed), x - 1, y + 24, 0));
       w.structures.push(S.standAt(S.abbey(), x, y, level));
       break;
     case "lighthouse": {
@@ -219,6 +235,19 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
     case "windmill":
       addConform(w, flat(x, y, 7, 7, true, level, 6));
       block(w, x, y, 5, 5);
+      // Corn on the slope below the mill.
+      for (const [ox, oy] of [[(seed & 15) - 7, 24], [-34, 14], [34, 14], [0, -24]]) {
+        const fx = x + ox, fy = y + oy;
+        let ok = true, lo = Infinity, hi = -Infinity;
+        for (let dy = -10; dy <= 10 && ok; dy += 5) for (let dx = -22; dx <= 22; dx += 11) {
+          if (!dry(w, fx + dx, fy + dy) || w.c.slope[node(w.c, fx + dx, fy + dy)] > 0.5) { ok = false; break; }
+          const g = groundAt(w, fx + dx, fy + dy);
+          lo = Math.min(lo, g); hi = Math.max(hi, g);
+        }
+        if (!ok || hi - lo > 14) continue;
+        w.structures.push(S.standAt(S.cornFields(46, 20, seed), fx, fy, 0));
+        break;
+      }
       w.structures.push(S.standAt(S.windmill(), x, y, level));
       break;
     case "cathedral":
@@ -441,37 +470,57 @@ function standQuarry(w: Work, hm: Hamlet): boolean {
   }
   if (best < 0) return false;
   const qx = 4 * (best % gN) + 2, qy = 4 * Math.floor(best / gN) + 2;
-  const level = groundAt(w, qx, qy + 7);
-  // Two benches: the working floor, and a higher one cut into the back of it.
-  addConform(w, flat(qx, qy, 13, 8, true, level, 4, 12));
-  addConform(w, flat(qx + 3, qy - 5, 8, 4, true, level + 4, 2, 12));
-  block(w, qx, qy, 14, 10);
-  const s = S.sculpt(36, 28);
-  for (let y = 0; y < 28; y++) for (let x = 0; x < 36; x++) {
-    const q = Math.sqrt(((x - 17.5) * (x - 17.5)) / (15 * 15) + ((y - 11) * (y - 11)) / (10.5 * 10.5));
-    if (q < 0.9 + (hash2(x >> 1, y >> 1, w.seed) & 255) / 1300) s.paint[y * 36 + x] = M.quarry;
+  // The floor is cut level into the hill; above it two benches step back, each a face of fresh slate.
+  const level = groundAt(w, qx, qy + 9);
+  // Not on a shore: the floor must stand clear of the sea, on dry ground all round.
+  if (level < 3 || !dry(w, qx - 15, qy + 12) || !dry(w, qx + 15, qy + 12) || !dry(w, qx - 15, qy - 10) || !dry(w, qx + 15, qy - 10)) return false;
+  addConform(w, flat(qx, qy, 15, 10, false, level, 3, 16));
+  block(w, qx, qy, 16, 12);
+  const s = S.sculpt(34, 30);
+  for (let y = 0; y < 24; y++) for (let x = 1; x < 33; x++) {
+    if (Math.min(x - 1, 32 - x) < (hash2(x >> 1, y >> 2, w.seed) & 1)) continue;
+    s.paint[y * 34 + x] = M.quarry;
   }
-  // Spoil heaps along the lip.
-  for (let k = 0; k < 4; k++) {
+  const bench = (x0: number, x1: number, y0: number, y1: number, top: number): void => {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const ragged = top - ((hash2(x, y, w.seed) & 7) === 0 ? 1 : 0);
+      S.put(s, x, y, ragged, y === y1 ? M.cliffSlate : M.quarry, y === y1 ? 104 : 150);
+    }
+    // Joints in the face.
+    for (let x = x0 + 1; x <= x1; x += 2 + (hash2(x, y1, w.seed) & 3)) for (let z = 1; z < top; z++) S.mark(s, x, y1, z, M.opening, 110);
+  };
+  bench(3, 30, 6, 11, 4);
+  bench(7, 27, 1, 5, 8);
+  // Spoil tipped over the lip.
+  for (let k = 0; k < 5; k++) {
     const hsh = hash2(k, qx + qy, w.seed);
-    const lx = 6 + k * 7 + (hsh & 3), ly = 22 + ((hsh >>> 2) & 1), r = 2.2 + ((hsh >>> 4) & 3) * 0.3;
+    const lx = 4 + k * 6 + (hsh & 3), ly = 25 + ((hsh >>> 2) & 1), r = 2.4 + ((hsh >>> 4) & 3) * 0.4;
     for (let y = Math.floor(ly - r); y <= Math.ceil(ly + r); y++) for (let x = Math.floor(lx - r); x <= Math.ceil(lx + r); x++) {
       const d2 = (x - lx) * (x - lx) + (y - ly) * (y - ly);
-      if (d2 <= r * r) S.put(s, x, y, 0.6 + 2.2 * Math.sqrt(1 - d2 / (r * r)), M.screeSlate, 0);
+      if (d2 <= r * r && 0.6 + 2.6 * Math.sqrt(1 - d2 / (r * r)) > s.top[y * 34 + x]) S.put(s, x, y, 0.6 + 2.6 * Math.sqrt(1 - d2 / (r * r)), M.screeSlate, 0);
     }
   }
   // Cut blocks on the floor.
   for (let k = 0; k < 7; k++) {
     const hsh = hash2(k, qx - qy, w.seed);
-    const bx = 7 + (hsh % 22), by = 12 + ((hsh >>> 6) % 7);
+    const bx = 5 + (hsh % 24), by = 14 + ((hsh >>> 6) % 7);
     S.put(s, bx, by, 1 + ((hsh >>> 10) & 1), M.rockSlate, S.T_WALL);
     if ((hsh >>> 12) & 1) S.put(s, bx + 1, by, 1, M.rockSlate, S.T_WALL);
   }
-  // A row of quarrymen's cottages below the tips.
-  const rowX = qx - 14, rowY = qy + 22;
-  if (dry(w, rowX, rowY) && dry(w, rowX + 20, rowY) && Math.abs(groundAt(w, rowX, rowY) - groundAt(w, rowX + 20, rowY)) < 3) {
-    const base = (groundAt(w, rowX, rowY) + groundAt(w, rowX + 20, rowY)) / 2;
-    addConform(w, flat(rowX + 10, rowY, 12, 4, false, base, 3, 2));
+  w.structures.push(S.standAt(s, qx, qy + 3, level - 0.01));
+  w.structures.push(S.standAt(S.derrick(), qx - 6, qy + 1, level + 4));
+  // A row of quarrymen's cottages on the first level ground near the tips.
+  for (const [ox, oy] of [[-4, 26], [-22, 22], [16, 24], [-30, 8], [32, 8], [0, 36], [-24, 34], [22, 34]]) {
+    const rx = qx + ox, ry = qy + oy;
+    let ok = true, lo = Infinity, hi = -Infinity;
+    for (let dx = -10; dx <= 10 && ok; dx += 5) for (const dy of [-3, 3]) {
+      if (!dry(w, rx + dx, ry + dy) || w.blocked[node(w.c, rx + dx, ry + dy)]) { ok = false; break; }
+      const g = groundAt(w, rx + dx, ry + dy);
+      lo = Math.min(lo, g); hi = Math.max(hi, g);
+    }
+    if (!ok || hi - lo > 5 || lo < 1) continue;
+    const base = (lo + hi) / 2;
+    addConform(w, flat(rx, ry, 12, 4, false, base, 3, 3));
     const row = S.sculpt(20, 5);
     S.house(row, 0, 0, 20, 5, 3, 3, { gable: 0, wallMat: M.stoneDark, roofMat: M.roofSlate, openings: 0, chimney: false });
     for (let k = 0; k < 4; k++) {
@@ -480,9 +529,10 @@ function standQuarry(w: Work, hm: Hamlet): boolean {
       S.mark(row, 3 + k * 5, 4, 2, M.opening);
       S.put(row, 4 + k * 5, 1, row.top[1 * 20 + 4 + k * 5] + 2, M.stoneDark, S.T_WALL);
     }
-    w.structures.push(S.standAt(row, rowX + 10, rowY, base));
+    w.structures.push(S.standAt(row, rx, ry, base));
+    block(w, rx, ry, 11, 4);
+    break;
   }
-  w.structures.push(S.standAt(s, qx, qy + 3, level - 0.01));
   return true;
 }
 
@@ -744,6 +794,33 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
 
   // Hamlets: one at the abbey's river crossing, the rest where the land is level and near water.
   const hamlets = pickHamlets(w, placed.sites);
+  // The abbey's own hamlet, at the foot of its road where the home river is crossed.
+  const abbey = placed.sites.find((q) => q.type === "abbey");
+  let farBank: Stop | null = null, nearBank: Stop | null = null;
+  if (abbey && abbey.river) {
+    const dx = torusDelta(abbey.river.x, abbey.x, c.n), dy = torusDelta(abbey.river.y, abbey.y, c.n), dl = Math.sqrt(dx * dx + dy * dy) || 1;
+    for (const d of [20, 26, 32, 14]) {
+      const hx = abbey.river.x + (dx / dl) * d, hy = abbey.river.y + (dy / dl) * d;
+      if (!dry(w, hx, hy) || c.slope[node(c, hx, hy)] > 0.3) continue;
+      for (let k = hamlets.length - 1; k >= 0; k--) {
+        const ex = torusDelta(hx, hamlets[k].x, c.n), ey = torusDelta(hy, hamlets[k].y, c.n);
+        if (ex * ex + ey * ey < 200 * 200) hamlets.splice(k, 1);
+      }
+      hamlets.unshift({ x: Math.floor(hx), y: Math.floor(hy), houses: 6, island: c.island[node(c, hx, hy)], quarry: false });
+      // The stone bridge at its foot: bank to bank across the home river, its two ends stops of the road network.
+      const half = c.rw[node(c, abbey.river.x, abbey.river.y)] / 2 + 6;
+      const land = (px: number, py: number): boolean => !c.isSea[node(c, px, py)] && c.lakeId[node(c, px, py)] < 0;
+      const ax = abbey.river.x + (dx / dl) * half, ay = abbey.river.y + (dy / dl) * half;
+      const fx = abbey.river.x - (dx / dl) * half, fy = abbey.river.y - (dy / dl) * half;
+      if (land(ax, ay) && land(fx, fy)) {
+        const water = abbey.river.level;
+        w.structures.push(bridge(ax, ay, fx, fy, water, Math.max(groundAt(w, ax, ay), water + 2) + 0.4, Math.max(groundAt(w, fx, fy), water + 2) + 0.4, 2 * half - 6, 6));
+        nearBank = { x: ax, y: ay, island: c.island[node(c, ax, ay)], width: 2, pair: 9999 };
+        farBank = { x: fx, y: fy, island: c.island[node(c, fx, fy)], width: 2, pair: 9999 };
+      }
+      break;
+    }
+  }
   const slateIslands = new Set<number>();
   for (const hm of hamlets) {
     standHamlet(w, hm);
@@ -762,7 +839,9 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
     if (s.span) stops.push({ x: s.span.bx, y: s.span.by, island: c.island[node(c, s.span.bx, s.span.by)], width: 2, pair: k });
   });
   for (const hm of hamlets) if (hm.houses > 0) stops.push({ x: hm.x, y: hm.y, island: hm.island, width: 2, pair: -1 });
-  const roads = layLanes(w, stops);
+  if (nearBank) stops.push(nearBank);
+  if (farBank) stops.push(farBank);
+  const roads = opts.lanes === false ? [] : layLanes(w, stops);
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),

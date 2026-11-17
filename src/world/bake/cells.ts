@@ -325,6 +325,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run) => {
     const r = width / 2, r2 = r * r;
     const cx = Math.floor(px) - wx0, cy = Math.floor(py) - wy0;
+    // A rill that reaches the town's terraces goes under them in a culvert.
+    if (width === 1 && band !== null && cx >= 0 && cy >= 0 && cx < W && cy < H && band[cy * W + cx] >= 1 && band[cy * W + cx] <= 3) return;
     if (width === 1 && run >= 0) {
       if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) return;
       const k = cy * W + cx;
@@ -576,7 +578,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           if (xx < 0 || xx >= W) continue;
           const a = j * s.w + q, k = yy * W + xx;
           if (s.top[a] > 0) {
-            crown[k] = s.base + s.top[a];
+            crown[k] = (s.onGround ? ground[k] : s.base) + s.top[a];
             crownMat[k] = s.mat[a];
             fixed[k] = s.tone[a];
             made[k] = 2;
