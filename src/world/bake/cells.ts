@@ -454,7 +454,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0 };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cN * cN;
   const rockW = new Float64Array(3);
@@ -535,6 +535,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.rock = rockW[1] + 2 * rockW[2];
       c.cliffAbove = fields.cliffAbove[i];
       c.relief = fields.relief[i];
+      c.steep = fields.steep[i];
+      c.form = fields.form[i];
+      c.curve = fields.curve[i];
       for (let a = 0; a < 6; a++) {
         const o = a * cc;
         region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];

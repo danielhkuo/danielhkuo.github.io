@@ -215,6 +215,8 @@ function buildSpecs(): Spec[] {
   // Scree is fresh, broken stone: lighter and warmer than the face it fell from.
   set(M.scree, all([0.82, 0.022, 82]), STONE);
   set(M.screeSlate, all([0.68, 0.02, 258]), STONE);
+  // Its stones are a tone under the fan: grey-buff, nowhere near ink.
+  set(M.screeStone, all([0.7, 0.018, 80]), STONE);
 
   // Upland. Alpine meadow is the winter snow band.
   const alpine: Lch[] = [[0.72, 0.08, 148], [0.74, 0.085, 140], [0.76, 0.09, 128]];
@@ -272,6 +274,11 @@ function buildSpecs(): Spec[] {
   // Wet ground.
   set(M.marsh, grass([0.62, 0.065, 128]), LAND);
   set(M.reeds, [[0.66, 0.07, 115], [0.67, 0.065, 105], [0.7, 0.07, 85], [0.72, 0.06, 82]], LAND);
+
+  // The shore's own plants. Marram is a pale sage that bleaches in winter; saltmarsh a grey-green, its creeks wet mud.
+  set(M.duneGrass, [[0.8, 0.05, 124], [0.81, 0.045, 118], [0.8, 0.045, 104], [0.79, 0.035, 96]], LAND);
+  set(M.saltmarsh, [[0.68, 0.045, 138], [0.67, 0.042, 142], [0.66, 0.04, 118], [0.65, 0.03, 110]], LAND);
+  set(M.saltCreek, all([0.71, 0.022, 215]), LINE);
 
   // Lowland grass.
   const meadow: Lch[] = [[0.785, 0.1, 140], [0.8, 0.105, 131], [0.81, 0.1, 121]];
