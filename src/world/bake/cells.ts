@@ -8,7 +8,8 @@ import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { forEachRiverPoint } from "./lines.ts";
-import { HMAX, type BakeWorld } from "./world.ts";
+import { applyStampsTo } from "../gen/stamps.ts";
+import { HMAX, stampsNear, type BakeWorld } from "./world.ts";
 
 export const TILE = 256;
 
@@ -62,6 +63,8 @@ const BLUR_R = 8;
 const SHORE_CAP = 15;
 /** Shore-distance tones run this many cells out; deeper tones follow the sea bed. */
 const SHELF = 8;
+/** Sea shallower than this many units is drawn in the pale shelf tones. */
+const SHALLOW = 2.4;
 /** Rivers are looked for this many cells due north and due south of a cell. */
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
@@ -172,6 +175,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 1. Ground.
   const ground = new Float32Array(count);
   upsampleGround(world.ground, gN, wx0, wy0, W, H, ground);
+  const near = stampsNear(world.stamps, wx0, wy0, W, H);
+  if (near.length > 0) applyStampsTo(ground, { w: W, h: H, cellsPerNode: 1, x0: wx0, y0: wy0, period: n }, near);
 
   // 2. Water: lakes where the ground lies under a neighbouring lake node's level, sea at or below 0.
   const water = new Uint8Array(count);
@@ -436,8 +441,16 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const dither = (mask[((wrap(y0 + y, n) + 91) & 255) * 256 + ((wrap(x0 + x, n) + 157) & 255)] + 0.5) / 256;
         const d = (dist[i] - 3) / 3;
         const depth = (water[i] === 2 ? level[i] : 0) - ground[i];
-        const far = SHELF + (depth - 1) / 3.5;
-        const v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
+        let v: number;
+        if (water[i] === 1) {
+          // The sea's tones follow its bed, so a shelf is as wide as the coast stage made it:
+          // eight pale tones over the first SHALLOW units, then the deep tones.
+          const tone = depth < SHALLOW ? (SHELF * depth) / SHALLOW : SHELF + (depth - SHALLOW) / 3.1;
+          v = d < 0.5 ? 0 : Math.floor((tone < 1 ? 1 : tone) + dither - 0.5);
+        } else {
+          const far = SHELF + (depth - 1) / 3.5;
+          v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
+        }
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;

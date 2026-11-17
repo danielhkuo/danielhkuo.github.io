@@ -10,7 +10,7 @@ import { NB8_DX, NB8_DY, torusDelta, wrapIndex } from "../core/torus.ts";
 import { boxBlur, drainage, nearestSource, nodeAt, regionsOn, rockOn } from "./field.ts";
 import { ARCHETYPE_COUNT, type WorldParams } from "./params.ts";
 import type { Plan } from "./plan.ts";
-import { applyStamps, type Stamp } from "./stamps.ts";
+import { applyStamps, type CoveStamp, inCove, type Stamp } from "./stamps.ts";
 
 export interface CoastContext {
   /** Rock class per node (0 hard, 1 medium, 2 soft) on the same grid as the heights. */
@@ -172,9 +172,6 @@ const BEACH_RUN = 3;
 const MIN_CUT = 1.5;
 /** Passes of averaging the retreat along the shore. */
 const RETREAT_SMOOTH = 10;
-/** A cove's water reaches this share of its radius; its centre sits this share inland of the cliff line. */
-const COVE_WATER = 0.55;
-const COVE_INSET = 0.3;
 /** A channel with this many times the least drainage gets the largest cove. */
 const COVE_FULL = 6;
 /** A channel drains at least this many nodes, and a cove's channel this many, however small the world. */
@@ -182,6 +179,9 @@ const CHANNEL_NODES = 16;
 const COVE_NODES = 40;
 /** Share of the retreat band, from the old shore, at which a surviving stack stands. */
 const STACK_AT = 0.45;
+/** Feature sizes, in cells of the 6400 world, of the noise that varies the shelf's width and of the one that frays its edge. */
+const SHELF_CELLS = 220;
+const EDGE_CELLS = 60;
 /** The exposure field is blurred over this many cells before it shapes the sea bed. */
 const BATHY_BLUR = 32;
 /** The sea is at least this deep, so a sea node never reads as land. */
@@ -393,19 +393,17 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
     stamps.push({ kind: "cut", x, y, r: retreat[s], level: -(c.platform[0] + (c.platform[1] - c.platform[0]) * t), fall, cap: cap[s], slope: c.capSlope, reach });
   }
 
-  // 5 and 7. Channels at the coast: a cove where one meets a cut shore, a mouth record everywhere.
+  // 5 and 7. Channels at the coast. Where one meets a cut shore it has worn a
+  // cove along its own course; a river wide enough ends in an estuary, or in a
+  // delta where the water is quiet. Every mouth is recorded.
   // On a small test world the scaled area is under a node or two: hold it to a real channel.
   const coveMin = Math.max(c.coveArea, COVE_NODES * cpn * cpn);
-  const inCove = new Uint8Array(nn);
+  const inCoveAt = new Uint8Array(nn);
   const coves: { x: number; y: number; r: number }[] = [];
-  for (const m of sortIndicesBy(mouthKeys)) {
-    const s = mouthSlots[m];
-    const i = shore.nodes[s];
-    const x = i % n;
-    const y = (i - x) / n;
-    // Flow direction from three nodes upstream, following the largest donor.
+  /** Unit vector from `steps` nodes up the channel (following the largest donor) to node i. */
+  const flowAt = (i: number, steps: number, fallbackX: number, fallbackY: number): [number, number] => {
     let u = i;
-    for (let step = 0; step < 3; step++) {
+    for (let step = 0; step < steps; step++) {
       const ux = u % n;
       const uy = (u - ux) / n;
       let best = -1;
@@ -416,56 +414,81 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
       if (best < 0) break;
       u = best;
     }
-    let dx = torusDelta(u % n, x, n);
-    let dy = torusDelta(Math.floor(u / n), y, n);
+    const dx = torusDelta(u % n, i % n, n);
+    const dy = torusDelta(Math.floor(u / n), Math.floor(i / n), n);
     const dl = Math.sqrt(dx * dx + dy * dy);
-    if (dl > 0) {
-      dx /= dl;
-      dy /= dl;
-    } else {
-      dx = fx[s];
-      dy = fy[s];
+    return dl > 0 ? [dx / dl, dy / dl] : [fallbackX, fallbackY];
+  };
+  const mark = (s: CoveStamp, value: number): void => {
+    const R = Math.ceil((s.len + s.tail + 2 * s.width) / cpn) + 1;
+    const ni = nodeAt(s.x, s.y, cpn, n);
+    const nx = ni % n;
+    const ny = (ni - nx) / n;
+    for (let oy = -R; oy <= R; oy++) {
+      for (let ox = -R; ox <= R; ox++) {
+        if (inCove(s, (nx + ox + 0.5) * cpn, (ny + oy + 0.5) * cpn, p.n, 1.5)) inCoveAt[wrapIndex(nx + ox, ny + oy, n)] = value;
+      }
     }
+  };
+  for (const m of sortIndicesBy(mouthKeys)) {
+    const s = mouthSlots[m];
+    const i = shore.nodes[s];
+    const [dx, dy] = flowAt(i, 3, fx[s], fy[s]);
     const cells = flow.area[i] * cpn * cpn;
     const e = shore.e[i];
     const px = shoreX(s);
     const py = shoreY(s);
+    const w = Math.min(6, Math.max(1, Math.round(Math.sqrt(flow.area[i] / p.rivers.qScale))));
+    let form: "delta" | "estuary" | "plain" = "plain";
     if (retreat[s] > 0 && cells >= coveMin) {
       const grow = Math.min(1, Math.sqrt(cells / (COVE_FULL * coveMin)));
-      const r = c.coveR[0] + (c.coveR[1] - c.coveR[0]) * grow;
-      const back = retreat[s] + COVE_INSET * r;
-      const cx = px - dx * back;
-      const cy = py - dy * back;
+      const len = Math.min(c.coveLen[1], (c.coveLen[0] + (c.coveLen[1] - c.coveLen[0]) * grow) * rng.range(0.7, 1.3));
+      const width = len * rng.range(0.2, 0.36);
+      const neck = rng.range(0.35, 0.6);
+      const sand = rng.float() < c.coveBoulder ? 0 : rng.range(0.25, 0.42);
+      const seed = rng.next();
+      // The cove lies along the stream's last reach, not along the shore's normal.
+      const [ax, ay] = flowAt(i, Math.max(3, Math.round(len / cpn)), fx[s], fy[s]);
+      const ox0 = px - ax * retreat[s];
+      const oy0 = py - ay * retreat[s];
+      const mx = ox0 - ax * 0.5 * len;
+      const my = oy0 - ay * 0.5 * len;
       let clear = true;
       for (const o of coves) {
-        const ox = torusDelta(o.x, cx, p.n);
-        const oy = torusDelta(o.y, cy, p.n);
-        const apart = Math.max(c.coveSpacing, 1.5 * (o.r + r));
+        const ox = torusDelta(o.x, mx, p.n);
+        const oy = torusDelta(o.y, my, p.n);
+        const apart = Math.max(c.coveSpacing, 1.5 * (o.r + len));
         if (ox * ox + oy * oy < apart * apart) {
           clear = false;
           break;
         }
       }
       if (clear) {
-        coves.push({ x: cx, y: cy, r });
-        stamps.push({ kind: "cove", x: cx, y: cy, r, water: COVE_WATER * r, base: c.beachBase, rise: c.beachRise, shelfSlope: c.shelfSlope });
-        const R = Math.ceil(r / cpn) + 1;
-        const ni = nodeAt(cx, cy, cpn, n);
-        for (let oy = -R; oy <= R; oy++) {
-          for (let ox = -R; ox <= R; ox++) {
-            if ((ox * ox + oy * oy) * cpn * cpn <= (r + cpn) * (r + cpn)) inCove[wrapIndex((ni % n) + ox, Math.floor(ni / n) + oy, n)] = 1;
-          }
-        }
+        const t = Math.max(0, (e - c.cliffE) / (1 - c.cliffE));
+        const stamp: CoveStamp = { kind: "cove", x: ox0, y: oy0, ax: -ax, ay: -ay, len, width, neck, tail: retreat[s] + 3 * scale, sand, depth: c.platform[0] + (c.platform[1] - c.platform[0]) * t, seed, base: c.beachBase, rise: c.beachRise };
+        coves.push({ x: mx, y: my, r: 0.5 * len + width });
+        stamps.push(stamp);
+        mark(stamp, sand > 0 ? 1 : 2);
+      }
+    } else if (w >= c.estuaryWidth && retreat[s] <= 0) {
+      const seed = rng.next();
+      if (e < c.deltaE && w >= c.deltaWidth) {
+        form = "delta";
+        const t = (w - c.deltaWidth) / Math.max(1, 6 - c.deltaWidth);
+        const channels = rng.float() < 0.5 ? [rng.range(-0.75, -0.35), rng.range(0.3, 0.75)] : [rng.range(-0.85, -0.5), rng.range(-0.15, 0.15), rng.range(0.5, 0.85)];
+        stamps.push({ kind: "delta", x: px, y: py, ax: dx, ay: dy, r: c.deltaR[0] + (c.deltaR[1] - c.deltaR[0]) * t, spread: rng.range(1, 1.4), top: c.deltaTop, channels, channel: 0.5 * w * scale + 0.6 * scale, seed });
+      } else {
+        form = "estuary";
+        const len = c.estuaryLen * (0.6 + 0.2 * w);
+        const [ax, ay] = flowAt(i, Math.max(3, Math.round(len / cpn)), fx[s], fy[s]);
+        const head = (0.5 * w + 0.5) * scale;
+        stamps.push({ kind: "estuary", x: px, y: py, ax: -ax, ay: -ay, len, head, sea: 3 * head + 2 * scale, depth: 0.6 + 0.25 * w, seed });
       }
     }
-    // Width as S7 will set it: √(Q/1000) with Q in nodes of the 6400 world.
-    const q = cells / (scale * scale) / 16;
-    const w = Math.min(6, Math.max(1, Math.round(Math.sqrt(q / 1000))));
-    const form = e < c.deltaE ? (w >= 4 ? "delta" : "plain") : w >= 2 ? "estuary" : "plain";
     stamps.push({ kind: "mouth", x: px, y: py, dx, dy, area: cells, form });
   }
 
-  // 4. Stacks: pieces the retreat leaves where the rock is hardest, and a few off each headland.
+  // 4. Stacks: pieces the retreat leaves where the rock is hardest, and a group off each headland.
   const rMin = Math.sqrt(c.stackArea[0] / 3.141592653589793);
   const rMax = Math.sqrt(c.stackArea[1] / 3.141592653589793);
   const placed: { x: number; y: number; r: number }[] = [];
@@ -487,7 +510,8 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
   };
   const stack = (x: number, y: number, r: number, top: number): void => {
     placed.push({ x, y, r });
-    stamps.push({ kind: "stack", x, y, r, top: Math.min(c.stackTop[1], Math.max(c.stackTop[0], top)) });
+    const k = rng.int(16);
+    stamps.push({ kind: "stack", x, y, r, top: Math.min(c.stackTop[1], Math.max(c.stackTop[0], top)), ux: GRADIENTS[2 * k], uy: GRADIENTS[2 * k + 1], lobe: rng.range(0.08, 0.28), apron: c.stackApron });
   };
   const period = Math.max(1, Math.round(p.n / c.stackNoiseCells));
   const hardSlots: number[] = [];
@@ -521,6 +545,8 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
     }
   }
   const heads: number[] = [];
+  /** Shoals: patches of shallow, broken water off the headlands, under the stack groups. */
+  const shoals: { x: number; y: number; r: number; top: number }[] = [];
   for (const m of sortIndicesBy(headKeys)) {
     const s = headSlots[m];
     const x = shoreX(s);
@@ -537,24 +563,44 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
     if (!clear) continue;
     heads.push(s);
     const wanted = c.headlandStacks[0] + rng.int(c.headlandStacks[1] - c.headlandStacks[0] + 1);
-    const top = cliffTop(s);
+    // The leader is the tallest thing on the headland; the rest step down seaward.
+    const lead = Math.max(cliffTop(s), rng.range(c.stackLead[0], c.stackLead[1]));
+    const drift = rng.range(-0.5, 0.5);
     let d = retreat[s];
+    let side = 0;
     for (let k = 0; k < wanted; k++) {
-      const r = Math.max(rMin, rMax * (0.9 - 0.2 * k) * rng.range(0.7, 1));
-      d += r + rng.range(3, 8) * scale;
-      const side = rng.range(-1, 1) * r;
+      const r = Math.max(rMin, rMax * (0.95 - 0.2 * k) * rng.range(0.75, 1));
+      d += r + rng.range(3, 9) * scale;
+      side += (drift + rng.range(-0.5, 0.5)) * 2 * r;
       const sx = x + fx[s] * d - fy[s] * side;
       const sy = y + fy[s] * d + fx[s] * side;
       d += r;
       if (!isSea0[nodeAt(sx, sy, cpn, n)] || !fits(sx, sy, r)) continue;
-      stack(sx, sy, r, top * (0.9 - 0.18 * k));
+      stack(sx, sy, r, lead * (1 - 0.22 * k) * rng.range(0.85, 1));
     }
+    const reach = d - retreat[s];
+    shoals.push({ x: x + fx[s] * (retreat[s] + 0.55 * reach), y: y + fy[s] * (retreat[s] + 0.55 * reach), r: 0.6 * reach + rng.range(c.shoalR[0], c.shoalR[1]), top: rng.range(1, 2.2) });
   }
 
-  // 6. Beaches.
+  // 6. Beaches. The shelf's width wanders along the shore and tapers at the ends of a beach.
+  const shelfPeriod = Math.max(1, Math.round(6400 / SHELF_CELLS));
   for (let s = 0; s < count; s++) {
-    if (cls[s] !== SHORE.beach || inCove[shore.nodes[s]]) continue;
-    stamps.push({ kind: "beach", x: shoreX(s), y: shoreY(s), land: c.beachLand, base: c.beachBase, rise: c.beachRise, shelf: c.shelf, shelfSlope: c.shelfSlope });
+    const i = shore.nodes[s];
+    if (cls[s] !== SHORE.beach || inCoveAt[i]) continue;
+    const x = i % n;
+    const y = (i - x) / n;
+    let run = 0;
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const t = shore.slot[wrapIndex(x + dx, y + dy, n)];
+        if (t >= 0 && cls[t] === SHORE.beach) run++;
+      }
+    }
+    const px = shoreX(s);
+    const py = shoreY(s);
+    const wander = Math.max(-1, Math.min(1, 1.6 * fbm((px * shelfPeriod) / p.n, (py * shelfPeriod) / p.n, shelfPeriod, 2, 0.5, noiseSeed ^ 0x51)));
+    const shelf = c.shelf * (1 + 0.45 * wander) * Math.min(1, 0.35 + run / 9);
+    stamps.push({ kind: "beach", x: px, y: py, land: c.beachLand, base: c.beachBase, rise: c.beachRise, shelf, shelfSlope: c.shelfSlope });
   }
 
   // 8. Bathymetry from the cut shoreline, then the stamps.
@@ -568,14 +614,54 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
   for (let s = 0; s < count; s++) isShore[shore.nodes[s]] = 1;
   const toShore = nearestSource(n, isShore);
   const exposure = new Float32Array(nn);
-  for (let i = 0; i < nn; i++) exposure[i] = toShore.src[i] >= 0 ? shore.e[toShore.src[i]] : 1;
-  const smooth = boxBlur(exposure, n, Math.max(1, Math.round((BATHY_BLUR * scale) / cpn)), 2);
+  const sandy = new Float32Array(nn);
+  for (let i = 0; i < nn; i++) {
+    const src = toShore.src[i];
+    exposure[i] = src >= 0 ? shore.e[src] : 1;
+    sandy[i] = src >= 0 ? c.shelfRock[ctx.rock[src]] : 0;
+  }
+  const blurR = Math.max(1, Math.round((BATHY_BLUR * scale) / cpn));
+  const smooth = boxBlur(exposure, n, blurR, 2);
+  const sand = boxBlur(sandy, n, blurR, 2);
+  // The shelf: a gentle apron as wide as the shore is sheltered and soft, then
+  // the fall to deep water. Two noises make its width and its edge irregular.
   const base = new Float64Array(h);
   const b = c.bathy;
+  const edgePeriod = Math.max(1, Math.round(6400 / EDGE_CELLS));
   for (let i = 0; i < nn; i++) {
     if (!isSea0[i]) continue;
+    const x = ((i % n) + 0.5) * cpn;
+    const y = (Math.floor(i / n) + 0.5) * cpn;
+    const wide = Math.max(-1, Math.min(1, 1.6 * fbm((x * shelfPeriod) / p.n, (y * shelfPeriod) / p.n, shelfPeriod, 2, 0.5, noiseSeed ^ 0x52)));
+    const edge = Math.max(-1, Math.min(1, 1.6 * fbm((x * edgePeriod) / p.n, (y * edgePeriod) / p.n, edgePeriod, 2, 0.5, noiseSeed ^ 0x53)));
+    const e = smooth[i];
     const d = Math.max(0, toLand.dist[i] * cpn - 0.5 * cpn);
-    base[i] = -Math.max(SEA_MIN, Math.min(b.max, b.slope * d * (b.base + b.eGain * smooth[i])));
+    const width = c.shelfWide * (1 - e) * (1 - e) * sand[i] * (1 + 0.6 * wide);
+    // On the shelf the bed never falls faster than shelfSlope; the edge noise only moves where the shelf ends.
+    const past = Math.max(0, d * (1 + 0.3 * edge) - width);
+    const depth = c.shelfSlope * Math.min(d, width) + b.slope * (b.base + b.eGain * e) * past;
+    base[i] = -Math.max(SEA_MIN, Math.min(b.max, depth));
+  }
+  for (const o of shoals) {
+    const R = Math.ceil((1.4 * o.r) / cpn);
+    const ni = nodeAt(o.x, o.y, cpn, n);
+    const nx = ni % n;
+    const ny = (ni - nx) / n;
+    for (let oy = -R; oy <= R; oy++) {
+      for (let ox = -R; ox <= R; ox++) {
+        const j = wrapIndex(nx + ox, ny + oy, n);
+        if (!isSea0[j]) continue;
+        const x = (nx + ox + 0.5) * cpn;
+        const y = (ny + oy + 0.5) * cpn;
+        const edge = Math.max(-1, Math.min(1, 1.6 * fbm((x * edgePeriod) / p.n, (y * edgePeriod) / p.n, edgePeriod, 2, 0.5, noiseSeed ^ 0x54)));
+        const q = (Math.sqrt(ox * ox + oy * oy) * cpn) / (o.r * (1 + 0.35 * edge));
+        if (q >= 1) continue;
+        // The crest blends into whatever bed lies round it: a shoal has no rim.
+        const t = q * q * (3 - 2 * q);
+        const bed = -o.top * (1 - t) + base[j] * t;
+        if (bed > base[j]) base[j] = bed;
+      }
+    }
   }
   const out = new Float64Array(base);
   applyStamps(out, n, cpn, stamps);
@@ -585,13 +671,19 @@ export function coast(h: Float64Array, n: number, ctx: CoastContext, p: WorldPar
   const shoreClass = new Uint8Array(nn);
   for (let i = 0; i < nn; i++) {
     if (isSea[i]) continue;
+    // A delta's fan is sand all over, not only at its edge.
+    if (isSea0[i] && cut[i] > 0) {
+      shoreClass[i] = SHORE.beach;
+      continue;
+    }
     const x = i % n;
     const y = (i - x) / n;
     let wet = false;
     for (let k = 0; k < 8 && !wet; k++) wet = isSea[wrapIndex(x + NB8_DX[k], y + NB8_DY[k], n)] !== 0;
     if (!wet) continue;
     const s = toShore.src[i] >= 0 ? shore.slot[toShore.src[i]] : -1;
-    if (inCove[i]) shoreClass[i] = SHORE.cove;
+    if (inCoveAt[i] === 1) shoreClass[i] = SHORE.cove;
+    else if (inCoveAt[i] === 2) shoreClass[i] = SHORE.rocky;
     else if (s < 0) shoreClass[i] = SHORE.none;
     else if (cls[s] === SHORE.cliff) shoreClass[i] = out[i] >= c.minCliff ? SHORE.cliff : SHORE.rocky;
     else shoreClass[i] = cls[s];

@@ -89,9 +89,10 @@ export interface WorldParams {
   glacial: {
     /** A region weight of at least this puts a node inside that region's mask. */
     mask: number;
-    /** `step` is the share of a lake's reach, from its head, over which the old floor steps down to the basin; `wall` the side's rise at the half-width, as a slope. */
-    lakes: { count: readonly [number, number]; length: readonly [number, number]; depth: readonly [number, number]; halfWidth: readonly [number, number]; minArea: number; minFloor: number; step: number; wall: number };
-    tarns: { count: readonly [number, number]; radius: readonly [number, number]; depth: number; minHeight: number; maxArea: number };
+    /** `sill` is the share of a lake's depth made by a rock bar at its outlet (the rest is dug from the floor); the bar falls downstream at `sillSlope`; a fan shelves into the head at `fanSlope`; the floor is dug by at most `maxDig`, easing in over the first `head` of the reach. */
+    lakes: { count: readonly [number, number]; length: readonly [number, number]; depth: readonly [number, number]; halfWidth: readonly [number, number]; minArea: number; minFloor: number; sill: number; sillSlope: number; fanSlope: number; maxDig: number; head: number };
+    /** A tarn sits on ground no steeper than `maxSlope`; its water stands `bank` of the way from the lip up to the centre; the rim falls outward at `rimSlope`. */
+    tarns: { count: readonly [number, number]; radius: readonly [number, number]; depth: number; minHeight: number; maxArea: number; maxSlope: number; bank: number; rimSlope: number };
     dams: { count: readonly [number, number]; height: readonly [number, number]; thickness: number; span: number; minArea: number; minFloor: number };
     /** U-section: half-width range, lowest floor, smallest drainage, and the wall's height at the half-width as a slope. */
     trough: { halfWidth: readonly [number, number]; minFloor: number; minArea: number; wall: number };
@@ -121,12 +122,20 @@ export interface WorldParams {
     stackNoise: number;
     stackNoiseCells: number;
     stackTop: readonly [number, number];
+    /** Least height of the leading stack off a headland, drawn from this range. */
+    stackLead: readonly [number, number];
+    /** Width of the shoal ring round a stack. */
+    stackApron: number;
+    /** Radius added round a headland's stack group for its shoal. */
+    shoalR: readonly [number, number];
     headlandStacks: readonly [number, number];
     headlandSpacing: number;
     /** Share of sea within headlandR of a shore node that makes it a convex headland. */
     headlandSea: number;
     headlandR: number;
-    coveR: readonly [number, number];
+    /** A cove's length along its stream, and the share of coves with a rock back and no sand. */
+    coveLen: readonly [number, number];
+    coveBoulder: number;
     /** Smallest drainage (cells²) whose channel cuts a cove into a cliff coast. */
     coveArea: number;
     /** Least distance between two coves, in cells. */
@@ -146,7 +155,16 @@ export interface WorldParams {
     beachRise: number;
     shelf: number;
     shelfSlope: number;
+    /** Width of the gentle shelf off a wholly sheltered shore of soft rock, and its share per rock class: hard, medium, soft. */
+    shelfWide: number;
+    shelfRock: readonly [number, number, number];
     deltaE: number;
+    /** River widths (px) from which a mouth is an estuary, and a sheltered one a delta. */
+    estuaryWidth: number;
+    deltaWidth: number;
+    estuaryLen: number;
+    deltaR: readonly [number, number];
+    deltaTop: number;
     bathy: { max: number; slope: number; base: number; eGain: number };
   };
 }
@@ -230,8 +248,8 @@ export function paramsFor(n: number): WorldParams {
     drown: { rise: 2 },
     glacial: {
       mask: 0.5,
-      lakes: { count: [3, 6], length: [80 * s, 250 * s], depth: [6, 12], halfWidth: [12 * s, 22 * s], minArea: 1500 * s * s, minFloor: 4, step: 0.25, wall: 0.5 / s },
-      tarns: { count: [4, 8], radius: [12 * s, 20 * s], depth: 5, minHeight: 60, maxArea: 6000 * s * s },
+      lakes: { count: [3, 6], length: [80 * s, 250 * s], depth: [6, 12], halfWidth: [18 * s, 30 * s], minArea: 1500 * s * s, minFloor: 4, sill: 0.6, sillSlope: 0.25 / s, fanSlope: 0.05 / s, maxDig: 10, head: 0.2 },
+      tarns: { count: [4, 8], radius: [12 * s, 20 * s], depth: 5, minHeight: 60, maxArea: 6000 * s * s, maxSlope: 0.55 / s, bank: 0.5, rimSlope: 0.5 / s },
       dams: { count: [2, 4], height: [4, 8], thickness: 10 * s, span: 60 * s, minArea: 6000 * s * s, minFloor: 8 },
       trough: { halfWidth: [8 * s, 16 * s], minFloor: 35, minArea: 20000 * s * s, wall: 0.5 / s },
     },
@@ -251,12 +269,16 @@ export function paramsFor(n: number): WorldParams {
       stackArea: [8 * s * s, 120 * s * s],
       stackNoise: 0.8,
       stackNoiseCells: 40 * s,
-      stackTop: [4, 30],
-      headlandStacks: [1, 4],
+      stackTop: [4, 36],
+      stackLead: [14, 28],
+      stackApron: 3.5 * s,
+      shoalR: [16 * s, 40 * s],
+      headlandStacks: [2, 4],
       headlandSpacing: 260 * s,
       headlandSea: 0.62,
       headlandR: 48 * s,
-      coveR: [8 * s, 20 * s],
+      coveLen: [14 * s, 52 * s],
+      coveBoulder: 0.3,
       coveArea: 2000 * s * s,
       coveSpacing: 260 * s,
       channelArea: 1024 * s * s,
@@ -271,7 +293,14 @@ export function paramsFor(n: number): WorldParams {
       beachRise: 0.05 / s,
       shelf: 30 * s,
       shelfSlope: 0.04 / s,
+      shelfWide: 110 * s,
+      shelfRock: [0.3, 0.7, 1],
       deltaE: 0.4,
+      estuaryWidth: 2,
+      deltaWidth: 4,
+      estuaryLen: 40 * s,
+      deltaR: [45 * s, 90 * s],
+      deltaTop: 0.7,
       bathy: { max: 24, slope: 0.12 / s, base: 0.6, eGain: 0.8 },
     },
   };

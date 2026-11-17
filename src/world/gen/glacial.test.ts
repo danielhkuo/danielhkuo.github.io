@@ -107,13 +107,24 @@ test("ground outside every mask is untouched, and the sea mask never changes", (
   }
 });
 
-test("lakes and tarns only lower, dams only raise", () => {
+test("no quarries: a lake is dug by at most maxDig and banked by less than its depth; a tarn is half cut, half banked", () => {
   const { out, h } = world();
+  const g = p.glacial;
   for (let i = 0; i < nn; i++) {
     const m = out.mask[i];
-    if (m === GLACIAL_MASK.lake || m === GLACIAL_MASK.tarn) assert.ok(out.h[i] <= h[i] + 1e-3);
+    if (m === GLACIAL_MASK.lake) {
+      assert.ok(h[i] - out.h[i] <= g.lakes.maxDig + 1e-6, `lake dug ${h[i] - out.h[i]}`);
+      assert.ok(out.h[i] - h[i] <= g.lakes.depth[1], `lake banked ${out.h[i] - h[i]}`);
+    }
   }
+  // A tarn's water stands between its centre's old height and its lip's: half cut, half banked.
   const cpn = p.n / n;
+  for (const t of out.tarns) {
+    const c = Math.floor(t.y / cpn) * n + Math.floor(t.x / cpn);
+    const level = out.h[c] + g.tarns.depth;
+    assert.ok(level < h[c], "the bowl's back is cut into the slope");
+    assert.ok(h[c] - level < 0.75 * g.tarns.maxSlope * t.size + 1e-6, "but not deeply");
+  }
   for (const d of out.dams) {
     const i = Math.floor(d.y / cpn) * n + Math.floor(d.x / cpn);
     assert.ok(Math.abs(out.h[i] - (h[i] + d.depth)) < 1e-3, "the bar's crest stands its height above the old floor");

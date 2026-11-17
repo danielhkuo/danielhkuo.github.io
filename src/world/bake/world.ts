@@ -9,12 +9,67 @@
 import { wrap } from "../core/torus.ts";
 import type { WorldParams } from "../gen/params.ts";
 import { makeWorld, type World } from "../gen/pipeline.ts";
-import { standinExposure, standinSeaBed, standinShore } from "./standin-land.ts";
+import { type Stamp, stampReach } from "../gen/stamps.ts";
 
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
 export const SHORE = { none: 0, beach: 1, rocky: 2, cliff: 3, cove: 4 } as const;
 /** No surface, canopy included, stands above this. */
 export const HMAX = 160;
+
+/** Side of a stamp bucket, in cells. */
+export const STAMP_BUCKET = 64;
+
+/** Coast stamps filed under every bucket their reach touches. */
+export interface StampIndex {
+  stamps: readonly Stamp[];
+  /** Buckets a side: n / STAMP_BUCKET. */
+  bN: number;
+  bucketStart: Uint32Array;
+  /** Indices into `stamps`, ascending within a bucket. */
+  entries: Uint32Array;
+}
+
+export function stampIndex(stamps: readonly Stamp[], n: number): StampIndex {
+  const bN = n / STAMP_BUCKET;
+  const count = new Uint32Array(bN * bN + 1);
+  const visit = (each: (b: number, k: number) => void): void => {
+    for (let k = 0; k < stamps.length; k++) {
+      const s = stamps[k], r = stampReach(s);
+      if (r <= 0) continue;
+      const x0 = Math.floor((s.x - r) / STAMP_BUCKET), x1 = Math.floor((s.x + r) / STAMP_BUCKET);
+      const y0 = Math.floor((s.y - r) / STAMP_BUCKET), y1 = Math.floor((s.y + r) / STAMP_BUCKET);
+      for (let by = y0; by <= y1; by++) for (let bx = x0; bx <= x1; bx++) each(wrap(by, bN) * bN + wrap(bx, bN), k);
+    }
+  };
+  visit((b) => count[b + 1]++);
+  for (let b = 0; b < bN * bN; b++) count[b + 1] += count[b];
+  const entries = new Uint32Array(count[bN * bN]);
+  const fill = new Uint32Array(count.subarray(0, bN * bN));
+  visit((b, k) => { entries[fill[b]++] = k; });
+  return { stamps, bN, bucketStart: count, entries };
+}
+
+/** The stamps that can touch cells [x0, x0 + w) × [y0, y0 + h), in list order, each once. */
+export function stampsNear(ix: StampIndex, x0: number, y0: number, w: number, h: number): Stamp[] {
+  const seen = new Set<number>();
+  const bx0 = Math.floor(x0 / STAMP_BUCKET), bx1 = Math.floor((x0 + w - 1) / STAMP_BUCKET);
+  const by0 = Math.floor(y0 / STAMP_BUCKET), by1 = Math.floor((y0 + h - 1) / STAMP_BUCKET);
+  for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) {
+    const b = wrap(by, ix.bN) * ix.bN + wrap(bx, ix.bN);
+    for (let e = ix.bucketStart[b]; e < ix.bucketStart[b + 1]; e++) seen.add(ix.entries[e]);
+  }
+  // Ascending by index (insertion sort: a window sees a few hundred at most).
+  const ids = Uint32Array.from(seen);
+  for (let a = 1; a < ids.length; a++) {
+    const v = ids[a];
+    let b = a - 1;
+    for (; b >= 0 && ids[b] > v; b--) ids[b + 1] = ids[b];
+    ids[b + 1] = v;
+  }
+  const out: Stamp[] = [];
+  for (const k of ids) out.push(ix.stamps[k]);
+  return out;
+}
 
 /** Side of a river bucket, in cells. */
 export const RIVER_BUCKET = 32;
@@ -51,6 +106,8 @@ export interface BakeWorld {
   shore: Uint8Array;
 
   rivers: RiverIndex;
+  /** Coast stamps, cut into the upsampled ground at cell size. */
+  stamps: StampIndex;
 
   // --- C grid, cN² each ---
   moisture: Float32Array;
@@ -109,9 +166,9 @@ export interface BakeWorldInput {
   seed: number;
   /** The generator's stages (gen/pipeline.ts makeWorld()). Run here when absent. */
   world?: World;
-  /** Shore classes on G. STAND-IN when absent. */
+  /** Shore classes on G; the coast stage's when absent. */
   shore?: Uint8Array;
-  /** Coastal exposure on C, 0–1. STAND-IN when absent. */
+  /** Coastal exposure on C, 0–1; the coast stage's when absent. */
   exposure?: Float32Array;
 }
 
@@ -134,20 +191,35 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   const { land, hydro, rivers, climate } = w;
   const isSea = land.isSea;
 
-  // The rivers stage's ground is final on land; the sea bed is a stand-in until the coast stage.
-  const ground = standinSeaBed(rivers.ground, isSea, gN);
+  // Land is the rivers stage's ground; the sea bed is the coast stage's. Where a
+  // coast stamp cut land away on G, the uncut land goes back in: the bake
+  // upsamples it and cuts the same stamps at cell size, so a cliff keeps a crisp face.
+  const ground = new Float32Array(gN * gN);
   const waterLevel = new Float32Array(gN * gN), waterKind = new Uint8Array(gN * gN), hand = new Float32Array(gN * gN);
   for (let i = 0; i < waterKind.length; i++) {
     hand[i] = hydro.hand[i];
-    if (isSea[i]) waterKind[i] = 1;
-    else if (hydro.lakeId[i] >= 0) { waterKind[i] = 2; waterLevel[i] = hydro.surface[i]; }
+    if (isSea[i]) {
+      waterKind[i] = 1;
+      ground[i] = land.base[i] > 0 ? land.base[i] : Math.min(land.g[i], -0.01);
+    } else {
+      ground[i] = Math.max(rivers.ground[i], 0.01);
+      if (hydro.lakeId[i] >= 0) { waterKind[i] = 2; waterLevel[i] = hydro.surface[i]; }
+    }
   }
-  const exposure = inp.exposure ?? standinExposure(cN, seed);
-  const shore = inp.shore ?? standinShore(ground, waterKind, exposure, gN);
+  let exposure = inp.exposure;
+  if (!exposure) {
+    exposure = new Float32Array(cN * cN);
+    for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
+      const i = 2 * y * gN + 2 * x;
+      exposure[y * cN + x] = (land.exposure[i] + land.exposure[i + 1] + land.exposure[i + gN] + land.exposure[i + gN + 1]) / 4;
+    }
+  }
+  const shore = inp.shore ?? land.shoreClass;
 
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,
     rivers: riverIndex(rivers.reaches.map((r) => ({ vertices: r.vertices, stride: 4 })), n),
+    stamps: stampIndex(land.stamps, n),
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
   };
@@ -166,6 +238,7 @@ export function blankWorld(n: number, level: number): BakeWorld {
     hand: new Float32Array(gN * gN),
     shore: new Uint8Array(gN * gN),
     rivers: riverIndex([], n),
+    stamps: stampIndex([], n),
     moisture: new Float32Array(cN * cN).fill(0.5),
     wind: new Float32Array(cN * cN),
     exposure: new Float32Array(cN * cN),
