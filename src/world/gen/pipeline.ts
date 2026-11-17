@@ -12,7 +12,7 @@ import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
 import { settle, type SettleOptions, type Settlement } from "./settle.ts";
 import { applyStamps, type Stamp } from "./stamps.ts";
-import { talus } from "./talus.ts";
+import { scree, talus } from "./talus.ts";
 
 export interface Land {
   p: WorldParams;
@@ -69,11 +69,14 @@ export function makeLand(p: WorldParams, seed: number): Land {
   const gl = glacial(dr.h, gN, glacialContext(dr.h, gN, dr.isSea, plan, p), p, seed);
   // S5 talus: slopes relax to repose; debris collects below.
   const rock = rockOnG(plan, gN);
-  const t = talus(gl.h, gN, rock, p.talus.repose, 4, p.talus.sweeps);
-  for (let i = 0; i < t.h.length; i++) {
-    if (dr.isSea[i]) t.h[i] = gl.h[i];
-    else if (t.h[i] <= 0) t.h[i] = p.erode.eps;
+  const slid = talus(gl.h, gN, rock, p.talus.repose, 4, p.talus.sweeps);
+  for (let i = 0; i < slid.h.length; i++) {
+    if (dr.isSea[i]) slid.h[i] = gl.h[i];
+    else if (slid.h[i] <= 0) slid.h[i] = p.erode.eps;
   }
+  // Rockfall: steep faces shed, and the debris lies in cones and aprons at their feet.
+  const t = scree(slid.h, gN, dr.isSea, 4, p.talus.scree, p.erode.eps);
+  for (let i = 0; i < t.h.length; i++) t.debris[i] += slid.debris[i];
   // Scree does not soften a cirque: its headwall and lip are cut again, as the bake will cut them at cell size.
   applyStamps(t.h, gN, p.n / gN, gl.cirques);
   // S6 coasts: exposure, cliffs, stacks, coves, beaches, shelf.

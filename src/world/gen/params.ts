@@ -34,12 +34,13 @@ export interface WorldParams {
   /** tan 25°: spines run within 25° of west–east. */
   strike: { maxSlope: number };
   spine: { segments: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
-  uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number };
+  /** `rugged` per archetype (home, highland, slate, lakes, karst, skerry): 0 a smooth fold belt, 1 a massif of branching ridges. */
+  uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number; rugged: readonly number[] };
   rock: { kMul: readonly [number, number, number]; kBase: number; warpCells: number };
   regions: { blend: readonly [number, number] };
   /** S7 hydrology on G (see gen/hydro.ts HydroParams). */
   /** S5 talus: repose per rock class (height per cell) and sweeps; land is scaled down uniformly if it rises above `cap`. */
-  talus: { repose: readonly [number, number, number]; sweeps: number; cap: number };
+  talus: { repose: readonly [number, number, number]; sweeps: number; cap: number; scree: { shed: number; rate: number; repose: number; wash: number; passes: number; sweeps: number } };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
   climate: { moistureRadius: number; windReach: number; windDropPerNode: number; windScale: number };
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
@@ -88,6 +89,14 @@ export interface WorldParams {
     uniformRainSteps: number;
     stopAt: number;
     diffusionSweeps: number;
+    /** Threshold slope per rock class (hard, medium, soft), in height per cell: steeper ground fails as the rivers cut. */
+    sc: readonly [number, number, number];
+    /** The threshold holds for ground draining scArea cells²; ground draining A stands at (scArea / A)^¼ of it, within scRange. */
+    scArea: number;
+    scRange: readonly [number, number];
+    /** On G the threshold varies by ±grain, and erodibility against it, in knots of grainCells. */
+    grain: number;
+    grainCells: number;
     /** Hillslope diffusion per archetype, in C-node units (×4 on G). */
     d: readonly number[];
   };
@@ -243,12 +252,13 @@ export function paramsFor(n: number): WorldParams {
     },
     strike: { maxSlope: 0.4663076581549986 },
     spine: { segments: [3, 6], ridgeGap: 120 * s, bend: 0.25, plateau: 0.35 },
-    uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
+    uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s, rugged: [0, 1, 0.5, 0.8, 0.35, 0] },
     rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
     regions: { blend: [100 * s, 200 * s] },
     // Tuned 2026-11-17: mean land rain ~0.93, windward up to ~1.9, lee ~0.6.
     // Lakes ≥ 120 cells (7.5 G nodes); a channel drains ≥ 40 node-rains.
-    talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128 },
+    // Rockfall: ground steeper than 0.72 sheds, and the debris lies at 0.55 where the slope eases, unless a stream carries it off.
+    talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128, scree: { shed: 0.72 / s, rate: 5 * s, repose: 0.55 / s, wash: 2400 * s * s, passes: 4, sweeps: 24 } },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
     climate: { moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30 },
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
@@ -303,10 +313,15 @@ export function paramsFor(n: number): WorldParams {
       uniformRainSteps: 75,
       stopAt: 0.75,
       diffusionSweeps: 8,
+      sc: [0.7 / s, 0.6 / s, 0.5 / s],
+      scArea: 600 * s * s,
+      grain: 0.3,
+      grainCells: 120 * s,
+      scRange: [0.75, 1.5],
       // home, highland, slate, lakes, karst, skerry
       // Tuned 2026-11-17 on eroded renders: the first values smoothed away
       // every valley narrower than ~70 cells.
-      d: [0.03, 0.004, 0.01, 0.007, 0.012, 0.005],
+      d: [0.03, 0.0015, 0.01, 0.003, 0.012, 0.005],
     },
     // 2, not the design's 3: at 3 the 6400 world fell to ~26 % land (target 30–35 %).
     drown: { rise: 2 },

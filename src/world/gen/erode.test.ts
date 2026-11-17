@@ -6,7 +6,7 @@ import { seamRatio } from "../testing/seam.ts";
 import { sha256Hex } from "../testing/sha.ts";
 import { diffuseImplicit, type ErodeState, erodeStep, runSchedule, type ScheduleResult } from "./erode.ts";
 import { priorityFlood } from "./flood.ts";
-import { paramsFor } from "./params.ts";
+import { ARCHETYPE, paramsFor } from "./params.ts";
 import { planWorld } from "./plan.ts";
 
 const fill = (n: number, v: number) => new Float64Array(n).fill(v);
@@ -108,4 +108,67 @@ test("deterministic twice and in a worker_threads worker", async () => {
     w.once("error", reject);
   });
   assert.equal(got, want);
+});
+
+test("with a threshold slope no node stands steeper above its receiver, ribs steeper than gullies", () => {
+  const f = bumpy(64, 15), N = 64 * 64, h = priorityFlood(f.h, 64, f.isSea, 1e-6).filled;
+  const base: ErodeState = { n: 64, h: h.slice(), uplift: fill(N, 0), k: fill(N, 2e-3), d: fill(N, 0), isSea: f.isSea, jitter: null, rain: null, eps: 1e-6, diffusionSweeps: 0 };
+  // The fall to the lowest neighbour, per node of distance: the steepest way down.
+  const steepest = (g: Float64Array) => {
+    let worst = 0;
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      const i = y * 64 + x;
+      if (f.isSea[i]) continue;
+      let s = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const j = ((y + dy + 64) % 64) * 64 + ((x + dx + 64) % 64);
+        s = Math.max(s, (g[i] - Math.max(g[j], 0)) / Math.sqrt(dx * dx + dy * dy));
+      }
+      worst = Math.max(worst, s);
+    }
+    return worst;
+  };
+  assert.ok(steepest(h) > 2, "the field is steep without a threshold");
+  // No river power: only the threshold acts, and the ground settles to it.
+  const cut: ErodeState = { ...base, k: fill(N, 0), h: h.slice(), sc: fill(N, 0.5) };
+  for (let i = 0; i < 40; i++) erodeStep(cut, 100);
+  assert.ok(steepest(cut.h) <= 0.5 + 1e-6, `steepest ${steepest(cut.h)}`);
+  const fluted: ErodeState = { ...base, k: fill(N, 0), h: h.slice(), sc: fill(N, 0.5), scArea: 4, scRange: [0.5, 1.5] };
+  for (let i = 0; i < 40; i++) erodeStep(fluted, 100);
+  const s = steepest(fluted.h);
+  assert.ok(s > 0.5 && s <= 0.75 + 1e-6, `steepest ${s}`);
+  const pits = priorityFlood(fluted.h, 64, f.isSea, 0).filled;
+  for (let i = 0; i < N; i++) assert.ok(Math.abs(pits[i] - fluted.h[i]) <= 1e-6, `pit at ${i}`);
+});
+
+/** How far the highest ground strays to either side of the highland's spine, in G nodes (RMS about its mean), over the middle of its length. */
+function crestWander(r: ScheduleResult, spine: Float64Array, cellsPerNode: number): number {
+  const reach = 8, offs: number[] = [];
+  for (let k = 0; k + 3 < spine.length; k += 2) {
+    const ax = spine[k], ay = spine[k + 1], bx = spine[k + 2], by = spine[k + 3];
+    const len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)), ux = (bx - ax) / len, uy = (by - ay) / len;
+    for (let t = 0; t < Math.floor(len / cellsPerNode); t++) {
+      const px = ax + ux * t * cellsPerNode, py = ay + uy * t * cellsPerNode;
+      let best = -1, at = 0;
+      for (let c = -reach; c <= reach; c++) {
+        const gx = ((Math.floor((px - uy * c * cellsPerNode) / cellsPerNode) % r.gN) + r.gN) % r.gN;
+        const gy = ((Math.floor((py + ux * c * cellsPerNode) / cellsPerNode) % r.gN) + r.gN) % r.gN;
+        if (r.g[gy * r.gN + gx] > best) { best = r.g[gy * r.gN + gx]; at = c; }
+      }
+      offs.push(at);
+    }
+  }
+  const mid = offs.slice(Math.floor(offs.length / 5), offs.length - Math.floor(offs.length / 5));
+  const mean = mid.reduce((a, b) => a + b, 0) / mid.length;
+  return Math.sqrt(mid.reduce((a, b) => a + (b - mean) * (b - mean), 0) / mid.length);
+}
+
+test("the highland's crest wanders: it strays from the spine, far more than a smooth fold belt's", () => {
+  const plan = planWorld(p, 42), spine = plan.cores.find((c) => c.archetype === ARCHETYPE.highland)!.spine;
+  const rugged = crestWander(run(), spine, p.n / p.gN);
+  const smooth = { ...p, uplift: { ...p.uplift, rugged: [0, 0, 0, 0, 0, 0] } };
+  const tent = crestWander(runSchedule(planWorld(smooth, 42), smooth, 42), spine, p.n / p.gN);
+  assert.ok(rugged >= 2.5, `the crest strays ${rugged} nodes`);
+  assert.ok(rugged >= 2 * tent, `rugged ${rugged} against a fold belt's ${tent}`);
 });

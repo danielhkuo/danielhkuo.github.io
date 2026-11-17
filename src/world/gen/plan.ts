@@ -1,7 +1,7 @@
 // S1 Plan: island cores, fold-belt spines, uplift U, erodibility K, rock and
 // soft region weights, all on the coarse grid C.
 
-import { fbm, gradNoise, octaveMatrixPower } from "../core/noise.ts";
+import { fbm, gradNoise, octaveMatrixPower, ridgedFbm } from "../core/noise.ts";
 import { rngFor, type Rng } from "../core/rng.ts";
 import { torusDelta } from "../core/torus.ts";
 import { ARCHETYPE, ARCHETYPE_COUNT, type Archetype, type ArchetypeSpec, type WorldParams } from "./params.ts";
@@ -94,6 +94,26 @@ const SUMMIT = 0.12;
 const SUMMIT_CELLS = 490;
 const UPLIFT_OCTAVES = 3;
 const UPLIFT_GAIN = 0.75;
+
+/**
+ * Rugged islands (uplift.rugged per archetype) are massifs, not tents. Above the lowland their uplift follows a
+ * network of ridges: ridged noise of MASSIF_CELLS, sampled at a point warped by MASSIF_WARP cells of a noise of
+ * MASSIF_WARP_CELLS, so its crest lines bend and branch; between the ridges it falls to MASSIF_BASE of the belt's
+ * height, which is where the rivers cut the passes and the valley heads. The belt's own axis is bent as well, by up
+ * to AXIS_WARP of its half-width over AXIS_CELLS. Both fade to nothing at the coast: the outline is the tent's.
+ */
+const MASSIF_CELLS = 520;
+const MASSIF_OCTAVES = 4;
+const MASSIF_GAIN = 0.6;
+const MASSIF_BASE = 0.2;
+const MASSIF_WARP_CELLS = 330;
+const MASSIF_WARP = 70;
+const AXIS_CELLS = 760;
+const AXIS_WARP = 0.45;
+/** The share of a belt's height at which its uplift starts to follow the massif, and at which it follows it wholly. */
+/** A massif's belts are broad-topped: the flank reaches the plateau this share of the half-width short of the axis. */
+const MASSIF_PLATEAU = 0.7;
+const MASSIF_RISE: readonly [number, number] = [0.16, 0.4];
 
 /** The home island's town bay: a bite out of the south coast, east of centre, ringed by lowland. */
 const BAY_RADIUS = 0.1;
@@ -661,6 +681,11 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   const ux = 1 / norm, uy = slope / norm;
 
   const islands = placeIslands(p, rng, slope);
+  // Drawn from a stream of their own, so the islands stand where they did before the massifs were added.
+  const massifRng = rngFor(seed, "massif");
+  const massifSeed = massifRng.next(), massifWarpSeed = massifRng.next(), axisSeed = massifRng.next();
+  const massifPeriod = Math.round(6400 / MASSIF_CELLS), massifWarpPeriod = Math.round(6400 / MASSIF_WARP_CELLS), axisPeriod = Math.round(6400 / AXIS_CELLS);
+  const massifWarp = (MASSIF_WARP * n) / 6400;
 
   // Feature sizes are rounded so each noise has a whole number of periods round the world.
   const featurePeriod = Math.max(1, Math.round(n / p.uplift.featureCells));
@@ -717,13 +742,27 @@ export function planWorld(p: WorldParams, seed: number): Plan {
         const low = clamp(FBM_GAIN * gradNoise((x * lowPeriod) / n, (y * lowPeriod) / n, lowPeriod, lowSeed), -1, 1);
         const lowShare = LOWLAND_SHARE[0] + (LOWLAND_SHARE[1] - LOWLAND_SHARE[0]) * (0.5 + 0.5 * low);
         const slide = fibre.signed(x, y);
-        let best = 0;
+        let best = 0, bestRel = 0, bestRugged = 0;
+        let axisX = 0, axisY = 0, axisDone = false;
         for (let c = 0; c < islands.length; c++) {
           const isl = islands[c];
           if (edgeOf[c] >= isl.near) continue;
           // The shear fades to nothing on the ridge lines, so a core never leaves its spine.
           const shift = isl.fibre * slide * clamp(1 + edgeOf[c] / isl.half, 0, 1);
-          const dx = torusDelta(isl.core.x, x, n) + shift * isl.ux, dy = torusDelta(isl.core.y, y, n) + shift * isl.uy;
+          let dx = torusDelta(isl.core.x, x, n) + shift * isl.ux, dy = torusDelta(isl.core.y, y, n) + shift * isl.uy;
+          const rugged = p.uplift.rugged[isl.core.archetype];
+          const bend = rugged * AXIS_WARP * isl.half * clamp(-edgeOf[c] / isl.half, 0, 1);
+          const plainX = dx, plainY = dy;
+          const plateau = p.spine.plateau + rugged * (MASSIF_PLATEAU - p.spine.plateau);
+          if (bend > 0) {
+            if (!axisDone) {
+              axisX = clamp(FBM_GAIN * fbm((x * axisPeriod) / n, (y * axisPeriod) / n, axisPeriod, 2, 0.5, axisSeed), -1, 1);
+              axisY = clamp(FBM_GAIN * fbm((x * axisPeriod) / n, (y * axisPeriod) / n, axisPeriod, 2, 0.5, axisSeed + 1), -1, 1);
+              axisDone = true;
+            }
+            dx += bend * axisX;
+            dy += bend * axisY;
+          }
           let cut = 0, lowland = lowShare + isl.lowland;
           if (isl.bayR > 0) {
             const bx = dx - isl.bayX, by = dy - isl.bayY;
@@ -733,17 +772,39 @@ export function planWorld(p: WorldParams, seed: number): Plan {
           }
           lowland = Math.min(lowland, 0.55);
           const dx2 = otherImage(dx, n, isl.reach), dy2 = otherImage(dy, n, isl.reach);
-          let rel = reliefAt(isl, dx, dy, bite, cut, lowland, p.spine.plateau, 0);
-          if (dx2 !== dx) rel = reliefAt(isl, dx2, dy, bite, cut, lowland, p.spine.plateau, rel);
+          let rel = reliefAt(isl, dx, dy, bite, cut, lowland, plateau, 0);
+          if (dx2 !== dx) rel = reliefAt(isl, dx2, dy, bite, cut, lowland, plateau, rel);
           if (dy2 !== dy) {
-            rel = reliefAt(isl, dx, dy2, bite, cut, lowland, p.spine.plateau, rel);
-            if (dx2 !== dx) rel = reliefAt(isl, dx2, dy2, bite, cut, lowland, p.spine.plateau, rel);
+            rel = reliefAt(isl, dx, dy2, bite, cut, lowland, plateau, rel);
+            if (dx2 !== dx) rel = reliefAt(isl, dx2, dy2, bite, cut, lowland, plateau, rel);
           }
-          best = Math.max(best, isl.amp * rel);
+          if (bend > 0 && rel === 0) {
+            // The bent axis must not open water inside the outline: such a point keeps the straight belt's uplift.
+            const px2 = otherImage(plainX, n, isl.reach), py2 = otherImage(plainY, n, isl.reach);
+            rel = reliefAt(isl, plainX, plainY, bite, cut, lowland, plateau, 0);
+            if (px2 !== plainX) rel = reliefAt(isl, px2, plainY, bite, cut, lowland, plateau, rel);
+            if (py2 !== plainY) {
+              rel = reliefAt(isl, plainX, py2, bite, cut, lowland, plateau, rel);
+              if (px2 !== plainX) rel = reliefAt(isl, px2, py2, bite, cut, lowland, plateau, rel);
+            }
+          }
+          if (isl.amp * rel > best) {
+            best = isl.amp * rel;
+            bestRel = rel;
+            bestRugged = rugged;
+          }
         }
         if (best > 0) {
           const summit = clamp(FBM_GAIN * fbm((x * summitPeriod) / n, (y * summitPeriod) / n, summitPeriod, 2, 0.5, summitSeed), -1, 1);
-          uplift[i] = best * (1 - SUMMIT * (0.5 - 0.5 * summit)) * (p.uplift.base + p.uplift.ridgedAmp * grain.ridged(x, y));
+          let shape = (1 - SUMMIT * (0.5 - 0.5 * summit)) * (p.uplift.base + p.uplift.ridgedAmp * grain.ridged(x, y));
+          const follow = bestRugged * smoothstep((bestRel - MASSIF_RISE[0]) / (MASSIF_RISE[1] - MASSIF_RISE[0]));
+          if (follow > 0) {
+            const wx = x + massifWarp * FBM_GAIN * fbm((x * massifWarpPeriod) / n, (y * massifWarpPeriod) / n, massifWarpPeriod, 2, 0.5, massifWarpSeed);
+            const wy = y + massifWarp * FBM_GAIN * fbm((x * massifWarpPeriod) / n, (y * massifWarpPeriod) / n, massifWarpPeriod, 2, 0.5, massifWarpSeed + 1);
+            const ridge = ridgedFbm((wx * massifPeriod) / n, (wy * massifPeriod) / n, massifPeriod, MASSIF_OCTAVES, MASSIF_GAIN, massifSeed);
+            shape += follow * (MASSIF_BASE + (1 - MASSIF_BASE) * ridge * ridge - shape);
+          }
+          uplift[i] = best * shape;
         }
       }
 
