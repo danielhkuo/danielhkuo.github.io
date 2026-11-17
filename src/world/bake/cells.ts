@@ -73,8 +73,11 @@ const RIVER_OFFSET = 8;
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
 export const STREAM_MAX_SLOPE = 0.9;
+/** Ground from this slope is gullied, up to GULLY_DEPTH units deep. */
+export const GULLY_SLOPE = 0.75;
+export const GULLY_DEPTH = 4;
 /** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
-export const CLIFF_SLOPE = 1.7;
+export const CLIFF_SLOPE = 1.4;
 /** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
 export const STEEP_SLOPE = 1.15;
 /** Cover is evaluated this far north-west and south-east of the core. */
@@ -202,6 +205,34 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       // Under the sea the generator's own bed (its bathymetry) stands, unless the stamp cut deeper.
       ground[i] = v > 0 ? v : ground[i] < v ? ground[i] : v < 0 ? v : ground[i] < 0 ? ground[i] : -0.02;
     }
+  }
+
+  // Gullies: steep ground is incised along its fall line, a few units deep, so faces show ribs and
+  // couloirs in their shading and their silhouettes. A pure function of the cell and the smooth ground.
+  {
+    const cut = new Float32Array(count), per = n / 2;
+    for (let y = 1; y < H - 1; y++) {
+      const v = wrap(wy0 + y, n) / 2;
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x, e = ground[i];
+        if (e <= 1.5) continue;
+        const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
+        const s2 = dx * dx + dy * dy;
+        if (s2 < GULLY_SLOPE * GULLY_SLOPE) continue;
+        const u = wrap(wx0 + x, n) / 2;
+        // Noise smeared four lattice steps along whichever axis the ground falls, so the grain runs downhill.
+        let a: number;
+        // (Every lattice coordinate is the cell over 2, so the noise wraps with the world.)
+        if (dy * dy >= dx * dx) a = 0.5 * (gradNoise(u, v, per, 0x61b) + gradNoise(u, v + 2, per, 0x61b) + gradNoise(u, v + 4, per, 0x61b) + gradNoise(u, v + 6, per, 0x61b));
+        else a = 0.5 * (gradNoise(u, v, per, 0x7c3) + gradNoise(u + 2, v, per, 0x7c3) + gradNoise(u + 4, v, per, 0x7c3) + gradNoise(u + 6, v, per, 0x7c3));
+        const ridge = a < 0 ? -a : a;
+        // Narrow cuts between broad ribs: deepest where the noise crosses zero.
+        const depth = ridge > 0.5 ? 0 : 1 - ridge * 2;
+        const steep = Math.sqrt(s2) - GULLY_SLOPE;
+        cut[i] = depth * depth * GULLY_DEPTH * (steep > 0.6 ? 1 : steep / 0.6) * (e > 16 ? 1 : (e - 1.5) / 14.5);
+      }
+    }
+    for (let i = 0; i < count; i++) if (cut[i] > 0) ground[i] = Math.floor((ground[i] - cut[i]) * 64 + 0.5) / 64;
   }
 
   // 2. Water: lakes where the ground lies under a neighbouring lake node's level, sea at or below 0.
@@ -543,8 +574,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const mx = (x + mOffX) / 8, my = (y + mOffY) / 8, mi = Math.floor(mx), mj = Math.floor(my), mfx = mx - mi, mfy = my - mj;
         const ma = mj * mW + mi;
         const mottle = (1 - mfy) * (mott[ma] + (mott[ma + 1] - mott[ma]) * mfx) + mfy * (mott[ma + mW] + (mott[ma + mW + 1] - mott[ma + mW]) * mfx);
-        const far = SHELF + (depth - 1) / 3.5 + mottle;
-        const v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
+        // Tone follows the sea bed: a wide pale shelf in a shallow bay, dark water straight under a cliff.
+        // Only the cell on the shore itself is foam.
+        const far = 1 + depth * 0.75 + mottle * (depth < 4 ? depth / 4 : 1);
+        const v = Math.floor(d < 0.5 ? 0 : far < 1 ? 1 : far + dither - 0.5);
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;
@@ -558,14 +591,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
 
       const gx = (surf[i + 1] - surf[i - 1]) * 0.5, gy = (surf[i + W] - surf[i - W]) * 0.5;
-      let bump = 0;
-      if (!hasCrown && slope[i] > 0.9) {
-        // Micro-relief: steep ground is ribbed by gullies running down it, drawn as light only.
-        const u = wrap(x0 + x, n) / 3, v = wrap(y0 + y, n) / 4, per = n / 4;
-        const rib = gradNoise(u * 0.75, v, per, 0x61b) + gradNoise(u * 0.75, v + 1, per, 0x61b) + 0.6 * gradNoise(u * 0.75 + 40.5, v + 17, per, 0x7c3);
-        bump = 1.2 * rib * (slope[i] > 1.9 ? 1 : slope[i] - 0.9);
-      }
-      let tone = shade(gx + bump, gy, dry[i] - blur[i], ground[i]);
+      let tone = shade(gx, gy, dry[i] - blur[i], ground[i]);
       if (hasCrown) {
         // A crown is modelled by its own dome, but keeps the light of the hillside it stands on, so woods show the land's form.
         const under = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);

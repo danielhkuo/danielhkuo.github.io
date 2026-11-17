@@ -146,10 +146,11 @@ export function hatch(p: Painted, mask: Uint8Array): void {
       const i = r * w + c;
       const f = flags[i];
       if ((f & (F_CLIFF | F_DEEP)) === 0 || ink[i] !== 0 || (f & (F_QUIET | F_CANOPY)) !== 0) continue;
+      // Only true cliffs are hatched, on their shade side or in deep shadow; moderate slopes take none.
       const cliff = (f & F_CLIFF) !== 0 && aux[i] >= 2;
-      // Steep ground is hatched only on its shade side.
-      if ((f & F_DEEP) === 0 && light[i] > (cliff ? 118 : 96)) continue;
-      if (pick > (cliff ? 110 : 60)) continue;
+      if (!cliff) continue;
+      if ((f & F_DEEP) === 0 && light[i] > 112) continue;
+      if (pick > 100) continue;
       const R = r0 + r;
       // Strokes of 3–8 px with gaps, each band of the column offset by a second hash; blue noise frays their ends.
       const band = Math.floor((R + phase) / period);
