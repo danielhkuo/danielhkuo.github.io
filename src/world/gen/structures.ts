@@ -154,7 +154,7 @@ export function drum(s: Structure, cx: number, cy: number, r: number, top: numbe
 /** The abbey (30 × 24, 35 tall): church with a west tower and a cross, cloister round a garth, guest hall, precinct wall. */
 export function abbey(): Structure {
   const s = sculpt(30, 24);
-  paint(s, 0, 0, 30, 24, M.cobble);
+  paint(s, 0, 0, 30, 24, M.road);
   // Precinct wall round the yard, with a gate in the south side.
   for (let x = 0; x < 30; x++) { put(s, x, 0, 2, M.stoneDark, T_WALL); if (x < 13 || x > 16) put(s, x, 23, 2, M.stoneDark, T_WALL); }
   for (let y = 0; y < 24; y++) { put(s, 0, y, 2, M.stoneDark, T_WALL); put(s, 29, y, 2, M.stoneDark, T_WALL); }
