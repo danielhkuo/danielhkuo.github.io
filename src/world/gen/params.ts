@@ -74,14 +74,14 @@ export function paramsFor(n: number): WorldParams {
     },
     strike: { maxSlope: 0.4663076581549986 },
     spine: { segments: [3, 6], ridgeGap: 120 * s, bend: 0.25, plateau: 0.35 },
-    uplift: { scale: 1e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
+    uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
     rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
     regions: { blend: [100 * s, 200 * s] },
     erode: {
       cSteps: 150,
-      gSteps: 40,
+      gSteps: 60,
       dtC: 10,
-      dtG: 5,
+      dtG: 10,
       eps: 1e-6,
       jitter: 0.4,
       upsampleNoise: 0.02,
@@ -89,7 +89,9 @@ export function paramsFor(n: number): WorldParams {
       stopAt: 0.75,
       diffusionSweeps: 8,
       // home, highland, slate, lakes, karst, skerry
-      d: [0.25, 0.035, 0.09, 0.06, 0.12, 0.05],
+      // Tuned 2026-11-17 on eroded renders: the first values smoothed away
+      // every valley narrower than ~70 cells.
+      d: [0.03, 0.004, 0.01, 0.007, 0.012, 0.005],
     },
   };
 }
