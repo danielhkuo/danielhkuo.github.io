@@ -164,11 +164,13 @@ export const MATERIAL = {
   saltmarsh: 92,
   /** The muddy creeks that cut a saltmarsh. */
   saltCreek: 93,
+  /** Gorse: dark, dense bushes on open moor, still flecked with gold in summer. */
+  gorse: 94,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 94;
+export const MATERIAL_COUNT = 95;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -215,7 +217,7 @@ export const isVegetation: Uint8Array = flags([
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
-  M.hedge, M.hedgeCrown, M.bracken, M.duneGrass, M.saltmarsh,
+  M.hedge, M.hedgeCrown, M.bracken, M.duneGrass, M.saltmarsh, M.gorse,
 ]);
 
 /** Made things: buildings, walls and paving. */

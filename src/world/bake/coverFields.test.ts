@@ -83,6 +83,7 @@ test("the fields depend only on nearby ground: any window gives the same cells",
       assert.equal(fb.steep[ib], fa.steep[ia]);
       assert.equal(fb.curve[ib], fa.curve[ia]);
       assert.equal(fb.form[ib], fa.form[ia]);
+      assert.equal(fb.north[ib], fa.north[ia]);
       if (fb.cliffAbove[ib] > 0 && fb.cliffAbove[ib] < 1) fans++;
     }
   }
@@ -140,4 +141,18 @@ test("a whole tile of cliffs stays cheap", () => {
   coverFields(g, W, H, M, M, W - 2 * M, H - 2 * M);
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   assert.ok(ms < 400, `${ms.toFixed(0)} ms for a tile`);
+});
+
+test("north is the aspect of the form: a gully does not turn it, and flat ground has none", () => {
+  const W = 120, H = 120;
+  // A face rising to the south, so it faces north, cut by a gully whose walls face east and west.
+  const gullied = (x: number, y: number): number => 20 + 0.6 * y - (x === 60 ? 2 : x === 59 || x === 61 ? 1 : 0);
+  const f = coverFields(window(W, H, 0, 0, gullied), W, H, M, M, W - 2 * M, H - 2 * M);
+  for (const x of [30, 59, 60, 61, 90]) assert.ok(f.north[60 * W + x] > 0.97, `north ${f.north[60 * W + x]} at ${x}`);
+  const south = coverFields(window(W, H, 0, 0, (_x, y) => 90 - 0.6 * y), W, H, M, M, W - 2 * M, H - 2 * M);
+  assert.ok(south.north[60 * W + 60] < -0.99);
+  const east = coverFields(window(W, H, 0, 0, (x) => 20 + 0.6 * x), W, H, M, M, W - 2 * M, H - 2 * M);
+  assert.ok(Math.abs(east.north[60 * W + 60]) < 1e-6);
+  const flat = coverFields(window(W, H, 0, 0, () => 12), W, H, M, M, W - 2 * M, H - 2 * M);
+  assert.equal(flat.north[60 * W + 60], 0);
 });

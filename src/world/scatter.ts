@@ -58,6 +58,8 @@ const SCATTER_SEED = 0x5ca77e4;
 const DRIFT_SEED = 0xf10e4;
 const CLUMP_SEED = 0xc0b5e;
 const HEDGE_SEED = 0x4ed6e;
+/** Lone trees on upland pasture and meadow are this share of the lowland's, and stand only in their clumps. */
+const UPLAND_LONE = 0.45;
 /** Sparse scatter outside a clump is this share of its peak density. */
 const CLUMP_FLOOR = 0.03;
 
@@ -74,12 +76,21 @@ function vigour(c: CoverInput): number {
   return (0.55 + 0.45 * clamp01((c.moisture - 0.4) / 0.25)) * (0.4 + 0.6 * clamp01((0.6 - c.wind) / 0.2));
 }
 
+/** 0 well below the tree line … 1 at it: the cold score cover.ts uses, less the highland's lower line. */
+function altitude(c: CoverInput): number {
+  const cold = c.e / 100 + 0.1 * (c.formNorth === undefined ? c.northness : c.formNorth);
+  return clamp01((cold - 0.46 + 0.18 * (c.region[1] + c.region[3])) / 0.14);
+}
+
 /** Trees and bushes per cell on this ground. Monotone: more moisture never means fewer trees, more wind never more. */
 export function treeDensity(c: CoverInput, groundMat: number): number {
-  if (groundMat === M.floorBroadleaf) return DENSITY.broadleaf * vigour(c);
-  if (groundMat === M.floorConifer) return DENSITY.conifer * vigour(c);
-  if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c);
-  if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c);
+  // Woods thin toward the tree line: the last ten units of height below it carry half the trees.
+  if (groundMat === M.floorBroadleaf) return DENSITY.broadleaf * vigour(c) * (1 - 0.5 * altitude(c));
+  if (groundMat === M.floorConifer) return DENSITY.conifer * vigour(c) * (1 - 0.5 * altitude(c));
+  // Lone trees are a lowland thing: on the hill they are rare, and none stand near the tree line.
+  const lone = c.region[0] > 0.5 ? 1 : UPLAND_LONE * (1 - altitude(c));
+  if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c) * lone;
+  if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c) * lone;
   if (groundMat === M.marsh) return DENSITY.marshTree;
   if (groundMat === M.hedge) return DENSITY.hedge;
   if (inTriple(groundMat, M.scrubCool)) return DENSITY.shrub * (0.5 + 0.5 * clamp01(c.moisture / 0.3));
@@ -116,11 +127,11 @@ export function northReach(r: number, h: number, shape: number): number {
  * boulder fields, 30–50 cells across, with a thin sprinkle between; an even
  * spread of dots would read as an orchard.
  */
-function clump(x: number, y: number, n: number, salt: number): number {
+function clump(x: number, y: number, n: number, salt: number, floor: number = CLUMP_FLOOR): number {
   const p = Math.max(1, Math.round(n / 44));
   const g = gradNoise(((x + 0.5) * p) / n + salt, ((y + 0.5) * p) / n, p, CLUMP_SEED);
   const t = clamp01((g - 0.12) * 3.2);
-  return CLUMP_FLOOR + (1 - CLUMP_FLOOR) * t * t * (3 - 2 * t);
+  return floor + (1 - floor) * t * t * (3 - 2 * t);
 }
 
 function farmed(c: CoverInput, groundMat: number): boolean {
@@ -178,7 +189,7 @@ export function scatterAt(
   }
 
   const density = treeDensity(c, groundMat);
-  if (treeRoll < density && (density > SPARSE || treeRoll < density * clump(x, y, n, 0))) {
+  if (treeRoll < density && (density > SPARSE || treeRoll < density * clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0))) {
     let r: number;
     let h: number;
     let mat: number;

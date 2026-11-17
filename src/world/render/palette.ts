@@ -179,6 +179,7 @@ function evergreen(c: Lch): Seasons {
 const LAND = { drop: 0.5, rise: 0.58, cool: 0.055, coolHue: 238, warm: 0.046, ramp: "land" } as const;
 const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, ramp: "land" } as const;
 const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, coolHue: 278, warm: 0.075, ramp: "land" } as const;
+const TALUS = { drop: 0.26, rise: 0.6, cool: 0.012, coolHue: 278, warm: 0.06, ramp: "land" } as const;
 const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
 const LINE = { drop: 0.2, rise: 0.3, cool: 0.02, ramp: "land" } as const;
 
@@ -219,13 +220,14 @@ function buildSpecs(): Spec[] {
   set(M.cliffLime, all([0.86, 0.018, 90]), PALE);
   set(M.cliffSlate, all([0.47, 0.035, 265]), STONE);
   // Scree is fresh, broken stone: lighter and warmer than the face it fell from.
-  set(M.scree, all([0.82, 0.022, 82]), STONE);
-  set(M.screeSlate, all([0.68, 0.02, 258]), STONE);
+  // It stays warm in shade: a fan that went violet there would read as a slab of the face.
+  set(M.scree, all([0.84, 0.034, 76]), TALUS);
+  set(M.screeSlate, all([0.76, 0.014, 250]), TALUS);
   // Its stones are a tone under the fan: grey-buff, nowhere near ink.
-  set(M.screeStone, all([0.7, 0.018, 80]), STONE);
+  set(M.screeStone, all([0.66, 0.024, 62]), TALUS);
 
   // Upland. Alpine meadow is the winter snow band.
-  const alpine: Lch[] = [[0.72, 0.08, 148], [0.74, 0.085, 140], [0.76, 0.09, 128]];
+  const alpine: Lch[] = [[0.71, 0.07, 140], [0.73, 0.075, 131], [0.75, 0.08, 121]];
   for (let v = 0; v < 3; v++) {
     const g = grass(alpine[v]);
     set(M.alpineCool + v, [g[0], g[1], g[2], SNOW], LAND);
@@ -308,6 +310,8 @@ function buildSpecs(): Spec[] {
   // A hedge's ground is rough grass; the hedge itself is the row of crowns scatter plants on it.
   set(M.hedge, grass([0.68, 0.09, 138]), LAND);
   set(M.bracken, [[0.6, 0.07, 96], [0.64, 0.088, 116], [0.6, 0.09, 58], [0.55, 0.06, 55]], LAND);
+  // Gorse blooms gold in spring and keeps a little of it all summer.
+  set(M.gorse, [[0.66, 0.105, 100], [0.6, 0.09, 108], [0.55, 0.07, 122], [0.53, 0.06, 125]], LAND);
   set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
   set(M.wall, all([0.69, 0.012, 265]), LINE);
 

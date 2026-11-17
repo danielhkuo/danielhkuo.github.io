@@ -6,9 +6,11 @@
 // compared against its value plus blue-noise jitter scaled to the rule's edge
 // width, so two covers meet in a speckled band and never along a contour.
 // On steep ground that is not enough: a face is drawn a pixel to the unit of
-// height, so a speckled band there is static. Rock, scree, snow and the
-// plants of a face are bounded by smooth noise instead, and judged on the
-// slope and height of the land's form (bake/coverFields.ts), not of the cell.
+// height, so a speckled band there is static. Rock and the plants of a face
+// are bounded by smooth noise instead, and judged on the slope, height and
+// aspect of the land's form (bake/coverFields.ts), not of the cell. Snow,
+// scree and upland woods are scores on those smooth fields, with edges
+// feathered by smooth noise and a little dither.
 //
 // Enclosed land (S10) comes before heath and forest: where people farm, the
 // field decides, and woods keep to the ground too steep to plough.
@@ -72,13 +74,22 @@ export const CRAG_SLOPE = 0.75;
 const CRAG_SPACING = 8;
 /** Scree lies at its angle of rest or flatter: steeper ground under a cliff is still the cliff's own slope. */
 const SCREE_REST = 0.9;
-/** Ground steeper than this sheds its snow, give or take 0.08 for aspect: 0.7 (35°) in the shade, 0.54 in the sun. A couloir holds it to COULOIR_SHED. */
-export const SNOW_SHED = 0.62;
-const COULOIR_SHED = 1.05;
-/** A crest standing this far above the ground round it is too narrow to hold snow. */
-const CREST_RELIEF = 1.1;
-/** So is a ridge whose form stands this far above the ground eight cells round. */
-const CREST_CURVE = 1.05;
+/** The snowline on a level, open face, in units of height; slow noise moves it some ten units either way. */
+export const SNOWLINE = 99;
+/** A face turned full north carries its snow this many units lower; one turned south, as much higher. */
+const SNOW_SHADE = 6;
+/** Units of height to one point of snow score: a crest, a cirque or a couloir head is worth about half of it. */
+const SNOW_SPAN = 10;
+/** Ground this close to its stream's level is valley floor or gully bottom: it takes no snow until far above the line. */
+const VALLEY_HAND = 12;
+/** Ground this steep is hatched as a face by the bake, so it is never drawn as scree. */
+const SCREE_FACE = 1.12;
+/** Debris thicker than this (0–1, thick from three units) is a talus fan. */
+const SCREE_DEBRIS = 0.4;
+/** And this much thicker still at the foot of the hills. */
+const SCREE_GROWN = 0.45;
+/** Stones lie scattered this far, in debris, beyond the edge of a fan. */
+const SCREE_SPILL = 0.07;
 /** Ground this close to its river's level is floodplain. */
 const FLOOD_HAND = 0.9;
 const ROCK_SEED = 0x70c4;
@@ -90,6 +101,14 @@ const STRATA_SEED = 0x57a7a;
 const HEATH_SEED = 0x4ea7;
 const WOOD_SEED = 0x300d;
 const CREEK_SEED = 0xc4ee;
+const COPSE_SEED = 0xc095e;
+const MOOR_SEED = 0x3004;
+/** An upland wood stands where its score passes this: the higher, the less woodland. */
+const COPSE_BIAS = 0.03;
+/** The width of an upland wood's edge, in score: its trees thin out over some half a dozen cells. */
+const WOOD_FEATHER = 0.36;
+/** The cold score at which trees give out; lower in highland and lake country. */
+const TREE_LINE = 0.6;
 /** Vegetation ledges on a steep face follow strata about this many units of height apart. */
 const STRATA_SPACING = 5.5;
 /** Below this height nothing is ever snow, so the snowline is not worked out. */
@@ -230,6 +249,41 @@ function faceShare(st: number): number {
   return st > 0.75 ? 1 : st < 0.45 ? 0 : (st - 0.45) / 0.3;
 }
 
+/**
+ * Where upland woods stand, about ±1: clumps some 20–60 cells across, and on
+ * steep ground hangers: woods a dozen units of height deep that run along the
+ * contour and break every few dozen cells.
+ */
+function copseScore(x: number, y: number, n: number, st: number, ef: number): number {
+  const k = st > 0.55 ? 1 : st < 0.25 ? 0 : (st - 0.25) / 0.3;
+  const clumps = soft(x, y, n, 58, COPSE_SEED) + 0.45 * soft(x, y, n, 21, COPSE_SEED + 1);
+  if (k === 0) return 1.7 * clumps;
+  const p = Math.max(1, Math.round(n / 46));
+  const hang = gradNoise(ef / 15 + 2.2 * soft(x, y, n, 70, COPSE_SEED + 2), ((x + y + 0.5) * p) / n, p, COPSE_SEED + 3);
+  return 1.7 * ((1 - 0.5 * k) * clumps + 0.8 * k * hang);
+}
+
+/**
+ * Grass moor is never one flat wash: bracken beds in drifts on its lower,
+ * sunnier slopes, gorse in loose groups of bushes on the drier banks, and
+ * the grass itself in tussocky patches a few cells across.
+ */
+function moorGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: number): number {
+  const jj = ruleJitter(mask, x, y, RULE.hue);
+  const st = c.steep === undefined ? c.slope : c.steep;
+  const north = c.formNorth === undefined ? c.northness : c.formNorth;
+  const drift = soft(x, y, n, 34, MOOR_SEED + 3);
+  if (c.e < 70) {
+    const high = c.e > 40 ? (c.e - 40) / 40 : 0;
+    const bed = soft(x, y, n, 23, MOOR_SEED) + 0.5 * soft(x, y, n, 8, MOOR_SEED + 1) - 0.22 * north - high - (st < 0.2 ? 2 * (0.2 - st) : st > 0.85 ? st - 0.85 : 0);
+    if (bed > 0.3 + 0.24 * jj) return M.bracken;
+    // Gorse: bushes two or three cells across, gathered where the drift is, never spread evenly.
+    if (drift > 0.1 + high && soft(x, y, n, 4.5, MOOR_SEED + 2) > 0.34 - 0.3 * (drift > 0.5 ? 0.4 : drift - 0.1)) return M.gorse;
+  }
+  const f = hueField(x, y, HUE_CLASS.moor, n) + 1.5 * soft(x, y, n, 7, MOOR_SEED + 4) + 0.5 * jj;
+  return M.moorCool + (f < 0.5 ? 0 : f < 1.5 ? 1 : 2);
+}
+
 /** Open hill ground: heather where it is dry or slaty, grass moor where it is wet, in drifts. */
 function heathOrMoor(c: CoverInput, x: number, y: number, j: number, mask: Uint8Array, n: number): number {
   // Heather keeps to dry, exposed, well-drained ground: the windward convex
@@ -247,7 +301,9 @@ function heathOrMoor(c: CoverInput, x: number, y: number, j: number, mask: Uint8
   if (k > 0) {
     score += k * ((above < -0.2 ? -0.2 : above > 0.25 ? 0.25 : above) + 0.34 * strata(c.form === undefined ? c.e : c.form, x, y, n) + 0.14 * spur);
   }
-  if (score <= 0.3) return M.moorCool + hueVariant(x, y, HUE_CLASS.moor, mask, n);
+  // The heath's edge is ragged: heather and grass in a mosaic for a few cells either side of it.
+  score += 0.16 * ruleJitter(mask, x, y, RULE.hue) + 0.14 * soft(x, y, n, 5, HEATH_SEED + 5);
+  if (score <= 0.3) return moorGround(c, x, y, mask, n);
   // In bloom at the heart of the heath, browner toward its edge.
   return score > 0.85 ? M.heathCool : score > 0.55 ? M.heathMid : M.heathWarm;
 }
@@ -324,42 +380,48 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   }
 
   const relief = c.relief === undefined ? 0 : c.relief;
-  const west = c.westness === undefined ? 0 : c.westness;
 
   // The slope of the land's form. Class borders are drawn on it, not on the
   // slope of the cell: a gullied face changes slope from cell to cell, and a
   // border on that is static.
   const st = c.steep === undefined ? s : c.steep;
   const curve = c.curve === undefined ? 0 : c.curve;
+  /** Aspect of the form: what snow and woods are judged on, so a gully's two walls do not differ. */
+  const north = c.formNorth === undefined ? c.northness : c.formNorth;
   /** Height on the form: beds and bands follow its contours and so cross gullies unbroken. */
   const ef = c.form === undefined ? e : c.form;
 
-  // Snow is built, not banded: height, less on faces turned south and to the
-  // sun, less on spurs and more in corries, shed from steep ground and from
-  // narrow crests so ribs and arêtes show, and lingering where the ground is
-  // hollow, so it caps the benches and streaks down the couloirs. The edge is
-  // a hard threshold on a smooth score: clean, wandering, never speckled.
-  let snowScore = 0;
+  // Snow lies by height above a wandering snowline, and the line is lower
+  // where the land's form faces north, on convex crests, on cirque headwalls
+  // and at the heads of couloirs. It is higher in a valley: ground near its
+  // stream's level, and gentle hollows, stay green until well above the line,
+  // so no valley floor or gully bottom below it is ever white. Steep ground
+  // sheds, sunny faces sooner. All of it is read off smooth fields, and the
+  // edge is feathered over two or three cells by smooth noise and dither.
+  let snowScore = -9;
+  /** What steepness took off the score: ground that would be white but for it is bare rock. */
+  let shed = 0;
   let fine = 0;
-  if (e > SNOW_FLOOR) {
+  if (ef > SNOW_FLOOR) {
     fine = soft(x, y, n, 18, SNOWLINE_SEED + 1);
-    const wander = soft(x, y, n, 28, SNOWLINE_SEED);
-    // How far a gully carries its snow below the line differs from one gully to the next: no comb of equal tongues.
-    const carry = 0.55 + 1.5 * (wander < -0.3 ? -0.3 : wander > 0.3 ? 0.3 : wander);
-    const hollow = relief < 0 ? carry * (relief < -4 ? 0.2 : -0.05 * relief) : relief > 2 ? -0.04 : -0.02 * relief;
-    // Corries and gully heads gather snow, spurs and ridges lose it: what breaks the snowline into tongues of unequal length.
-    const lie = curve < 0 ? (curve < -1.5 ? 0.12 : -0.08 * curve) : curve > 1.5 ? -0.12 : -0.08 * curve;
-    snowScore = e / 100 + 0.2 * c.northness - 0.06 * west + hollow + lie +
-      0.13 * soft(x, y, n, 150, SNOWLINE_SEED + 2) + 0.07 * wander + 0.012 * fine;
+    const wander = soft(x, y, n, 40, SNOWLINE_SEED);
+    const line = SNOWLINE + 8 * soft(x, y, n, 150, SNOWLINE_SEED + 2) + 4 * wander - SNOW_SHADE * north;
+    // 0 at the stream … 1 well above it: only ground clear of the valley earns the bonuses.
+    const clear = hand < 6 ? 0 : hand > 16 ? 1 : (hand - 6) / 10;
+    const crestLie = curve > 0 ? 0.55 * (curve > 2.4 ? 1 : curve / 2.4) : 0;
+    const cirque = curve < 0 && st > 0.45 ? 0.45 * (curve < -2 ? 1 : -curve / 2) * (st > 0.7 ? 1 : (st - 0.45) / 0.25) : 0;
+    const couloir = relief < -0.2 && st > 0.55 ? 0.3 * (relief < -1 ? 1 : -relief) : 0;
+    const valley = (hand < VALLEY_HAND ? 1.1 * (1 - hand / VALLEY_HAND) : 0) + (curve < 0 && st < 0.45 ? 0.22 * (curve < -2 ? 1 : -curve / 2) : 0);
+    // Steep ground sheds: its ribs first, and bed by bed, so a snow face shows its rock in ledges and arêtes.
+    const face = st > 0.8 ? 1 : st < 0.6 ? 0 : (st - 0.6) / 0.2;
+    shed = (st > 0.7 ? 2.6 * (st - 0.7) : 0) + (north < 0 && st > 0.55 ? -0.55 * north * (st > 0.9 ? 1 : (st - 0.55) / 0.35) : 0) +
+      face * ((relief > 0 ? 0.7 * (relief > 1 ? 1 : relief) : 0) + 0.3 * strata(ef, x, y, n));
+    snowScore = (ef - line) / SNOW_SPAN + clear * (crestLie + cirque + couloir) - valley - shed +
+      0.2 * soft(x, y, n, 7, SNOWLINE_SEED + 4) + 0.07 * fine +
+      // The dither is worth a cell or two of height whatever the slope: on gentle ground a fixed one would be a field of static.
+      (st > 0.8 ? 0.2 : st < 0.12 ? 0.03 : 0.25 * st) * ruleJitter(mask, x, y, RULE.snow);
   }
-  // Steep ground sheds its snow, sunny faces sooner than shaded ones; a couloir or a corrie holds it on steeper ground.
-  const hollowed = relief < -0.6 || curve < -0.45;
-  const shed = st > (hollowed ? COULOIR_SHED : SNOW_SHED + 0.08 * c.northness) + 0.08 * fine;
-  // A narrow crest, sharp or rounded, is blown clear: the ridges show as lines of rock.
-  const sharp = relief > CREST_RELIEF + 0.5 * fine && st > 0.2;
-  const crest = sharp || curve + 2.5 * (relief > 0.5 ? 0.5 : relief) > CREST_CURVE + 0.35 * fine;
-  const holdsSnow = !shed && !crest;
-  if (snowScore > 0.84 && holdsSnow) return M.snow;
+  if (snowScore > 0) return M.snow;
 
   // Bare rock is the exception, not the rule. Faces: a true cliff, from a
   // form slope of 1.3, its edge bent by smooth noise so it never runs ruled
@@ -377,10 +439,34 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   ) {
     return M.cliffHard + rockKind(c, x, y, n);
   }
-  if (snowScore > 0.8 + 0.03 * bend && !holdsSnow) {
-    // Bare faces above the snowline are bedded: dark steps and paler benches, and snow lying on the widest ledges.
+  // Scree: the rockfall the generator laid at the foot of its steep faces,
+  // and fans under a true cliff, widening down the fall line. A pale
+  // warm-grey wash with a lobed edge; its stones are dots a tone darker, fine
+  // at the head of the fan and in clusters at the toe, where the big blocks
+  // roll to. Ground steep enough to be hatched as a face is the face.
+  const fan = c.cliffAbove === undefined ? 0 : c.cliffAbove;
+  if ((c.debris > 0.12 || fan > 0) && s < SCREE_FACE && st > 0.3 && st < CLIFF_SLOPE - 0.05 && hand > 0.6) {
+    const sj = ruleJitter(mask, x, y, RULE.scree);
+    const reach = c.debris + (st < SCREE_REST && st > 0.12 ? 0.55 * fan : 0);
+    // Low down a fan is grown over: only the thickest falls stay bare there.
+    const grown = e > 80 ? 0 : e < 30 ? SCREE_GROWN : (SCREE_GROWN * (80 - e)) / 50;
+    const depth = reach - SCREE_DEBRIS - grown - 0.16 * soft(x, y, n, 6, SCREE_SEED) - 0.05 * soft(x, y, n, 2.5, SCREE_SEED + 2);
+    if (depth > -SCREE_SPILL) {
+      // 0 at the head of the fan … 1 at its toe, down by the stream, where the big blocks roll to.
+      const toe = hand > 16 ? 0 : hand < 4 ? 1 : (16 - hand) / 12;
+      const pair = hash2(x >> 1, y >> 1, SCREE_SEED) & 255;
+      const own = hash2(x, y, SCREE_SEED + 7) & 255;
+      const big = toe > 0.5 ? hash2(Math.floor(x / 3), y >> 1, SCREE_SEED + 9) & 255 : 255;
+      const stone = big < 44 * (toe - 0.5) || (pair < 14 + 50 * toe && own < 210) || sj > 0.41 + 0.07 * toe;
+      // The fan's edge is not a line: past it the stones lie scattered on the grass.
+      if (depth > 0.1 * sj) return stone ? M.screeStone : slate > 0.5 ? M.screeSlate : M.scree;
+      if (stone && sj > -0.2) return M.screeStone;
+    }
+  }
+  if (snowScore + shed > -0.2 + 0.1 * bend && st > 0.78 + 0.1 * fine) {
+    // Bare faces at and above the snowline are bedded: dark steps and paler benches, and snow lying on the widest ledges.
     const bed = strata(ef, x, y, n);
-    if (bed < -0.42 && !crest && st < 0.8 && soft(x, y, n, 20, SNOWLINE_SEED + 3) > -0.08) return M.snow;
+    if (bed < -0.42 && st < 1 && snowScore + shed > 0.3 && soft(x, y, n, 20, SNOWLINE_SEED + 3) > -0.08) return M.snow;
     return (st > 0.95 + 0.2 * bend || bed > 0.35 ? M.cliffHard : M.rockHard) + rockKind(c, x, y, n);
   }
   if (st > 0.45 && (e - 75) / 40 + 2 * (c.wind - 0.6) + (curve > 4 ? 0.16 : curve < -4 ? -0.16 : 0.04 * curve) > 0.45 + 0.14 * bend + j * 0.03) {
@@ -401,23 +487,9 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     if (thick > 0.11 && t - Math.floor(t) < thick + j * 0.04 && soft(x, y, n, 9, CRAG_SEED + 2) > -0.18) return M.rockHard + rockKind(c, x, y, n);
   }
 
-  // Scree: talus fans under a real cliff, where the form breaks from the face
-  // to gentler ground, widening down the fall line. A buff wash with a clean,
-  // lobed edge and a few stones in clusters: never a stipple.
-  const fan = c.cliffAbove === undefined ? 0 : c.cliffAbove;
-  if (fan > 0 && st > 0.12 && st < SCREE_REST && s < 1.2) {
-    j = ruleJitter(mask, x, y, RULE.scree);
-    const reach = fan * (1 + (c.debris > 0.5 ? 0.5 : c.debris));
-    const lobe = 0.34 + 0.45 * soft(x, y, n, 5, SCREE_SEED);
-    if (reach > (lobe < 0.1 ? 0.1 : lobe) + j * 0.025) {
-      if (j > 0.36 && soft(x, y, n, 8, SCREE_SEED + 1) > 0.12) return M.screeStone;
-      return slate > 0.5 ? M.screeSlate : M.scree;
-    }
-  }
-
-  // Late snow: the band under the permanent snow that melts to fellfield in
-  // high summer. The same clean edge.
-  if (snowScore > 0.74 && holdsSnow) return M.snowLate;
+  // Late snow: the feathered band under the permanent snow that melts to
+  // fellfield in high summer.
+  if (snowScore > -0.45) return M.snowLate;
 
   // Alpine meadow: highland and lake country, cold, gentle. Edge 10. Lake
   // country's fells are lower, so its meadows start lower.
@@ -425,7 +497,9 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   if (
     region[1] + region[3] > 0.5 + j * 10 * PER_CELL.field &&
     cold > 0.55 - ALPINE_LAKES * region[3] + j * 10 * PER_CELL.cold &&
-    st < 0.5 + j * 10 * PER_CELL.slope
+    st < 0.5 + j * 10 * PER_CELL.slope &&
+    // In patches, with a wide ragged edge: a meadow below every crest would ring the rock in green.
+    soft(x, y, n, 46, MOOR_SEED + 6) + 0.4 * soft(x, y, n, 13, MOOR_SEED + 7) - 0.12 * curve > -0.02 + 0.4 * j
   ) {
     return M.alpineCool + hueVariant(x, y, HUE_CLASS.alpine, mask, n);
   }
@@ -458,6 +532,28 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   // valley floor or the home lowland.
   const lee = 0.25 * (e < 0 ? 1 : e > 24 ? 0 : 1 - e / 24) + 0.1 * region[0];
 
+  // The karst coast is dry whatever the rain: its limestone drains it.
+  const moisture = c.moisture * (1 - 0.62 * karst);
+
+  // Upland woods are copses and hangers, not a strip up every gully: a slow
+  // seeded mask of clumps, pulled along the contour on steep ground, and
+  // raised or lowered by moisture, aspect, wind, steepness and cold. Height
+  // above the stream hardly counts, so a wood crosses the spurs between
+  // gullies. The edge is a wide dither: trees thin out over several cells,
+  // at the tree line as anywhere else.
+  const home = region[0] > 0.5;
+  j = ruleJitter(mask, x, y, RULE.forest);
+  // No wood at all on ground too dry, too wind-blown or too steep for one, whatever the mask says.
+  if (!home && e > 1.5 && moisture > 0.4 + j * 3 * PER_CELL.field && c.wind < 0.66 + lee + j * 3 * PER_CELL.wind && st < 1.05) {
+    const line = TREE_LINE - 0.18 * (region[1] + region[3]);
+    const w = copseScore(x, y, n, st, ef) + 1.5 * (moisture - 0.62) + 0.16 * north -
+      2.2 * (c.wind > 0.42 + lee ? c.wind - 0.42 - lee : 0) - 3 * (st > 0.72 ? st - 0.72 : 0) - 7 * (cold > line ? cold - line : 0) -
+      (hand > 24 ? 0.015 * (hand - 24) : hand < 2 ? 0.5 * (2 - hand) : 0) - (curve > 0 ? 0.07 * (curve > 2 ? 2 : curve) : 0);
+    if (w > COPSE_BIAS + WOOD_FEATHER * j) {
+      return cold > 0.45 - 0.22 * region[1] + 0.12 * soft(x, y, n, 31, WOOD_SEED + 3) + ruleJitter(mask, x, y, RULE.hue) * 0.12 ? M.floorConifer : M.floorBroadleaf;
+    }
+  }
+
   // Heath: wind-blown ground, and the tops of valley country. Edge 12.
   j = ruleJitter(mask, x, y, RULE.heath);
   const dX12 = j * 12 * PER_CELL.wind;
@@ -465,10 +561,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     return heathOrMoor(c, x, y, j, mask, n);
   }
 
-  // The karst coast is dry whatever the rain: its limestone drains it.
-  const moisture = c.moisture * (1 - 0.62 * karst);
-
-  // Forest: the lower valley sides. The edge is drawn by the trees, so the
+  // Forest of the home lowland: the lower valley sides. The edge is drawn by the trees, so the
   // floor's own edge is narrow; the conifer line is a wide belt of mixed wood,
   // some 20 units of height deep, so it never rings a hill. In the highland
   // woods keep to the valleys and turn to conifer sooner.
@@ -477,7 +570,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   const dS = j * 3 * PER_CELL.slope;
   const dF = j * 3 * PER_CELL.field;
   if (
-    hand > 2 + dH && hand < 30 - 14 * region[1] - 16 * region[3] + dH &&
+    home && hand > 2 + dH && hand < 30 - 14 * region[1] - 16 * region[3] + dH &&
     s > 0.08 + (HOME_OPEN + stray) * region[0] + dS * 0.5 && st < 0.8 + dS &&
     moisture > 0.4 + dF && c.wind < 0.5 + lee + j * 3 * PER_CELL.wind &&
     cold < 0.6 - 0.2 * (region[1] + region[3]) + j * 3 * PER_CELL.cold &&
@@ -507,8 +600,8 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     if (e > 38 + 16 * soft(x, y, n, 30, HEATH_SEED + 1) + j * 2 || c.wind > 0.56 + j * 8 * PER_CELL.wind) return heathOrMoor(c, x, y, j, mask, n);
     // Bracken takes the sunny side, bed by bed, and the damp runnels of any side.
     const sun = 0.25 + 0.45 * strata(ef, x, y, n) + 0.3 * soft(x, y, n, 22, HEATH_SEED + 2) + j * 0.06;
-    if (c.northness < sun || (curve < -0.6 && c.northness < sun + 0.5)) return M.bracken;
-    return M.pastureCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);
+    if (north < sun || (curve < -0.6 && north < sun + 0.5)) return M.bracken;
+    return home ? M.pastureCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n) : moorGround(c, x, y, mask, n);
   }
   // Above the walls the hill is rough grazing, not pasture.
   if (uplandW > 0.5 + j * 8 * PER_CELL.field && hand > ROUGH_HAND + j * 8 * PER_CELL.hand) return heathOrMoor(c, x, y, j, mask, n);
