@@ -7,6 +7,7 @@ import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
+import { coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
@@ -455,7 +456,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0 };
+  const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cN * cN;
   const rockW = new Float64Array(3);
   // Stamps may only touch cells whose crowns matter: the core, TREE_REACH to the north-west and one cell round.
@@ -531,7 +533,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.wind = w00 * wind[c00] + w10 * wind[c10] + w01 * wind[c01] + w11 * wind[c11];
       c.exposure = w00 * exposure[c00] + w10 * exposure[c10] + w01 * exposure[c01] + w11 * exposure[c11];
       c.debris = w00 * debris[c00] + w10 * debris[c10] + w01 * debris[c01] + w11 * debris[c11];
-      c.rock = rk;
+      // The cover blends rock kinds where they meet; the flags keep the voted class.
+      c.rock = rockW[1] + 2 * rockW[2];
+      c.cliffAbove = fields.cliffAbove[i];
+      c.relief = fields.relief[i];
       for (let a = 0; a < 6; a++) {
         const o = a * cc;
         region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];

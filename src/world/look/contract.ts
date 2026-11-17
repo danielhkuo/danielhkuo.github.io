@@ -29,7 +29,7 @@ export interface CoverInput {
   wind: number;
   exposure: number;
   debris: number;
-  /** 0 hard, 1 medium, 2 soft. */
+  /** 0 hard, 1 medium, 2 soft; may be fractional where two rocks meet. */
   rock: number;
   /** Six archetype weights (home, highland, slate, lakes, karst, skerry), summing to 1. */
   region: ArrayLike<number>;
@@ -55,6 +55,18 @@ export interface CoverInput {
    * trees along every rill reads as a comb.
    */
   riverWide?: number;
+  /**
+   * Optional (bake/coverFields.ts): 0–1, how strongly a cliff uphill of this
+   * cell feeds it scree: 1 at the cliff's foot, fading down the fall line and
+   * spreading as it goes.
+   */
+  cliffAbove?: number;
+  /**
+   * Optional (bake/coverFields.ts): height of the cell above the mean of the
+   * ground four cells round it. Positive on crests and knolls, negative in
+   * gullies and couloirs.
+   */
+  relief?: number;
 }
 
 /** A crown or rock stamped into height and material by the bake. */
