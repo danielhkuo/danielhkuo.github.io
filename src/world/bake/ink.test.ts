@@ -43,7 +43,7 @@ test("a ridge hiding three or more rows gets one clean 1 px line", () => {
     const rows: number[] = [];
     for (let r = 0; r < 120; r++) if (b.ink(c, r)) rows.push(r);
     assert.equal(rows.length, 1, `column ${c} has ${rows.length} ink pixels`);
-    assert.equal(b.ink(c, rows[0]), INK_FULL);
+    assert.ok(b.ink(c, rows[0]) >= INK_FULL);
     // The line is on the crest: ground just north of it is far behind.
     assert.ok(b.y(c, rows[0]) - b.y(c, rows[0] - 1) > 10);
   }

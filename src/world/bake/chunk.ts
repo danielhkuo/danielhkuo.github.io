@@ -11,7 +11,11 @@ import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { buildTile, F_CANOPY, F_CLIFF, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
 import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
+import { BASE_TONE } from "./light.ts";
 import { forEachRiverPoint } from "./lines.ts";
+
+/** The tone index flat, unshadowed ground takes (render/palette.ts FLAT_TONE). */
+export const FLAT_TONE = 9;
 import { HMAX, type BakeWorld } from "./world.ts";
 
 export const CHUNK = 256;
@@ -109,7 +113,7 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
  * so the raster is 8-connected. A point behind a ridge is skipped and breaks
  * the line, so a river never crosses a ridge.
  */
-export function drawRivers(world: BakeWorld, tiles: TileSource, p: Painted): void {
+export function drawRivers(world: BakeWorld, tiles: TileSource, p: Painted, isWater: Uint8Array): void {
   const n = world.n;
   const { w, h, x0, r0 } = p;
   const yFirst = Math.ceil((5 * r0) / 4) - 4;
@@ -138,6 +142,8 @@ export function drawRivers(world: BakeWorld, tiles: TileSource, p: Painted): voi
     const key = (wy >> 8) * 4096 + (wx >> 8);
     if (key !== tKey) { tile = tiles(wx >> 8, wy >> 8); tKey = key; }
     const ti = ((wy & 255) << 8) | (wx & 255);
+    // The cells decide where a river runs (steep 1 px streams are left out); draw only where they did.
+    if (isWater[(tile as Cells).mat[ti]] === 0) { prev = false; return; }
     const H = (tile as Cells).surf[ti];
     const r = Math.floor((4 * cy) / 5) - r0 - Math.floor(H + 0.5);
     if (r < 0 || r >= h) { prev = false; return; }
@@ -184,7 +190,9 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
         let l = p.light[i];
         // A cliff's face stands in its own shade.
         if ((f & F_CLIFF) !== 0 && Math.floor((4 * p.y[i]) / 5) - R - Math.floor(p.height[i] + 0.5) < 0) l -= 28;
-        tone = Math.floor((l * 15) / 255 + (mask[(R & 255) * 256 + ((p.x0 + mx + c) & 255)] + 0.5) / 256);
+        // Flat, unshaded ground sits at FLAT_TONE; darks have the longer run of the ramp.
+        const d = (l - Math.floor(BASE_TONE * 255 + 0.5)) / 255;
+        tone = Math.floor(FLAT_TONE + d * (d < 0 ? 2 * FLAT_TONE : 2 * (15 - FLAT_TONE)) + (mask[(R & 255) * 256 + ((p.x0 + mx + c) & 255)] + 0.5) / 256);
         tone = tone < 0 ? 0 : tone > 15 ? 15 : tone;
       }
       const light = tone | ((f & F_SHADOW) << LIGHT_SHADOW_SHIFT) | (p.ink[i] << LIGHT_INK_SHIFT);
@@ -198,7 +206,7 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
 /** The finished bake pixels of the window [x0, x0 + w) × [r0, r0 + h) of bake space. */
 export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles: TileSource, x0: number, r0: number, w: number, h: number): Uint32Array {
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
-  drawRivers(world, tiles, p);
+  drawRivers(world, tiles, p, look.isWater);
   inkOcclusion(p);
   inkCliffs(p, look.isWater);
   hatch(p, mask);

@@ -6,12 +6,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Look } from "../bake/cells.ts";
-import { standinLook } from "../bake/standin.ts";
+import { worldLook } from "../bake/look.ts";
+import { buildPalette } from "../render/palette.ts";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { rngFor } from "../core/rng.ts";
 import { wrap, wrapIndex } from "../core/torus.ts";
 import { ARCHETYPE, paramsFor } from "../gen/params.ts";
-import { planWorld, type Plan } from "../gen/plan.ts";
+import { makeWorld } from "../gen/pipeline.ts";
+import type { Plan } from "../gen/plan.ts";
 import { createView } from "../runtime/view.ts";
 import { encodePng } from "./png.ts";
 
@@ -32,7 +34,7 @@ export function loadBlueNoise(): Uint8Array {
 
 /** Six viewpoints chosen from the data, so they follow the seed. */
 export function autoViewpoints(world: BakeWorld, plan: Plan, seed: number): Viewpoint[] {
-  const { gN, ground, riverWidth, riverRun, waterKind } = world;
+  const { gN, ground, waterKind } = world;
   const at = (name: string, i: number): Viewpoint => {
     const gx = i % gN, gy = (i - gx) / gN;
     return { name, x: 4 * gx + 2, y: 4 * gy + 2, e: Math.max(0, ground[i]) };
@@ -43,14 +45,14 @@ export function autoViewpoints(world: BakeWorld, plan: Plan, seed: number): View
   for (let i = 0; i < ground.length; i++) if (ground[i] > ground[peak]) peak = i;
   out.push(at("peak", peak));
 
-  // A river reach: the widest river, a little way up from its mouth.
+  // A river reach: the widest river, about 160 cells up from where its reach began to be that wide.
+  const rv = world.rivers.vertices;
   let reach = -1, best = -1;
-  for (let i = 0; i < ground.length; i++) {
-    if (riverWidth[i] === 0) continue;
-    const s = riverWidth[i] * 1000 - Math.abs(riverRun[i] - 160);
-    if (s > best) { best = s; reach = i; }
+  for (let v = 0; v < rv.length; v += 4) {
+    const s = rv[v + 2] * 1000 - Math.abs(rv[v + 3] - 160);
+    if (s > best) { best = s; reach = v; }
   }
-  if (reach >= 0) out.push(at("river", reach));
+  if (reach >= 0) out.push(at("river", wrapIndex(Math.floor(rv[reach] / 4), Math.floor(rv[reach + 1] / 4), gN)));
 
   // The coast with the most relief: a shore node under the highest ground within 10 nodes to its north.
   let coast = -1;
@@ -133,11 +135,12 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const { n, seed } = opts;
   const t0 = performance.now();
   const params = paramsFor(n);
-  const plan = planWorld(params, seed);
-  const world = buildBakeWorld({ params, plan, seed });
+  const made = makeWorld(params, seed);
+  const plan = made.land.plan;
+  const world = buildBakeWorld({ params, seed, world: made });
   log(`world ${n} seed ${seed}: ${Math.round(performance.now() - t0)} ms`);
 
-  const look = opts.look ?? standinLook();
+  const look = opts.look ?? worldLook(n, buildPalette({ time: 0.5, season: 0.25, overcast: 0 }));
   const mask = loadBlueNoise();
   const view = createView(world, look, mask, { width: VIEW_W, height: VIEW_H, cacheChunks: 64 });
   const dir = opts.outDir ?? join(process.cwd(), ".cache", "world-renders", `${n}-${seed}`);

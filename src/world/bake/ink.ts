@@ -8,6 +8,8 @@ import { F_CANOPY, F_CLIFF, F_DEEP, F_BEDDED, F_QUIET, F_SEACLIFF } from "./cell
 export const INK_NONE = 0;
 export const INK_SOFT = 1;
 export const INK_FULL = 2;
+/** Solid ink: the crest lines that hide the most. */
+export const INK_SOLID = 3;
 
 /** Ink needs at least this many world rows hidden behind the nearer pixel, and this much drop. */
 export const INK_MIN_HIDDEN = 3;
@@ -17,6 +19,8 @@ export const CANOPY_MIN_HIDDEN = 2;
 export const CANOPY_MIN_DROP = 2;
 /** From this many hidden rows the ink is full. */
 export const INK_FULL_HIDDEN = 10;
+/** And from this many it is solid. */
+export const INK_SOLID_HIDDEN = 24;
 /** A side silhouette is traced at most this many pixels below its crest. */
 export const CREST_REACH = 24;
 /** A cliff lip is inked above a rock wall at least this tall. */
@@ -74,7 +78,7 @@ export function inkOcclusion(p: Painted): void {
         const quiet = (f & F_QUIET) !== 0 || (canopy && (flags[i - w] & F_CANOPY) !== 0);
         if (!quiet) {
           // A crown is small: its edge takes soft ink only, and no side tracing.
-          const v = canopy ? INK_SOFT : hid >= INK_FULL_HIDDEN ? INK_FULL : INK_SOFT;
+          const v = canopy ? INK_SOFT : hid >= INK_SOLID_HIDDEN ? INK_SOLID : hid >= INK_FULL_HIDDEN ? INK_FULL : INK_SOFT;
           ink[i] = v;
           if (!canopy) { cy = y[i]; ci = v; age = 0; }
         }
@@ -98,13 +102,13 @@ export function inkOcclusion(p: Painted): void {
 
 /** Full ink on the lip above a rock wall of LIP_RUN pixels or more, and on cliffed coasts at the waterline. */
 export function inkCliffs(p: Painted, isWater: Uint8Array): void {
-  const { w, h, flags, ink, mat, y } = p;
+  const { w, h, flags, ink, mat, y, aux } = p;
   for (let c = 0; c < w; c++) {
     let run = 0;
     for (let r = h - 1; r >= 0; r--) {
       const i = r * w + c;
       const f = flags[i];
-      if ((f & F_CLIFF) !== 0) { run++; continue; }
+      if ((f & F_CLIFF) !== 0 && aux[i] >= 2) { run++; continue; }
       // The first pixel above a tall enough wall, if it is the ground the wall drops from.
       if (run >= LIP_RUN && (f & (F_QUIET | F_CANOPY)) === 0 && y[i + w] - y[i] <= 3) ink[i] = INK_FULL;
       run = 0;
@@ -124,7 +128,7 @@ export function inkCliffs(p: Painted, isWater: Uint8Array): void {
  * breaks every stroke into dashes.
  */
 export function hatch(p: Painted, mask: Uint8Array): void {
-  const { w, h, x0, r0, flags, ink, y } = p;
+  const { w, h, x0, r0, flags, ink, y, aux } = p;
   for (let r = 0; r < h; r++) {
     const R = r0 + r;
     for (let c = 0; c < w; c++) {
@@ -137,9 +141,13 @@ export function hatch(p: Painted, mask: Uint8Array): void {
         if ((f & F_BEDDED) !== 0) {
           // The pixel's own elevation: strata sit at fixed heights.
           const elev = Math.floor((4 * y[i]) / 5) - R;
-          on = (elev & 1) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < ((elev & 3) === 0 ? 120 : 40);
+          on = aux[i] >= 2
+            ? (elev & 1) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < ((elev & 3) === 0 ? 120 : 40)
+            : (elev & 3) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < 60;
         } else {
-          on = (X & 1) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < ((X & 3) === 0 ? 110 : 36);
+          on = aux[i] >= 2
+            ? (X & 1) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < ((X & 3) === 0 ? 110 : 36)
+            : (X & 3) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < 55;
         }
       } else {
         const d = X - R;

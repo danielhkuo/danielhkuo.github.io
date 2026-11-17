@@ -15,7 +15,8 @@ export const TILE = 256;
 /** What the cover and palette side hands the bake. */
 export interface Look {
   cover(c: CoverInput, mask: Uint8Array): number;
-  scatter(c: CoverInput, groundMat: number, mask: Uint8Array, riverDist?: number): Stamp | null;
+  /** `riverDist`: cells to the nearest river due north and due south of this cell, Infinity beyond RIVER_SIGHT. */
+  scatter(c: CoverInput, groundMat: number, mask: Uint8Array, riverDist?: { north: number; south: number }): Stamp | null;
   /** Per material id: 1 for water. */
   isWater: Uint8Array;
   /** Per material id: 1 for tree crowns. */
@@ -28,7 +29,7 @@ export interface Look {
 /** Cell flags. */
 export const F_SHADOW = 0x03;
 export const F_CANOPY = 0x04;
-/** Ground slope ≥ 2: a cliff, the only ground that shows rock walls and hatching. */
+/** Ground slope ≥ STEEP_SLOPE (aux 1) or ≥ CLIFF_SLOPE (aux 2: a cliff), the only ground that shows rock walls and hatching. */
 export const F_CLIFF = 0x08;
 /** Deep in shadow cast by terrain (never by trees). */
 export const F_DEEP = 0x10;
@@ -48,7 +49,7 @@ export interface Cells {
   /** Tone 0–255 before dithering. */
   light: Uint8Array;
   flags: Uint8Array;
-  /** Water cells: shore distance 0–15 (sea, lakes) or flow phase 0–15 (rivers). */
+  /** Water cells: shore distance 0–15 (sea, lakes) or flow phase 0–15 (rivers). Steep land: hatch level 1 or 2. */
   aux: Uint8Array;
 }
 
@@ -59,13 +60,22 @@ const TREE_REACH = 4;
 const STAMP_REACH = 6;
 const BLUR_R = 8;
 const SHORE_CAP = 15;
-const RIVER_CAP = 8;
+/** Shore-distance tones run this many cells out; deeper tones follow the sea bed. */
+const SHELF = 8;
+/** Rivers are looked for this many cells due north and due south of a cell. */
+export const RIVER_SIGHT = 12;
+/** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
+export const STREAM_MAX_SLOPE = 1.2;
+/** Ground at least this steep is a cliff: it shows rock and takes hatching (the cover table draws faces from 1.7). */
+export const CLIFF_SLOPE = 1.7;
+/** Ground from this slope takes sparse hatching, so a long steep face never reads as a flat wall. */
+export const STEEP_SLOPE = 1.15;
 /** Cover is evaluated this far north-west and south-east of the core. */
 const COVER_N = TREE_REACH + STAMP_REACH;
 const COVER_S = 1 + STAMP_REACH;
 /** Heights are needed this far out. */
 const PAD_N = SHADOW_REACH + 1;
-const PAD_S = RIVER_CAP + COVER_S + 1;
+const PAD_S = RIVER_SIGHT + COVER_S + 1;
 
 const WEIGHTS: Float64Array = (() => {
   const out = new Float64Array(16);
@@ -228,6 +238,12 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run) => {
     const r = width / 2, r2 = r * r;
     const cx = Math.floor(px) - wx0, cy = Math.floor(py) - wy0;
+    if (width === 1) {
+      if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) return;
+      const k = cy * W + cx;
+      const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
+      if (sx * sx + sy * sy > STREAM_MAX_SLOPE * STREAM_MAX_SLOPE) return;
+    }
     const reach = Math.floor(r + 0.5);
     for (let yy = cy - reach; yy <= cy + reach; yy++) {
       if (yy < 0 || yy >= H) continue;
@@ -245,7 +261,25 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
     }
   });
-  if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_CAP - 1);
+  // Cells to the nearest river due north and due south, within sight.
+  const rivN = new Uint8Array(count).fill(255), rivS = new Uint8Array(count).fill(255);
+  if (rivers) {
+    for (let x = 0; x < W; x++) {
+      let d = 255;
+      for (let y = 0; y < H; y++) {
+        const i = y * W + x;
+        d = riv[i] === 0 ? 0 : d < RIVER_SIGHT ? d + 1 : 255;
+        rivN[i] = d;
+      }
+      d = 255;
+      for (let y = H - 1; y >= 0; y--) {
+        const i = y * W + x;
+        d = riv[i] === 0 ? 0 : d < RIVER_SIGHT ? d + 1 : 255;
+        rivS[i] = d;
+      }
+    }
+  }
+  const sight = { north: Infinity, south: Infinity };
 
   // 6. Cover, then scatter stamped into a crown layer.
   const cw = w + COVER_N + COVER_S, ch = h + COVER_N + COVER_S;
@@ -336,9 +370,15 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       gmat[i] = m;
       if (c.water !== 0) continue;
 
-      const rd = riv[i] / 3;
-      const st = look.scatter(c, m, mask, rd > RIVER_CAP ? RIVER_CAP : rd);
+      sight.north = rivN[i] === 255 ? Infinity : rivN[i];
+      sight.south = rivS[i] === 255 ? Infinity : rivS[i];
+      const st = look.scatter(c, m, mask, sight);
       if (!st) continue;
+      if (st.h <= 0) {
+        // A flat stamp (flowers) only recolours the ground it is rooted on.
+        gmat[i] = st.mat;
+        continue;
+      }
       // The stamp's centre in window cells, and the ground it stands on.
       let ox = st.x - c.x, oy = st.y - c.y;
       if (ox > n / 2) ox -= n; else if (ox < -n / 2) ox += n;
@@ -403,8 +443,14 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       out.surf[o] = top;
       out.mat[o] = m;
       if (water[i] !== 0) {
-        const d = Math.floor((dist[i] - 1) / 3);
-        out.aux[o] = d > SHORE_CAP ? SHORE_CAP : d < 0 ? 0 : d;
+        // Tone: cells from the shore across the shallows, then the depth of the water beyond them.
+        // Blue noise per cell breaks the steps between tones into a wash.
+        const dither = (mask[((wrap(y0 + y, n) + 91) & 255) * 256 + ((wrap(x0 + x, n) + 157) & 255)] + 0.5) / 256;
+        const d = (dist[i] - 3) / 3;
+        const depth = (water[i] === 2 ? level[i] : 0) - ground[i];
+        const far = SHELF + (depth - 1) / 3.5;
+        const v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
+        out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;
         continue;
@@ -422,7 +468,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         // Micro-relief: steep ground is ribbed by gullies running down it, drawn as light only.
         const u = wrap(x0 + x, n) / 3, v = wrap(y0 + y, n) / 4, per = n / 4;
         const rib = gradNoise(u * 0.75, v, per, 0x61b) + gradNoise(u * 0.75, v + 1, per, 0x61b) + 0.6 * gradNoise(u * 0.75 + 40.5, v + 17, per, 0x7c3);
-        bump = 0.45 * rib * (slope[i] > 1.9 ? 1 : slope[i] - 0.9);
+        bump = 1.2 * rib * (slope[i] > 1.9 ? 1 : slope[i] - 0.9);
       }
       let tone = shade(gx + bump, gy, dry[i] - blur[i], ground[i]);
       if (hasCrown) {
@@ -436,7 +482,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const canopy = hasCrown && look.isCanopy[m] === 1;
       if (canopy) flags |= F_CANOPY;
       else {
-        if (!hasCrown && slope[i] >= 2) flags |= F_CLIFF;
+        if (!hasCrown && slope[i] >= STEEP_SLOPE) {
+          // Steep ground is hatched: sparsely from STEEP_SLOPE, densely on true cliffs. The level rides in aux.
+          flags |= F_CLIFF;
+          out.aux[o] = slope[i] >= CLIFF_SLOPE ? 2 : 1;
+        }
         if (deep) flags |= F_DEEP;
       }
       if (rockAt[i] !== 0) flags |= F_BEDDED;

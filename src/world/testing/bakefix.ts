@@ -5,10 +5,9 @@ import { fileURLToPath } from "node:url";
 import type { Look } from "../bake/cells.ts";
 import { blankWorld, buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { paramsFor } from "../gen/params.ts";
-import { planWorld } from "../gen/plan.ts";
 
 export const M_SEA = 1;
-export const M_RIVER = 3;
+export const M_RIVER = 4;
 export const M_LAND = 5;
 export const M_TREE = 9;
 
@@ -19,10 +18,10 @@ export function loadMask(): Uint8Array {
 /** One land material, no scatter unless `trees` (a tall crown on every 16th cell of every 16th row). */
 export function plainLook(trees = false): Look {
   const isWater = new Uint8Array(256), isCanopy = new Uint8Array(256);
-  isWater[M_SEA] = isWater[2] = isWater[M_RIVER] = 1;
+  isWater[M_SEA] = isWater[3] = isWater[M_RIVER] = 1;
   isCanopy[M_TREE] = 1;
   return {
-    cover: (c) => (c.water === 0 ? M_LAND : c.water),
+    cover: (c) => (c.water === 0 ? M_LAND : c.water === 3 ? M_RIVER : c.water === 2 ? 3 : M_SEA),
     scatter: (c) => (trees && c.x % 16 === 3 && c.y % 16 === 3 ? { x: c.x + 0.5, y: c.y + 0.5, r: 2.5, h: 9, mat: M_TREE, shape: 0 } : null),
     isWater, isCanopy, palette: new Uint32Array(65536),
   };
@@ -45,7 +44,7 @@ let generated: BakeWorld | null = null;
 export function generatedWorld(): BakeWorld {
   if (!generated) {
     const params = paramsFor(1280);
-    generated = buildBakeWorld({ params, plan: planWorld(params, 7), seed: 7 });
+    generated = buildBakeWorld({ params, seed: 7 });
   }
   return generated;
 }
