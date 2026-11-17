@@ -12,7 +12,9 @@ import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { buildTile, F_CANOPY, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
 import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
-import { forEachRiverPoint } from "./lines.ts";
+import { imageOffset, structuresIn } from "../gen/built.ts";
+import { forEachLinePoint } from "./lines.ts";
+import type { RiverIndex } from "./world.ts";
 
 /** The tone index flat, unshadowed ground takes (render/palette.ts FLAT_TONE). */
 export const FLAT_TONE = 9;
@@ -114,7 +116,53 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
  * the line, so a river never crosses a ridge.
  */
 export function drawRivers(world: BakeWorld, tiles: TileSource, p: Painted, isWater: Uint8Array): void {
-  const n = world.n;
+  drawLines(world.rivers, world.n, tiles, p, isWater, 6);
+}
+
+/** Roads and paths, drawn the same way, one pixel wide, wherever the cells carry a road. */
+export function drawRoads(world: BakeWorld, tiles: TileSource, p: Painted): void {
+  if (!world.roads || !world.built || world.roads.segments.length === 0) return;
+  const is = new Uint8Array(256);
+  is[world.built.built.mats.path] = is[world.built.built.mats.road] = 1;
+  is[0] = 0;
+  drawLines(world.roads, world.n, tiles, p, is, 1);
+}
+
+/**
+ * Marks on built faces: windows, doors, arches, clock faces, cross arms and sails. Each is one bake pixel at the
+ * projection of (x, y, z), drawn unless something nearer the camera owns that pixel.
+ */
+export function drawMarks(world: BakeWorld, p: Painted): void {
+  const bi = world.built;
+  if (!bi) return;
+  const { w, h, x0, r0 } = p;
+  const yFirst = Math.ceil((5 * r0) / 4) - 2;
+  const yLast = Math.ceil((5 * (r0 + h + HMAX)) / 4) + 2;
+  for (const id of structuresIn(bi, x0, yFirst, x0 + w, yLast)) {
+    const s = bi.built.structures[id];
+    const marks = s.marks;
+    if (marks.length === 0) continue;
+    const ox = imageOffset(s.x, s.w, x0, world.n);
+    const oy = imageOffset(s.y, s.h, yFirst, world.n) + yFirst;
+    for (let k = 0; k + 5 <= marks.length; k += 5) {
+      const c = ox + marks[k], cy = oy + marks[k + 1];
+      const top = s.base + marks[k + 2];
+      const r = Math.floor((4 * cy) / 5) - r0 - Math.floor(top + 0.5);
+      if (c < 0 || c >= w || r < 0 || r >= h) continue;
+      const i = r * w + c;
+      if (p.y[i] > cy) continue;
+      p.mat[i] = marks[k + 3];
+      p.light[i] = marks[k + 4];
+      p.flags[i] = (p.flags[i] & F_SHADOW) | F_QUIET;
+      p.aux[i] = 0;
+      p.hidden[i] = 0;
+      p.y[i] = cy;
+      p.height[i] = top;
+    }
+  }
+}
+
+function drawLines(index: RiverIndex, n: number, tiles: TileSource, p: Painted, isWater: Uint8Array, maxWidth: number): void {
   const { w, h, x0, r0 } = p;
   const yFirst = Math.ceil((5 * r0) / 4) - 4;
   const yLast = Math.ceil((5 * (r0 + h + HMAX)) / 4) + 4;
@@ -133,7 +181,8 @@ export function drawRivers(world: BakeWorld, tiles: TileSource, p: Painted, isWa
     p.hidden[i] = 0;
   };
 
-  forEachRiverPoint(world, x0, yFirst, x0 + w, yLast, (x, y, width, _run, first) => {
+  forEachLinePoint(index, x0, yFirst, x0 + w, yLast, (x, y, width0, _run, first) => {
+    const width = width0 > maxWidth ? maxWidth : width0;
     if (first) prev = false;
     const cx = Math.floor(x), cy = Math.floor(y);
     const c = cx - x0;
@@ -205,6 +254,8 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
 export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles: TileSource, x0: number, r0: number, w: number, h: number): Uint32Array {
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
   drawRivers(world, tiles, p, look.isWater);
+  drawRoads(world, tiles, p);
+  drawMarks(world, p);
   inkOcclusion(p);
   inkCliffs(p, look.isStill ?? look.isWater);
   hatch(p, mask);

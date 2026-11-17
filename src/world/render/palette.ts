@@ -293,6 +293,26 @@ function buildSpecs(): Spec[] {
   set(M.hedgeCrown, [[0.6, 0.1, 138], [0.53, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
   set(M.wall, all([0.69, 0.012, 265]), LINE);
 
+  // Built things. Walls are seen from the south, in soft shade: their own tone carries that, so the flat colour is the lit one.
+  const BUILT = { drop: 0.34, rise: 0.5, cool: 0.06, ramp: "land" } as const;
+  set(M.whitewash, all([0.95, 0.012, 90]), BUILT);
+  set(M.plaster, all([0.86, 0.05, 75]), BUILT);
+  set(M.stone, all([0.83, 0.025, 85]), BUILT);
+  set(M.stoneDark, all([0.66, 0.02, 80]), STONE);
+  set(M.roofSlate, all([0.5, 0.03, 255]), STONE);
+  set(M.roofTile, all([0.64, 0.085, 45]), BUILT);
+  set(M.roofLead, all([0.66, 0.03, 190]), STONE);
+  set(M.timber, all([0.5, 0.05, 60]), BUILT);
+  set(M.brick, all([0.55, 0.075, 35]), BUILT);
+  set(M.opening, all([0.42, 0.03, 265]), LINE);
+  set(M.cobble, all([0.84, 0.022, 80]), PALE);
+  set(M.yew, evergreen([0.36, 0.05, 158]), CANOPY);
+  set(M.gilt, all([0.8, 0.09, 88]), LINE);
+  set(M.dial, all([0.95, 0.02, 95]), LINE);
+  set(M.lantern, all([0.93, 0.05, 98]), LINE);
+  set(M.sailcloth, all([0.93, 0.018, 85]), LINE);
+  set(M.quarry, all([0.58, 0.03, 258]), STONE);
+
   return s;
 }
 
