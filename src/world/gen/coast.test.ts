@@ -592,11 +592,19 @@ test("stamps are well formed: sizes in range, unit directions, positions inside 
     } else if (s.kind === "estuary") {
       assert.ok(s.sea >= 3 * s.head, "an estuary widens at least threefold");
       assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
-    } else {
+    } else if (s.kind === "spit") {
+      assert.ok(s.len >= c.spit.len[0] && s.len <= c.spit.len[1]);
+      assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
+      assert.ok(s.hook === 1 || s.hook === -1);
+      // Built with the drift: the wind blows from the south-west.
+      assert.ok(s.ax - s.ay > 0, "a spit grows downdrift");
+    } else if (s.kind === "delta") {
       assert.ok(s.r >= c.deltaR[0] && s.r <= c.deltaR[1]);
       assert.ok(s.channels.length === 2 || s.channels.length === 3);
       for (const k of s.channels) assert.ok(Math.abs(k) < s.spread);
-    }
+      for (let k = 1; k < s.channels.length; k++) assert.ok(s.channels[k] - s.channels[k - 1] > 0.3, "distributaries part");
+      assert.ok(s.drift === -1 || s.drift === 0 || s.drift === 1);
+    } else assert.fail(`a ${s.kind} stamp from the coast stage`);
   }
   for (const kind of ["cut", "stack", "cove", "beach", "berm", "strand", "mouth"]) assert.ok((count[kind] ?? 0) > 0, `no ${kind} stamps`);
 });

@@ -99,9 +99,10 @@ export interface EstuaryStamp {
 }
 
 /**
- * Delta: a low fan of sand built seaward from a river's mouth at (x, y) along
- * (ax, ay), split by distributaries. Each channel is the line v = k·u in the
- * fan's own axes.
+ * Delta: a low, lobed fan of silt built seaward from a river's mouth at (x, y) along (ax, ay).
+ * Two or three distributaries leave one trunk, each where the flow splits, and curve their own
+ * way to the front; a crescent bar of sand lies off each one's mouth. Nothing in it is straight:
+ * the fan's own axes are warped by noise before any edge is drawn.
  */
 export interface DeltaStamp {
   kind: "delta";
@@ -109,13 +110,63 @@ export interface DeltaStamp {
   y: number;
   ax: number;
   ay: number;
+  /** Reach of the fan seaward of the mouth; its lobes run a little past it. */
   r: number;
-  /** Half-spread as a slope: the fan covers |v| ≤ spread·u. */
+  /** How far the fan spreads along the shore to either side, against its reach (about 1 to 1.4). */
   spread: number;
   top: number;
+  /** One number per distributary: where its mouth lies across the fan, as a share of r to either side of the axis. */
   channels: readonly number[];
-  /** Half-width of a distributary, cells. */
+  /** Half-width of the largest distributary, cells. */
   channel: number;
+  /** The side (the sign of v, across the fan) longshore drift carries sand to: the mouth bars lean that way. 0 for none. */
+  drift: number;
+  seed: number;
+}
+
+/**
+ * Spit: a strand of sand that longshore drift has built out from the shore at (x, y), heading
+ * along (ax, ay). It bows, tapers to a point, and its tip recurves to the side `hook` (+1 or −1,
+ * the sign of v = dy·ax − dx·ay): the land's side, where the waves bend round the end.
+ */
+export interface SpitStamp {
+  kind: "spit";
+  x: number;
+  y: number;
+  ax: number;
+  ay: number;
+  hook: number;
+  /** Length along the heading; the recurved tip ends about 0.4 of it to the side. */
+  len: number;
+  /** Half-width at the root. */
+  width: number;
+  top: number;
+  seed: number;
+}
+
+/**
+ * Cirque: an armchair hollow cut into a slope, holding a tarn. (x, y) is the middle of the lake
+ * and (ax, ay) points downslope, to the open side. The lake is `len` long, widest (`width` to
+ * either side) near its back under the headwall, and narrows to its outlet at the lip. Ground
+ * behind and beside the lake is cut to a wall that climbs at `wall` until it meets the slope;
+ * ground in front is banked to a low lip that falls away at `fall`, lowest on the axis, where
+ * the water spills. Nothing rings the lake: the headwall is the back and the sides only.
+ */
+export interface CirqueStamp {
+  kind: "cirque";
+  x: number;
+  y: number;
+  ax: number;
+  ay: number;
+  len: number;
+  width: number;
+  /** Height of the water. */
+  level: number;
+  depth: number;
+  wall: number;
+  fall: number;
+  /** How far from the lake's edge the wall or the lip can matter. */
+  reach: number;
   seed: number;
 }
 
@@ -186,7 +237,7 @@ export interface MouthStamp {
   form: "delta" | "estuary" | "plain";
 }
 
-export type Stamp = CutStamp | StackStamp | CoveStamp | BeachStamp | EstuaryStamp | DeltaStamp | StrandStamp | LedgeStamp | BermStamp | CreekStamp | MouthStamp;
+export type Stamp = CutStamp | StackStamp | CoveStamp | BeachStamp | EstuaryStamp | DeltaStamp | SpitStamp | CirqueStamp | StrandStamp | LedgeStamp | BermStamp | CreekStamp | MouthStamp;
 
 /** Past the shelf the beach's sea bed falls away this many times faster, down to the open bathymetry. */
 const SHELF_DROP = 4;
@@ -209,6 +260,34 @@ const FLATS = 1.8;
 const FLATS_RISE = 0.08;
 /** A delta's silt apron: its centre along the axis and its radius, in fan radii, and its depth at the rim. */
 const PRODELTA: readonly [number, number, number] = [0.5, 1.2, 3.5];
+/** A delta's outline closes this far round from its axis, as a pseudo-angle: 1 is square to it, so the fan tucks a little behind the shore. */
+const DELTA_ARC = 1.25;
+/** The trunk splits between these shares of the fan's reach. */
+const DELTA_SPLIT: readonly [number, number] = [0.08, 0.24];
+/** A lobe pushes the front out where a distributary reaches it: its height as a share of r, and its half-width as a pseudo-angle. */
+const DELTA_LOBE: readonly [number, number] = [0.16, 0.17];
+/** Backwaters: still pools between the distributaries, where a noise of this many fan radii passes the threshold. */
+const DELTA_POOL: readonly [number, number] = [0.2, 0.52];
+/** A mouth bar: its half-length and its gap from the front, as shares of r, and how far its horns sweep back. */
+const BAR: readonly [number, number, number] = [0.15, 0.08, 0.28];
+/** Sand of a bar or a spit climbs from the water at this slope, so its top is flat and its edge is not a wall. */
+const SAND_RISE = 0.13;
+/** A spit bows this share of its length to the hook's side, and its tip turns in that hard past HOOK_AT of the way. */
+const SPIT_BOW = 0.16;
+const SPIT_HOOK = 2;
+const HOOK_AT = 0.6;
+/** Shoal water round a spit: its width, and its depth at the sand and at its outer edge. */
+const SPIT_SHOAL: readonly [number, number, number] = [6, 0.2, 1.6];
+/** A cirque lake is widest this share of the way from its back, and this share of its width at the outlet. */
+const CIRQUE_BELLY = 0.35;
+const CIRQUE_NECK = 0.22;
+/** The lake's bed drops to its full depth over this share of the width from the shore. */
+const CIRQUE_SHELF = 0.6;
+/** The headwall starts this far above the water, past a bench this wide; the lip stands LIP[0] above the water at the outlet and LIP[1] elsewhere, on a crest this wide. */
+const CIRQUE_FOOT = 0.5;
+const CIRQUE_BENCH = 2;
+const LIP: readonly [number, number] = [0.15, 0.45];
+const LIP_CREST = 7;
 /** Water at a strand's line and in a creek is this deep. */
 const STRAND_DEPTH = 0.03;
 const CREEK_DEPTH = 0.12;
@@ -239,6 +318,23 @@ function wobble(t: number, lane: number, seed: number): number {
   return a + (b - a) * f * f * (3 - 2 * f);
 }
 
+/** Smooth 2-D value noise in [−1, 1], fixed per (seed, lane). */
+function wobble2(x: number, y: number, lane: number, seed: number): number {
+  const i = Math.floor(x);
+  const j = Math.floor(y);
+  const fx = x - i;
+  const fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const k = (seed ^ Math.imul(lane + 1, 0x9e3779b1)) >>> 0;
+  const a = hash2(i, j, k) / 2147483648 - 1;
+  const b = hash2(i + 1, j, k) / 2147483648 - 1;
+  const c = hash2(i, j + 1, k) / 2147483648 - 1;
+  const d = hash2(i + 1, j + 1, k) / 2147483648 - 1;
+  const top = a + (b - a) * sx;
+  return top + (c + (d - c) * sx - top) * sy;
+}
+
 function smooth(t: number): number {
   return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 }
@@ -258,7 +354,11 @@ export function stampReach(s: Stamp): number {
     case "estuary":
       return s.len + FLATS * 1.3 * s.sea;
     case "delta":
-      return s.r * (PRODELTA[0] + PRODELTA[1]);
+      return s.r * (PRODELTA[0] + PRODELTA[1] + 0.1) + 8;
+    case "spit":
+      return 1.3 * s.len + s.width + SPIT_SHOAL[0] + 2;
+    case "cirque":
+      return 0.5 * s.len + 1.5 * s.width + s.reach + 6;
     case "strand":
       return s.r;
     case "berm":
@@ -324,8 +424,208 @@ export function inCreek(s: CreekStamp, dx: number, dy: number): boolean {
   return false;
 }
 
+/** Where distributary i's centre line lies across a delta's fan, u cells seaward of the mouth. All of them share the trunk until each one's split. */
+export function deltaChannel(s: DeltaStamp, i: number, u: number): number {
+  const t = u / s.r;
+  const trunk = 0.05 * s.r * wobble(2.5 * t, 0, s.seed) * smooth(t / 0.15);
+  const u0 = DELTA_SPLIT[0] + (DELTA_SPLIT[1] - DELTA_SPLIT[0]) * (hash2(i, 3, s.seed) / 4294967296);
+  const q = (t - u0) / (1 - u0);
+  if (q <= 0) return trunk;
+  // It leaves the trunk at a low angle and bends away as it goes, wandering on the way.
+  return trunk + s.channels[i] * s.r * q * (0.3 + 0.7 * q) + 0.1 * s.r * wobble(3.6 * t, i + 1, s.seed) * smooth(3 * q);
+}
+
+/** A direction as a number: 0 along the axis, ±1 square to it, ±2 straight back. Atan without the arc. */
+function bearing(u: number, v: number): number {
+  const av = v < 0 ? -v : v;
+  if (u > 0) return v / (av + u);
+  const au = -u;
+  if (av + au === 0) return 0;
+  return (v < 0 ? -1 : 1) * (2 - av / (av + au));
+}
+
+/** What a delta's shape needs per distributary; worked out once per stamp. */
+interface DeltaForm {
+  of: DeltaStamp | null;
+  /** Bearing at which each distributary reaches the front. */
+  exit: number[];
+  /** Its share of the largest one's width. */
+  share: number[];
+  /** Its mouth bar: centre in the fan's axes, the unit direction of the flow there, and its half-length. */
+  barU: number[];
+  barV: number[];
+  barCu: number[];
+  barCv: number[];
+  barLen: number[];
+}
+const FORM: DeltaForm = { of: null, exit: [], share: [], barU: [], barV: [], barCu: [], barCv: [], barLen: [] };
+
+/** Distance of the fan's front from the mouth along bearing a: an arc that closes behind the shore, lobed where the distributaries reach it. */
+function deltaFront(s: DeltaStamp, f: DeltaForm, a: number): number {
+  const q = (a < 0 ? -a : a) / DELTA_ARC;
+  if (q >= 1) return 0;
+  const q2 = q * q;
+  let front = Math.sqrt(1 - q2 * q2) * (1 - (1 - 0.46 * s.spread) * q2);
+  front *= 1 + 0.2 * wobble(2.3 * a + 5, 16, s.seed) + 0.08 * wobble(6.1 * a, 17, s.seed);
+  for (let i = 0; i < f.exit.length; i++) {
+    const z = (a - f.exit[i]) / DELTA_LOBE[1];
+    if (z > -1 && z < 1) front += DELTA_LOBE[0] * (1 - z * z) * (1 - z * z);
+  }
+  return s.r * front;
+}
+
+function deltaForm(s: DeltaStamp): DeltaForm {
+  const f = FORM;
+  if (f.of === s) return f;
+  f.of = s;
+  const count = s.channels.length;
+  f.exit.length = 0;
+  const main = hash2(9, 3, s.seed) % count;
+  const step = 0.02 * s.r;
+  for (let i = 0; i < count; i++) {
+    f.share[i] = i === main ? 1 : 0.6 + 0.25 * (hash2(i, 5, s.seed) / 4294967296);
+    let u = 0.4 * s.r;
+    let v = deltaChannel(s, i, u);
+    while (u * u + v * v < s.r * s.r && u < 2 * s.r) {
+      u += step;
+      v = deltaChannel(s, i, u);
+    }
+    f.exit[i] = bearing(u, v);
+  }
+  for (let i = 0; i < count; i++) {
+    const far = deltaFront(s, f, f.exit[i]) + BAR[1] * s.r + 2;
+    let u = 0.4 * s.r;
+    let v = deltaChannel(s, i, u);
+    while (u * u + v * v < far * far && u < 2 * s.r) {
+      u += step;
+      v = deltaChannel(s, i, u);
+    }
+    const m = (deltaChannel(s, i, u + 1) - deltaChannel(s, i, u - 1)) / 2;
+    const ml = Math.sqrt(1 + m * m);
+    f.barU[i] = u;
+    f.barV[i] = v;
+    f.barCu[i] = 1 / ml;
+    f.barCv[i] = m / ml;
+    f.barLen[i] = BAR[0] * s.r * f.share[i] * (0.85 + 0.3 * (hash2(i, 6, s.seed) / 4294967296));
+  }
+  return f;
+}
+
+const DELTA_AT = { e: 0, wet: 0, bar: 0, u: 0, v: 0 };
+
+/**
+ * Where a point (dx, dy from the mouth) lies in a delta. `e` is its distance from the mouth as a
+ * share of the front's (under 1 is on the fan); `wet` is 1 in a distributary and 2 in a backwater
+ * pool; `bar` is the height of a mouth bar's sand there, 0 off the bars. (u, v) are the fan's own
+ * warped axes. The object returned is reused by the next call.
+ */
+export function deltaAt(s: DeltaStamp, dx: number, dy: number): { e: number; wet: number; bar: number; u: number; v: number } {
+  const o = DELTA_AT;
+  const f = deltaForm(s);
+  // The warp: broad away from the mouth, so the river still meets its own trunk, and a fine fray everywhere.
+  const big = 0.07 * s.r * smooth(Math.sqrt(dx * dx + dy * dy) / (0.3 * s.r));
+  const lam = 0.22 * s.r;
+  const wx = dx + big * wobble2(dx / lam, dy / lam, 20, s.seed) + 1.2 * wobble2(dx / 5, dy / 5, 22, s.seed);
+  const wy = dy + big * wobble2(dx / lam, dy / lam, 21, s.seed) + 1.2 * wobble2(dx / 5, dy / 5, 23, s.seed);
+  const u = wx * s.ax + wy * s.ay;
+  const v = wy * s.ax - wx * s.ay;
+  o.u = u;
+  o.v = v;
+  o.wet = 0;
+  o.bar = 0;
+  const front = deltaFront(s, f, bearing(u, v));
+  const d = Math.sqrt(u * u + v * v);
+  o.e = front > 0 ? d / front : Infinity;
+  if (o.e < 1) {
+    if (u > 0) {
+      const t = u / s.r;
+      for (let i = 0; i < s.channels.length; i++) {
+        const c = deltaChannel(s, i, u);
+        const m = (deltaChannel(s, i, u + 1) - deltaChannel(s, i, u - 1)) / 2;
+        const half = Math.max(0.9, s.channel * f.share[i] * (0.75 + 0.6 * t));
+        if (Math.abs(v - c) < half * Math.sqrt(1 + m * m)) {
+          o.wet = 1;
+          return o;
+        }
+      }
+    }
+    const pool = DELTA_POOL[0] * s.r;
+    if (o.e > 0.3 && o.e < 0.7 && wobble2(dx / pool, dy / pool, 24, s.seed) > DELTA_POOL[1]) o.wet = 2;
+    return o;
+  }
+  // Mouth bars: crescents off the front, horns swept back toward the shore, the longer horn downdrift.
+  for (let i = 0; i < s.channels.length; i++) {
+    const du = u - f.barU[i];
+    const dv = v - f.barV[i];
+    const along = du * f.barCu[i] + dv * f.barCv[i];
+    const across = dv * f.barCu[i] - du * f.barCv[i] - 0.3 * s.drift * f.barLen[i];
+    const len = f.barLen[i] * (1 + 0.35 * s.drift * (across < 0 ? -1 : 1));
+    const w = across / len;
+    if (w <= -1 || w >= 1) continue;
+    const thick = (1.6 + 0.02 * s.r) * (1 - w * w);
+    const off = Math.abs(along + BAR[2] * len * w * w) - thick;
+    if (off < 0) o.bar = Math.max(o.bar, Math.min(0.45, 0.06 + SAND_RISE * -off));
+  }
+  return o;
+}
+
+/** Where a spit's centre line lies to the side of its heading, u cells along it from the root. */
+export function spitCentre(s: SpitStamp, u: number): number {
+  const t = u / s.len;
+  const k = t > HOOK_AT ? t - HOOK_AT : 0;
+  return s.hook * s.len * (SPIT_BOW * t * t + SPIT_HOOK * k * k) + 0.03 * s.len * wobble(3 * t, 0, s.seed) * smooth(2 * t);
+}
+
+/** Distance of a point (dx, dy from the root) past the edge of a spit's sand, in cells: negative on the sand, Infinity beyond either end. */
+export function spitAt(s: SpitStamp, dx: number, dy: number): number {
+  const u = dx * s.ax + dy * s.ay;
+  if (u < -0.2 * s.len || u > s.len) return Infinity;
+  const v = dy * s.ax - dx * s.ay;
+  const w = u > 0 ? u : 0;
+  const t = w / s.len;
+  const c = spitCentre(s, w);
+  const m = u > 0 ? (spitCentre(s, w + 1) - spitCentre(s, w - 1)) / 2 : 0;
+  // It tapers all the way, and the last of it comes to a point.
+  const half = s.width * (1 - 0.78 * t) * (1 + 0.18 * wobble(4 * t + 2, v > c ? 1 : 2, s.seed)) * Math.sqrt(Math.min(1, (s.len - w) / s.width));
+  return Math.abs(v - c) / Math.sqrt(1 + m * m) - half;
+}
+
+const CIRQUE_AT = { t: 0, d: 0, off: 0 };
+
+/**
+ * Where a point (dx, dy from the lake's middle) lies in a cirque. `t` runs along the lake from 0
+ * at its back, under the headwall, to 1 at the outlet; `d` is the distance outside the lake's
+ * edge in cells, negative in the water; `off` is the distance from the lake's centre line as a
+ * share of its width. The object returned is reused by the next call.
+ */
+export function cirqueAt(s: CirqueStamp, dx: number, dy: number): { t: number; d: number; off: number } {
+  const o = CIRQUE_AT;
+  // Warped, so the shore is no curve a compass could draw.
+  const wx = dx + 2.6 * wobble2(dx / 13, dy / 13, 30, s.seed) + 1.5 * wobble2(dx / 5.5, dy / 5.5, 32, s.seed);
+  const wy = dy + 2.6 * wobble2(dx / 13, dy / 13, 31, s.seed) + 1.5 * wobble2(dx / 5.5, dy / 5.5, 33, s.seed);
+  const u = wx * s.ax + wy * s.ay + 0.5 * s.len;
+  const v = wy * s.ax - wx * s.ay;
+  const t = u / s.len;
+  const tc = t < 0 ? 0 : t > 1 ? 1 : t;
+  const centre = 0.18 * s.width * wobble(2.2 * tc, 0, s.seed);
+  let half: number;
+  if (tc < CIRQUE_BELLY) {
+    const k = (CIRQUE_BELLY - tc) / CIRQUE_BELLY;
+    half = s.width * Math.sqrt(1 - k * k);
+  } else half = s.width * (1 - (1 - CIRQUE_NECK) * smooth((tc - CIRQUE_BELLY) / (1 - CIRQUE_BELLY)));
+  half *= 1 + 0.2 * wobble(3 * tc + 1, v > centre ? 1 : 2, s.seed);
+  const side = Math.abs(v - centre);
+  const lat = side - half;
+  o.t = t;
+  o.off = side / s.width;
+  if (t < 0) o.d = Math.sqrt(u * u + (lat > 0 ? lat * lat : 0));
+  else if (t > 1) o.d = Math.sqrt((u - s.len) * (u - s.len) + (lat > 0 ? lat * lat : 0));
+  else o.d = lat;
+  return o;
+}
+
 /** New height of ground at height h, offset (dx, dy) cells from the stamp. */
-function stamped(s: Stamp, h: number, dx: number, dy: number): number {
+export function stamped(s: Stamp, h: number, dx: number, dy: number): number {
   switch (s.kind) {
     case "cut": {
       const d = Math.sqrt(dx * dx + dy * dy);
@@ -378,30 +678,41 @@ function stamped(s: Stamp, h: number, dx: number, dy: number): number {
       return h;
     }
     case "delta": {
-      const u = dx * s.ax + dy * s.ay;
-      const v = dy * s.ax - dx * s.ay;
-      if (u > 0 && Math.abs(v) <= s.spread * u) {
-        const k = v / u;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        // A lobed front, and distributaries that wander and widen a little towards the sea.
-        const r = s.r * (1 + 0.3 * wobble(2.5 * k + 9, 0, s.seed));
-        if (d < r) {
-          for (let i = 0; i < s.channels.length; i++) {
-            const c = s.channels[i];
-            const line = c * u + 0.1 * u * wobble((6 * u) / s.r, i + 1, s.seed);
-            if (Math.abs(v - line) < s.channel * (1 + u / s.r) * Math.sqrt(1 + c * c)) return Math.min(h, -COVE_MIN);
-          }
-          const e = d / r;
-          return Math.max(h, s.top * (1 - e * e) + 0.05);
-        }
+      const at = deltaAt(s, dx, dy);
+      if (at.e < 1) {
+        if (at.wet === 1) return Math.min(h, -COVE_MIN);
+        // A backwater is cut only into the fan's own silt, never into the land the fan lies against.
+        if (at.wet === 2) return h < s.top + 0.3 ? Math.min(h, -0.12) : h;
+        return Math.max(h, s.top * (1 - at.e * at.e) + 0.05);
       }
+      if (at.bar > 0) return Math.max(h, at.bar);
       // The prodelta: silt shoals the sea round the fan.
       if (h > 0) return h;
-      const mx = dx - PRODELTA[0] * s.r * s.ax;
-      const my = dy - PRODELTA[0] * s.r * s.ay;
-      const dc = Math.sqrt(mx * mx + my * my);
+      const mu = at.u - PRODELTA[0] * s.r;
+      const dc = Math.sqrt(mu * mu + at.v * at.v);
       if (dc >= PRODELTA[1] * s.r) return h;
       return Math.max(h, -(COVE_MIN + PRODELTA[2] * smooth((dc - 0.45 * s.r) / ((PRODELTA[1] - 0.45) * s.r))));
+    }
+    case "spit": {
+      const d = spitAt(s, dx, dy);
+      if (d >= SPIT_SHOAL[0]) return h;
+      if (d < 0) return Math.max(h, Math.min(s.top, 0.06 + SAND_RISE * -d));
+      return h > 0 ? h : Math.max(h, -(SPIT_SHOAL[1] + ((SPIT_SHOAL[2] - SPIT_SHOAL[1]) * d) / SPIT_SHOAL[0]));
+    }
+    case "cirque": {
+      const at = cirqueAt(s, dx, dy);
+      if (at.d >= s.reach) return h;
+      const t = at.t < 0 ? 0 : at.t > 1 ? 1 : at.t;
+      if (at.d < 0) {
+        // The bed shelves from the shore and is deepest at the back, under the headwall.
+        const k = Math.min(1, -at.d / (CIRQUE_SHELF * s.width));
+        return s.level - 0.15 - s.depth * k * (2 - k) * (1 - 0.4 * t);
+      }
+      const outlet = smooth((at.t - 0.5) / 0.4) * (1 - smooth(at.off / 0.8));
+      const lip = s.level + LIP[1] - (LIP[1] - LIP[0]) * outlet - s.fall * Math.max(0, at.d - LIP_CREST);
+      const wall = s.level + CIRQUE_FOOT + s.wall * Math.max(0, at.d - CIRQUE_BENCH) + 0.04 * at.d;
+      const banked = h > lip ? h : lip;
+      return banked < wall ? banked : wall;
     }
     case "strand": {
       if (h <= 0 || dx * dx + dy * dy > s.r * s.r) return h;
@@ -421,7 +732,7 @@ function stamped(s: Stamp, h: number, dx: number, dy: number): number {
 }
 
 /** Kinds are applied in this order whatever the order of the list. */
-const ORDER: readonly Stamp["kind"][] = ["strand", "cut", "estuary", "cove", "berm", "ledge", "beach", "delta", "creek", "stack"];
+const ORDER: readonly Stamp["kind"][] = ["cirque", "strand", "cut", "estuary", "cove", "berm", "ledge", "beach", "delta", "spit", "creek", "stack"];
 
 function applyOne(h: Float64Array | Float32Array, g: StampGrid, s: Stamp, sx: number, sy: number, wrapX: boolean, wrapY: boolean): void {
   const c = g.cellsPerNode;

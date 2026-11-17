@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyStamps, applyStampsTo, type CoveStamp, coveAt, type CreekStamp, inCove, inCreek, type Stamp, stampReach } from "./stamps.ts";
+import { applyStamps, applyStampsTo, type CirqueStamp, cirqueAt, type CoveStamp, coveAt, type CreekStamp, deltaAt, deltaChannel, type DeltaStamp, inCove, inCreek, spitAt, spitCentre, type SpitStamp, type Stamp, stampReach } from "./stamps.ts";
 
 const cut: Stamp = { kind: "cut", x: 100, y: 100, r: 20, level: -2, fall: 0.1, cap: 12, slope: 0.8, reach: 40 };
 const stack: Stamp = { kind: "stack", x: 60, y: 140, r: 6, top: 18, ux: 1, uy: 0, lobe: 0, apron: 3 };
@@ -10,9 +10,13 @@ const beach: Stamp = { kind: "beach", x: 40, y: 40, land: 10, base: 0.6, rise: 0
 // An estuary with its mouth at (40, 170), the river coming from the east.
 const estuary: Stamp = { kind: "estuary", x: 40, y: 170, ax: 1, ay: 0, len: 40, head: 2, sea: 8, depth: 1.2, seed: 5 };
 // A delta built west into the sea from (40, 110).
-const delta: Stamp = { kind: "delta", x: 40, y: 110, ax: -1, ay: 0, r: 30, spread: 1.2, top: 0.7, channels: [-0.6, 0.1, 0.6], channel: 1.5, seed: 9 };
+const delta: DeltaStamp = { kind: "delta", x: 40, y: 110, ax: -1, ay: 0, r: 30, spread: 1.2, top: 0.7, channels: [-0.6, 0.1, 0.6], channel: 1.5, drift: 1, seed: 9 };
+// A spit rooted on the shore at (40, 60), heading south-west and hooking back toward the land.
+const spit: SpitStamp = { kind: "spit", x: 40, y: 60, ax: -0.6, ay: 0.8, hook: -1, len: 34, width: 4, top: 0.55, seed: 3 };
+// A cirque whose tarn lies about (150, 160), open to the south.
+const cirque: CirqueStamp = { kind: "cirque", x: 150, y: 160, ax: 0, ay: 1, len: 36, width: 13, level: 20, depth: 5, wall: 1.6, fall: 0.8, reach: 20, seed: 11 };
 const mouth: Stamp = { kind: "mouth", x: 10, y: 10, dx: 0, dy: 1, area: 5000, form: "plain" };
-const ALL: Stamp[] = [stack, beach, cut, mouth, cove, estuary, delta];
+const ALL: Stamp[] = [stack, beach, cut, mouth, cove, estuary, delta, spit, cirque];
 
 /** A 200-cell world at one cell a node: land at `land`, with sea west of x = 40. */
 function field(n: number, land: number): Float64Array {
@@ -180,19 +184,197 @@ test("a delta builds a low fan into the sea, split by its distributaries, with s
   }
   assert.ok(fan > 400, `${fan} cells of fan`);
   assert.ok(tallest <= 0.8, "the fan is low");
-  // Along a line across the fan, land is broken by three channels.
-  let runs = 0;
-  for (let y = 80, onLand = false; y < 140; y++) {
-    const land = h[y * n + 22] > 0;
-    if (land && !onLand) runs++;
-    onLand = land;
-  }
-  assert.equal(runs, 4);
   // Silt: the sea just beyond the fan is shallow, and deep again farther out.
-  assert.ok(at(h, n, 5, 110) > -4);
+  assert.ok(at(h, n, 2, 110) > -4.5);
   assert.equal(at(h, n, 10, 20), -20);
   // Land behind the mouth is not touched.
   assert.equal(at(h, n, 60, 110), 3);
+});
+
+/** Greatest distance of a line's points from the chord between its ends. */
+function bow(points: [number, number][]): number {
+  const [x0, y0] = points[0], [x1, y1] = points[points.length - 1];
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  let most = 0;
+  for (const [x, y] of points) most = Math.max(most, Math.abs((x - x0) * (y1 - y0) - (y - y0) * (x1 - x0)) / len);
+  return most;
+}
+
+test("a delta's distributaries: two or three, split from one trunk, each one curved and none on a line with another", () => {
+  for (const d of [delta, { ...delta, seed: 10, channels: [-0.5, 0.6] }, { ...delta, seed: 4321, r: 80, channels: [-0.7, 0, 0.75], channel: 3 }] as DeltaStamp[]) {
+    const count = d.channels.length;
+    assert.ok(count === 2 || count === 3);
+    // One trunk at the mouth; at the front each has gone its own way, in the order given.
+    for (let i = 1; i < count; i++) {
+      assert.ok(Math.abs(deltaChannel(d, i, 0.05 * d.r) - deltaChannel(d, 0, 0.05 * d.r)) < 1e-9, "one trunk");
+      assert.ok(deltaChannel(d, i, 0.9 * d.r) - deltaChannel(d, i - 1, 0.9 * d.r) > 0.2 * d.r, "they part");
+    }
+    for (let i = 0; i < count; i++) {
+      const line: [number, number][] = [];
+      for (let u = 0; u <= d.r; u += d.r / 40) line.push([u, deltaChannel(d, i, u)]);
+      assert.ok(bow(line) > 0.04 * d.r, `distributary ${i} bows ${bow(line).toFixed(2)} of ${d.r}`);
+      // Not a ray from the mouth: its bearing from the apex changes along it.
+      const k1 = deltaChannel(d, i, 0.45 * d.r) / 0.45, k2 = deltaChannel(d, i, 0.9 * d.r) / 0.9;
+      assert.ok(Math.abs(k1 - k2) > 0.03 * d.r, `distributary ${i} is radial`);
+    }
+    // Across the fan four fifths of the way out, the water lies in as many runs as there are distributaries.
+    let runs = 0;
+    for (let v = -1.5 * d.r, wet = false; v <= 1.5 * d.r; v += 0.25) {
+      // With the stamp's axis (−1, 0): u = −dx and v = −dy, before the warp.
+      const a = deltaAt(d, -0.8 * d.r, -v);
+      const now = a.e < 1 && a.wet === 1;
+      if (now && !wet) runs++;
+      wet = now;
+    }
+    assert.equal(runs, count);
+  }
+});
+
+test("a delta's front is lobed, not an arc or a wedge, and a bar of sand lies off it", () => {
+  const n = 200, h = field(n, 3);
+  applyStamps(h, n, 1, [delta]);
+  // Reach of the fan's land along rays from the mouth.
+  const reach: number[] = [];
+  for (let k = -6; k <= 6; k++) {
+    const dy = k / 8, dl = Math.hypot(1, dy);
+    let far = 0;
+    for (let d = 2; d < 50; d += 0.5) {
+      const a = deltaAt(delta, (-d * 1) / dl, (d * dy) / dl);
+      if (a.e < 1) far = d;
+    }
+    reach.push(far);
+  }
+  const lo = Math.min(...reach), hi = Math.max(...reach);
+  assert.ok(lo > 0.5 * delta.r && hi < 1.7 * delta.r, `${lo} to ${hi}`);
+  assert.ok(hi - lo > 0.15 * delta.r, "the front is one arc");
+  // It turns in and out along the front: more than one change of direction.
+  let turns = 0;
+  for (let i = 2; i < reach.length; i++) if ((reach[i] - reach[i - 1]) * (reach[i - 1] - reach[i - 2]) < 0) turns++;
+  assert.ok(turns >= 2, `${turns} turns`);
+  // Bars: sand off the front, low, parted from the fan by water.
+  let bar = 0;
+  for (let y = 40; y < 180; y++) for (let x = 0; x < 40; x++) {
+    const a = deltaAt(delta, x + 0.5 - 40, y + 0.5 - 110);
+    if (a.e < 1 || a.bar <= 0) continue;
+    bar++;
+    assert.ok(Math.abs(h[y * n + x] - a.bar) < 1e-9 && a.bar <= 0.45);
+  }
+  assert.ok(bar > 20, `${bar} cells of bar`);
+});
+
+test("a spit is curved, tapers to a point, and recurves at its tip toward the land", () => {
+  const n = 200, h = field(n, 3), before = h.slice();
+  applyStamps(h, n, 1, [spit]);
+  const line: [number, number][] = [];
+  for (let u = 0; u <= spit.len; u += spit.len / 40) line.push([u, spitCentre(spit, u)]);
+  // Bowed: well off the chord from root to tip.
+  assert.ok(bow(line) > 0.08 * spit.len, `bow ${bow(line)}`);
+  // Recurved: the heading at the tip has turned more than 45° from the root's, to the hook's side.
+  const m0 = (spitCentre(spit, 2) - spitCentre(spit, 0)) / 2, m1 = (spitCentre(spit, spit.len) - spitCentre(spit, spit.len - 2)) / 2;
+  assert.ok(Math.abs(m0) < 0.2, `root ${m0}`);
+  assert.ok(m1 * spit.hook > 1, `tip ${m1}`);
+  // Tapering: sand across the spit near the root is wider than near the tip, and the end is a point.
+  const across = (u: number): number => {
+    let cells = 0;
+    const c = spitCentre(spit, u);
+    for (let v = c - 12; v <= c + 12; v += 0.25) if (spitAt(spit, spit.ax * u - spit.ay * v, spit.ay * u + spit.ax * v) < 0) cells++;
+    return cells / 4;
+  };
+  // (Measured square to the heading, so the hooked tip reads wider than it is.)
+  assert.ok(across(0.1 * spit.len) > 1.5 * across(0.85 * spit.len), `${across(0.1 * spit.len)} then ${across(0.85 * spit.len)}`);
+  assert.ok(across(0.99 * spit.len) < 1.5);
+  // No straight edge: each side's outline bows too.
+  const edge: [number, number][] = [];
+  for (let u = 2; u <= spit.len - 2; u += 1) {
+    const c = spitCentre(spit, u);
+    let v = c;
+    while (spitAt(spit, spit.ax * u - spit.ay * v, spit.ay * u + spit.ax * v) < 0) v += 0.1;
+    edge.push([u, v]);
+  }
+  assert.ok(bow(edge) > 0.06 * spit.len);
+  // In the field: low sand in the sea, shoal water round it, and it only ever raises.
+  let sand = 0;
+  for (let i = 0; i < h.length; i++) {
+    assert.ok(h[i] >= before[i]);
+    if (before[i] < 0 && h[i] > 0) { sand++; assert.ok(h[i] <= spit.top); }
+  }
+  assert.ok(sand > 80 && sand < 400, `${sand} cells of sand`);
+});
+
+/** A slope that falls to the south at 0.3 a cell, 40 high at y = 160. */
+function hillside(n: number): Float64Array {
+  const h = new Float64Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) h[y * n + x] = 40 - 0.3 * (y + 0.5 - 160);
+  return h;
+}
+
+test("a cirque is an armchair: a headwall behind and beside the tarn, open downslope over a low lip", () => {
+  const n = 320;
+  const c: CirqueStamp = { ...cirque, x: 160, y: 160, level: 40 - 0.3 * 18 + 0.3, reach: 40 };
+  const h = hillside(n), before = h.slice();
+  applyStamps(h, n, 1, [c]);
+  let water = 0;
+  const rim = { back: Infinity, front: Infinity, frontAt: 0, wall: 0 };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const a = cirqueAt(c, x + 0.5 - c.x, y + 0.5 - c.y), v = h[y * n + x];
+    if (a.d < 0) {
+      water++;
+      assert.ok(v < c.level && v >= c.level - 0.15 - c.depth - 1e-9, `bed ${v}`);
+      continue;
+    }
+    // Ground at the water's edge: the lowest of it is the outlet.
+    if (a.d < 2) {
+      if (a.t < 0.6) rim.back = Math.min(rim.back, v);
+      else if (v < rim.front) { rim.front = v; rim.frontAt = a.off; }
+    }
+    // The headwall: behind the lake the ground climbs steeply to the old slope.
+    if (a.t < 0.2 && a.d > 3 && a.d < 6) rim.wall = Math.max(rim.wall, v - c.level);
+    if (a.d < 6) assert.ok(v >= c.level + 0.1, `dry ground below the water at (${x}, ${y})`);
+  }
+  assert.ok(water > 500 && water < 1400, `${water} cells of water`);
+  assert.ok(rim.front < rim.back - 0.25, `the lip (${rim.front}) is lower than the back (${rim.back})`);
+  assert.ok(rim.front <= c.level + 0.3 && rim.frontAt < 0.5, "the water spills on the axis");
+  assert.ok(rim.wall > 3, `headwall ${rim.wall}`);
+  // The back is cut into the slope and the front is banked up from it.
+  assert.ok(at(h, n, 160, 137) < at(before, n, 160, 137) - 3, "cut behind");
+  assert.ok(at(h, n, 160, 182) > at(before, n, 160, 182), "banked in front");
+  assert.equal(at(h, n, 160, 60), at(before, n, 160, 60));
+  assert.equal(at(h, n, 160, 250), at(before, n, 160, 250));
+});
+
+test("a tarn is no circle and no quad: widest toward its back, narrow at the outlet, with a ragged shore", () => {
+  const span = (c: CirqueStamp, t: number): number => {
+    let cells = 0;
+    for (let v = -40; v <= 40; v += 0.25) if (cirqueAt(c, -v, (t - 0.5) * c.len).d < 0) cells++;
+    return cells / 4;
+  };
+  for (const seed of [11, 12, 13, 14]) {
+    const c = { ...cirque, seed };
+    // The stamp opens south: across is x, along is y.
+    assert.ok(span(c, 0.35) > 1.2 * c.width, `belly ${span(c, 0.35)}`);
+    assert.ok(span(c, 0.35) > 2 * span(c, 0.95), `belly ${span(c, 0.35)}, outlet ${span(c, 0.95)}`);
+    assert.ok(span(c, 0.95) >= 1, "the outlet is open");
+    // The shore: its distance from the middle, taken round the back half, is no constant (a circle) and no two straight runs (a quad).
+    const r: number[] = [];
+    for (let k = 0; k <= 48; k++) {
+      const dx = (k - 24) / 24, dy = -Math.sqrt(1 - dx * dx) * 0.999 - 0.001;
+      let d = 0;
+      while (d < 60 && cirqueAt(c, dx * d, dy * d).d < 0) d += 0.25;
+      r.push(d);
+    }
+    // Changes of direction, flat runs aside.
+    let turns = 0;
+    for (let i = 1, last = 0; i < r.length; i++) {
+      const step = Math.sign(r[i] - r[i - 1]);
+      if (step === 0) continue;
+      if (last !== 0 && step !== last) turns++;
+      last = step;
+    }
+    assert.ok(Math.max(...r) - Math.min(...r) > 2, "round");
+    // A smooth oval's back turns once, at its far point.
+    assert.ok(turns >= 2, `${turns} turns`);
+  }
+  assert.notDeepEqual(cirqueAt({ ...cirque, seed: 12 }, 9, 3).d, cirqueAt(cirque, 9, 3).d);
 });
 
 // ── The low shore: strand, berm, ledge, creek ───────────────────────────────

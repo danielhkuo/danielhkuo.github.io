@@ -1,8 +1,8 @@
 // S4 Glacial imprint: no ice simulation, four geometric operators on G.
 // Troughs give large highland channels a parabolic U section; ribbon lakes
-// overdeepen valley floors in lake country; tarns are bowls on highland
-// slopes that open east to south-east, where the camera sees into them;
-// moraine dams are bars across valleys.
+// overdeepen valley floors in lake country; tarns lie in cirques, armchair
+// hollows cut into highland slopes that open southward, where the camera
+// sees in over the lip; moraine dams are bars across valleys.
 
 import { rngFor, type Rng } from "../core/rng.ts";
 import { torusDelta, wrapIndex } from "../core/torus.ts";
@@ -10,6 +10,7 @@ import { drainage, regionsOn } from "./field.ts";
 import { priorityFlood } from "./flood.ts";
 import { ARCHETYPE, type WorldParams } from "./params.ts";
 import type { Plan } from "./plan.ts";
+import { type CirqueStamp, cirqueAt, stamped, stampReach } from "./stamps.ts";
 
 export interface GlacialContext {
   /** Six planes of n², archetype-major, on the same grid as the heights. */
@@ -22,14 +23,14 @@ export interface GlacialContext {
 
 export interface GlacialFeature {
   kind: "lake" | "tarn" | "dam";
-  /** Centre in cells: a lake's midpoint, a tarn's bowl, the middle of a dam. */
+  /** Centre in cells: a lake's midpoint, the middle of a tarn's water, the middle of a dam. */
   x: number;
   y: number;
-  /** Cells: a lake's length, a tarn's radius, a dam's half-length. */
+  /** Cells: a lake's length, half a tarn's length, a dam's half-length. */
   size: number;
   /** Units: how far the floor was lowered, or how high the bar stands. */
   depth: number;
-  /** Unit vector: downstream for a lake or a dam, the open side of a tarn. */
+  /** Unit vector: downstream for a lake or a dam; for a tarn, downslope from its headwall to its outlet. */
   dx: number;
   dy: number;
 }
@@ -42,6 +43,8 @@ export interface GlacialResult {
   lakes: GlacialFeature[];
   tarns: GlacialFeature[];
   dams: GlacialFeature[];
+  /** One stamp per tarn, in the same order: the bake cuts them again at cell size. */
+  cirques: CirqueStamp[];
   mask: Uint8Array;
 }
 
@@ -51,10 +54,14 @@ const LAND_MIN = 0.5;
 const REGION_MARGIN = 0.1;
 /** Features keep this many of their own sizes apart. */
 const KEEP_APART = 2.5;
-/** A tarn's back wall is cut, and its rim banked, out to this many radii. */
-const TARN_REACH = 2.4;
-/** The rim stands this far above the water. */
-const TARN_RIM = 0.4;
+/** A cirque's wall and lip must meet the slope within this many lake lengths of the water. */
+const TARN_REACH = 1.6;
+/** A tarn is at least this many nodes long and holds at least as many, however small the world. */
+const TARN_NODES = 5;
+/** A tarn's half-width as a share of its length. */
+const TARN_ASPECT: readonly [number, number] = [0.3, 0.42];
+/** The water stands this far above the old ground at the outlet. */
+const TARN_LIP = 0.3;
 /** A depression shallower than this is rounding, not a lake. */
 const DEPRESSION = 1e-3;
 
@@ -281,79 +288,78 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     }
   }
 
-  // 3. Tarns: bowls on highland benches that fall east to south-east.
+  // 3. Tarns: cirques at the heads of small highland valleys, on slopes that fall
+  // southward, so the camera looks in over the lip at the headwall. Each is a
+  // stamp: cut here on G, and again at cell size by the bake.
   const tarns: GlacialFeature[] = [];
+  const cirques: CirqueStamp[] = [];
   const tn = g.tarns;
-  const tarnArea = tn.maxArea / node2;
   const tarnCands: number[] = [];
   for (let i = 0; i < nn; i++) {
-    if (!isSea[i] && regions[HL + i] >= g.mask && out[i] >= tn.minHeight && area[i] <= tarnArea && mask[i] !== GLACIAL_MASK.lake) tarnCands.push(i);
+    if (!isSea[i] && regions[HL + i] >= g.mask && out[i] >= tn.minHeight && area[i] * node2 >= tn.minArea && area[i] * node2 <= tn.maxArea && mask[i] !== GLACIAL_MASK.lake) tarnCands.push(i);
   }
   const tarnCount = pick(rng, tn.count);
+  const changed: number[] = [];
+  const heights: number[] = [];
   for (let k = 0, tries = 0; k < tarnCount && tries < 4000 && tarnCands.length > 0; tries++) {
     const c = tarnCands[rng.int(tarnCands.length)];
-    const r = Math.max(rng.range(tn.radius[0], tn.radius[1]), 1.5 * cpn);
+    const len = Math.max(rng.range(tn.length[0], tn.length[1]), TARN_NODES * cpn);
+    const width = Math.max(len * rng.range(TARN_ASPECT[0], TARN_ASPECT[1]), 0.3 * TARN_NODES * cpn);
+    const stampSeed = rng.next();
     if (blocked[c]) continue;
     const x = c % n;
     const y = (c - x) / n;
-    const q = Math.max(1, Math.round(r / cpn));
-    // Downhill across the bowl's width.
+    const q = Math.max(1, Math.round((0.5 * len) / cpn));
+    // Downhill along the lake's length.
     const gx = out[wrapIndex(x - q, y, n)] - out[wrapIndex(x + q, y, n)];
     const gy = out[wrapIndex(x, y - q, n)] - out[wrapIndex(x, y + q, n)];
     const gl = Math.sqrt(gx * gx + gy * gy);
     if (gl === 0) continue;
     const ox = gx / gl;
     const oy = gy / gl;
-    // East to south-east: between (1, 0) and (1, 1)/√2, south being +y.
-    if (!(ox > 0 && oy >= 0 && oy <= ox)) continue;
-    // A cirque sits on a bench, not on a wall: steep ground would need a quarry.
-    if (gl / (2 * q * cpn) > tn.maxSlope) continue;
-    const lip = wrapIndex(Math.round(x + (ox * r) / cpn), Math.round(y + (oy * r) / cpn), n);
+    // Open within 60° of south (+y): the headwall faces the camera.
+    if (oy < 0.5) continue;
+    // A cirque needs a slope to cut its headwall from, but a wall would need a quarry.
+    const fall = gl / (2 * q * cpn);
+    if (fall < tn.slope[0] || fall > tn.slope[1]) continue;
+    const lip = wrapIndex(Math.round(x + (ox * 0.5 * len) / cpn), Math.round(y + (oy * 0.5 * len) / cpn), n);
     if (isSea[lip] || regions[HL + lip] < g.mask || out[lip] >= out[c]) continue;
-    // The water stands part-way between the lip and the centre: the back of
-    // the bowl is cut into the slope and its front is banked up as a rim.
-    const level = out[lip] + tn.bank * (out[c] - out[lip]);
+    // The water stands at the old ground of the outlet: the lake is cut back into the slope, and only its lip is banked.
+    const level = out[lip] + TARN_LIP;
     if (level - tn.depth < LAND_MIN) continue;
-    const R = Math.ceil((TARN_REACH * r) / cpn);
-    let inside = true;
-    for (let dy = -R; dy <= R && inside; dy++) {
+    const far = TARN_REACH * len;
+    const stamp: CirqueStamp = { kind: "cirque", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, ax: ox, ay: oy, len, width, level, depth: tn.depth, wall: tn.wall, fall: tn.fall + 1.2 * fall, reach: far, seed: stampSeed };
+    const R = Math.ceil(stampReach(stamp) / cpn);
+    changed.length = 0;
+    heights.length = 0;
+    let fits = true;
+    let need = 0;
+    let wet = 0;
+    for (let dy = -R; dy <= R && fits; dy++) {
       for (let dx = -R; dx <= R; dx++) {
         const j = wrapIndex(x + dx, y + dy, n);
-        if (isSea[j] || regions[HL + j] < g.mask || blocked[j]) {
-          inside = false;
+        const v = stamped(stamp, out[j], dx * cpn, dy * cpn);
+        if (v === out[j]) continue;
+        const d = cirqueAt(stamp, dx * cpn, dy * cpn).d;
+        // Everything it moves is highland, and the wall and the lip both meet the slope within reach.
+        if (isSea[j] || regions[HL + j] < g.mask || blocked[j] || d > far - cpn) {
+          fits = false;
           break;
         }
+        if (d < 0) wet++;
+        if (d > need) need = d;
+        changed.push(j);
+        heights.push(v);
       }
     }
-    if (!inside) continue;
-    for (let dy = -R; dy <= R; dy++) {
-      for (let dx = -R; dx <= R; dx++) {
-        const d = Math.sqrt(dx * dx + dy * dy) * cpn;
-        if (d >= TARN_REACH * r) continue;
-        const j = wrapIndex(x + dx, y + dy, n);
-        // One parabola: the bowl inside r, and beyond it the back wall easing into the slope.
-        const bowl = level - tn.depth * (1 - (d * d) / (r * r));
-        if (d < r) {
-          if (out[j] !== bowl) {
-            out[j] = bowl;
-            mask[j] = GLACIAL_MASK.tarn;
-          }
-          continue;
-        }
-        if (bowl < out[j]) {
-          out[j] = bowl;
-          mask[j] = GLACIAL_MASK.tarn;
-        }
-        // The rim: ground below the water's level is banked up, falling away outside.
-        const rim = level + TARN_RIM - tn.rimSlope * (d - r);
-        if (rim > out[j]) {
-          out[j] = rim;
-          mask[j] = GLACIAL_MASK.tarn;
-        }
-      }
+    if (!fits || wet < TARN_NODES) continue;
+    for (let m = 0; m < changed.length; m++) {
+      out[changed[m]] = heights[m];
+      mask[changed[m]] = GLACIAL_MASK.tarn;
     }
-    tarns.push({ kind: "tarn", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, size: r, depth: tn.depth, dx: ox, dy: oy });
-    block(blocked, n, x, y, (KEEP_APART * 2 * r) / cpn);
+    cirques.push({ ...stamp, reach: need + cpn });
+    tarns.push({ kind: "tarn", x: (x + 0.5) * cpn, y: (y + 0.5) * cpn, size: 0.5 * len, depth: tn.depth, dx: ox, dy: oy });
+    block(blocked, n, x, y, (KEEP_APART * len) / cpn);
     k++;
   }
 
@@ -428,6 +434,6 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     }
   }
 
-  return { h: out, lakes, tarns, dams, mask };
+  return { h: out, lakes, tarns, dams, cirques, mask };
 }
 
