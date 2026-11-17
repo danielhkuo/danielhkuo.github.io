@@ -1,0 +1,91 @@
+// World generation parameters. Lengths are in cells for the 6400 world and
+// scaled by paramsFor(n); heights are absolute units and never scale.
+// These values set the land's character and are tuned on renders.
+
+export const ARCHETYPE = { home: 0, highland: 1, slate: 2, lakes: 3, karst: 4, skerry: 5 } as const;
+export type Archetype = (typeof ARCHETYPE)[keyof typeof ARCHETYPE];
+export const ARCHETYPE_COUNT = 6;
+
+export const ROCK = { hard: 0, medium: 1, soft: 2 } as const;
+
+export interface ArchetypeSpec {
+  id: Archetype;
+  /** Inclusive range of how many cores take this archetype. */
+  count: readonly [number, number];
+  /** Island length along strike, in cells. */
+  diameter: readonly [number, number];
+  /** Island width across strike as a share of its length. */
+  aspect: number;
+  /** Target peak height in units. */
+  peak: number;
+  /** Relative odds of hard, medium and soft rock within the island. */
+  rockBias: readonly [number, number, number];
+}
+
+export interface WorldParams {
+  n: number;
+  gN: number;
+  cN: number;
+  cores: { poissonR: number; archetypes: readonly ArchetypeSpec[] };
+  /** tan 25°: spines run within 25° of west–east. */
+  strike: { maxSlope: number };
+  spine: { segments: readonly [number, number]; ridges: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
+  uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number };
+  rock: { stripeWidth: readonly [number, number]; kMul: readonly [number, number, number]; kBase: number; warpCells: number };
+  regions: { blend: readonly [number, number] };
+  erode: {
+    cSteps: number;
+    gSteps: number;
+    dtC: number;
+    dtG: number;
+    eps: number;
+    jitter: number;
+    upsampleNoise: number;
+    uniformRainSteps: number;
+    stopAt: number;
+    diffusionSweeps: number;
+    /** Hillslope diffusion per archetype, in C-node units (×4 on G). */
+    d: readonly number[];
+  };
+}
+
+export function paramsFor(n: number): WorldParams {
+  if (!Number.isInteger(n) || n % 64 !== 0 || n < 256) throw new Error(`world size ${n} must be a multiple of 64, at least 256`);
+  const s = n / 6400;
+  const A = ARCHETYPE;
+  return {
+    n,
+    gN: n / 4,
+    cN: n / 8,
+    cores: {
+      poissonR: 900 * s,
+      archetypes: [
+        { id: A.highland, count: [1, 1], diameter: [2600 * s, 3000 * s], aspect: 0.7, peak: 130, rockBias: [0.7, 0.25, 0.05] },
+        { id: A.home, count: [1, 1], diameter: [1900 * s, 2200 * s], aspect: 0.75, peak: 50, rockBias: [0.15, 0.4, 0.45] },
+        { id: A.lakes, count: [1, 1], diameter: [1700 * s, 2000 * s], aspect: 0.75, peak: 95, rockBias: [0.25, 0.6, 0.15] },
+        { id: A.slate, count: [1, 1], diameter: [1300 * s, 1600 * s], aspect: 0.6, peak: 65, rockBias: [0.5, 0.0, 0.5] },
+        { id: A.karst, count: [2, 2], diameter: [1000 * s, 1300 * s], aspect: 0.7, peak: 45, rockBias: [0.85, 0.15, 0.0] },
+        { id: A.skerry, count: [5, 7], diameter: [180 * s, 380 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0] },
+      ],
+    },
+    strike: { maxSlope: 0.4663076581549986 },
+    spine: { segments: [3, 6], ridges: [2, 3], ridgeGap: 170 * s, bend: 0.25, plateau: 0.35 },
+    uplift: { scale: 1e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s },
+    rock: { stripeWidth: [300 * s, 600 * s], kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
+    regions: { blend: [100 * s, 200 * s] },
+    erode: {
+      cSteps: 150,
+      gSteps: 40,
+      dtC: 10,
+      dtG: 5,
+      eps: 1e-6,
+      jitter: 0.4,
+      upsampleNoise: 0.02,
+      uniformRainSteps: 75,
+      stopAt: 0.75,
+      diffusionSweeps: 8,
+      // home, highland, slate, lakes, karst, skerry
+      d: [0.25, 0.035, 0.09, 0.06, 0.12, 0.05],
+    },
+  };
+}
