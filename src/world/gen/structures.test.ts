@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isBuilt, isCanopy, isWater, MATERIAL as M, MATERIAL_COUNT } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
-import { bridge } from "./settle.ts";
+import { bridge, harbourWorks } from "./settle.ts";
 import * as S from "./structures.ts";
 
 /** Columns and rows that hold something standing, and the greatest height of tops and marks. */
@@ -52,6 +52,9 @@ test("every landmark stays inside its sprite box (design 5.9)", () => {
     ["windmill", S.windmill(), 9, 9, 30],
     ["ruined cathedral", S.ruinedCathedral(1), 34, 16, 26],
     ["ruined cathedral", S.ruinedCathedral(99), 34, 16, 26],
+    ["ruined cathedral, transept", S.ruinedCathedral(5, 0), 34, 16, 26],
+    ["ruined cathedral, tower", S.ruinedCathedral(5, 1), 34, 16, 26],
+    ["parish church", S.parishChurch(), 15, 8, 16],
     ["wayside cross", S.waysideCross(), 6, 6, 10],
     ["sheepfold", S.sheepfold(), 6, 6, 10],
   ];
@@ -164,6 +167,90 @@ test("a bridge: a deck from bank to bank, parapets, a hump over the water and ar
   // A low footbridge has no room for arches.
   const low = bridge(100, 200, 110, 200, 4, 5, 5, 4, 1);
   assert.equal(low.marks.filter((_, k) => k % 5 === 3 && (low.marks[k] === M.opening || low.marks[k] === M.river)).length, 0);
+});
+
+test("no two ruins or churchyards are the same: the kind changes the plan, the seed the details and the handedness", () => {
+  const differ = (a: Structure, b: Structure): number => {
+    let d = 0;
+    for (let i = 0; i < a.top.length; i++) if ((a.top[i] > 0) !== (b.top[i] > 0) || Math.abs(a.top[i] - b.top[i]) > 2) d++;
+    return d / a.top.length;
+  };
+  for (let seed = 1; seed < 40; seed++) {
+    const r0 = S.ruinedCathedral(seed, 0), r1 = S.ruinedCathedral(seed, 1);
+    wellFormed(r0, "ruin 0");
+    wellFormed(r1, "ruin 1");
+    assert.ok(differ(r0, r1) > 0.12, `ruins of seed ${seed} differ in ${differ(r0, r1)} of their cells`);
+    // Kind 1 keeps its tower: something stands over 18 on the wall row of a six-cell shaft.
+    let tall = 0;
+    for (let i = 0; i < r1.top.length; i++) if (r1.top[i] >= 18) tall++;
+    assert.ok(tall >= 8, `the tower stands (${tall} cells)`);
+    const y0 = S.churchyard(seed, 0), y1 = S.churchyard(seed, 1);
+    wellFormed(y0, "churchyard 0");
+    wellFormed(y1, "churchyard 1");
+    assert.ok(differ(y0, y1) > 0.08, `churchyards of seed ${seed} differ in ${differ(y0, y1)}`);
+    for (const y of [y0, y1]) {
+      // A cross on the bellcote, and a way from the gate in the south wall.
+      assert.ok(y.marks.some((_, k) => k % 5 === 3 && y.marks[k] === M.gilt));
+      const gate = S.gateOf(y);
+      assert.ok(gate && gate[1] >= y.h - 3, "the path reaches the south wall");
+    }
+  }
+  // Both hands occur: the yew stands west of the chapel in some yards and east in others.
+  const sides = new Set<boolean>();
+  for (let seed = 1; seed < 40; seed++) {
+    const y = S.churchyard(seed, 0);
+    let sum = 0, count = 0;
+    for (let i = 0; i < y.top.length; i++) if (y.mat[i] === M.yew) { sum += i % y.w; count++; }
+    sides.add(sum / count < y.w / 2);
+  }
+  assert.equal(sides.size, 2);
+  const m = S.mirrored(S.townHouse(77));
+  assert.deepEqual(S.mirrored(m), S.townHouse(77));
+});
+
+test("the harbour: a quay wall, a mole that turns across the basin's mouth with a light on its head, a pier on the river's side", () => {
+  for (const river of [-1, 1]) {
+    const h = harbourWorks(river);
+    wellFormed(h, "harbour");
+    const at = (x: number, y: number): number => h.top[y * h.w + x];
+    // The quay wall runs the length of the quay, but for the stair.
+    let wall = 0;
+    for (let x = 6; x < 78; x++) if (at(x, 2) >= 2.4) wall++;
+    assert.ok(wall >= 66, `quay wall ${wall}`);
+    // The mole leaves the quay at the end away from the river and comes back across the basin.
+    const far = 42 - river * 34;
+    assert.ok(at(far, 8) > 2, "the mole's first leg");
+    assert.ok(at(42 - river * 10, 24) > 2, "the mole's long arm");
+    assert.equal(at(42, 12), 0, "open water in the basin");
+    assert.equal(at(42 + river * 20, 24), 0, "the mouth is open");
+    assert.ok(at(42 + river * 34, 8) > 2, "the pier");
+    // The seaward edge carries a parapet, a step above the walk.
+    let parapet = 0;
+    for (let i = 0; i < h.top.length; i++) if (h.top[i] > 3.5 && h.top[i] < 4) parapet++;
+    assert.ok(parapet > 30, `parapet ${parapet}`);
+    assert.equal(h.marks.filter((_, k) => k % 5 === 3 && h.marks[k] === M.lantern).length, 1);
+    // Nothing is of timber: no legs under a slab.
+    for (let i = 0; i < h.top.length; i++) if (h.top[i] > 0) assert.notEqual(h.mat[i], M.timber);
+  }
+});
+
+test("staging: a precinct leaves the way in open and the building's box clear; a copse keeps its middle open", () => {
+  const p = S.precinct(66, 46, 34, 16, 9, 0, 1);
+  assert.equal(p.onGround, true);
+  let walls = 0, trees = 0;
+  for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+    const t = p.top[y * p.w + x];
+    if (t <= 0) continue;
+    if (isCanopy[p.mat[y * p.w + x]]) trees++;
+    else walls++;
+    assert.ok(!(Math.abs(x - 32.5) < 15 && Math.abs(y - 22.5) < 6 && t > 2), "nothing tall inside the building's box");
+    if (y > 23 && Math.abs(x - 32.5) < 3) assert.ok(!(t > 1 && !isCanopy[p.mat[y * p.w + x]] && y > 31), "no wall across the way in");
+  }
+  assert.ok(walls > 30 && trees > 20, `${walls} wall cells, ${trees} crown cells`);
+  const c = S.copse(58, 46, 18, 12, 4);
+  for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) {
+    if (c.top[y * c.w + x] > 0) assert.ok((x - 28.5) * (x - 28.5) + (y - 22.5) * (y - 22.5) > 13 * 13, "the middle is open");
+  }
 });
 
 test("builders are deterministic", () => {

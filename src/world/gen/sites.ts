@@ -66,8 +66,13 @@ export interface SiteRules {
   abbey: { above: readonly [number, number]; riverWidth: number; within: number; crownSlope: number };
   town: { exposure: number; rise: readonly [number, number]; within: number; mouthWithin: number; beach: number; opening: readonly [number, number]; fetch: number };
   lighthouse: { open: number; exposure: number; cliff: readonly [number, number]; stackTop: number };
-  windmill: { prominence: number; wind: number; height: readonly [number, number]; alongSlope: number };
-  bridge: { width: number; level: number; deck: readonly [number, number] };
+  /**
+   * `knoll`, when given, also admits a mill among its corn: a rise of at least `prominence` standing `height`
+   * or more up, with at least `corn` of the ground within 40 cells gentle and farmable.
+   */
+  windmill: { prominence: number; wind: number; height: readonly [number, number]; alongSlope: number; knoll?: { prominence: number; height: number; corn: number } };
+  /** `clear`: no other reach meets or passes the river within this many cells of the deck. */
+  bridge: { width: number; level: number; deck: readonly [number, number]; clear: number };
   cathedral: { hand: number; slope: number; floor: number; hills: number; hillsWithin: number; river: readonly [number, number] };
   yew: { prominence: readonly [number, number]; alone: number };
 }
@@ -96,7 +101,7 @@ export function siteRules(n: number): SiteRules {
     town: { exposure: 0.3, rise: [25, 45], within: 120, mouthWithin: 160, beach: 30, opening: [40, 120], fetch: 400 },
     lighthouse: { open: 220, exposure: 0.6, cliff: [12, 35], stackTop: 4 },
     windmill: { prominence: 8, wind: 0.7, height: [20, 50], alongSlope: 0.1 },
-    bridge: { width: 3, level: 2, deck: [1.5, 14] },
+    bridge: { width: 3, level: 2, deck: [1.5, 14], clear: 48 },
     cathedral: { hand: 4, slope: 0.05, floor: 60, hills: 25, hillsWithin: 250, river: [30, 80] },
     yew: { prominence: [6, 15], alone: 120 },
   };
@@ -116,7 +121,8 @@ export function builtRules(n: number): SiteRules {
     homeRiver: [600 * k, 2000 * k],
     abbey: { ...r.abbey, above: [8, 45] },
     lighthouse: { ...r.lighthouse, open: 180, exposure: 0.5, cliff: [6, 35] },
-    windmill: { ...r.windmill, prominence: 4, wind: 0.5, height: [12, 60] },
+    // The ridges this land makes stand in heath and wood, far from any corn: a mill may also take a knoll among the fields.
+    windmill: { ...r.windmill, prominence: 4, wind: 0.5, height: [12, 60], knoll: { prominence: 2, height: 5, corn: 0.12 } },
     // A true valley floor comes first: the river may be further off and the floor narrower, but hills stand close on both sides.
     cathedral: { hand: 5, slope: 0.1, floor: 32, hills: 12, hillsWithin: 320, river: [20, 320] },
     yew: { prominence: [4, 18], alone: 80 },
@@ -399,6 +405,11 @@ export function isOpenCover(m: number): boolean {
   return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.wheatRow && m <= M.stubbleRow);
 }
 
+/** Ground a plough could work: meadow, pasture or crops; never heath, moor, scrub or wood. */
+export function isFarmable(m: number): boolean {
+  return (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.pastureWarm) || (m >= M.wheatRow && m <= M.stubbleRow);
+}
+
 /** Mean slope and height range of the node block of half-sizes (hw, hd). */
 function blockShape(c: SiteContext, gx: number, gy: number, hw: number, hd: number): { slope: number; range: number; land: boolean } {
   let s = 0, lo = Infinity, hi = -Infinity, land = true, count = 0;
@@ -648,13 +659,24 @@ function windmillCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] 
     cap: `height ≤ ${r.heightCap}`,
   };
   for (const rule of Object.values(L)) tally.declare(rule);
+  const knoll = r.windmill.knoll;
+  // Corn to grind: the share of the ground within 40 cells that is gentle and farmable.
+  const cornBy = (gx: number, gy: number): number => {
+    let corn = 0;
+    for (let k = 0; k < 16; k++) for (const q of [4, 7, 10]) {
+      const nx = Math.floor(gx + 0.5 + RX[k] * q), ny = Math.floor(gy + 0.5 + RY[k] * q), j = idx(c, nx, ny);
+      if (!c.isSea[j] && c.lakeId[j] < 0 && c.rw[j] === 0 && c.slope[j] < 0.12 && isFarmable(coverAtNode(c, nx, ny))) corn++;
+    }
+    return corn / 48;
+  };
   for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
     const i = gy * gN + gx;
     const level = c.h[i];
-    if (c.isSea[i] || level < r.windmill.height[0] || level > r.windmill.height[1] || c.rw[i] > 0 || c.lakeId[i] >= 0) continue;
-    tally.pass(L.height);
+    if (c.isSea[i] || level < (knoll ? Math.min(knoll.height, r.windmill.height[0]) : r.windmill.height[0]) || level > r.windmill.height[1] || c.rw[i] > 0 || c.lakeId[i] >= 0) continue;
+    const ridge = level >= r.windmill.height[0];
+    if (ridge) tally.pass(L.height);
     if (c.wind[(gy >> 1) * cN + (gx >> 1)] < r.windmill.wind) continue;
-    tally.pass(L.wind);
+    if (ridge) tally.pass(L.wind);
     let sum = 0, count = 0, higher = false;
     for (let dy = -7; dy <= 7 && !higher; dy++) for (let dx = -7; dx <= 7; dx++) {
       if (dx * dx + dy * dy > 56) continue;
@@ -663,7 +685,16 @@ function windmillCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] 
       sum += v > 0 ? v : 0;
       count++;
     }
-    if (higher || level - sum / count < r.windmill.prominence) continue;
+    if (higher) continue;
+    const prom = level - sum / count;
+    const crest = ridge && prom >= r.windmill.prominence;
+    let corn = -1;
+    if (!crest) {
+      // Not a ridge crest: a knoll among cornland will do.
+      if (!knoll || prom < knoll.prominence) continue;
+      corn = cornBy(gx, gy);
+      if (corn < knoll.corn) continue;
+    }
     tally.pass(L.crest);
     let along = Infinity;
     for (let k = 0; k < 8; k++) {
@@ -680,7 +711,9 @@ function windmillCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] 
     tally.pass(L.seen);
     if (level + BOX.windmill.h > r.heightCap) continue;
     tally.pass(L.cap);
-    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: (level - sum / count) / 8 + c.wind[(gy >> 1) * cN + (gx >> 1)] + (1 - along / r.windmill.alongSlope) });
+    if (corn < 0) corn = cornBy(gx, gy);
+    // A mill with corn round it comes before one on a bare ridge, however fine the crest.
+    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: Math.min(1.5, prom / 8) + c.wind[(gy >> 1) * cN + (gx >> 1)] + (1 - along / r.windmill.alongSlope) + 4 * corn });
   }
   return out;
 }
@@ -800,16 +833,45 @@ function yewCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
   return out;
 }
 
+/** Where reaches meet: the point, and the width of the lesser stream that joins there (0 when only one reach arrives). */
+function confluences(c: SiteContext): { x: number; y: number; minor: number }[] {
+  const first = new Map<number, number>(), second = new Map<number, number>(), at = new Map<number, [number, number]>();
+  for (const r of c.reaches) {
+    if (r.endsIn !== "reach" || r.vertices.length < 4) continue;
+    const e = r.vertices.length - 4, w = r.vertices[e + 2], a = first.get(r.downstream);
+    if (a === undefined) { first.set(r.downstream, w); at.set(r.downstream, [r.vertices[e], r.vertices[e + 1]]); }
+    else if (w > a) { second.set(r.downstream, a); first.set(r.downstream, w); }
+    else if (w > (second.get(r.downstream) ?? 0)) second.set(r.downstream, w);
+  }
+  const out: { x: number; y: number; minor: number }[] = [];
+  for (const [id, p] of at) out.push({ x: p[0], y: p[1], minor: second.get(id) ?? 0 });
+  return out;
+}
+
+/** How many separate channels cross the square ring of half-side `r` nodes round a node: two for a single river passing through. */
+function channelsRound(c: SiteContext, gx: number, gy: number, r: number): number {
+  const wet: number[] = [];
+  for (let k = -r; k < r; k++) wet.push(c.rw[idx(c, gx + k, gy - r)]);
+  for (let k = -r; k < r; k++) wet.push(c.rw[idx(c, gx + r, gy + k)]);
+  for (let k = r; k > -r; k--) wet.push(c.rw[idx(c, gx + k, gy + r)]);
+  for (let k = r; k > -r; k--) wet.push(c.rw[idx(c, gx - r, gy + k)]);
+  let runs = 0;
+  for (let k = 0; k < wet.length; k++) if (wet[k] > 0 && wet[(k + wet.length - 1) % wet.length] === 0) runs++;
+  return runs;
+}
+
 function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
   const out: Cand[] = [];
   const L = {
     river: `river of w ≥ ${r.bridge.width} running north–south, so the deck is seen side-on`,
     dry: "abutments on dry land",
+    single: `a single reach: no confluence within ${r.bridge.clear}`,
     level: `abutments level within ${r.bridge.level}`,
     deck: `deck ${r.bridge.deck[0]}–${r.bridge.deck[1]} above the water`,
     seen: `visibility ≥ ${r.visible}`,
   };
   for (const rule of Object.values(L)) tally.declare(rule);
+  const meets = confluences(c);
   for (const reach of c.reaches) {
     const v = reach.vertices;
     let run = 0, lastPick = -Infinity;
@@ -837,11 +899,33 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       const fa = idx(c, Math.floor((ax - nx * 8) / 4), Math.floor((ay - ny * 8) / 4)), fb = idx(c, Math.floor((bx + nx * 8) / 4), Math.floor((by + ny * 8) / 4));
       if (c.rw[fa] > 0 || c.rw[fb] > 0 || c.isSea[fa] || c.isSea[fb]) continue;
       tally.pass(L.dry);
+      // One river under the deck: no tributary joins within `clear`, no rill within sight of the arches,
+      // and few rills in that stretch.
+      // `apart` is measured out to four times `clear`: the further from any confluence, the better the site scores.
+      const far = 4 * r.bridge.clear;
+      let apart = far, rills = 0;
+      for (const m of meets) {
+        const dx = torusDelta(px, m.x, c.n), dy = torusDelta(py, m.y, c.n);
+        if (dx > far || dx < -far || dy > far || dy < -far || m.minor <= 0) continue;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= far) continue;
+        if (d < r.bridge.clear) rills++;
+        // A rill is a thin line: it counts only close by.
+        const eff = m.minor >= 1.15 ? d : 4 * d;
+        if (eff < apart) apart = eff;
+      }
+      if (apart < r.bridge.clear || rills > 4) continue;
+      // And by the water itself, whatever the reaches are called (a braid, a lake's outflow): one channel in, one out.
+      const bgx = Math.floor(px / 4), bgy = Math.floor(py / 4);
+      if (channelsRound(c, bgx, bgy, 4) > 2 || channelsRound(c, bgx, bgy, 7) > 2) continue;
+      tally.pass(L.single);
       const ha = heightAt(c, ax, ay), hb = heightAt(c, bx, by), water = v[k + 3];
       if (Math.abs(ha - hb) > r.bridge.level) continue;
       tally.pass(L.level);
       const deck = Math.max(ha, hb) + 1 - water;
-      if (deck < r.bridge.deck[0] || deck > r.bridge.deck[1] || c.slope[fa] > 0.35 || c.slope[fb] > 0.35) continue;
+      // Banks a road can come down: gentle ones first, a gorge's sides only when the land offers nothing else.
+      const bank = Math.max(c.slope[fa], c.slope[fb]);
+      if (deck < r.bridge.deck[0] || deck > r.bridge.deck[1] || bank > 0.6) continue;
       tally.pass(L.deck);
       const gx = Math.floor(px / 4), gy = Math.floor(py / 4);
       const seen = seenShare(c, gx, gy, 3, 1, water, deck);
@@ -851,7 +935,7 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       out.push({
         gx, gy, x: px, y: py, level: water + deck,
         // Best side-on to the camera: a deck running east–west shows its arches.
-        score: w / 3 + 2 * nx * nx + 1 - Math.abs(ha - hb) / r.bridge.level + seen.box - (deck > 8 ? (deck - 8) / 6 : 0),
+        score: w / 3 + 2 * nx * nx + 1 - Math.abs(ha - hb) / r.bridge.level + seen.box - (deck > 8 ? (deck - 8) / 6 : 0) + 3 * Math.min(1, apart / (4 * r.bridge.clear)) - (bank > 0.35 ? 1 + 4 * (bank - 0.35) : 0) - 1.5 * Math.max(0, channelsRound(c, gx, gy, 11) - 2),
         extra: { span: { ax, ay, bx, by, water, width: w } },
       });
     }
@@ -878,9 +962,10 @@ function thin(c: SiteContext, cands: Cand[], apart: number, keep: number): Cand[
 }
 
 /** Where the road leaves the pad: the gentlest way out, with a lean to the south, where the camera sees it. */
-function approachOf(c: SiteContext, x: number, y: number, level: number, pad: { w: number; d: number }): { facing: readonly [number, number]; x: number; y: number } {
+function approachOf(c: SiteContext, x: number, y: number, level: number, pad: { w: number; d: number }, southOnly = false): { facing: readonly [number, number]; x: number; y: number } {
   let best = 4, bestCost = Infinity;
-  for (let k = 0; k < 16; k += 2) {
+  // A building whose door or gate faces the camera is reached from the south-east, south or south-west.
+  for (let k = southOnly ? 2 : 0; k < (southOnly ? 8 : 16); k += 2) {
     const edge = Math.abs(RX[k]) * pad.w / 2 + Math.abs(RY[k]) * pad.d / 2;
     let cost = 0;
     for (let q = 1; q <= 5; q++) {
@@ -908,16 +993,16 @@ function place(c: SiteContext, type: LandmarkType, k: number, q: Cand): PlacedSi
     const len = Math.sqrt((s.bx - s.ax) * (s.bx - s.ax) + (s.by - s.ay) * (s.by - s.ay));
     pad = { w: Math.ceil(len), d: 6, round: false };
     facing = [(s.ax - s.bx) / len, (s.ay - s.by) / len];
-    approach = { x: s.ax, y: s.ay, road: true };
+    approach = { x: wrap(s.ax, c.n), y: wrap(s.ay, c.n), road: true };
   } else if (type === "town" && extra.harbour) {
     // The coast road comes in along the shore from the river's side.
     const side = torusDelta(q.x, extra.harbour.mouthX, c.n) < 0 ? -1 : 1;
     facing = [0, 1];
-    approach = { x: q.x + side * (box.w / 2 - 6), y: extra.harbour.y - 14, road: true };
+    approach = { x: wrap(q.x + side * (box.w / 2 - 6), c.n), y: wrap(extra.harbour.y - 14, c.n), road: true };
   } else if (extra.stack) {
     approach = { x: q.x, y: q.y, road: false };
   } else {
-    const a = approachOf(c, q.x, q.y, q.level, pad);
+    const a = approachOf(c, q.x, q.y, q.level, pad, type === "yew" || type === "windmill" || type === "cathedral");
     facing = a.facing;
     approach = { x: a.x, y: a.y, road: true };
   }
@@ -1067,7 +1152,7 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
         }
       }
       chosen.length = 0;
-      budget = 300000;
+      budget = 2000000;
       deepest = 0;
       blame = null;
       found = feasible(0) && search(0, 0);

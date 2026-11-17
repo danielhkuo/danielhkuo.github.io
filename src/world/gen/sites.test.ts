@@ -181,6 +181,26 @@ test("bridge: a river of w ≥ 3 between level banks, its deck across the flow",
   assert.match(failure(() => placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 900, 2, 5)] }), only({ bridge: 1 }))).message, /bridge: river of w ≥ 3/);
 });
 
+test("bridge: never at a confluence — a tributary joining near every crossing rejects the river, one far off does not", () => {
+  // The trunk in twelve reaches, a tributary of w 2 joining at each joint, 68 cells apart: no point is 40 cells from a confluence.
+  const side = (id: number, y: number, downstream: number): SiteReach => {
+    const v: number[] = [];
+    for (let x = 300; x <= 500; x += 4) v.push(x, y, 2, 5);
+    return { id, downstream, endsIn: "reach", lake: -1, fromLake: -1, vertices: v };
+  };
+  const busy: SiteReach[] = [];
+  for (let k = 0; k < 12; k++) {
+    const y0 = k === 0 ? 100 : 64 + 68 * k, y1 = k === 11 ? 900 : 132 + 68 * k;
+    busy.push(reachDown(k, 500, y0, y1, 3, 5, k === 11 ? "sea" : "reach", k + 1));
+    if (k < 11) busy.push(side(20 + k, y1, k + 1));
+  }
+  assert.match(failure(() => placeSites(fields({ height: valley, hand: valleyHand, reaches: busy }), only({ bridge: 1 }))).message, /bridge: a single reach/);
+  // One confluence only: the bridge stands, at least 40 cells from it.
+  const one = placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 500, 3, 5, "reach", 1), reachDown(1, 500, 500, 900, 3, 5), side(10, 500, 1)] }), only({ bridge: 1 }));
+  const s = one.sites[0];
+  assert.ok(Math.abs(s.y - 500) >= 40, `bridge at y ${s.y}`);
+});
+
 /**
  * An island with a bay in its south shore between two headlands, a hillside rising behind the bay to a
  * plateau, and a river that runs down the west of it into the bay.
