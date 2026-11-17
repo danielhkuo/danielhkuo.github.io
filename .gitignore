@@ -49,3 +49,6 @@ next-env.d.ts
 # Delete these folders freely; nothing builds from them.
 /aujournuit-main
 /sneaky-times-main
+
+# world generator stage caches and renders
+/.cache/
