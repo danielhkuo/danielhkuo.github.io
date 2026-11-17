@@ -17,6 +17,8 @@ import type { Settlement } from "../gen/settle.ts";
 import { cachedTerrain } from "./worldcache.ts";
 import type { Plan } from "../gen/plan.ts";
 import { createView } from "../runtime/view.ts";
+import { bakeWindow, tileCache } from "../bake/chunk.ts";
+import { gridScore, inkShare, repeatScore, toneExtremes, toneImage } from "./gates.ts";
 import { encodePng } from "./png.ts";
 
 export const VIEW_W = 400;
@@ -173,6 +175,8 @@ export function renderWorld(opts: RenderOptions): RenderResult {
     ...(opts.extra ?? []),
   ];
   const frames: Uint32Array[] = [];
+  const gateTiles = tileCache(world, look, mask, 24);
+  const allGates: Record<string, number | string>[] = [];
   const files: string[] = [];
   for (const [k, vp] of points.entries()) {
     // Centre on the ground itself: it is drawn `e` pixels above its sea-level position.
@@ -184,7 +188,16 @@ export function renderWorld(opts: RenderOptions): RenderResult {
     writeFileSync(join(dir, `${base}.png`), encodePng(bytes(out), VIEW_W, VIEW_H));
     writeFileSync(join(dir, `${base}@3x.png`), encodePng(bytes(upscale(out, VIEW_W, VIEW_H, 3)), VIEW_W * 3, VIEW_H * 3));
     files.push(join(dir, `${base}@3x.png`));
-    log(`${base}: cell (${vp.x}, ${vp.y}) height ${vp.e.toFixed(1)}`);
+    // Gates, on the bake pixels of a 512 × 256 window on the same centre.
+    const r = view.rect();
+    const gx = r.x + (VIEW_W >> 1) - 256, gy = r.y + (VIEW_H >> 1) - 128;
+    const px = bakeWindow(world, look, mask, gateTiles, gx, gy, 512, 256);
+    const tone = toneImage(px);
+    const sq = new Float32Array(256 * 256);
+    for (let y = 0; y < 256; y++) sq.set(tone.subarray(y * 512 + 128, y * 512 + 384), y * 256);
+    const gates = { ink: inkShare(px, look.isWater), toneExtremes: toneExtremes(px), grid: gridScore(sq, 256), repeat: repeatScore(tone, 512, 256, [128, 256]) };
+    allGates.push({ view: base, ...gates });
+    log(`${base}: cell (${vp.x}, ${vp.y}) height ${vp.e.toFixed(1)}  ink ${(100 * gates.ink).toFixed(2)}%  tone-extremes ${(100 * gates.toneExtremes).toFixed(2)}%  grid ${gates.grid.toFixed(2)}  repeat ${gates.repeat.toFixed(2)}`);
   }
 
   // Contact sheet: three across at ×2.
@@ -199,6 +212,7 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   writeFileSync(join(dir, "contact.png"), encodePng(bytes(sheet), sw, sh));
   files.push(join(dir, "contact.png"));
 
+  writeFileSync(join(dir, "metrics.json"), JSON.stringify(allGates, null, 2));
   const st = view.stats();
   const msPerChunk = st.chunks ? st.bakeMs / st.chunks : 0;
   log(`baked ${st.chunks} chunks, ${msPerChunk.toFixed(1)} ms per chunk (tiles included)`);

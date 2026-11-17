@@ -11,6 +11,7 @@ import { MATERIAL as M } from "../look/materials.ts";
 import { featureFor, type LandmarkType } from "../sites/assign.ts";
 import { type Built, type Conform, conformed, conformGrid, ROAD_PIECE, type RoadLine, type Structure } from "./built.ts";
 import { ARCHETYPE } from "./params.ts";
+import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
 import { builtRules, heightAt, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules } from "./sites.ts";
 import * as S from "./structures.ts";
@@ -69,6 +70,8 @@ interface Work {
   terraces: Conform[];
   /** G nodes a lane may not cross: pads and yards. */
   blocked: Uint8Array;
+  /** Where each path node already laid ended up after smoothing, so lanes that share a way share one line. */
+  laid: Map<number, [number, number]>;
 }
 
 function node(c: SiteContext, x: number, y: number): number {
@@ -158,14 +161,20 @@ export function bridge(ax: number, ay: number, bx: number, by: number, water: nu
 /** Mean ground over a pad of half-sizes (rx, ry): the level that cuts as much as it fills. */
 function padLevel(w: Work, x: number, y: number, rx: number, ry: number): number {
   let sum = 0, count = 0;
-  for (let dy = -ry; dy <= ry; dy += 4) for (let dx = -rx; dx <= rx; dx += 4) { sum += heightAt({ h: w.g, gN: w.c.gN }, x + dx, y + dy); count++; }
-  return sum / count;
+  for (let dy = -ry; dy <= ry; dy += 4) for (let dx = -rx; dx <= rx; dx += 4) {
+    // Sea bed under a headland's pad is no part of its level.
+    if (w.c.isSea[node(w.c, x + dx, y + dy)]) continue;
+    sum += heightAt({ h: w.g, gN: w.c.gN }, x + dx, y + dy);
+    count++;
+  }
+  return count ? sum / count : heightAt({ h: w.g, gN: w.c.gN }, x, y);
 }
 
 function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
   const { x, y } = site;
   const box = site.pad;
-  const level = site.type === "bridge" || site.type === "town" || site.stack ? site.level : padLevel(w, x, y, box.w / 2, box.d / 2);
+  // Within 3 of the ground the site was scored at, so the pad stays the place that passed the rules.
+  const level = site.type === "bridge" || site.type === "town" || site.stack ? site.level : Math.max(site.level - 3, Math.min(site.level + 3, padLevel(w, x, y, box.w / 2, box.d / 2)));
   site.level = level;
   const seed = hash2(Math.floor(x), Math.floor(y), w.seed);
   if (site.type === "bridge" && site.span) {
@@ -314,7 +323,7 @@ function standTown(w: Work, site: PlacedSite): void {
       const hs = S.townHouse(hsh);
       const q = Math.sqrt(((x + hs.w / 2 - hx) * (x + hs.w / 2 - hx)) / (76 * 76) + ((south - (shore - 44)) * (south - (shore - 44))) / (66 * 66));
       const gap = (hsh >>> 20) % 8 === 0 ? 3 : (hsh >>> 23) % 3 === 0 ? 1 : 0;
-      const cx = x + hs.w / 2, cy = south - hs.h / 2 + 0.5;
+      const cx = x + hs.w / 2;
       const onPiazza = Math.abs(cx - tx) < 10 + hs.w / 2 && south > ty - 7 && south - hs.h < ty + 10;
       const base = groundAt(w, cx, south);
       const back = groundAt(w, cx, south - hs.h);
@@ -405,6 +414,7 @@ function standHamlet(w: Work, hm: Hamlet): void {
     if (!dry(w, cx, cy) || !dry(w, cx - 4, cy) || !dry(w, cx + 4, cy) || !dry(w, cx, cy + 4) || c.slope[node(c, cx, cy)] > 0.3) continue;
     const hs = S.countryHouse(hsh >>> 4, slate);
     const base = groundAt(w, cx, cy + hs.h / 2);
+    if (base < 1) continue;
     addConform(w, flat(cx, cy, hs.w / 2 + 1, hs.h / 2 + 1, false, base, 3, 1.5));
     w.structures.push(S.standAt(hs, cx, cy, base));
     stood++;
@@ -477,8 +487,8 @@ function standQuarry(w: Work, hm: Hamlet): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Lanes. A stand-in for gen/roads.ts: least-cost paths on G between the sites and hamlets of each island,
-// joined as a minimum spanning tree, with a bridge wherever a lane crosses a river of w ≥ 2.
+// Lanes: the road network of gen/roads.ts over the sites and hamlets of each island, with a bridge wherever a
+// lane crosses a river of w ≥ 2. findPath is a looser pathfinder for the stops that network cannot reach.
 
 interface Stop {
   x: number;
@@ -554,57 +564,122 @@ function subdivide(pts: number[], width: number): RoadLine {
   return { width, vertices: v };
 }
 
+/** gen/roads.ts parameters (design S10). */
+export const ROAD_PARAMS: RoadParams = { gradeMax: 0.12, slopeCost: 40, southBonus: 0.15, bridgeCost: 50, maxBridgeWidth: 4, turnCost: 2, extraEdges: 0 };
+
+/**
+ * The road network over the stops (gen/roads.ts: a spanning tree plus a fifth more edges per island), turned
+ * into road lines and bridges. The two ends of a reserved bridge are always joined by its deck. A stop the
+ * network cannot reach under the 12 % grade limit is joined by the stand-in pathfinder, which allows steeper lanes.
+ */
 function layLanes(w: Work, stops: Stop[]): RoadLine[] {
   const c = w.c, gN = c.gN, n = c.n;
   const roads: RoadLine[] = [];
-  const islands = new Map<number, number[]>();
-  stops.forEach((s, k) => { if (s.island >= 0) islands.set(s.island, [...(islands.get(s.island) ?? []), k]); });
-  for (const members of islands.values()) {
-    if (members.length < 2) continue;
-    // Prim's tree on straight-line distance.
-    const inTree = new Uint8Array(members.length), best = new Float64Array(members.length).fill(Infinity), link = new Int32Array(members.length).fill(-1);
-    best[0] = 0;
-    for (let round = 0; round < members.length; round++) {
-      let u = -1;
-      for (let k = 0; k < members.length; k++) if (!inTree[k] && (u < 0 || best[k] < best[u])) u = k;
-      inTree[u] = 1;
-      const a = stops[members[u]];
-      if (link[u] >= 0) {
-        const b = stops[members[link[u]]];
-        const width = Math.min(a.width, b.width);
-        if (a.pair >= 0 && a.pair === b.pair) roads.push(subdivide([a.x, a.y, a.x + torusDelta(a.x, b.x, n), a.y + torusDelta(a.y, b.y, n)], 2));
-        else {
-          const ax = Math.floor(a.x / 4), ay = Math.floor(a.y / 4);
-          const bx = ax + Math.floor(torusDelta(a.x, b.x, n) / 4 + 0.5), by = ay + Math.floor(torusDelta(a.y, b.y, n) / 4 + 0.5);
-          const path = findPath(w, ax, ay, bx, by);
-          if (path) lanesOf(w, path, a, b, width, roads);
-        }
-      }
-      for (let k = 0; k < members.length; k++) {
-        if (inTree[k]) continue;
-        const b = stops[members[k]];
-        const dx = torusDelta(a.x, b.x, n), dy = torusDelta(a.y, b.y, n);
-        // The two ends of a bridge always join each other.
-        const d = a.pair >= 0 && a.pair === b.pair ? 0 : Math.sqrt(dx * dx + dy * dy);
-        if (d < best[k]) { best[k] = d; link[k] = u; }
-      }
+  // The network is found on C (8 cells a node): on G it takes minutes for a world's hundred stops.
+  const cN = gN / 2;
+  const h = new Float64Array(cN * cN), isSea = new Uint8Array(cN * cN), lake = new Uint8Array(cN * cN), riverWidth = new Uint8Array(cN * cN);
+  for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
+    const k = y * cN + x;
+    let land = 0;
+    for (let q = 0; q < 4; q++) {
+      const i = (2 * y + (q >> 1)) * gN + 2 * x + (q & 1);
+      if (c.isSea[i]) continue;
+      land++;
+      h[k] += w.g[i];
+      if (c.lakeId[i] >= 0) lake[k] = 1;
+      if (c.rw[i] > riverWidth[k]) riverWidth[k] = c.rw[i];
     }
+    if (land < 3) isSea[k] = 1;
+    else h[k] /= land;
   }
-  void gN;
+  // A stop on a node the coarse grid calls sea moves to the nearest land node.
+  const points = stops.map((s) => {
+    const sx = wrap(Math.floor(s.x / 8), cN), sy = wrap(Math.floor(s.y / 8), cN);
+    for (let d = 0; d <= 3; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) {
+      const k = wrap(sy + dy, cN) * cN + wrap(sx + dx, cN);
+      if (!isSea[k] && !lake[k]) return k;
+    }
+    return sy * cN + sx;
+  });
+  const net = roadNetwork({ n: cN, cellsPerNode: 8, h, isSea, lake, riverWidth }, ROAD_PARAMS, points);
+  // Union-find over the stops, to see which the network left out.
+  const parent = stops.map((_, k) => k);
+  const find = (k: number): number => { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
+  for (const r of net) {
+    const a = stops[r.a], b = stops[r.b];
+    parent[find(r.a)] = find(r.b);
+    if (a.pair >= 0 && a.pair === b.pair) continue;
+    // Unwrap the node path, as cells.
+    const path: number[] = [];
+    let px = r.path[0] % cN, py = Math.floor(r.path[0] / cN);
+    path.push(8 * px + 4, 8 * py + 4);
+    for (let k = 1; k < r.path.length; k++) {
+      const x = r.path[k] % cN, y = Math.floor(r.path[k] / cN);
+      px += torusDelta(wrap(px, cN), x, cN);
+      py += torusDelta(wrap(py, cN), y, cN);
+      path.push(8 * px + 4, 8 * py + 4);
+    }
+    lanesOf(w, path, a, b, Math.min(a.width, b.width), roads);
+  }
+  stops.forEach((a, k) => {
+    if (a.pair < 0) return;
+    for (let j = k + 1; j < stops.length; j++) {
+      const b = stops[j];
+      if (b.pair !== a.pair) continue;
+      roads.push(subdivide([a.x, a.y, a.x + torusDelta(a.x, b.x, n), a.y + torusDelta(a.y, b.y, n)], 2));
+      parent[find(k)] = find(j);
+    }
+  });
+  // Stragglers: each joins the nearest stop of its island that is in another group.
+  for (let k = 0; k < stops.length; k++) {
+    const a = stops[k];
+    let best = -1, bd = Infinity, alone = true;
+    for (let j = 0; j < stops.length; j++) if (j !== k && find(j) === find(k)) { alone = false; break; }
+    if (!alone || a.island < 0) continue;
+    for (let j = 0; j < stops.length; j++) {
+      const b = stops[j];
+      if (j === k || b.island !== a.island) continue;
+      const dx = torusDelta(a.x, b.x, n), dy = torusDelta(a.y, b.y, n);
+      if (dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = j; }
+    }
+    if (best < 0 || bd > 900 * 900) continue;
+    const b = stops[best];
+    const ax = Math.floor(a.x / 4), ay = Math.floor(a.y / 4);
+    const path = findPath(w, ax, ay, ax + Math.floor(torusDelta(a.x, b.x, n) / 4 + 0.5), ay + Math.floor(torusDelta(a.y, b.y, n) / 4 + 0.5));
+    if (path) { lanesOf(w, path.map((v) => 4 * v + 2), a, b, Math.min(a.width, b.width), roads); parent[find(k)] = find(best); }
+  }
   return roads;
 }
 
-/** Turns a node path into road lines, with a bridge over every river of w ≥ 2 it crosses. */
+/** Turns a path of cell positions (node centres, unwrapped) into road lines, with a bridge over every river of w ≥ 2 it crosses. */
 function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads: RoadLine[]): void {
-  const c = w.c, gN = c.gN, n = c.n;
+  const c = w.c, n = c.n;
   const m = path.length / 2;
   const px = new Float64Array(m), py = new Float64Array(m), fixed = new Uint8Array(m);
-  for (let k = 0; k < m; k++) { px[k] = 4 * path[2 * k] + 2; py[k] = 4 * path[2 * k + 1] + 2; }
+  for (let k = 0; k < m; k++) { px[k] = path[2 * k]; py[k] = path[2 * k + 1]; }
   // The ends meet the stops themselves.
   px[0] = a.x; py[0] = a.y;
   px[m - 1] = px[0] + torusDelta(a.x, b.x, n); py[m - 1] = py[0] + torusDelta(a.y, b.y, n);
   fixed[0] = fixed[m - 1] = 1;
-  const wet = (k: number): number => c.rw[wrap(path[2 * k + 1], gN) * gN + wrap(path[2 * k], gN)];
+  // A node an earlier lane passed through keeps that lane's line.
+  const keyOf = (k: number): number => wrap(Math.floor(path[2 * k + 1]), n) * n + wrap(Math.floor(path[2 * k]), n);
+  for (let k = 1; k < m - 1; k++) {
+    const at = w.laid.get(keyOf(k));
+    if (!at) continue;
+    px[k] += torusDelta(px[k], at[0], n);
+    py[k] += torusDelta(py[k], at[1], n);
+    fixed[k] = 2;
+  }
+  // The widest river within a node's reach of the path point: the path may come from the coarse grid.
+  const riverAt = (k: number): number => {
+    let best = -1, bw = 0;
+    for (let dy = -2; dy <= 2; dy += 2) for (let dx = -2; dx <= 2; dx += 2) {
+      const i = node(c, path[2 * k] + dx, path[2 * k + 1] + dy);
+      if (c.rw[i] > bw) { bw = c.rw[i]; best = i; }
+    }
+    return best;
+  };
+  const wet = (k: number): number => { const i = riverAt(k); return i < 0 ? 0 : c.rw[i]; };
   // Bridges: each run of river nodes of w ≥ 2, from the bank node before it to the bank node after.
   const cuts: [number, number][] = [];
   for (let k = 1; k < m - 1; k++) {
@@ -614,8 +689,7 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
     const i0 = k - 1, i1 = e + 1;
     fixed[i0] = fixed[i1] = 1;
     cuts.push([i0, i1]);
-    const ri = wrap(path[2 * k + 1], gN) * gN + wrap(path[2 * k], gN);
-    const water = c.rlev[ri];
+    const water = c.rlev[riverAt(k)];
     const span = Math.sqrt((px[i1] - px[i0]) * (px[i1] - px[i0]) + (py[i1] - py[i0]) * (py[i1] - py[i0]));
     w.structures.push(bridge(px[i0], py[i0], px[i1], py[i1], water,
       Math.max(groundAt(w, px[i0], py[i0]), water + 1.6) + 0.3, Math.max(groundAt(w, px[i1], py[i1]), water + 1.6) + 0.3, Math.max(2, span - 8)));
@@ -630,12 +704,20 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
       if (!fixed[k]) { px[k] = nx; py[k] = ny; }
     }
   }
+  for (let k = 1; k < m - 1; k++) if (fixed[k] !== 2) w.laid.set(keyOf(k), [px[k], py[k]]);
   let from = 0;
+  // Stretches already laid by an earlier lane are not drawn twice.
   const flush = (to: number): void => {
-    if (to <= from) return;
-    const pts: number[] = [];
-    for (let k = from; k <= to; k++) pts.push(px[k], py[k]);
-    roads.push(subdivide(pts, width));
+    let pts: number[] = [];
+    for (let k = from; k <= to; k++) {
+      const shared = k > from && fixed[k] === 2 && fixed[k - 1] === 2;
+      if (shared) {
+        if (pts.length >= 4) roads.push(subdivide(pts, width));
+        pts = [];
+      }
+      pts.push(px[k], py[k]);
+    }
+    if (pts.length >= 4) roads.push(subdivide(pts, width));
   };
   for (const [i0, i1] of cuts) {
     flush(i0);
@@ -656,7 +738,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   const placed = placeSitesOn(c, rules, opts);
   const w: Work = {
     c, g: Float64Array.from(fields.h), seed: t.land.seed, structures: [], conforms: [], terraces: [],
-    blocked: new Uint8Array(c.gN * c.gN),
+    blocked: new Uint8Array(c.gN * c.gN), laid: new Map(),
   };
   for (const site of placed.sites) standLandmark(w, site, !opts.occupied || opts.occupied.has(site.id) || site.type === "abbey");
 

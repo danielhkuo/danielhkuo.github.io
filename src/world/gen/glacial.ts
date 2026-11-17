@@ -47,8 +47,14 @@ export interface GlacialResult {
 
 /** Land is never lowered below this, so the sea mask does not change. */
 const LAND_MIN = 0.5;
+/** A lake's reach keeps this far inside its region's mask, so the water it holds stays inside too. */
+const REGION_MARGIN = 0.1;
 /** Features keep this many of their own sizes apart. */
 const KEEP_APART = 2.5;
+/** A tarn's back wall is cut, and its rim banked, out to this many radii. */
+const TARN_REACH = 2.4;
+/** The rim stands this far above the water. */
+const TARN_RIM = 0.4;
 /** A depression shallower than this is rounding, not a lake. */
 const DEPRESSION = 1e-3;
 
@@ -130,7 +136,7 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     let i = c;
     let len = 0;
     while (true) {
-      if (isSea[i] || blocked[i] || regions[LK + i] < g.mask || out[i] < lk.minFloor) return -1;
+      if (isSea[i] || blocked[i] || regions[LK + i] < g.mask + REGION_MARGIN || out[i] < lk.minFloor) return -1;
       path.push(i);
       along.push(len);
       if (len >= length) break;
@@ -163,41 +169,101 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     if (best < 0) continue;
     reach(best, length);
     const total = along[along.length - 1];
-    const lip = out[path[path.length - 1]];
-    // Past the half-width the wall keeps rising, so steep valley sides are cut back to a U.
-    const R = Math.ceil((2 * half) / cpn);
+    const last = path[path.length - 1];
+    const lip = out[last];
+    // A rock bar raises the outlet by part of the depth and the floor is
+    // deepened by the rest, so the water stands against the valley's own
+    // sides: its shore is their contour, long and narrow, shelving at the head.
+    const sill = lk.sill * depth;
+    const dig = depth - sill;
+    const level = lip + sill;
+    const R = Math.ceil(half / cpn);
     const touched: number[] = [];
     for (let s = 0; s < path.length; s++) {
       const t = along[s] / total;
-      // The basin hangs from the lip; over the first `step` of the reach the old floor steps down to it.
-      const q = Math.min(1, t / lk.step);
-      const keep = 1 - q * q * (3 - 2 * q);
-      const floor = Math.max(LAND_MIN, lip + (out[path[s]] - lip) * keep - depth * 4 * t * (1 - t));
+      // Dig what brings the floor under the water along the reach, but never more
+      // than maxDig, and nothing at the head: there the old floor shelves into the lake.
+      const want = out[path[s]] - (level - 0.5 - dig * 4 * t * (1 - t));
+      const amp = Math.min(lk.maxDig, Math.max(0, want)) * Math.min(1, t / lk.head);
+      if (amp <= 0) continue;
       const x = path[s] % n;
       const y = (path[s] - x) / n;
       for (let dy = -R; dy <= R; dy++) {
         for (let dx = -R; dx <= R; dx++) {
           const d = Math.sqrt(dx * dx + dy * dy) * cpn;
-          if (d >= 2 * half) continue;
+          if (d >= half) continue;
           const j = wrapIndex(x + dx, y + dy, n);
           if (isSea[j] || regions[LK + j] < g.mask) continue;
-          const target = floor + (lk.wall * d * d) / half;
-          if (lower[j] === 0) {
-            touched.push(j);
-            lower[j] = target;
-          } else if (target < lower[j]) lower[j] = target;
+          // A bell with no wall: the lowering fades to nothing, and to no slope, at the half-width.
+          const bell = 1 - (d * d) / (half * half);
+          const low = amp * bell * bell;
+          if (low > lower[j]) {
+            if (lower[j] === 0) touched.push(j);
+            lower[j] = low;
+          }
         }
       }
     }
     for (const j of touched) {
-      if (lower[j] < out[j]) {
-        out[j] = lower[j];
-        mask[j] = GLACIAL_MASK.lake;
-      }
+      if (out[j] > LAND_MIN) out[j] = Math.max(LAND_MIN, out[j] - lower[j]);
       lower[j] = 0;
+      mask[j] = GLACIAL_MASK.lake;
+    }
+    // The bar: from the lip the valley floor is filled to a ramp that falls downstream.
+    const before = path[Math.max(0, path.length - 4)];
+    let bx = torusDelta(before % n, last % n, n);
+    let by = torusDelta(Math.floor(before / n), Math.floor(last / n), n);
+    const bl = Math.sqrt(bx * bx + by * by) || 1;
+    bx /= bl;
+    by /= bl;
+    const lx = last % n;
+    const ly = (last - lx) / n;
+    const span = Math.ceil((2 * half) / cpn);
+    let node = last;
+    let run = 0;
+    for (let guard = 0; guard < 400; guard++) {
+      const fill = level - lk.sillSlope * run;
+      if (isSea[node] || fill <= out[node]) break;
+      const x = node % n;
+      const y = (node - x) / n;
+      for (let dy = -span; dy <= span; dy++) {
+        for (let dx = -span; dx <= span; dx++) {
+          if (dx * dx + dy * dy > span * span) continue;
+          const j = wrapIndex(x + dx, y + dy, n);
+          if (isSea[j] || regions[LK + j] < g.mask || fill <= out[j]) continue;
+          // Never upstream of the lip: that is the lake.
+          if (torusDelta(lx, x + dx, n) * bx + torusDelta(ly, y + dy, n) * by < -0.5) continue;
+          out[j] = fill;
+          mask[j] = GLACIAL_MASK.lake;
+        }
+      }
+      const next = rcv[node];
+      if (next === node) break;
+      const dx = torusDelta(x, next % n, n);
+      const dy = torusDelta(y, Math.floor(next / n), n);
+      run += Math.sqrt(dx * dx + dy * dy) * cpn;
+      node = next;
+    }
+    // A delta where the stream enters: a low fan at the first drowned node of the reach.
+    for (let s = 0; s < path.length; s++) {
+      if (out[path[s]] >= level) continue;
+      const x = path[s] % n;
+      const y = (path[s] - x) / n;
+      const fanR = Math.ceil((0.8 * half) / cpn);
+      for (let dy = -fanR; dy <= fanR; dy++) {
+        for (let dx = -fanR; dx <= fanR; dx++) {
+          const d = Math.sqrt(dx * dx + dy * dy) * cpn;
+          if (d >= 0.8 * half) continue;
+          const j = wrapIndex(x + dx, y + dy, n);
+          const fan = level + 0.1 - lk.fanSlope * d;
+          if (isSea[j] || regions[LK + j] < g.mask || fan <= out[j]) continue;
+          out[j] = fan;
+          mask[j] = GLACIAL_MASK.lake;
+        }
+      }
+      break;
     }
     const first = path[0];
-    const last = path[path.length - 1];
     const mid = path[path.length >> 1];
     const vx = torusDelta(first % n, last % n, n);
     const vy = torusDelta(Math.floor(first / n), Math.floor(last / n), n);
@@ -207,7 +273,15 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     for (const i of path) block(blocked, n, i % n, Math.floor(i / n), apart);
   }
 
-  // 3. Tarns: bowls on highland slopes that fall east to south-east.
+  // Water held behind a bar lies outside the ground it touched: mark it.
+  if (lakes.length > 0) {
+    const filled = priorityFlood(out, n, isSea, p.erode.eps).filled;
+    for (let i = 0; i < nn; i++) {
+      if ((mask[i] === GLACIAL_MASK.none || mask[i] === GLACIAL_MASK.trough) && filled[i] - out[i] > DEPRESSION) mask[i] = GLACIAL_MASK.lake;
+    }
+  }
+
+  // 3. Tarns: bowls on highland benches that fall east to south-east.
   const tarns: GlacialFeature[] = [];
   const tn = g.tarns;
   const tarnArea = tn.maxArea / node2;
@@ -232,11 +306,15 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     const oy = gy / gl;
     // East to south-east: between (1, 0) and (1, 1)/√2, south being +y.
     if (!(ox > 0 && oy >= 0 && oy <= ox)) continue;
+    // A cirque sits on a bench, not on a wall: steep ground would need a quarry.
+    if (gl / (2 * q * cpn) > tn.maxSlope) continue;
     const lip = wrapIndex(Math.round(x + (ox * r) / cpn), Math.round(y + (oy * r) / cpn), n);
     if (isSea[lip] || regions[HL + lip] < g.mask || out[lip] >= out[c]) continue;
-    const level = out[lip];
+    // The water stands part-way between the lip and the centre: the back of
+    // the bowl is cut into the slope and its front is banked up as a rim.
+    const level = out[lip] + tn.bank * (out[c] - out[lip]);
     if (level - tn.depth < LAND_MIN) continue;
-    const R = Math.ceil(r / cpn);
+    const R = Math.ceil((TARN_REACH * r) / cpn);
     let inside = true;
     for (let dy = -R; dy <= R && inside; dy++) {
       for (let dx = -R; dx <= R; dx++) {
@@ -251,11 +329,25 @@ export function glacial(h: Float64Array, n: number, ctx: GlacialContext, p: Worl
     for (let dy = -R; dy <= R; dy++) {
       for (let dx = -R; dx <= R; dx++) {
         const d = Math.sqrt(dx * dx + dy * dy) * cpn;
-        if (d >= r) continue;
+        if (d >= TARN_REACH * r) continue;
         const j = wrapIndex(x + dx, y + dy, n);
-        const target = level - tn.depth * (1 - (d * d) / (r * r));
-        if (target < out[j]) {
-          out[j] = target;
+        // One parabola: the bowl inside r, and beyond it the back wall easing into the slope.
+        const bowl = level - tn.depth * (1 - (d * d) / (r * r));
+        if (d < r) {
+          if (out[j] !== bowl) {
+            out[j] = bowl;
+            mask[j] = GLACIAL_MASK.tarn;
+          }
+          continue;
+        }
+        if (bowl < out[j]) {
+          out[j] = bowl;
+          mask[j] = GLACIAL_MASK.tarn;
+        }
+        // The rim: ground below the water's level is banked up, falling away outside.
+        const rim = level + TARN_RIM - tn.rimSlope * (d - r);
+        if (rim > out[j]) {
+          out[j] = rim;
           mask[j] = GLACIAL_MASK.tarn;
         }
       }

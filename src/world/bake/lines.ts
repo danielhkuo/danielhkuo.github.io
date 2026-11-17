@@ -44,10 +44,12 @@ export function forEachLinePoint(index: RiverIndex, x0: number, y0: number, x1: 
         const len = Math.sqrt(dx * dx + dy * dy);
         if (len > RIVER_PIECE_REACH) continue;
         const steps = Math.max(1, Math.ceil(len / STEP));
-        const w = Math.floor(vertices[v + 2] + 0.5), run = vertices[v + 3], dRun = vertices[v + 7] - run;
+        // Still water (an oxbow) carries a negative width; it is handed on as run −1.
+        const still = vertices[v + 2] < 0;
+        const w = Math.floor((still ? -vertices[v + 2] : vertices[v + 2]) + 0.5), run = vertices[v + 3], dRun = vertices[v + 7] - run;
         for (let k = 0; k <= steps; k++) {
           const t = k / steps;
-          emit(ax + ox + t * dx, ay + oy + t * dy, w < 1 ? 1 : w > 6 ? 6 : w, run + t * dRun, k === 0);
+          emit(ax + ox + t * dx, ay + oy + t * dy, w < 1 ? 1 : w > 6 ? 6 : w, still ? -1 : run + t * dRun, k === 0);
         }
       }
     }

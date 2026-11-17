@@ -181,8 +181,7 @@ export function abbey(): Structure {
 /** The town's bell tower (7 × 7, 38 tall): a square shaft with an open belfry, a clock face and a tiled spire. */
 export function bellTower(): Structure {
   const s = sculpt(7, 7);
-  const tip = tower(s, 1, 0, 5, 6, 27, 7, M.stone, M.roofTile, true);
-  void tip;
+  tower(s, 1, 0, 5, 6, 27, 7, M.stone, M.roofTile, true);
   // A plinth one cell wider.
   for (let x = 0; x < 7; x++) put(s, x, 6, 3, M.stone, T_WALL);
   // Belfry: two round-headed openings under the cornice.

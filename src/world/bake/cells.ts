@@ -6,6 +6,7 @@
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
+import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
 import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
@@ -135,6 +136,17 @@ export function groundAt(world: BakeWorld, x: number, y: number): number {
   return out[0];
 }
 
+/** The coast stamps that can reach a window, in their original order. */
+function stampsNear(world: BakeWorld, x0: number, y0: number, w: number, h: number): CoastStamp[] {
+  const n = world.n, out: CoastStamp[] = [];
+  for (const s of world.stamps as readonly CoastStamp[]) {
+    const reach = stampReach(s) + 2;
+    const dx = wrap(s.x - x0 + reach, n), dy = wrap(s.y - y0 + reach, n);
+    if (dx <= w + 2 * reach && dy <= h + 2 * reach) out.push(s);
+  }
+  return out;
+}
+
 /** Chamfer 3–4 distance transform in place over the cells from (lo, lo) to the end of a w × h window; `d` holds 0 at sources and `big` elsewhere. */
 function chamfer(d: Int16Array, w: number, h: number, lo: number): void {
   for (let y = lo; y < h; y++) {
@@ -179,6 +191,19 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 1. Ground.
   const ground = new Float32Array(count);
   upsampleGround(world.ground, gN, wx0, wy0, W, H, ground);
+  if (world.base && world.conform && world.stamps) {
+    // Crisp coasts: the pre-stamp ground, the coast stamps at cell size, then the rivers' conforming.
+    const crisp = new Float32Array(count), delta = new Float32Array(count);
+    upsampleGround(world.base, gN, wx0, wy0, W, H, crisp);
+    applyStampsTo(crisp, { w: W, h: H, cellsPerNode: 1, x0: wx0, y0: wy0, period: n }, stampsNear(world, wx0, wy0, W, H));
+    upsampleGround(world.conform, gN, wx0, wy0, W, H, delta);
+    for (let i = 0; i < count; i++) {
+      // Heights are kept to whole 64ths, so the last bits of a stamp's arithmetic cannot differ between windows.
+      const v = Math.floor((crisp[i] + delta[i]) * 64 + 0.5) / 64;
+      // Under the sea the generator's own bed (its bathymetry) stands, unless the stamp cut deeper.
+      ground[i] = v > 0 ? v : ground[i] < v ? ground[i] : v < 0 ? v : ground[i] < 0 ? ground[i] : -0.02;
+    }
+  }
   // Pads, street terraces and the harbour, cut at cell size.
   const bi = world.built;
   // Under street terraces the cover is chosen from the hillside as it was, so a riser is a wall and not a crag.
@@ -276,13 +301,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 4. Shore distance on the water side, in cells, capped.
   const dist = new Int16Array(count);
   const big = 3 * 64;
-  for (let i = 0; i < count; i++) dist[i] = water[i] ? big : 0;
-  chamfer(dist, W, H, PAD_N - SHORE_CAP - 1);
+  let anyWater = false, anySea = false;
+  for (let i = 0; i < count; i++) {
+    if (water[i]) { dist[i] = big; anyWater = true; if (water[i] === 1) anySea = true; }
+  }
+  // Distances are only read on water cells, so a dry window needs no transform.
+  if (anyWater) chamfer(dist, W, H, PAD_N - SHORE_CAP - 1);
 
   // Cells from the sea on the land side, so shore bands follow the coast and not the G nodes.
   const inland = new Int16Array(count);
-  for (let i = 0; i < count; i++) inland[i] = water[i] === 1 ? 0 : big;
-  chamfer(inland, W, H, PAD_N - COVER_N - SHORE_BAND - 2);
+  inland.fill(big);
+  if (anySea) {
+    for (let i = 0; i < count; i++) if (water[i] === 1) inland[i] = 0;
+    chamfer(inland, W, H, PAD_N - COVER_N - SHORE_BAND - 2);
+  }
 
   // 5. Rivers: the cells under each curve, the flow phase there, and the distance to the nearest.
   const riv = new Int16Array(count).fill(big);
@@ -293,7 +325,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   forEachRiverPoint(world, wx0, wy0, wx0 + W, wy0 + H, (px, py, width, run) => {
     const r = width / 2, r2 = r * r;
     const cx = Math.floor(px) - wx0, cy = Math.floor(py) - wy0;
-    if (width === 1) {
+    if (width === 1 && run >= 0) {
       if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) return;
       const k = cy * W + cx;
       const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
@@ -310,7 +342,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (water[i]) continue;
         // Several curve points land on one cell; the lowest run wins so the phase never depends on their order.
         // Tones 0–7: flow phase of a river; 8: a 1 px stream; 15: foam (set at falls).
-        const ph = width === 1 ? 8 : Math.floor(run) & 7;
+        const ph = run < 0 ? 9 : width === 1 ? 8 : Math.floor(run) & 7;
         if (riv[i] !== 0 || ph < phase[i]) phase[i] = ph;
         riv[i] = 0;
         if (width >= 2) wide[i] = 1;
@@ -567,6 +599,16 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
 
+  // Sea mottling, sampled on the world's 8-cell lattice and interpolated.
+  const mBaseX = Math.floor(x0 / 8), mBaseY = Math.floor(y0 / 8);
+  const mOffX = x0 - mBaseX * 8, mOffY = y0 - mBaseY * 8;
+  const mW = Math.floor((w + mOffX) / 8) + 2, mH = Math.floor((h + mOffY) / 8) + 2;
+  const mott = new Float32Array(mW * mH);
+  for (let j = 0; j < mH; j++) for (let i = 0; i < mW; i++) {
+    const lx = wrap(mBaseX + i, n / 8), ly = wrap(mBaseY + j, n / 8);
+    mott[j * mW + i] = 1.1 * gradNoise(lx / 4, ly / 4, n / 32, 0x5ea) + 0.5 * gradNoise(lx, ly, n / 8, 0x5eb);
+  }
+
   // 8. Light, shadow and flags for the core.
   const out: Cells = { w, h, surf: new Float32Array(w * h), mat: new Uint8Array(w * h), light: new Uint8Array(w * h), flags: new Uint8Array(w * h), aux: new Uint8Array(w * h) };
   const noInk = look.noInk;
@@ -600,8 +642,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const d = (dist[i] - 3) / 3;
         const depth = (water[i] === 2 ? level[i] : 0) - ground[i];
         // Low-frequency mottling: a wash, not a gradient.
-        const per = n / 32;
-        const mottle = 1.1 * gradNoise(wrap(x0 + x, n) / 32, wrap(y0 + y, n) / 32, per, 0x5ea) + 0.5 * gradNoise(wrap(x0 + x, n) / 8, wrap(y0 + y, n) / 8, n / 8, 0x5eb);
+        const mx = (x + mOffX) / 8, my = (y + mOffY) / 8, mi = Math.floor(mx), mj = Math.floor(my), mfx = mx - mi, mfy = my - mj;
+        const ma = mj * mW + mi;
+        const mottle = (1 - mfy) * (mott[ma] + (mott[ma + 1] - mott[ma]) * mfx) + mfy * (mott[ma + mW] + (mott[ma + mW + 1] - mott[ma + mW]) * mfx);
         const far = SHELF + (depth - 1) / 3.5 + mottle;
         const v = Math.floor((d < SHELF ? (d < 0.5 ? 0 : d + dither - 0.5) : far < SHELF ? SHELF : far + dither - 0.5));
         out.aux[o] = v < 0 ? 0 : v > 15 ? 15 : v;
@@ -630,6 +673,18 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const under = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);
         tone = under + 0.55 * (shade(gx, gy, 0, 0) - 0.5);
         tone = tone < 0 ? 0 : tone > 1 ? 1 : tone;
+      }
+      if (!hasCrown) {
+        // Ground just south of a wood sits in its shade: darker for a few cells, fading.
+        for (let k = 1; k <= 4; k++) {
+          const j = i - k * W;
+          if (crown[j] > dry[j]) {
+            tone -= 0.1 * (5 - k) / 4;
+            if (k <= 2 && (flags & F_SHADOW) === 0) flags |= 1;
+            break;
+          }
+        }
+        if (tone < 0.06) tone = 0.06;
       }
       out.light[o] = structure && fixed[i] !== 0 ? fixed[i] : Math.floor(tone * 255 + 0.5);
 

@@ -137,11 +137,11 @@ test("a bridge: a deck from bank to bank, parapets, a hump over the water and ar
   assert.ok(crown + b.base >= 4 + 7.5 - 0.2, `crown ${crown + b.base}`);
   assert.ok(crown <= 14, "the deck stays within 14 of the water");
   assert.ok(mid[100 - b.x] < crown - 2);
-  // Three cells wide, road between stone parapets.
+  // A road two cells wide between stone parapets.
   const col = 113 - b.x;
-  const mats = [199, 200, 201].map((y) => b.mat[(y - b.y) * b.w + col]);
-  assert.deepEqual(mats, [M.stone, M.road, M.stone]);
-  assert.equal(b.top[(198 - b.y) * b.w + col], 0);
+  const mats = [198, 199, 200, 201].map((y) => b.mat[(y - b.y) * b.w + col]);
+  assert.deepEqual(mats, [M.stone, M.road, M.road, M.stone]);
+  assert.equal(b.top[(197 - b.y) * b.w + col], 0);
   assert.equal(b.top[(202 - b.y) * b.w + col], 0);
   // Arches: shade marks on the south face, none through the piers at the ends.
   const arch = b.marks.filter((_, k) => k % 5 === 3 && b.marks[k] === M.opening).length;

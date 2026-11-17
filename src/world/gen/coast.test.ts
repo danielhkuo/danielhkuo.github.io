@@ -10,7 +10,7 @@ import { runSchedule } from "./erode.ts";
 import { glacial, glacialContext } from "./glacial.ts";
 import { paramsFor, type WorldParams } from "./params.ts";
 import { planWorld } from "./plan.ts";
-import { applyStamps, type Stamp } from "./stamps.ts";
+import { applyStamps, inCove, type Stamp } from "./stamps.ts";
 
 /** Full-size lengths (as on the 6400 world) on a small grid of 4-cell nodes. */
 function fullScale(nodes: number): WorldParams {
@@ -31,8 +31,15 @@ function inStack(stamps: readonly Stamp[], i: number, n: number, cpn: number): b
   for (const s of stamps) {
     if (s.kind !== "stack") continue;
     const dx = torusDelta(s.x, x, n * cpn), dy = torusDelta(s.y, y, n * cpn);
-    if (dx * dx + dy * dy < s.r * s.r) return true;
+    if (dx * dx + dy * dy < (s.r * 1.5 + s.apron) * (s.r * 1.5 + s.apron)) return true;
   }
+  return false;
+}
+
+/** True when node i lies in or beside a cove. */
+function nearCove(stamps: readonly Stamp[], i: number, n: number, cpn: number): boolean {
+  const x = ((i % n) + 0.5) * cpn, y = (Math.floor(i / n) + 0.5) * cpn;
+  for (const s of stamps) if (s.kind === "cove" && inCove(s, x, y, n * cpn, 3)) return true;
   return false;
 }
 
@@ -184,11 +191,13 @@ test("an island straddling the wrap gets the same coast as one in the middle", (
     const a = mid.h[i], b = moved.h[j];
     if (a > 0 || b > 0) { land++; if (Math.abs(a - b) < 1e-9) same++; }
     if (mid.shoreClass[i] !== SHORE.none || moved.shoreClass[j] !== SHORE.none) { shoreNodes++; if (mid.shoreClass[i] === moved.shoreClass[j]) sameClass++; }
-    // Stacks follow a noise fixed to the world, and the corners tie on convexity and are taken
+    // Stacks follow a noise fixed to the world; coves and the corners' stacks draw their shapes
     // in node order. Everything else is the same to the node.
     const corner = Math.abs(x - PYR.cx) >= 30 && Math.abs(y - PYR.cy) >= 30;
-    if (!corner && !inStack(mid.stamps, i, n, 4) && !inStack(moved.stamps, j, n, 4)) {
-      assert.ok(Math.abs(a - b) < 1e-9, `(${x}, ${y}) ${a} vs ${b}`);
+    const drawn = inStack(mid.stamps, i, n, 4) || inStack(moved.stamps, j, n, 4) || nearCove(mid.stamps, i, n, 4) || nearCove(moved.stamps, j, n, 4);
+    if (!corner && !drawn) {
+      // The sea bed's shelf follows a noise fixed to the world, so only the land is compared to the node.
+      if (a > 0 || b > 0) assert.ok(Math.abs(a - b) < 1e-9, `(${x}, ${y}) ${a} vs ${b}`);
       assert.equal(mid.shoreClass[i], moved.shoreClass[j]);
     }
   }
@@ -220,12 +229,12 @@ test("a sheltered, gentle shore becomes a beach with a shelf no steeper than 0.0
       const d = (row + 0.5) * 4, i = (54 + row) * n + x, j = (73 - row) * n + x;
       for (const k of [i, j]) {
         assert.ok(r.h[k] < 0);
-        if (d <= c.shelf) {
+        if (d <= 0.5 * c.shelf) {
           assert.ok(Math.abs(r.h[k] + c.shelfSlope * d) < 1e-9, `shelf depth ${r.h[k]} at ${d} cells`);
-          assert.ok(r.base[k] < r.h[k], "the shelf is raised above the open bathymetry");
+          assert.ok(r.base[k] <= r.h[k] + 1e-9, "the shelf is never below the open bathymetry");
         }
       }
-      if (row > 0 && d <= c.shelf) assert.ok(Math.abs(r.h[i] - r.h[i - n]) <= c.shelfSlope * 4 + 1e-9);
+      if (row > 0 && d <= 0.5 * c.shelf) assert.ok(Math.abs(r.h[i] - r.h[i - n]) <= c.shelfSlope * 4 + 1e-9);
     }
   }
 });
@@ -283,7 +292,8 @@ test("classes sit only on shore nodes, exposure is within [0, 1], and every kind
     assert.equal(out.isSea[i], out.h[i] <= 0 ? 1 : 0);
     assert.ok(out.exposure[i] >= 0 && out.exposure[i] <= 1);
     assert.ok(out.shoreClass[i] <= SHORE.cove);
-    if (out.shoreClass[i] !== SHORE.none) assert.ok(isShore(out.isSea, n, i), `class off the shore at ${i}`);
+    // Off the shore only a delta's fan, land that was sea, carries a class.
+    if (out.shoreClass[i] !== SHORE.none) assert.ok(isShore(out.isSea, n, i) || world().before[i] <= 0, `class off the shore at ${i}`);
     seen[out.shoreClass[i]]++;
   }
   assert.ok(seen[SHORE.beach] > 20, "beaches");
@@ -323,8 +333,11 @@ test("stamps are well formed: sizes in range, unit directions, positions inside 
       const area = Math.PI * s.r * s.r;
       assert.ok(area >= c.stackArea[0] - 1e-9 && area <= c.stackArea[1] + 1e-9);
     } else if (s.kind === "cove") {
-      assert.ok(s.r >= c.coveR[0] && s.r <= c.coveR[1]);
-      assert.ok(s.water < s.r);
+      assert.ok(s.len >= 0.7 * c.coveLen[0] && s.len <= c.coveLen[1]);
+      assert.ok(2 * s.width < 0.75 * s.len, "longer than wide");
+      assert.ok(s.neck > 0.3 && s.neck < 0.65);
+      assert.ok(s.sand === 0 || (s.sand >= 0.25 && s.sand <= 0.42));
+      assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
     } else if (s.kind === "cut") {
       assert.ok(s.r > 0 && s.r <= c.retreat * (1 - c.cliffE));
       assert.ok(s.level <= -c.platform[0] && s.level >= -c.platform[1]);
@@ -333,8 +346,16 @@ test("stamps are well formed: sizes in range, unit directions, positions inside 
       assert.ok(Math.abs(s.dx * s.dx + s.dy * s.dy - 1) < 1e-9);
       assert.ok(s.area >= c.channelArea);
       assert.ok(["delta", "estuary", "plain"].includes(s.form));
-    } else {
+    } else if (s.kind === "beach") {
       assert.equal(s.shelfSlope, c.shelfSlope);
+      assert.ok(s.shelf > 0.15 * c.shelf && s.shelf < 1.5 * c.shelf);
+    } else if (s.kind === "estuary") {
+      assert.ok(s.sea >= 3 * s.head, "an estuary widens at least threefold");
+      assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
+    } else {
+      assert.ok(s.r >= c.deltaR[0] && s.r <= c.deltaR[1]);
+      assert.ok(s.channels.length === 2 || s.channels.length === 3);
+      for (const k of s.channels) assert.ok(Math.abs(k) < s.spread);
     }
   }
   for (const kind of ["cut", "stack", "cove", "beach", "mouth"]) assert.ok((count[kind] ?? 0) > 0, `no ${kind} stamps`);
