@@ -119,13 +119,47 @@ export const MATERIAL = {
   /** The small crowns of a hedge. Not canopy: a hedge is never inked. */
   hedgeCrown: 71,
 
+  // Built things: the landmarks, the town, hamlets and what stands on free sites.
+  /** Limewashed wall. */
+  whitewash: 72,
+  /** Warm plaster of the town's houses. */
+  plaster: 73,
+  /** Dressed pale stone: the abbey, the bell tower, bridges, quays. */
+  stone: 74,
+  /** Rubble and weathered stone: ruins, field walls, chapels, upland cottages. */
+  stoneDark: 75,
+  roofSlate: 76,
+  /** Terracotta tile. */
+  roofTile: 77,
+  /** Lead and weathered copper: spires and the abbey church. */
+  roofLead: 78,
+  /** Planks, doors, jetties, mill caps. */
+  timber: 79,
+  /** The lighthouse's band: a muted brick, well clear of the dragon's vermilion. */
+  brick: 80,
+  /** Windows, doorways and the shade under an arch. */
+  opening: 81,
+  /** Streets, quays and yards. */
+  cobble: 82,
+  /** The dark crown of a churchyard yew. */
+  yew: 83,
+  /** Crosses, weathercocks and clock hands. */
+  gilt: 84,
+  /** A clock's face. */
+  dial: 85,
+  /** The lighthouse's lamp room. */
+  lantern: 86,
+  sailcloth: 87,
+  /** Fresh slate of a quarry face and floor. */
+  quarry: 88,
+
   /** Bracken: the warm olive of steep, sunny, unploughed hillsides; russet in autumn. */
-  bracken: 72,
+  bracken: 89,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 73;
+export const MATERIAL_COUNT = 90;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -173,6 +207,12 @@ export const isVegetation: Uint8Array = flags([
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
   M.hedge, M.hedgeCrown, M.bracken,
+]);
+
+/** Made things: buildings, walls and paving. */
+export const isBuilt: Uint8Array = flags([
+  M.whitewash, M.plaster, M.stone, M.stoneDark, M.roofSlate, M.roofTile, M.roofLead, M.timber, M.brick, M.opening,
+  M.cobble, M.gilt, M.dial, M.lantern, M.sailcloth, M.quarry,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */
