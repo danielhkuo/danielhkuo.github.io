@@ -210,8 +210,9 @@ function buildSpecs(): Spec[] {
   set(M.cliffSed, all([0.65, 0.03, 72]), STONE);
   set(M.cliffLime, all([0.86, 0.018, 90]), PALE);
   set(M.cliffSlate, all([0.47, 0.035, 265]), STONE);
-  set(M.scree, all([0.76, 0.012, 85]), STONE);
-  set(M.screeSlate, all([0.6, 0.025, 262]), STONE);
+  // Scree is fresh, broken stone: lighter and warmer than the face it fell from.
+  set(M.scree, all([0.82, 0.022, 82]), STONE);
+  set(M.screeSlate, all([0.68, 0.02, 258]), STONE);
 
   // Upland. Alpine meadow is the winter snow band.
   const alpine: Lch[] = [[0.72, 0.08, 148], [0.74, 0.085, 140], [0.76, 0.09, 128]];
@@ -234,43 +235,44 @@ function buildSpecs(): Spec[] {
 
   // Woods.
   // Floors sit between the crowns' shade and open grass, so a floor cell with no tree on it is not a dark tick.
-  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.53, 0.075, 146], [0.52, 0.06, 85], [0.52, 0.03, 60]], LAND);
-  set(M.floorConifer, evergreen([0.47, 0.055, 160]), LAND);
-  set(M.broadleafCool, [[0.62, 0.095, 146], [0.52, 0.08, 156], [0.6, 0.085, 112], [0.5, 0.022, 25]], CANOPY);
-  set(M.broadleafMid, [[0.66, 0.11, 135], [0.575, 0.092, 142], [0.66, 0.095, 88], [0.52, 0.028, 50]], CANOPY);
-  set(M.broadleafWarm, [[0.7, 0.115, 126], [0.63, 0.098, 127], [0.56, 0.095, 52], [0.54, 0.032, 65]], CANOPY);
-  set(M.coniferCool, evergreen([0.42, 0.05, 178]), CANOPY);
-  set(M.coniferMid, evergreen([0.44, 0.055, 165]), CANOPY);
-  set(M.coniferWarm, evergreen([0.47, 0.06, 152]), CANOPY);
-  set(M.alder, [[0.6, 0.095, 138], [0.52, 0.08, 150], [0.56, 0.07, 105], [0.5, 0.02, 30]], CANOPY);
+  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.5, 0.075, 147], [0.5, 0.06, 85], [0.5, 0.03, 60]], LAND);
+  set(M.floorConifer, evergreen([0.44, 0.055, 160]), LAND);
+  // Woods are the dark mass of a lowland view; meadows and corn the light one.
+  set(M.broadleafCool, [[0.57, 0.095, 146], [0.46, 0.08, 156], [0.6, 0.085, 112], [0.5, 0.022, 25]], CANOPY);
+  set(M.broadleafMid, [[0.61, 0.11, 135], [0.51, 0.092, 142], [0.66, 0.095, 88], [0.52, 0.028, 50]], CANOPY);
+  set(M.broadleafWarm, [[0.65, 0.115, 126], [0.56, 0.098, 128], [0.56, 0.095, 52], [0.54, 0.032, 65]], CANOPY);
+  set(M.coniferCool, evergreen([0.37, 0.05, 178]), CANOPY);
+  set(M.coniferMid, evergreen([0.39, 0.055, 165]), CANOPY);
+  set(M.coniferWarm, evergreen([0.42, 0.06, 152]), CANOPY);
+  set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.5, 0.02, 30]], CANOPY);
   set(M.shrub, evergreen([0.5, 0.055, 128]), CANOPY);
 
   // Crops ripen and are cut; ploughland shows in winter.
-  set(M.wheat, [[0.74, 0.11, 132], [0.785, 0.082, 97], [0.7, 0.06, 80], [0.56, 0.05, 58]], LAND);
-  set(M.barley, [[0.76, 0.11, 128], [0.765, 0.085, 110], [0.68, 0.055, 78], [0.6, 0.07, 125]], LAND);
-  set(M.ley, [[0.75, 0.13, 134], [0.73, 0.12, 136], [0.72, 0.1, 130], [0.68, 0.07, 125]], LAND);
-  set(M.hay, [[0.77, 0.115, 128], [0.775, 0.09, 116], [0.75, 0.09, 122], [0.7, 0.06, 112]], LAND);
+  set(M.wheat, [[0.76, 0.11, 132], [0.815, 0.082, 97], [0.7, 0.06, 80], [0.56, 0.05, 58]], LAND);
+  set(M.barley, [[0.78, 0.11, 128], [0.79, 0.085, 110], [0.68, 0.055, 78], [0.6, 0.07, 125]], LAND);
+  set(M.ley, [[0.77, 0.13, 134], [0.76, 0.12, 136], [0.72, 0.1, 130], [0.68, 0.07, 125]], LAND);
+  set(M.hay, [[0.79, 0.115, 128], [0.8, 0.09, 116], [0.75, 0.09, 122], [0.7, 0.06, 112]], LAND);
   set(M.plough, [[0.56, 0.05, 55], [0.62, 0.055, 85], [0.55, 0.05, 55], [0.53, 0.045, 50]], LAND);
   // Vines: rows of green over pale stony earth.
   set(M.vine, [[0.7, 0.045, 88], [0.715, 0.05, 92], [0.7, 0.05, 80], [0.66, 0.04, 70]], LAND);
   set(M.vineRow, [[0.62, 0.07, 110], [0.59, 0.085, 134], [0.6, 0.09, 72], [0.52, 0.03, 55]], LAND);
   // Lines across a crop sit a tone or two from the field: tramlines and
   // furrows darker, windrows and mown swaths lighter.
-  set(M.wheatRow, [[0.7, 0.105, 134], [0.745, 0.08, 100], [0.66, 0.055, 80], [0.52, 0.05, 55]], LAND);
-  set(M.barleyRow, [[0.72, 0.105, 130], [0.73, 0.085, 114], [0.645, 0.055, 78], [0.565, 0.07, 122]], LAND);
-  set(M.leyStripe, [[0.775, 0.125, 132], [0.755, 0.115, 133], [0.745, 0.095, 128], [0.7, 0.07, 123]], LAND);
-  set(M.hayRow, [[0.785, 0.11, 126], [0.8, 0.075, 104], [0.77, 0.085, 118], [0.715, 0.06, 110]], LAND);
+  set(M.wheatRow, [[0.72, 0.105, 134], [0.775, 0.08, 100], [0.66, 0.055, 80], [0.52, 0.05, 55]], LAND);
+  set(M.barleyRow, [[0.72, 0.105, 130], [0.755, 0.085, 114], [0.645, 0.055, 78], [0.565, 0.07, 122]], LAND);
+  set(M.leyStripe, [[0.775, 0.125, 132], [0.785, 0.115, 133], [0.745, 0.095, 128], [0.7, 0.07, 123]], LAND);
+  set(M.hayRow, [[0.785, 0.11, 126], [0.825, 0.075, 104], [0.77, 0.085, 118], [0.715, 0.06, 110]], LAND);
   set(M.ploughRow, [[0.51, 0.05, 50], [0.57, 0.055, 80], [0.5, 0.05, 50], [0.485, 0.045, 46]], LAND);
   // Stubble: what a cut cornfield leaves, paler than the standing crop, with the drill rows showing.
-  set(M.stubble, [[0.75, 0.1, 128], [0.795, 0.06, 96], [0.72, 0.055, 84], [0.57, 0.05, 58]], LAND);
-  set(M.stubbleRow, [[0.72, 0.1, 130], [0.76, 0.065, 92], [0.69, 0.055, 82], [0.54, 0.05, 56]], LAND);
+  set(M.stubble, [[0.77, 0.1, 128], [0.83, 0.06, 96], [0.72, 0.055, 84], [0.57, 0.05, 58]], LAND);
+  set(M.stubbleRow, [[0.72, 0.1, 130], [0.795, 0.065, 92], [0.69, 0.055, 82], [0.54, 0.05, 56]], LAND);
 
   // Wet ground.
   set(M.marsh, grass([0.62, 0.065, 128]), LAND);
   set(M.reeds, [[0.66, 0.07, 115], [0.67, 0.065, 105], [0.7, 0.07, 85], [0.72, 0.06, 82]], LAND);
 
   // Lowland grass.
-  const meadow: Lch[] = [[0.75, 0.1, 140], [0.765, 0.105, 131], [0.775, 0.1, 121]];
+  const meadow: Lch[] = [[0.785, 0.1, 140], [0.8, 0.105, 131], [0.81, 0.1, 121]];
   const pasture: Lch[] = [[0.69, 0.09, 143], [0.705, 0.095, 136], [0.72, 0.095, 127]];
   const scrub: Lch[] = [[0.72, 0.06, 118], [0.745, 0.068, 108], [0.765, 0.072, 98]];
   for (let v = 0; v < 3; v++) {
@@ -290,7 +292,8 @@ function buildSpecs(): Spec[] {
   set(M.path, all([0.82, 0.035, 80]), LINE);
   // A hedge's ground is rough grass; the hedge itself is the row of crowns scatter plants on it.
   set(M.hedge, grass([0.68, 0.09, 138]), LAND);
-  set(M.hedgeCrown, [[0.6, 0.1, 138], [0.53, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
+  set(M.bracken, [[0.6, 0.07, 96], [0.64, 0.088, 116], [0.6, 0.09, 58], [0.55, 0.06, 55]], LAND);
+  set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
   set(M.wall, all([0.69, 0.012, 265]), LINE);
 
   return s;

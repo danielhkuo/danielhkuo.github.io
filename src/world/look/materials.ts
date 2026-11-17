@@ -118,11 +118,14 @@ export const MATERIAL = {
 
   /** The small crowns of a hedge. Not canopy: a hedge is never inked. */
   hedgeCrown: 71,
+
+  /** Bracken: the warm olive of steep, sunny, unploughed hillsides; russet in autumn. */
+  bracken: 72,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 72;
+export const MATERIAL_COUNT = 73;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -169,7 +172,7 @@ export const isVegetation: Uint8Array = flags([
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
-  M.hedge, M.hedgeCrown,
+  M.hedge, M.hedgeCrown, M.bracken,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */
