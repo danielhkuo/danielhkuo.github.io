@@ -78,9 +78,11 @@ function dft2Real(img: Float32Array, size: number): { re: Float64Array; im: Floa
 }
 
 /**
- * Grid gate: mean power at axis-aligned frequencies (kx = 0 or ky = 0, DC excluded,
- * |k| ≤ size/4) divided by the median power of all other frequencies in the same radius.
- * A grid-free image scores about 1; the pass mark is ≤ 1.5. `size` must be a power of two.
+ * Grid gate: high-pass the image (subtract a 9 × 9 toroidal box blur), then over the
+ * annulus size/8 ≤ |k| ≤ size/2 compare mean power at axis-aligned frequencies
+ * (kx = 0 or ky = 0) with the median power of the rest. Large-scale terrain structure
+ * is ignored; pixel lattices and row/column banding are caught. A grid-free image
+ * scores about 1; the pass mark is ≤ 1.5. `size` must be a power of two.
  */
 export function gridScore(img: Float32Array, size: number): number {
   const { re, im } = dft2Real(img, size);

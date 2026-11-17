@@ -23,6 +23,19 @@ function noise(size: number, seed: number) {
   return a;
 }
 
+test("gridScore ignores smooth large-scale structure (high-passed, high frequencies only)", () => {
+  const size = 128, img = new Float32Array(size * size), n = noise(size, 9);
+  // West–east ridges and a broad gradient, like real terrain, plus fine noise.
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    img[y * size + x] = 40 * Math.sin((2 * Math.PI * y) / 64) + 0.3 * x + n[y * size + x];
+  }
+  const s = gridScore(img, size);
+  assert.ok(s < 1.5, `smooth terrain scored ${s}`);
+  // …but a fine pixel lattice on top of it is still caught.
+  const lattice = img.map((v, i) => v + ((i % size) % 4 === 0 || Math.floor(i / size) % 4 === 0 ? 3 : 0));
+  assert.ok(gridScore(lattice, size) > 3, `lattice ${gridScore(lattice, size)}`);
+});
+
 test("gridScore: ~1 for noise, high for a lattice", () => {
   const size = 64, n = noise(size, 1);
   const s = gridScore(n, size);
