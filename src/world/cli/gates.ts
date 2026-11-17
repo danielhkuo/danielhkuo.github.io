@@ -84,7 +84,6 @@ function dft2Real(img: Float32Array, size: number): { re: Float64Array; im: Floa
  */
 export function gridScore(img: Float32Array, size: number): number {
   const { re, im } = dft2Real(img, size);
-  const n = size * size;
   const half = size / 4;
   const axisPow: number[] = [];
   const otherPow: number[] = [];

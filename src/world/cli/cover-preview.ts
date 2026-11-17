@@ -4,16 +4,11 @@
 // `cameraFrame` is the same land through the whole bake and the camera, which
 // is where furrows and hedges meet the 0.8 row compression.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { buildCells, F_SHADOW, type Look } from "../bake/cells.ts";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
-import { climateFields } from "../gen/climate.ts";
-import { hydrology } from "../gen/hydro.ts";
 import { paramsFor } from "../gen/params.ts";
-import { type Land, makeLand, makeWorld, rockOnG } from "../gen/pipeline.ts";
-import { type Plan, planWorld } from "../gen/plan.ts";
-import { rivers } from "../gen/rivers.ts";
+import { makeWorld } from "../gen/pipeline.ts";
+import type { Plan } from "../gen/plan.ts";
 import { LIGHT_SHADOW_SHIFT, type Palette } from "../look/contract.ts";
 import { MATERIAL_COUNT, MATERIAL_NAMES } from "../look/materials.ts";
 import { createView } from "../runtime/view.ts";
@@ -31,6 +26,7 @@ export interface PreviewWorld {
  * bake reads it. Erosion takes a minute at full size, so the land is cached
  * under `cacheDir` when one is given; hydrology, rivers and climate always run.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function previewWorld(n: number, seed: number, _cacheDir?: string): PreviewWorld {
   // The land cache predated the coast stage's fields; build the whole world each time.
   const params = paramsFor(n);
