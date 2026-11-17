@@ -67,7 +67,6 @@ const BLUR_R = 8;
 const SHORE_CAP = 15;
 /** Shore classes apply this many cells inland. */
 const SHORE_BAND = 9;
-/** Shore-distance tones run this many cells out; deeper tones follow the sea bed. */
 /** The cover is told the way to the nearest river within this many cells. */
 const RIVER_OFFSET = 8;
 /** Rivers are looked for this many cells due north and due south of a cell. */
