@@ -189,7 +189,7 @@ function buildSpecs(): Spec[] {
     { drop: 0, rise: 0, cool: 0, ramp: "depth", mid: [0.74, 0.1, 203], deep: [0.52, 0.095, 242] });
   set(M.lake, [[0.75, 0.05, 222], [0.76, 0.055, 220], [0.74, 0.05, 226], [0.76, 0.03, 232]],
     { drop: 0, rise: 0, cool: 0, ramp: "depth", mid: [0.62, 0.068, 238], deep: [0.47, 0.072, 254] });
-  set(M.river, [[0.8, 0.075, 214], [0.8, 0.08, 212], [0.79, 0.07, 216], [0.82, 0.05, 224]],
+  set(M.river, [[0.73, 0.044, 224], [0.73, 0.046, 222], [0.72, 0.042, 226], [0.76, 0.034, 230]],
     { drop: 0, rise: 0, cool: 0, ramp: "flow" });
 
   // Shore.
@@ -409,7 +409,7 @@ function ramp(spec: Spec, season: number): Lab[] {
       const wave = Math.cos((t / 8) * 2 * Math.PI);
       out[t] = [base[0] - 0.011 + 0.011 * wave, base[1] * (1.15 - 0.15 * wave), base[2] * (1.15 - 0.15 * wave)];
     }
-    for (let t = 8; t < 15; t++) out[t] = [base[0] - 0.03, base[1] * 0.8, base[2] * 0.8];
+    for (let t = 8; t < 15; t++) out[t] = [base[0] - 0.045, base[1] * 0.62, base[2] * 0.62];
     out[15] = [0.975, base[1] * 0.22, base[2] * 0.22];
     return out;
   }

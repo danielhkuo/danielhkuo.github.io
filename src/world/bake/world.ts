@@ -9,6 +9,7 @@
 import { wrap } from "../core/torus.ts";
 import type { WorldParams } from "../gen/params.ts";
 import { makeWorld, type World } from "../gen/pipeline.ts";
+import type { Stamp as CoastStamp } from "../gen/stamps.ts";
 import { standinSeaBed } from "./standin-land.ts";
 
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
@@ -49,6 +50,15 @@ export interface BakeWorld {
   hand: Float32Array;
   /** Shore class: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */
   shore: Uint8Array;
+
+  /**
+   * Crisp coasts: when present, a cell's ground is upsample(base), then the
+   * coast stamps applied at cell size, then upsample(conform) — the rivers
+   * stage's change to the ground on G.
+   */
+  base?: Float32Array;
+  conform?: Float32Array;
+  stamps?: readonly CoastStamp[];
 
   rivers: RiverIndex;
   /** Waterfalls: x, y (cells), drop (units) each. */
@@ -92,6 +102,7 @@ export function riverIndex(lines: readonly RiverLine[], n: number): RiverIndex {
       }
       vertices[v * 4] = x;
       vertices[v * 4 + 1] = y;
+      // A negative width marks still water (an oxbow pond).
       vertices[v * 4 + 2] = l.vertices[k * l.stride + 2];
       vertices[v * 4 + 3] = run;
       if (k + 1 < m) firsts.push(v);
@@ -108,6 +119,40 @@ export function riverIndex(lines: readonly RiverLine[], n: number): RiverIndex {
 
 /** First-order streams shorter than this, in cells, are not drawn. */
 export const MIN_STREAM = 60;
+
+/** Oxbows shorter than this, in cells, are not drawn. */
+export const MIN_OXBOW = 6;
+
+/**
+ * A reach that ends at the sea is carried on along its last heading until it
+ * is three cells into the water, so no stream stops short on the beach.
+ */
+function runToSea(v: Float32Array, ground: Float32Array, gN: number): Float32Array {
+  const m = v.length / 4;
+  if (m < 2) return v;
+  const back = Math.max(0, m - 4);
+  let dx = v[(m - 1) * 4] - v[back * 4], dy = v[(m - 1) * 4 + 1] - v[back * 4 + 1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-6) return v;
+  dx /= len;
+  dy /= len;
+  const extra: number[] = [];
+  let x = v[(m - 1) * 4], y = v[(m - 1) * 4 + 1], wet = 0;
+  const w = v[(m - 1) * 4 + 2], level = v[(m - 1) * 4 + 3];
+  for (let k = 0; k < 40 && wet < 3; k++) {
+    x += dx;
+    y += dy;
+    extra.push(x, y, w, level);
+    const gx = wrap(Math.floor(x / 4), gN), gy = wrap(Math.floor(y / 4), gN);
+    if (ground[gy * gN + gx] <= 0) wet++;
+  }
+  // Only keep the run if it found the sea.
+  if (wet < 3) return v;
+  const out = new Float32Array(v.length + extra.length);
+  out.set(v);
+  out.set(extra, v.length);
+  return out;
+}
 
 function reachLength(v: Float32Array): number {
   let len = 0;
@@ -163,10 +208,30 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   }
   const shore = land.shoreClass;
 
+  // First-order streams shorter than MIN_STREAM cells are left out: on a planar slope they draw as a comb.
+  const lines: RiverLine[] = [];
+  for (const r of rivers.reaches) {
+    if (r.order <= 1 && reachLength(r.vertices) < MIN_STREAM) continue;
+    lines.push({ vertices: r.endsIn === "sea" ? runToSea(r.vertices, ground, gN) : r.vertices, stride: 4 });
+  }
+  // Oxbows: cut-off loops, drawn as still ponds. The smallest are specks and are left out.
+  for (const o of rivers.oxbows) {
+    if (o.vertices.length < 4) continue;
+    let len = 0;
+    for (let k = 2; k < o.vertices.length; k += 2) len += Math.sqrt((o.vertices[k] - o.vertices[k - 2]) * (o.vertices[k] - o.vertices[k - 2]) + (o.vertices[k + 1] - o.vertices[k - 1]) * (o.vertices[k + 1] - o.vertices[k - 1]));
+    if (len < MIN_OXBOW) continue;
+    const v: number[] = [];
+    for (let k = 0; k < o.vertices.length; k += 2) v.push(o.vertices[k], o.vertices[k + 1], -Math.max(2, o.width));
+    lines.push({ vertices: v, stride: 3 });
+  }
+
   return {
     n, gN, cN, ground, waterLevel, waterKind, hand, shore,
     // First-order streams shorter than MIN_STREAM cells are left out: on a planar slope they draw as a comb.
-    rivers: riverIndex(rivers.reaches.filter((r) => r.order > 1 || reachLength(r.vertices) >= MIN_STREAM).map((r) => ({ vertices: r.vertices, stride: 4 })), n),
+    base: Float32Array.from(land.base),
+    conform: Float32Array.from(rivers.ground, (v, i) => v - land.g[i]),
+    stamps: land.stamps,
+    rivers: riverIndex(lines, n),
     falls: Float32Array.from(rivers.falls.flatMap((f) => [f.x, f.y, f.drop])),
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
