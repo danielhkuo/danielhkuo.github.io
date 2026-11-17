@@ -70,7 +70,7 @@ function listen(port) {
 }
 
 function throttleWorker(worker, rate) {
-  worker.client.send("Emulation.setCPUThrottlingRate", { rate }).catch(() => {});
+  worker.client.send("Emulation.setCPUThrottlingRate", { rate }).then(() => console.error("throttled worker", worker.url()), (e) => console.error("worker throttle failed:", e.message));
 }
 
 const options = parseArgs(process.argv.slice(2));

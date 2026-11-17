@@ -34,7 +34,7 @@ scope.onmessage = (event: MessageEvent) => {
   }
   if (msg.kind === "warm") {
     cache = new Map();
-    const col = (msg.col ?? 0) % 10;
+    let col = (msg.col ?? 0) % 10;
     let row = msg.startRow ?? 0;
     const limit = msg.ms ?? 0;
     let chunks = 0;
@@ -42,7 +42,10 @@ scope.onmessage = (event: MessageEvent) => {
     while (performance.now() - started < limit) {
       bakeBenchChunk(field, col, row, cache, mask);
       chunks += 1;
+      // Fly north; after a full lap of the column move one column east, so each
+      // new chunk meets fresh land and shares only its southern tiles, as in flight.
       row = (row - 1 + 8) % 8;
+      if (chunks % 8 === 0) col = (col + 1) % 10;
     }
     scope.postMessage({ kind: "warm", chunks, ms: performance.now() - started });
   }
