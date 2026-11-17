@@ -31,3 +31,12 @@ test("land stays under the cap, keeps its coastline, and carries debris", () => 
 test("deterministic", () => {
   assert.deepEqual(makeLand(p, 42).g, land().g);
 });
+
+test("makeWorld chains hydrology, rivers and climate", async () => {
+  const { makeWorld } = await import("./pipeline.ts");
+  const w = makeWorld(p, 42);
+  assert.equal(w.rivers.ground.length, p.gN * p.gN);
+  assert.ok(w.rivers.reaches.length > 10);
+  assert.equal(w.climate.moisture.length, p.cN * p.cN);
+  for (const r of w.rivers.reaches) assert.ok(r.endsIn === "sea" || r.endsIn === "lake" || r.endsIn === "reach");
+});
