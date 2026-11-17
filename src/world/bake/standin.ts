@@ -33,9 +33,9 @@ function cover(c: CoverInput, mask: Uint8Array): number {
   j = jitter(mask, x, y, 4, 0.1);
   if (cold > 0.6 + j) return SMAT.alpine;
   j = jitter(mask, x, y, 5, 0.12);
-  if (c.wind > 0.62 + j) return SMAT.heath;
+  if (c.wind > 0.8 + j && e > 18) return SMAT.heath;
   j = jitter(mask, x, y, 6, 0.1);
-  if (c.hand > 1.5 + 10 * j && c.hand < 34 + 40 * j && s > 0.06 + j * 0.2 && s < 0.85 && c.moisture > 0.46 + j && c.wind < 0.56) return SMAT.woodFloor;
+  if (c.hand > 1.5 + 10 * j && c.hand < 34 + 40 * j && s > 0.06 + j * 0.2 && s < 0.85 && c.moisture > 0.5 + 2 * j && c.wind < 0.75) return SMAT.woodFloor;
   if (c.hand < 0.6 && s < 0.03) return SMAT.marsh;
   j = jitter(mask, x, y, 7, 0.16);
   return c.moisture < 0.4 + j ? SMAT.pasture : SMAT.meadow;
@@ -44,7 +44,7 @@ function cover(c: CoverInput, mask: Uint8Array): number {
 const stamp: Stamp = { x: 0, y: 0, r: 0, h: 0, mat: 0, shape: 0 };
 
 function scatter(c: CoverInput, groundMat: number, mask: Uint8Array, riverDist?: number): Stamp | null {
-  if (riverDist !== undefined && riverDist < 2.5) return null;
+  if (riverDist !== undefined && riverDist < 5) return null;
   const v = mask[((c.y + 71) & 255) * 256 + ((c.x + 233) & 255)];
   const hsh = hash2(c.x, c.y, 0x5ca7);
   stamp.x = c.x + 0.5;
@@ -90,14 +90,14 @@ const BASE: Record<number, Rgb> = {
   [SMAT.sand]: [232, 216, 168],
   [SMAT.meadow]: [140, 182, 96],
   [SMAT.pasture]: [176, 194, 108],
-  [SMAT.heath]: [158, 150, 108],
+  [SMAT.heath]: [166, 172, 112],
   [SMAT.woodFloor]: [98, 142, 82],
   [SMAT.broadleaf]: [78, 136, 72],
   [SMAT.broadleafLight]: [108, 156, 76],
   [SMAT.conifer]: [52, 104, 84],
-  [SMAT.rock]: [164, 154, 144],
+  [SMAT.rock]: [206, 190, 164],
   [SMAT.snow]: [238, 241, 246],
-  [SMAT.scree]: [178, 168, 152],
+  [SMAT.scree]: [204, 194, 172],
   [SMAT.boulder]: [150, 142, 134],
   [SMAT.marsh]: [128, 160, 108],
   [SMAT.alpine]: [160, 188, 128],
@@ -123,8 +123,8 @@ function waterColour(m: number, tone: number): Rgb {
   }
   // Tone is the distance from the shore: foam, then a pale shelf deepening.
   const foam: Rgb = [240, 244, 232];
-  const shelf: Rgb = m === SMAT.lake ? [128, 190, 204] : [142, 208, 200];
-  const deep: Rgb = m === SMAT.lake ? [84, 140, 180] : [88, 150, 178];
+  const shelf: Rgb = m === SMAT.lake ? [150, 206, 214] : [172, 222, 212];
+  const deep: Rgb = m === SMAT.lake ? [104, 160, 196] : [118, 178, 198];
   if (tone === 0) return foam;
   return mix(shelf, deep, (tone - 1) / 14);
 }
@@ -141,9 +141,12 @@ function buildPalette(): Palette {
       if (water) c = waterColour(m, tone);
       else {
         const k = (tone - 7.5) / 7.5;
-        c = k >= 0 ? mix(BASE[m], WARM, 0.5 * k) : mix(BASE[m], COOL, -0.5 * k);
+        const b = BASE[m];
+        // Lights warm towards the paper; darks deepen in their own hue and cool a little.
+        const dark = m === SMAT.rock || m === SMAT.scree || m === SMAT.boulder ? [b[0] * 0.6, b[1] * 0.52, b[2] * 0.48] as Rgb : mix([b[0] * 0.5, b[1] * 0.52, b[2] * 0.56], COOL, 0.15);
+        c = k >= 0 ? mix(b, WARM, 0.5 * k) : mix(b, dark, -0.8 * k);
       }
-      if (shadow) c = mix(c, SHADE, water ? 0.1 * shadow : 0.1 + 0.11 * shadow);
+      if (shadow) c = mix(c, SHADE, water ? 0.08 * shadow : 0.16 + 0.1 * shadow);
       if (ink === 1) c = mix(c, INK, 0.5);
       else if (ink >= 2) c = mix(c, INK, 0.88);
       pal[(m << 8) | light] = packRgb(c);

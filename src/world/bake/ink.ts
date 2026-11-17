@@ -12,6 +12,9 @@ export const INK_FULL = 2;
 /** Ink needs at least this many world rows hidden behind the nearer pixel, and this much drop. */
 export const INK_MIN_HIDDEN = 3;
 export const INK_MIN_DROP = 3;
+/** A crown inks against the ground from this many hidden rows and this much drop. */
+export const CANOPY_MIN_HIDDEN = 2;
+export const CANOPY_MIN_DROP = 2;
 /** From this many hidden rows the ink is full. */
 export const INK_FULL_HIDDEN = 10;
 /** A side silhouette is traced at most this many pixels below its crest. */
@@ -65,9 +68,9 @@ export function inkOcclusion(p: Painted): void {
       const i = r * w + c;
       age++;
       const hid = hidden[i];
-      if (hid >= INK_MIN_HIDDEN) {
-        const f = flags[i];
-        const canopy = (f & F_CANOPY) !== 0;
+      const f = flags[i];
+      const canopy = (f & F_CANOPY) !== 0;
+      if (hid >= (canopy ? CANOPY_MIN_HIDDEN : INK_MIN_HIDDEN)) {
         const quiet = (f & F_QUIET) !== 0 || (canopy && (flags[i - w] & F_CANOPY) !== 0);
         if (!quiet) {
           // A crown is small: its edge takes soft ink only, and no side tracing.
@@ -134,13 +137,13 @@ export function hatch(p: Painted, mask: Uint8Array): void {
         if ((f & F_BEDDED) !== 0) {
           // The pixel's own elevation: strata sit at fixed heights.
           const elev = Math.floor((4 * y[i]) / 5) - R;
-          on = (elev & 1) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < ((elev & 3) === 0 ? 190 : 90);
+          on = (elev & 1) === 0 && mask[(R & 255) * 256 + ((X >> 2) & 255)] < ((elev & 3) === 0 ? 120 : 40);
         } else {
-          on = (X & 1) === 0 && mask[((R >> 2) & 255) * 256 + (X & 255)] < ((X & 3) === 0 ? 190 : 90);
+          on = (X & 1) === 0 && mask[((R / 3) & 255) * 256 + (X & 255)] < ((X & 3) === 0 ? 110 : 36);
         }
       } else {
         const d = X - R;
-        on = (d & 3) === 0 && mask[(((R + X) >> 3) & 255) * 256 + (d & 255)] < 150;
+        on = (d & 3) === 0 && mask[(((R + X) >> 3) & 255) * 256 + (d & 255)] < 90;
       }
       if (on) ink[i] = INK_SOFT;
     }

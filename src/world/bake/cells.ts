@@ -3,6 +3,7 @@
 // material, light and cast shadows. Every output is a pure function of the
 // wrapped cell position, so any window equals the same crop of any other.
 
+import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
@@ -117,26 +118,26 @@ export function groundAt(world: BakeWorld, x: number, y: number): number {
   return out[0];
 }
 
-/** Chamfer 3–4 distance transform in place over a w × h window; `d` holds 0 at sources and `big` elsewhere. */
-function chamfer(d: Int16Array, w: number, h: number): void {
-  for (let y = 0; y < h; y++) {
+/** Chamfer 3–4 distance transform in place over the cells from (lo, lo) to the end of a w × h window; `d` holds 0 at sources and `big` elsewhere. */
+function chamfer(d: Int16Array, w: number, h: number, lo: number): void {
+  for (let y = lo; y < h; y++) {
     const row = y * w;
-    for (let x = 0; x < w; x++) {
+    for (let x = lo; x < w; x++) {
       const i = row + x;
       let v = d[i];
       if (v === 0) continue;
-      if (x > 0 && d[i - 1] + 3 < v) v = d[i - 1] + 3;
-      if (y > 0) {
+      if (x > lo && d[i - 1] + 3 < v) v = d[i - 1] + 3;
+      if (y > lo) {
         if (d[i - w] + 3 < v) v = d[i - w] + 3;
-        if (x > 0 && d[i - w - 1] + 4 < v) v = d[i - w - 1] + 4;
+        if (x > lo && d[i - w - 1] + 4 < v) v = d[i - w - 1] + 4;
         if (x + 1 < w && d[i - w + 1] + 4 < v) v = d[i - w + 1] + 4;
       }
       d[i] = v;
     }
   }
-  for (let y = h - 1; y >= 0; y--) {
+  for (let y = h - 1; y >= lo; y--) {
     const row = y * w;
-    for (let x = w - 1; x >= 0; x--) {
+    for (let x = w - 1; x >= lo; x--) {
       const i = row + x;
       let v = d[i];
       if (v === 0) continue;
@@ -144,7 +145,7 @@ function chamfer(d: Int16Array, w: number, h: number): void {
       if (y + 1 < h) {
         if (d[i + w] + 3 < v) v = d[i + w] + 3;
         if (x + 1 < w && d[i + w + 1] + 4 < v) v = d[i + w + 1] + 4;
-        if (x > 0 && d[i + w - 1] + 4 < v) v = d[i + w - 1] + 4;
+        if (x > lo && d[i + w - 1] + 4 < v) v = d[i + w - 1] + 4;
       }
       d[i] = v;
     }
@@ -211,14 +212,14 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 3. Terrain shadow ray and relief.
   const ray = new Float32Array(count);
   sweepShadow(dry, W, H, ray);
-  const blur = new Float32Array(count), tmp = new Float32Array(count);
-  boxBlur(dry, W, H, BLUR_R, blur, tmp);
+  const blur = new Float32Array(count), tmp = new Float64Array(count + W);
+  boxBlur(dry, W, PAD_N, PAD_N + w, BLUR_R, blur, tmp);
 
   // 4. Shore distance on the water side, in cells, capped.
   const dist = new Int16Array(count);
   const big = 3 * 64;
   for (let i = 0; i < count; i++) dist[i] = water[i] ? big : 0;
-  chamfer(dist, W, H);
+  chamfer(dist, W, H, PAD_N - SHORE_CAP - 1);
 
   // 5. Rivers: the cells under each curve, the flow phase there, and the distance to the nearest.
   const riv = new Int16Array(count).fill(big);
@@ -244,7 +245,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
     }
   });
-  if (rivers) chamfer(riv, W, H);
+  if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_CAP - 1);
 
   // 6. Cover, then scatter stamped into a crown layer.
   const cw = w + COVER_N + COVER_S, ch = h + COVER_N + COVER_S;
@@ -404,7 +405,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
 
       const gx = (surf[i + 1] - surf[i - 1]) * 0.5, gy = (surf[i + W] - surf[i - W]) * 0.5;
-      const tone = shade(gx, gy, dry[i] - blur[i], ground[i]);
+      let bump = 0;
+      if (!hasCrown && slope[i] > 0.9) {
+        // Micro-relief: steep ground is ribbed by gullies running down it, drawn as light only.
+        const u = wrap(x0 + x, n) / 3, v = wrap(y0 + y, n) / 4, per = n / 4;
+        const rib = gradNoise(u * 0.75, v, per, 0x61b) + gradNoise(u * 0.75, v + 1, per, 0x61b) + 0.6 * gradNoise(u * 0.75 + 40.5, v + 17, per, 0x7c3);
+        bump = 0.45 * rib * (slope[i] > 1.9 ? 1 : slope[i] - 0.9);
+      }
+      let tone = shade(gx + bump, gy, dry[i] - blur[i], ground[i]);
+      if (hasCrown) {
+        // A crown is modelled by its own dome, but keeps the light of the hillside it stands on, so woods show the land's form.
+        const under = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);
+        tone = under + 0.55 * (shade(gx, gy, 0, 0) - 0.5);
+        tone = tone < 0 ? 0 : tone > 1 ? 1 : tone;
+      }
       out.light[o] = Math.floor(tone * 255 + 0.5);
 
       const canopy = hasCrown && look.isCanopy[m] === 1;

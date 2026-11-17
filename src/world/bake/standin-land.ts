@@ -1,11 +1,10 @@
 // STAND-INS for generator stages that are not built yet. Everything in this
 // file is throwaway: it exists so the bake has believable land to draw until
-// gen/drown.ts, gen/coast.ts and gen/climate.ts land, and each
+// gen/drown.ts, gen/coast.ts and the debris layer land, and each
 // function is replaced by passing the real stage's output to buildBakeWorld.
 
 import { fbm } from "../core/noise.ts";
 import { wrapIndex } from "../core/torus.ts";
-import type { ClimateInput } from "./world.ts";
 
 /** Chamfer (3–4) distance in nodes from every node to the nearest node where `src` is set, capped. */
 function chamfer(src: Uint8Array, n: number, cap: number): Float32Array {
@@ -58,22 +57,12 @@ export function standinShore(ground: Float32Array, waterKind: Uint8Array, gN: nu
   return shore;
 }
 
-/** STAND-IN for S8's fields: noise, with wetter valley floors and windier heights. */
-export function standinClimate(ground: Float32Array, hand: Float32Array, gN: number, cN: number, seed: number): ClimateInput {
-  const moisture = new Float32Array(cN * cN), wind = new Float32Array(cN * cN);
+/** STAND-IN for S6's coastal exposure (noise) and S5's debris (none), on C. */
+export function standinExposure(cN: number, seed: number): { exposure: Float32Array; debris: Float32Array } {
   const exposure = new Float32Array(cN * cN), debris = new Float32Array(cN * cN);
-  const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
   for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
-    const i = y * cN + x;
-    const g = wrapIndex(2 * x, 2 * y, gN);
-    const e = Math.max(0, ground[g]);
-    const a = fbm((x * 6) / cN, (y * 6) / cN, 6, 3, 0.5, seed ^ 0x1111);
-    const b = fbm((x * 5) / cN, (y * 5) / cN, 5, 3, 0.5, seed ^ 0x2222);
-    const c = fbm((x * 4) / cN, (y * 4) / cN, 4, 2, 0.5, seed ^ 0x3333);
-    moisture[i] = clamp01(0.55 + 0.45 * a - hand[g] / 120 + (hand[g] < 6 ? 0.1 : 0));
-    wind[i] = clamp01(0.2 + e / 140 + 0.35 * b);
-    exposure[i] = clamp01(0.5 + 0.7 * c);
-    debris[i] = 0;
+    const v = 0.5 + 0.7 * fbm((x * 4) / cN, (y * 4) / cN, 4, 2, 0.5, seed ^ 0x3333);
+    exposure[y * cN + x] = v < 0 ? 0 : v > 1 ? 1 : v;
   }
-  return { moisture, wind, exposure, debris };
+  return { exposure, debris };
 }

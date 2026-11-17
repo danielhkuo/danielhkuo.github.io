@@ -10,7 +10,8 @@ import type { WorldParams } from "../gen/params.ts";
 import { runSchedule } from "../gen/erode.ts";
 import { hydrology, type HydroResult } from "../gen/hydro.ts";
 import { NB8_DX, NB8_DY, wrapIndex } from "../core/torus.ts";
-import { standinClimate, standinDrown, standinShore } from "./standin-land.ts";
+import { climateFields, type Climate } from "../gen/climate.ts";
+import { standinDrown, standinExposure, standinShore } from "./standin-land.ts";
 
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
 export const SHORE = { none: 0, beach: 1, rocky: 2, cliff: 3, cove: 4 } as const;
@@ -62,13 +63,6 @@ export interface HydroInput {
   hand: Float32Array;
 }
 
-export interface ClimateInput {
-  moisture: Float32Array;
-  wind: Float32Array;
-  exposure: Float32Array;
-  debris: Float32Array;
-}
-
 export interface BakeWorldInput {
   params: WorldParams;
   plan: Plan;
@@ -81,8 +75,11 @@ export interface BakeWorldInput {
   hydro?: HydroResult;
   /** Shore classes on G. STAND-IN when absent. */
   shore?: Uint8Array;
-  /** Climate and debris on C. STAND-IN when absent. */
-  climate?: ClimateInput;
+  /** S8 moisture and wind on C (gen/climate.ts climateFields()). Run here when absent. */
+  climate?: Climate;
+  /** Coastal exposure and debris on C, 0–1. STAND-IN when absent. */
+  exposure?: Float32Array;
+  debris?: Float32Array;
 }
 
 export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
@@ -102,14 +99,16 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
   for (let i = 0; i < ground.length; i++) if (!isSea[i]) ground[i] = hr.ground[i];
   const hydro = fromHydro(hr, isSea, gN, n);
   const shore = inp.shore ?? standinShore(ground, hydro.waterKind, gN);
-  const climate = inp.climate ?? standinClimate(ground, hydro.hand, gN, cN, seed);
+  const climate = inp.climate ?? climateFields(hr.ground, hr.rain, isSea, gN, p.climate);
+  const standin = standinExposure(cN, seed);
+  const exposure = inp.exposure ?? standin.exposure, debris = inp.debris ?? standin.debris;
 
   return {
     n, gN, cN, ground,
     waterLevel: hydro.waterLevel, waterKind: hydro.waterKind,
     riverWidth: hydro.riverWidth, riverTo: hydro.riverTo, riverRun: hydro.riverRun,
     hand: hydro.hand, shore,
-    moisture: climate.moisture, wind: climate.wind, exposure: climate.exposure, debris: climate.debris,
+    moisture: climate.moisture, wind: climate.wind, exposure, debris,
     rock: plan.rock, regions: plan.regions,
   };
 }

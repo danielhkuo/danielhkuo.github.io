@@ -31,9 +31,9 @@ export function sweepShadow(height: Float32Array, w: number, h: number, out: Flo
     const row = y * w, up = row - w;
     out[row] = -Infinity;
     for (let x = 1; x < w; x++) {
-      const carried = out[up + x - 1] - SHADOW_DROP;
+      const carried = out[up + x - 1];
       const caster = height[up + x - 1];
-      out[row + x] = carried > caster ? carried : caster;
+      out[row + x] = (carried > caster ? carried : caster) - SHADOW_DROP;
     }
   }
 }
@@ -44,25 +44,30 @@ export function shadowDepth(ray: number, surface: number): number {
   return over <= 0 ? 0 : over < 2.5 ? 1 : over < 9 ? 2 : 3;
 }
 
-/** Separable box blur of radius r over a w × h window; edges average what exists. Exact only r cells in from each edge. */
-export function boxBlur(src: Float32Array, w: number, h: number, r: number, dst: Float32Array, tmp: Float32Array): void {
+/**
+ * Box blur of radius r, written for the cells [lo, hi) × [lo, hi) of a window
+ * w wide; the window must reach r cells beyond them on every side. Heights
+ * are summed as whole 64ths, so the sliding sums are exact and the result
+ * does not depend on where the window starts.
+ */
+export function boxBlur(src: Float32Array, w: number, lo: number, hi: number, r: number, dst: Float32Array, tmp: Float64Array): void {
   const win = 2 * r + 1;
-  for (let y = 0; y < h; y++) {
+  for (let y = lo - r; y < hi + r; y++) {
     const row = y * w;
     let sum = 0;
-    for (let x = 0; x < win && x < w; x++) sum += src[row + x];
-    for (let x = r; x < w - r; x++) {
+    for (let x = lo - r; x <= lo + r; x++) sum += Math.floor(src[row + x] * 64 + 0.5);
+    for (let x = lo; x < hi; x++) {
       tmp[row + x] = sum;
-      if (x + r + 1 < w) sum += src[row + x + r + 1] - src[row + x - r];
+      sum += Math.floor(src[row + x + r + 1] * 64 + 0.5) - Math.floor(src[row + x - r] * 64 + 0.5);
     }
   }
-  const inv = 1 / (win * win);
-  for (let y = r; y < h - r; y++) {
-    const row = y * w;
-    for (let x = r; x < w - r; x++) {
-      let sum = 0;
-      for (let k = -r; k <= r; k++) sum += tmp[row + k * w + x];
-      dst[row + x] = sum * inv;
+  const inv = 1 / (64 * win * win);
+  for (let x = lo; x < hi; x++) {
+    let sum = 0;
+    for (let y = lo - r; y <= lo + r; y++) sum += tmp[y * w + x];
+    for (let y = lo; y < hi; y++) {
+      dst[y * w + x] = sum * inv;
+      sum += tmp[(y + r + 1) * w + x] - tmp[(y - r) * w + x];
     }
   }
 }
@@ -74,7 +79,8 @@ export function boxBlur(src: Float32Array, w: number, h: number, r: number, dst:
 export function shade(dhdx: number, dhdy: number, relief: number, e: number): number {
   const ndotl = (-dhdx * SUN_X - dhdy * SUN_Y + SUN_Z) / Math.sqrt(dhdx * dhdx + dhdy * dhdy + 1);
   // Lambert, rescaled so flat ground sits at one half.
-  let lam = ndotl >= SUN_Z ? 0.5 + (0.5 * (ndotl - SUN_Z)) / (1 - SUN_Z) : (0.5 * ndotl) / SUN_Z;
+  // The camera mostly sees slopes that face away from the sun, so the dark side keeps a floor of sky light.
+  let lam = ndotl >= SUN_Z ? 0.5 + (0.5 * (ndotl - SUN_Z)) / (1 - SUN_Z) : 0.5 * (0.3 + (0.7 * ndotl) / SUN_Z);
   if (lam < 0) lam = 0;
   let rel = 0.5 + 0.07 * relief;
   if (rel < 0) rel = 0;

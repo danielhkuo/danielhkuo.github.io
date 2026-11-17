@@ -10,7 +10,7 @@
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { buildTile, F_CANOPY, F_CLIFF, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
-import { hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
+import { CANOPY_MIN_DROP, hatch, INK_MIN_DROP, inkCliffs, inkOcclusion, newPainted, type Painted } from "./ink.ts";
 import { forEachRiverPoint } from "./lines.ts";
 import { HMAX, type BakeWorld } from "./world.ts";
 
@@ -77,7 +77,11 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
         if (f > nearF + HIDE_MARGIN) hid++;
         continue;
       }
-      if (top < h && hid > 0 && nearH - H >= INK_MIN_DROP) p.hidden[top * w + c] = hid > 255 ? 255 : hid;
+      if (top < h && hid > 0) {
+        // A crown is small, so its edge needs a little less hidden behind it than a ridge does.
+        const need = (p.flags[top * w + c] & F_CANOPY) !== 0 ? CANOPY_MIN_DROP : INK_MIN_DROP;
+        if (nearH - H >= need) p.hidden[top * w + c] = hid > 255 ? 255 : hid;
+      }
       const from = t > 0 ? t : 0;
       const m = (tile as Cells).mat[ti], l = (tile as Cells).light[ti], fl = (tile as Cells).flags[ti], a = (tile as Cells).aux[ti];
       for (let r = from; r < top; r++) {
