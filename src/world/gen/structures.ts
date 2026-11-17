@@ -105,7 +105,7 @@ export function house(s: Structure, x: number, y: number, w: number, d: number, 
     if (wall >= 4) mark(s, door, south, 2, M.timber, 96);
     for (const wx of w >= 7 ? [x + 1, x + w - 2] : w >= 5 ? [x + 1, x + w - 2] : [x + w - 1 - (w >> 1) + 1]) {
       if (wx === door) continue;
-      if (wall >= 4) mark(s, wx, south, wall >= 6 ? 2 : wall - 2, M.opening);
+      mark(s, wx, south, 2, M.opening);
       if (wall >= 6) mark(s, wx, south, wall - 2, M.opening);
     }
     if (wall >= 7 && w >= 5) mark(s, door, south, wall - 2, M.opening);
@@ -343,7 +343,7 @@ export function churchyard(seed: number): Structure {
     else s.paint[y * 28 + x] = M.hay;
   }
   // The yew: one great dome and three lobes, so its outline is lumpy.
-  const lobes: [number, number, number, number][] = [[8.5, 10.5, 6, 14], [5.5, 12, 3.6, 10], [11.5, 8, 3.8, 12], [10.5, 13.5, 3.4, 10.5]];
+  const lobes: [number, number, number, number][] = [[8.5, 10.5, 6, 14], [6, 12.2, 3.4, 10], [11.2, 8, 3.6, 12], [10.5, 13.5, 3.2, 10.5]];
   for (const [lx, ly, r, top] of lobes) {
     for (let y = Math.floor(ly - r); y <= Math.ceil(ly + r); y++) for (let x = Math.floor(lx - r); x <= Math.ceil(lx + r); x++) {
       const d2 = (x - lx) * (x - lx) + (y - ly) * (y - ly);
@@ -427,6 +427,6 @@ export function townHouse(seed: number): Structure {
   const s = sculpt(gable ? Math.min(w, 7) : w, d);
   const pick = (seed >>> 6) & 7;
   const wallMat = pick < 3 ? M.whitewash : pick < 6 ? M.plaster : M.stone;
-  house(s, 0, 0, s.w, d, 6 + ((seed >>> 9) % 4), 3 + ((seed >>> 12) & 1), { gable, wallMat, roofMat: M.roofTile, openings: 1, chimney: ((seed >>> 13) & 3) === 0 });
+  house(s, 0, 0, s.w, d, 6 + ((seed >>> 9) % 3), 3 + ((seed >>> 12) & 1), { gable, wallMat, roofMat: M.roofTile, openings: 1, chimney: ((seed >>> 13) & 3) === 0 });
   return s;
 }

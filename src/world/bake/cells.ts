@@ -200,7 +200,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const before = ground[k];
         ground[k] = conformed(cf, before, xx + 0.5 - ccx, yy + 0.5 - ccy);
         // Street terraces: which step a cell stands on, 1…3, cycling up the hill.
-        if (cf.kind === "terrace" && band && ground[k] !== before) band[k] = 1 + (((Math.floor((ground[k] - cf.level) / cf.limit + 0.5) % 3) + 3) % 3);
+        if (cf.kind === "terrace" && band && ground[k] !== before) {
+          // The town's ground ends in a speckled edge over the terraces' skirt; 4 marks a terraced cell outside it.
+          const inside = 255 * conformWeight(cf, xx + 0.5 - ccx, yy + 0.5 - ccy) > mask[((wrap(wy0 + yy, n) + 59) & 255) * 256 + ((wrap(wx0 + xx, n) + 173) & 255)];
+          band[k] = inside ? 1 + (((Math.floor((ground[k] - cf.level) / cf.limit + 0.5) % 3) + 3) % 3) : 4;
+        }
         if (pad && cf.kind === "flat" && cf.rx >= 5) {
           const v = Math.floor(255 * conformWeight(cf, xx + 0.5 - ccx, yy + 0.5 - ccy));
           if (v > pad[k]) pad[k] = v;
@@ -476,7 +480,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (road[i] !== 0 && bi) gmat[i] = road[i] === 2 ? bi.built.mats.road : bi.built.mats.path;
         continue;
       }
-      if (band !== null && band[i] !== 0) {
+      if (band !== null && band[i] !== 0 && band[i] !== 4) {
         // The town's hillside is gardens and vines, a terrace of each in turn, with few trees.
         if (bi) gmat[i] = band[i] === 2 ? bi.built.mats.vine : bi.built.mats.yard;
         if ((mask[((c.y + 201) & 255) * 256 + ((c.x + 9) & 255)] & 31) !== 0) continue;
