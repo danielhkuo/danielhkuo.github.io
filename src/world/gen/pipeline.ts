@@ -10,6 +10,7 @@ import { type HydroResult, hydrology } from "./hydro.ts";
 import type { WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
+import { settle, type SettleOptions, type Settlement } from "./settle.ts";
 import type { Stamp } from "./stamps.ts";
 import { talus } from "./talus.ts";
 
@@ -89,8 +90,23 @@ export interface Terrain {
   climate: Climate;
 }
 
-export type World = Terrain;
-export const makeWorld = makeTerrain;
+export interface World extends Terrain {
+  /** S10: sites, buildings, hamlets and roads; `settlement.ground` is the final ground on G. */
+  settlement: Settlement;
+}
+
+/**
+ * Every built stage, in order. Siting is lenient here: a type the land cannot place is listed in
+ * `settlement.shortfall` and the world is still made. Pass `{ strict: true }` to reject the seed instead.
+ */
+export function makeWorld(p: WorldParams, seed: number, opts: SettleOptions = {}): World {
+  return settleWorld(makeTerrain(p, seed), opts);
+}
+
+/** Sites and buildings on land that is already made (or read from a cache). */
+export function settleWorld(t: Terrain, opts: SettleOptions = {}): World {
+  return { ...t, settlement: settle(t, { strict: false, ...opts }) };
+}
 
 /** The natural land: every stage before siting. */
 export function makeTerrain(p: WorldParams, seed: number): Terrain {

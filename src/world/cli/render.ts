@@ -12,7 +12,9 @@ import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { rngFor } from "../core/rng.ts";
 import { wrap, wrapIndex } from "../core/torus.ts";
 import { ARCHETYPE, paramsFor } from "../gen/params.ts";
-import { makeWorld } from "../gen/pipeline.ts";
+import { makeWorld, settleWorld } from "../gen/pipeline.ts";
+import type { Settlement } from "../gen/settle.ts";
+import { cachedTerrain } from "./worldcache.ts";
 import type { Plan } from "../gen/plan.ts";
 import { createView } from "../runtime/view.ts";
 import { encodePng } from "./png.ts";
@@ -100,6 +102,16 @@ export function autoViewpoints(world: BakeWorld, plan: Plan, seed: number): View
   return out;
 }
 
+/**
+ * One viewpoint per reserved site, and one per hamlet up to `hamlets`: the site in the upper third of
+ * the frame, with the land to its south, where its approach comes from, below it.
+ */
+export function siteViewpoints(s: Settlement, hamlets = 0): Viewpoint[] {
+  const out: Viewpoint[] = s.sites.map((site) => ({ name: `site-${site.id}`, x: Math.floor(site.x), y: Math.floor(site.y) + (site.type === "town" ? 10 : 55), e: site.level }));
+  s.hamlets.slice(0, hamlets).forEach((h, k) => out.push({ name: `hamlet-${k}${h.quarry ? "-quarry" : ""}`, x: Math.floor(h.x), y: Math.floor(h.y) + 40, e: 0 }));
+  return out;
+}
+
 function upscale(src: Uint32Array, w: number, h: number, f: number): Uint32Array {
   const out = new Uint32Array(w * f * h * f);
   for (let y = 0; y < h * f; y++) {
@@ -120,6 +132,12 @@ export interface RenderOptions {
   look?: Look;
   /** Extra viewpoints as "name:x:y". */
   extra?: Viewpoint[];
+  /** Which viewpoints to render: the six chosen from the data, the reserved sites, or both (default). */
+  views?: "auto" | "sites" | "all";
+  /** Hamlets to add to the site viewpoints. */
+  hamlets?: number;
+  /** Read the land from .cache/world-gen/ (and write it there) instead of generating it every run. */
+  cache?: boolean;
   log?: (line: string) => void;
 }
 
@@ -135,7 +153,9 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const { n, seed } = opts;
   const t0 = performance.now();
   const params = paramsFor(n);
-  const made = makeWorld(params, seed);
+  const made = opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
+  for (const line of made.settlement.shortfall) log(`siting shortfall: ${line}`);
+  log(`${made.settlement.sites.length} sites, ${made.settlement.hamlets.length} hamlets, ${made.settlement.built.structures.length} structures, ${made.settlement.built.roads.length} road lines`);
   const plan = made.land.plan;
   const world = buildBakeWorld({ params, seed, world: made });
   log(`world ${n} seed ${seed}: ${Math.round(performance.now() - t0)} ms`);
@@ -146,7 +166,12 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const dir = opts.outDir ?? join(process.cwd(), ".cache", "world-renders", `${n}-${seed}`);
   mkdirSync(dir, { recursive: true });
 
-  const points = [...autoViewpoints(world, plan, seed), ...(opts.extra ?? [])];
+  const views = opts.views ?? "all";
+  const points = [
+    ...(views !== "sites" ? autoViewpoints(world, plan, seed) : []),
+    ...(views !== "auto" ? siteViewpoints(made.settlement, opts.hamlets ?? 0) : []),
+    ...(opts.extra ?? []),
+  ];
   const frames: Uint32Array[] = [];
   const files: string[] = [];
   for (const [k, vp] of points.entries()) {
@@ -184,16 +209,20 @@ export function main(argv: string[]): void {
   let n = 2048, seed = 7;
   const extra: Viewpoint[] = [];
   let outDir: string | undefined;
+  let views: RenderOptions["views"], hamlets = 0, cache = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--n") n = Number(argv[++i]);
     else if (a === "--seed") seed = Number(argv[++i]);
     else if (a === "--out") outDir = argv[++i];
+    else if (a === "--views") views = argv[++i] as RenderOptions["views"];
+    else if (a === "--hamlets") hamlets = Number(argv[++i]);
+    else if (a === "--cache") cache = true;
     else if (a === "--at") {
       const [name, x, y] = argv[++i].split(":");
       extra.push({ name, x: Number(x), y: Number(y), e: 0 });
     }
   }
-  const res = renderWorld({ n, seed, outDir, extra, log: (l) => console.log(l) });
+  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, log: (l) => console.log(l) });
   console.log(res.dir);
 }

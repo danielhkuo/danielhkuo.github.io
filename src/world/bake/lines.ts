@@ -4,7 +4,7 @@
 //
 // Continuous cell coordinates: cell i spans [i, i + 1).
 
-import { RIVER_BUCKET, type BakeWorld } from "./world.ts";
+import { RIVER_BUCKET, type BakeWorld, type RiverIndex } from "./world.ts";
 
 /** No river segment is longer than this many cells. */
 export const RIVER_PIECE_REACH = 8;
@@ -21,7 +21,12 @@ export type RiverPointFn = (x: number, y: number, width: number, run: number, fi
  * what is drawn never depends on the rectangle.
  */
 export function forEachRiverPoint(world: BakeWorld, x0: number, y0: number, x1: number, y1: number, emit: RiverPointFn): void {
-  const { vertices, bN, bucketStart, segments } = world.rivers;
+  forEachLinePoint(world.rivers, x0, y0, x1, y1, emit);
+}
+
+/** The same walk over any indexed set of polylines (rivers, roads). */
+export function forEachLinePoint(index: RiverIndex, x0: number, y0: number, x1: number, y1: number, emit: RiverPointFn): void {
+  const { vertices, bN, bucketStart, segments } = index;
   if (segments.length === 0) return;
   const bx0 = Math.floor((x0 - RIVER_PIECE_REACH) / RIVER_BUCKET), bx1 = Math.floor((x1 + RIVER_PIECE_REACH) / RIVER_BUCKET);
   const by0 = Math.floor((y0 - RIVER_PIECE_REACH) / RIVER_BUCKET), by1 = Math.floor((y1 + RIVER_PIECE_REACH) / RIVER_BUCKET);

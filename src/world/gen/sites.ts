@@ -395,7 +395,7 @@ export function coverAtNode(c: SiteContext, gx: number, gy: number): number {
 
 /** Open ground a building can stand in: grass, heath, moor, scrub or crops. */
 export function isOpenCover(m: number): boolean {
-  return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm);
+  return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.wheatRow && m <= M.stubbleRow);
 }
 
 /** Mean slope and height range of the node block of half-sizes (hw, hd). */
@@ -797,7 +797,7 @@ function yewCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
 function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
   const out: Cand[] = [];
   const L = {
-    river: `river of w ≥ ${r.bridge.width}`,
+    river: `river of w ≥ ${r.bridge.width} running north–south, so the deck is seen side-on`,
     dry: "abutments on dry land",
     level: `abutments level within ${r.bridge.level}`,
     deck: `deck ${r.bridge.deck[0]}–${r.bridge.deck[1]} above the water`,
@@ -814,7 +814,6 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       const px = v[k], py = v[k + 1];
       const node = idx(c, Math.floor(px / 4), Math.floor(py / 4));
       if (c.isSea[node] || c.lakeId[node] >= 0 || c.toSea[node] < 120) continue;
-      tally.pass(L.river);
       let tx = v[k + 8] - v[k - 8], ty = v[k + 9] - v[k - 7];
       const tl = Math.sqrt(tx * tx + ty * ty);
       if (tl < 1e-6) continue;
@@ -822,7 +821,9 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       // The deck runs across the flow; keep the abutment with the smaller x first.
       let nx = -ty, ny = tx;
       if (nx < 0) { nx = -nx; ny = -ny; }
-      const half = w / 2 + 7;
+      if (nx * nx < 0.6) continue;
+      const half = w / 2 + 10;
+      tally.pass(L.river);
       const ax = px - nx * half, ay = py - ny * half, bx = px + nx * half, by = py + ny * half;
       const ia = idx(c, Math.floor(ax / 4), Math.floor(ay / 4)), ib = idx(c, Math.floor(bx / 4), Math.floor(by / 4));
       if (c.isSea[ia] || c.isSea[ib] || c.lakeId[ia] >= 0 || c.lakeId[ib] >= 0) continue;
@@ -942,8 +943,12 @@ export class SitingError extends Error {
 
 /** Places the reserved sites. Throws a SitingError naming the failed rule unless `strict` is off. */
 export function placeSites(fields: SiteFields, rules: SiteRules = siteRules(fields.n), opts: PlaceOptions = {}): SitesResult {
+  return placeSitesOn(siteContext(fields), rules, opts);
+}
+
+/** The same, on fields already derived. */
+export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOptions = {}): SitesResult {
   const strict = opts.strict !== false;
-  const c = siteContext(fields);
   const shortfall: string[] = [];
   const fail = (type: string, rule: string): void => {
     if (strict) throw new SitingError(type, rule);

@@ -7,7 +7,8 @@ import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { boxBlur, shade, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
-import { forEachRiverPoint } from "./lines.ts";
+import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
+import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
 import { HMAX, type BakeWorld } from "./world.ts";
 
 export const TILE = 256;
@@ -178,6 +179,35 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   // 1. Ground.
   const ground = new Float32Array(count);
   upsampleGround(world.ground, gN, wx0, wy0, W, H, ground);
+  // Pads, street terraces and the harbour, cut at cell size.
+  const bi = world.built;
+  // Under street terraces the cover is chosen from the hillside as it was, so a riser is a wall and not a crag.
+  let natural: Float32Array | null = null;
+  // Pads: 255 at the heart of a levelled pad, fading over its skirt; nothing is planted there.
+  let pad: Uint8Array | null = null;
+  let band: Uint8Array | null = null;
+  if (bi) {
+    for (const id of conformsIn(bi, wx0, wy0, wx0 + W, wy0 + H)) {
+      const cf = bi.built.conforms[id];
+      if (cf.kind === "terrace" && !natural) { natural = Float32Array.from(ground); band = new Uint8Array(count); }
+      if (cf.kind === "flat" && cf.rx >= 5 && !pad) pad = new Uint8Array(count);
+      const [rx, ry] = conformReach(cf);
+      const ex = Math.floor(cf.x - rx), ey = Math.floor(cf.y - ry), sw = Math.ceil(2 * rx) + 2, sh = Math.ceil(2 * ry) + 2;
+      const ox = imageOffset(ex, sw, wx0, n), oy = imageOffset(ey, sh, wy0, n);
+      const ccx = cf.x - ex + ox, ccy = cf.y - ey + oy;
+      for (let yy = Math.max(0, oy); yy < Math.min(H, oy + sh); yy++) for (let xx = Math.max(0, ox); xx < Math.min(W, ox + sw); xx++) {
+        const k = yy * W + xx;
+        const before = ground[k];
+        ground[k] = conformed(cf, before, xx + 0.5 - ccx, yy + 0.5 - ccy);
+        // Street terraces: which step a cell stands on, 1…3, cycling up the hill.
+        if (cf.kind === "terrace" && band && ground[k] !== before) band[k] = 1 + (((Math.floor((ground[k] - cf.level) / cf.limit + 0.5) % 3) + 3) % 3);
+        if (pad && cf.kind === "flat" && cf.rx >= 5) {
+          const v = Math.floor(255 * conformWeight(cf, xx + 0.5 - ccx, yy + 0.5 - ccy));
+          if (v > pad[k]) pad[k] = v;
+        }
+      }
+    }
+  }
 
   // 2. Water: lakes where the ground lies under a neighbouring lake node's level, sea at or below 0.
   const water = new Uint8Array(count);
@@ -321,6 +351,26 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
     }
   }
+  // Roads: the cells under each line (1 a path, 2 a road), and the cells within two of one, where nothing is planted.
+  const road = new Uint8Array(count), roadNear = new Uint8Array(count);
+  if (world.roads && world.roads.segments.length) {
+    let any = false;
+    forEachLinePoint(world.roads, wx0, wy0, wx0 + W, wy0 + H, (px, py, width) => {
+      const cx = Math.floor(px) - wx0, cy = Math.floor(py) - wy0;
+      if (cx < 0 || cy < 0 || cx >= W || cy >= H) return;
+      const k = cy * W + cx;
+      if (water[k] || riv[k] === 0) return;
+      if (width > road[k]) road[k] = width > 2 ? 2 : width;
+      any = true;
+    });
+    if (any) {
+      for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
+        const k = y * W + x;
+        if (road[k] === 0) continue;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dy * dy <= 5) roadNear[k + dy * W + dx] = 1;
+      }
+    }
+  }
   const sight = { north: Infinity, south: Infinity };
   // Distance to the nearest river in any direction, for the cover's field boundaries. River cells stay 0.
   if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_OFFSET - 1);
@@ -332,6 +382,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const crown = new Float32Array(count).fill(-Infinity);
   const crownMat = new Uint8Array(count);
   const slope = new Float32Array(count);
+  const terr = new Uint8Array(count);
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
@@ -362,10 +413,13 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     c.y = wrap(wy, n);
     for (let x = 0; x < cw; x++) {
       const i = (y + cOff) * W + x + cOff;
-      const e = ground[i];
-      const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
+      const terraced = band !== null && band[i] !== 0;
+      const src = terraced ? (natural as Float32Array) : ground;
+      const e = src[i];
+      const dx = (src[i + 1] - src[i - 1]) * 0.5, dy = (src[i + W] - src[i - W]) * 0.5;
       const s = Math.sqrt(dx * dx + dy * dy);
       slope[i] = s;
+      if (terraced) terr[i] = 1;
 
       const gfx = gF[x];
       const g00 = gr0 + gI0[x], g10 = gr0 + gI1[x], g01 = gr1 + gI0[x], g11 = gr1 + gI1[x];
@@ -418,6 +472,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const m = look.cover(c, mask);
       gmat[i] = m;
       if (c.water !== 0) continue;
+      if (roadNear[i] !== 0) {
+        if (road[i] !== 0 && bi) gmat[i] = road[i] === 2 ? bi.built.mats.road : bi.built.mats.path;
+        continue;
+      }
+      if (band !== null && band[i] !== 0) {
+        // The town's hillside is gardens and vines, a terrace of each in turn, with few trees.
+        if (bi) gmat[i] = band[i] === 2 ? bi.built.mats.vine : bi.built.mats.yard;
+        if ((mask[((c.y + 201) & 255) * 256 + ((c.x + 9) & 255)] & 31) !== 0) continue;
+      }
+      if (pad !== null && pad[i] > 40) {
+        // A pad is a clearing: grass, speckled out over its skirt, and nothing planted.
+        if (bi && pad[i] > mask[((c.y + 37) & 255) * 256 + ((c.x + 101) & 255)]) gmat[i] = bi.built.mats.yard;
+        continue;
+      }
 
       sight.north = rivN[i] === 255 ? Infinity : rivN[i];
       sight.south = rivS[i] === 255 ? Infinity : rivS[i];
@@ -458,6 +526,33 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
 
+  // Structures: their tops go into the crown layer over whatever grew there; their yards repaint the ground.
+  const fixed = new Uint8Array(count), made = new Uint8Array(count);
+  if (bi) {
+    for (const id of structuresIn(bi, wx0, wy0, wx0 + W, wy0 + H)) {
+      const s = bi.built.structures[id];
+      const ox = imageOffset(s.x, s.w, wx0, n), oy = imageOffset(s.y, s.h, wy0, n);
+      for (let j = 0; j < s.h; j++) {
+        const yy = oy + j;
+        if (yy < 0 || yy >= H) continue;
+        for (let q = 0; q < s.w; q++) {
+          const xx = ox + q;
+          if (xx < 0 || xx >= W) continue;
+          const a = j * s.w + q, k = yy * W + xx;
+          if (s.top[a] > 0) {
+            crown[k] = s.base + s.top[a];
+            crownMat[k] = s.mat[a];
+            fixed[k] = s.tone[a];
+            made[k] = 2;
+          } else if (s.paint[a] !== 0 && made[k] !== 2) {
+            crown[k] = -Infinity;
+            if (!water[k] && riv[k] !== 0) { gmat[k] = s.paint[a]; made[k] = 1; }
+          }
+        }
+      }
+    }
+  }
+
   // 7. The drawn surface over the crown region.
   const surf = new Float32Array(count);
   for (let y = sLo - 1; y <= sHiY; y++) {
@@ -477,7 +572,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const o = y * w + x;
       const top = surf[i];
       const hasCrown = crown[i] > dry[i];
-      const m = hasCrown ? crownMat[i] : gmat[i];
+      let m = hasCrown ? crownMat[i] : gmat[i];
+      const structure = hasCrown && made[i] === 2;
+      // A street terrace's riser is a retaining wall.
+      if ((made[i] === 1 || terr[i] === 1) && !hasCrown && bi && ground[i] - ground[i + W] > 1.2) m = bi.built.mats.retaining;
       let flags = 0;
 
       // Shadow: terrain by the exact sweep, crowns and rocks by a short march.
@@ -491,7 +589,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
 
       out.surf[o] = top;
       out.mat[o] = m;
-      if (water[i] !== 0) {
+      if (water[i] !== 0 && !structure) {
         // Tone: cells from the shore across the shallows, then the depth of the water beyond them.
         // Blue noise per cell breaks the steps between tones into a wash.
         const dither = (mask[((wrap(y0 + y, n) + 91) & 255) * 256 + ((wrap(x0 + x, n) + 157) & 255)] + 0.5) / 256;
@@ -507,7 +605,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         out.flags[o] = flags | F_QUIET;
         continue;
       }
-      if (riv[i] === 0) {
+      if (riv[i] === 0 && !structure) {
         out.aux[o] = phase[i];
         out.light[o] = 128;
         out.flags[o] = flags | F_QUIET;
@@ -529,12 +627,12 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         tone = under + 0.55 * (shade(gx, gy, 0, 0) - 0.5);
         tone = tone < 0 ? 0 : tone > 1 ? 1 : tone;
       }
-      out.light[o] = Math.floor(tone * 255 + 0.5);
+      out.light[o] = structure && fixed[i] !== 0 ? fixed[i] : Math.floor(tone * 255 + 0.5);
 
       const canopy = hasCrown && look.isCanopy[m] === 1;
       if (canopy) flags |= F_CANOPY;
       else {
-        if (!hasCrown && slope[i] >= STEEP_SLOPE) {
+        if (!hasCrown && made[i] === 0 && terr[i] === 0 && slope[i] >= STEEP_SLOPE) {
           // Steep ground is hatched: sparsely from STEEP_SLOPE, densely on true cliffs. The level rides in aux.
           flags |= F_CLIFF;
           out.aux[o] = slope[i] >= CLIFF_SLOPE ? 2 : 1;
