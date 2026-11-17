@@ -1,12 +1,11 @@
 // STAND-INS for generator stages that are not built yet. Everything in this
 // file is throwaway: it exists so the bake has believable land to draw until
-// gen/erode.ts, gen/hydro.ts, gen/coast.ts and gen/climate.ts land, and each
+// gen/drown.ts, gen/coast.ts and gen/climate.ts land, and each
 // function is replaced by passing the real stage's output to buildBakeWorld.
 
 import { fbm } from "../core/noise.ts";
-import { NB8_DX, NB8_DY, wrapIndex } from "../core/torus.ts";
-import { accumulate, priorityFlood, receivers } from "../gen/flood.ts";
-import type { ClimateInput, HydroInput } from "./world.ts";
+import { wrapIndex } from "../core/torus.ts";
+import type { ClimateInput } from "./world.ts";
 
 /** Chamfer (3–4) distance in nodes from every node to the nearest node where `src` is set, capped. */
 function chamfer(src: Uint8Array, n: number, cap: number): Float32Array {
@@ -40,81 +39,6 @@ export function standinDrown(g: ArrayLike<number>, gN: number): Float32Array {
   const out = new Float32Array(gN * gN);
   for (let i = 0; i < out.length; i++) out[i] = land[i] ? g[i] - 3 : -Math.min(24, 0.3 + 0.48 * (off[i] - 0.5));
   return out;
-}
-
-/**
- * STAND-IN for S7: lakes where the flood stands ≥ 1.5 deep over ≥ 8 nodes,
- * channels from drainage area, HAND. Fills the smaller pits in `ground`.
- */
-export function standinHydro(ground: Float32Array, gN: number, n: number): HydroInput {
-  const nn = gN * gN;
-  const h = new Float64Array(nn);
-  const waterKind = new Uint8Array(nn);
-  const isSea = new Uint8Array(nn);
-  for (let i = 0; i < nn; i++) {
-    h[i] = ground[i];
-    if (ground[i] <= 0) { isSea[i] = 1; waterKind[i] = 1; }
-  }
-  const eps = 1e-4;
-  const { filled, order } = priorityFlood(h, gN, isSea, eps);
-
-  // Lakes: connected pieces of deep standing water.
-  const waterLevel = new Float32Array(nn);
-  const seen = new Uint8Array(nn);
-  const stack = new Int32Array(nn);
-  const piece: number[] = [];
-  for (let s = 0; s < nn; s++) {
-    if (seen[s] || isSea[s] || filled[s] - h[s] < 1.5) continue;
-    let sp = 0;
-    stack[sp++] = s;
-    seen[s] = 1;
-    piece.length = 0;
-    let level = Infinity;
-    while (sp > 0) {
-      const i = stack[--sp];
-      piece.push(i);
-      if (filled[i] < level) level = filled[i];
-      const x = i % gN, y = (i - x) / gN;
-      for (let q = 0; q < 8; q++) {
-        const j = wrapIndex(x + NB8_DX[q], y + NB8_DY[q], gN);
-        if (seen[j] || isSea[j] || filled[j] - h[j] < 0.3) continue;
-        seen[j] = 1;
-        stack[sp++] = j;
-      }
-    }
-    if (piece.length < 8) continue;
-    for (const i of piece) { waterKind[i] = 2; waterLevel[i] = level; }
-  }
-  for (let i = 0; i < nn; i++) if (waterKind[i] === 0 && filled[i] > ground[i]) ground[i] = filled[i];
-
-  const { rcv } = receivers(filled, gN, isSea, null);
-  const area = accumulate(order, rcv, isSea, null);
-  const riverWidth = new Uint8Array(nn);
-  const riverTo = new Uint8Array(nn).fill(255);
-  const riverRun = new Float32Array(nn);
-  const hand = new Float32Array(nn);
-  const drain = new Float64Array(nn);
-  const boost = 6400 / n;
-  for (let q = 0; q < order.length; q++) {
-    const i = order[q];
-    if (waterKind[i] !== 0) { drain[i] = waterKind[i] === 2 ? waterLevel[i] : 0; continue; }
-    const r = rcv[i];
-    if (area[i] >= 64) {
-      const w = Math.round(Math.sqrt((area[i] * boost) / 1000));
-      riverWidth[i] = w < 1 ? 1 : w > 6 ? 6 : w;
-      const x = i % gN, y = (i - x) / gN;
-      for (let d = 0; d < 8; d++) {
-        if (wrapIndex(x + NB8_DX[d], y + NB8_DY[d], gN) === r) { riverTo[i] = d; break; }
-      }
-      const step = riverTo[i] & 1 ? 4 * Math.SQRT2 : 4;
-      riverRun[i] = riverRun[r] + step;
-      drain[i] = filled[i];
-    } else {
-      drain[i] = drain[r];
-    }
-    hand[i] = Math.max(0, filled[i] - drain[i]);
-  }
-  return { waterLevel, waterKind, riverWidth, riverTo, riverRun, hand };
 }
 
 /** STAND-IN for S6's shore classes: by the relief standing within two nodes of the sea. */

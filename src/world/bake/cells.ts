@@ -327,7 +327,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const st = look.scatter(c, m, mask, rd > RIVER_CAP ? RIVER_CAP : rd);
       if (!st) continue;
       // The stamp's centre in window cells, and the ground it stands on.
-      const scx = st.x - c.x + (x + cOff), scy = st.y - c.y + (y + cOff);
+      let ox = st.x - c.x, oy = st.y - c.y;
+      if (ox > n / 2) ox -= n; else if (ox < -n / 2) ox += n;
+      if (oy > n / 2) oy -= n; else if (oy < -n / 2) oy += n;
+      const scx = ox + (x + cOff), scy = oy + (y + cOff);
       const r = st.r > STAMP_REACH - 1.5 ? STAMP_REACH - 1.5 : st.r;
       const bx = Math.floor(scx), by = Math.floor(scy);
       if (bx < 0 || by < 0 || bx >= W || by >= H) continue;
