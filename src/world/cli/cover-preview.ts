@@ -8,10 +8,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCells, F_SHADOW, type Look } from "../bake/cells.ts";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
-import { toCoarse } from "../gen/climate.ts";
+import { climateFields } from "../gen/climate.ts";
+import { hydrology } from "../gen/hydro.ts";
 import { paramsFor } from "../gen/params.ts";
-import { makeLand } from "../gen/pipeline.ts";
+import { type Land, makeLand, makeWorld, rockOnG } from "../gen/pipeline.ts";
 import { type Plan, planWorld } from "../gen/plan.ts";
+import { rivers } from "../gen/rivers.ts";
 import { LIGHT_SHADOW_SHIFT, type Palette } from "../look/contract.ts";
 import { MATERIAL_COUNT, MATERIAL_NAMES } from "../look/materials.ts";
 import { createView } from "../runtime/view.ts";
@@ -19,49 +21,52 @@ import { createView } from "../runtime/view.ts";
 export const VIEW_W = 400;
 export const VIEW_H = 225;
 
-/** Talus thickness, in units, that counts as full debris cover. */
-export const DEBRIS_FULL = 8;
-
 export interface PreviewWorld {
   world: BakeWorld;
   plan: Plan;
 }
 
 /**
- * The world the generator makes today: eroded, capped, talus-relaxed land,
- * then hydrology and climate. Erosion takes a minute at full size, so the land
- * is cached under `cacheDir` when one is given.
+ * The world the generator makes today (gen/pipeline.ts makeWorld), as the
+ * bake reads it. Erosion takes a minute at full size, so the land is cached
+ * under `cacheDir` when one is given; hydrology, rivers and climate always run.
  */
 export function previewWorld(n: number, seed: number, cacheDir?: string): PreviewWorld {
   const params = paramsFor(n);
   const nodes = params.gN * params.gN;
   const file = cacheDir ? join(cacheDir, `land-${n}-${seed}.bin`) : "";
-  let heights: Float64Array;
-  let debrisG: Float64Array;
-  let plan: Plan;
-  if (file && existsSync(file)) {
-    const raw = readFileSync(file);
-    const all = new Float64Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
-    if (all.length !== 2 * nodes) throw new Error(`${file} is not a ${n} world`);
-    heights = all.subarray(0, nodes);
-    debrisG = all.subarray(nodes);
-    plan = planWorld(params, seed);
-  } else {
-    const land = makeLand(params, seed);
-    heights = land.g;
-    debrisG = land.debris;
-    plan = land.plan;
-    if (file) {
-      mkdirSync(cacheDir as string, { recursive: true });
-      const all = new Float64Array(2 * nodes);
-      all.set(heights, 0);
-      all.set(debrisG, nodes);
-      writeFileSync(file, new Uint8Array(all.buffer));
-    }
+  if (!file) {
+    const made = makeWorld(params, seed);
+    return { world: buildBakeWorld({ params, seed, world: made }), plan: made.land.plan };
   }
-  const debris = toCoarse(debrisG, params.gN);
-  for (let i = 0; i < debris.length; i++) debris[i] = debris[i] >= DEBRIS_FULL ? 1 : debris[i] / DEBRIS_FULL;
-  return { world: buildBakeWorld({ params, plan, seed, heights, debris }), plan };
+  let land: Land;
+  if (existsSync(file)) {
+    const raw = readFileSync(file);
+    if (raw.byteLength !== 17 * nodes) throw new Error(`${file} is not a ${n} world`);
+    const copy = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+    const plan = planWorld(params, seed);
+    land = {
+      p: params, seed, plan,
+      g: new Float64Array(copy, 0, nodes),
+      debris: new Float64Array(copy, 8 * nodes, nodes),
+      isSea: new Uint8Array(copy, 16 * nodes, nodes),
+      rock: rockOnG(plan, params.gN),
+      steps: { stepsC: 0, steadinessC: 0, steadinessG: 0, capScale: 1 },
+    };
+  } else {
+    land = makeLand(params, seed);
+    mkdirSync(cacheDir as string, { recursive: true });
+    const out = new Uint8Array(17 * nodes);
+    out.set(new Uint8Array(land.g.buffer, land.g.byteOffset, 8 * nodes), 0);
+    out.set(new Uint8Array(land.debris.buffer, land.debris.byteOffset, 8 * nodes), 8 * nodes);
+    out.set(land.isSea, 16 * nodes);
+    writeFileSync(file, out);
+  }
+  const gN = params.gN;
+  const hydro = hydrology(land.g, gN, land.isSea, params.hydro);
+  const rv = rivers({ g: land.g, gN, isSea: land.isSea, hydro }, params.rivers, seed);
+  const climate = climateFields(rv.ground, hydro.rain, land.isSea, gN, params.climate);
+  return { world: buildBakeWorld({ params, seed, world: { land, hydro, rivers: rv, climate } }), plan: land.plan };
 }
 
 export interface MapWindow {

@@ -62,30 +62,43 @@ test("water is sea, lake or river, whatever else the cell says", () => {
   only({ water: 3, e: 120, slope: 2.5, wind: 1, region: HIGHLAND }, M.river);
 });
 
-test("sand: the beach stamp, or low sheltered flat ground", () => {
-  only({ shore: 1, e: 0.6, slope: 0.1 }, M.sand);
-  only({ shore: 4, e: 0.6, slope: 0.1, region: KARST }, M.sandPale);
+test("sand: only sheltered, nearly flat shore; not every coast has a beach", () => {
+  only({ shore: 1, e: 0.6, slope: 0.1, exposure: 0.2 }, M.sand);
+  // The beach stamp alone is not enough: an exposed or sloping shore keeps its grass or rock.
+  none({ shore: 1, e: 0.6, slope: 0.1, exposure: 0.8 }, M.sand, M.sandPale);
+  none({ shore: 1, e: 0.6, slope: 0.35, exposure: 0.2 }, M.sand, M.sandPale);
+  only({ shore: 4, e: 0.6, slope: 0.1, exposure: 0.2, region: KARST }, M.sandPale);
   only({ e: 0.8, exposure: 0.1, slope: 0.03, hand: 0.8 }, M.sand);
   // Exposed, steep or high ground is not sand.
   none({ e: 0.8, exposure: 0.8, slope: 0.03, hand: 0.8 }, M.sand, M.sandPale);
-  none({ e: 0.8, exposure: 0.1, slope: 0.4, hand: 0.8 }, M.sand, M.sandPale);
+  none({ e: 0.8, exposure: 0.1, slope: 0.2, hand: 0.8 }, M.sand, M.sandPale);
   none({ e: 6, exposure: 0.1, slope: 0.03, hand: 6 }, M.sand, M.sandPale);
 });
 
 test("rocky shores get a shingle line and a rock bench", () => {
   only({ shore: 2, e: 0.5, slope: 0.2 }, M.shingle);
-  only({ shore: 2, e: 1.8, slope: 0.2, rock: 2 }, M.rockSed);
-  only({ shore: 2, e: 1.8, slope: 0.2, rock: 0 }, M.rockHard);
+  only({ shore: 2, e: 1.4, slope: 0.2, rock: 2 }, M.rockSed);
+  only({ shore: 2, e: 1.4, slope: 0.2, rock: 0 }, M.rockHard);
+  // The bench is narrow: above it the shore is whatever the land is.
+  none({ shore: 2, e: 3, slope: 0.2, rock: 0 }, M.rockHard, M.cliffSlate);
 });
 
-test("snow: cold and not too steep; north faces are colder; cliffs shed it", () => {
+test("snow: by height, aspect and slope; scoured ridges and steep ribs break through", () => {
   only({ e: 120, hand: 60 }, M.snow);
-  only({ e: 78, northness: 1, hand: 60 }, M.snow);
-  none({ e: 78, northness: -1, hand: 60 }, M.snow, M.snow);
+  only({ e: 80, northness: 1, hand: 60 }, M.snow);
+  // Faces turned from the north-west sun hold snow lower than those turned to it.
+  only({ e: 82, westness: -1, northness: 0, hand: 60 }, M.snow);
+  none({ e: 82, westness: 1, northness: 0, hand: 60 }, M.snow, M.snow);
+  // A wind-scoured ridge is bare where a sheltered slope at the same height is white.
+  only({ e: 87, hand: 60, wind: 0.3 }, M.snow);
+  none({ e: 87, hand: 60, wind: 1 }, M.snow, M.snow);
+  // Ground steeper than about 0.85 sheds it.
+  none({ e: 120, slope: 0.98, hand: 60, rock: 2 }, M.snow, M.snowLate);
+  none({ e: 84, northness: -1, hand: 60 }, M.snow, M.snow);
   none({ e: 120, slope: 1.4, hand: 60 }, M.snow, M.snowLate);
 });
 
-test("bare rock: faces on any rock, steep ground on hard rock, in the region's stone", () => {
+test("bare rock goes by steepness: from 0.7 on hard rock, later on soft, in the region's stone", () => {
   only({ slope: 2.2, rock: 0 }, M.cliffHard);
   only({ slope: 2.2, rock: 2 }, M.cliffSed);
   only({ slope: 2.2, rock: 0, region: KARST }, M.cliffLime);
@@ -93,16 +106,24 @@ test("bare rock: faces on any rock, steep ground on hard rock, in the region's s
   only({ slope: 1.25, rock: 0 }, M.rockHard);
   only({ slope: 1.25, rock: 0, region: KARST }, M.rockLime);
   only({ slope: 1.25, rock: 0, region: SLATE }, M.rockSlate);
-  // Steep ground on soft rock keeps its soil.
-  none({ slope: 1.25, rock: 2 }, M.rockHard, M.cliffSlate);
+  only({ slope: 0.8, rock: 0 }, M.rockHard);
+  none({ slope: 0.6, rock: 0 }, M.rockHard, M.cliffSlate);
+  // Softer rock keeps its soil on steeper ground, and shows as sedimentary rock past that.
+  none({ slope: 0.8, rock: 1 }, M.rockHard, M.cliffSlate);
+  only({ slope: 1, rock: 1 }, M.rockSed);
+  none({ slope: 1, rock: 2 }, M.rockHard, M.cliffSlate);
+  only({ slope: 1.25, rock: 2 }, M.rockSed);
+  // Karst limestone shows sooner than any.
+  only({ slope: 0.55, rock: 0, region: KARST }, M.rockLime);
   // A cliffed shore shows its face at a gentler slope.
   only({ slope: 1.25, rock: 2, shore: 3, e: 8 }, M.cliffSed);
 });
 
-test("scree: debris on a middling slope", () => {
+test("scree: fans of debris under steep rock, never a stain on gentle grass", () => {
   only({ debris: 0.95, slope: 0.8, rock: 2 }, M.scree);
   only({ debris: 0.95, slope: 0.8, rock: 2, region: SLATE }, M.screeSlate);
-  none({ debris: 0.5, slope: 0.8, rock: 2 }, M.scree, M.screeSlate);
+  only({ debris: 0.5, slope: 0.5, rock: 0 }, M.scree);
+  none({ debris: 0.1, slope: 0.8, rock: 2 }, M.scree, M.screeSlate);
   none({ debris: 0.95, slope: 0.2, rock: 2 }, M.scree, M.screeSlate);
   none({ debris: 0.95, slope: 1.5, rock: 2 }, M.scree, M.screeSlate);
 });
@@ -228,7 +249,7 @@ test("upland in-bye land is walled grass: valley and lake country, and the highl
         else other++;
       }
     }
-    assert.ok(wall / 90000 > 0.015 && wall / 90000 < 0.1, `walls ${wall / 90000}`);
+    assert.ok(wall / 90000 > 0.008 && wall / 90000 < 0.08, `walls ${wall / 90000}`);
     assert.ok(grass / 90000 > 0.75, `grass ${grass / 90000}`);
     assert.ok(other / 90000 < 0.2);
   }
@@ -343,7 +364,7 @@ test("otherwise grass: scrub where dry, meadow on the valley floor, pasture on t
 
 test("rule order: the first match wins", () => {
   // One cell that satisfies snow, rock, scree, alpine, heath and forest at once, peeled a rule at a time.
-  const all = { e: 120, slope: 1.05, rock: 0, debris: 0.95, region: HIGHLAND, wind: 0.8, hand: 12, moisture: 0.7 };
+  const all = { e: 120, slope: 0.78, rock: 0, debris: 0.95, region: HIGHLAND, wind: 0.8, hand: 12, moisture: 0.7 };
   only({ ...all, water: 3 }, M.river);
   only(all, M.snow);
   only({ ...all, e: 58 }, M.rockHard);
@@ -355,7 +376,7 @@ test("rule order: the first match wins", () => {
   only({ ...all, e: 58, rock: 2, debris: 0, slope: 0.3, region: SKERRY, wind: 0.2 }, M.floorConifer);
   family({ ...all, e: 58, rock: 2, debris: 0, slope: 0.3, region: SKERRY, wind: 0.2, moisture: 0.1 }, M.scrubCool);
   // Sand beats the forest that would grow on the same low ground; late snow beats alpine meadow.
-  only({ shore: 1, e: 0.6, slope: 0.3, hand: 12, moisture: 0.7 }, M.sand);
+  only({ shore: 1, e: 0.6, slope: 0.12, exposure: 0.2, hand: 12, moisture: 0.7 }, M.sand);
   only({ e: 77, hand: 40, region: HIGHLAND }, M.snowLate);
   // Where people farm the field decides: farmland beats forest on gentle ground, and marsh on the valley floor.
   for (const id of patch({ slope: 0.11, hand: 6, moisture: 0.7, region: HOME })) assert.ok(enclosed(id) && id !== M.wall, MATERIAL_NAMES[id]);
@@ -375,15 +396,15 @@ test("jitter makes every border a speckled band, never a line", () => {
   // Each sweep crosses one threshold over 400 cells, at about the field's natural gradient.
   const tri = (id: number, base: number): boolean => id >= base && id <= base + 2;
   const sweeps: { name: string; at: (t: number) => Partial<CoverInput>; is: (id: number) => boolean; min: number }[] = [
-    { name: "snow", at: (t) => ({ e: 81.2 + 1.6 * t, hand: 50 }), is: (id) => id === M.snow, min: 2 },
-    { name: "rock", at: (t) => ({ slope: 0.75 + 0.3 * t, rock: 0 }), is: (id) => id === M.rockHard, min: 3 },
-    { name: "scree", at: (t) => ({ debris: 0.6 + 0.3 * t, slope: 0.8, rock: 2 }), is: (id) => id === M.scree, min: 6 },
+    { name: "snow", at: (t) => ({ e: 75 + 14 * t, hand: 50 }), is: (id) => id === M.snow, min: 2 },
+    { name: "rock", at: (t) => ({ slope: 0.55 + 0.3 * t, rock: 0 }), is: (id) => id === M.rockHard, min: 3 },
+    { name: "scree", at: (t) => ({ debris: 0.15 + 0.3 * t, slope: 0.8, rock: 2 }), is: (id) => id === M.scree, min: 6 },
     { name: "alpine", at: (t) => ({ e: 49 + 12 * t, hand: 40, region: HIGHLAND }), is: (id) => tri(id, M.alpineCool), min: 10 },
     { name: "heath", at: (t) => ({ wind: 0.4 + 0.3 * t }), is: (id) => id >= M.heathCool && id <= M.moorWarm, min: 12 },
     { name: "forest", at: (t) => ({ moisture: 0.36 + 0.08 * t }), is: (id) => id === M.floorBroadleaf, min: 3 },
     { name: "marsh", at: (t) => ({ hand: 0.4 + 1.2 * t, slope: 0.005 }), is: (id) => id === M.marsh || id === M.reeds, min: 4 },
     { name: "scrub", at: (t) => ({ moisture: 0.24 + 0.12 * t }), is: (id) => tri(id, M.scrubCool), min: 8 },
-    { name: "sand", at: (t) => ({ e: 1 + 1 * t, exposure: 0.1, slope: 0.03, hand: 1 }), is: (id) => id === M.sand, min: 2 },
+    { name: "sand", at: (t) => ({ e: 0.7 + 1 * t, exposure: 0.1, slope: 0.03, hand: 1 }), is: (id) => id === M.sand, min: 2 },
   ];
   for (const s of sweeps) {
     const row: boolean[] = [];

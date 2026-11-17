@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { worldLook } from "../look/look.ts";
+import { worldLook } from "../bake/look.ts";
+import { buildPalette } from "../render/palette.ts";
 import { isCrop, isWater, MATERIAL_COUNT } from "../look/materials.ts";
 import {
   busiest, cameraFrame, coverShares, mapWindow, paint, previewWorld, upscale, VIEW_H, VIEW_W,
@@ -17,7 +18,7 @@ test("the preview maps and films the generator's real land, the same every time"
   const { world, plan } = previewWorld(N, SEED);
   assert.equal(world.n, N);
   for (const v of world.debris) assert.ok(v >= 0 && v <= 1);
-  const look = worldLook(N);
+  const look = worldLook(N, buildPalette({ time: 0.5, season: 0.25, overcast: 0 }));
   const core = plan.cores[0];
   const x0 = Math.round(core.x) - 96, y0 = Math.round(core.y) - 64;
 

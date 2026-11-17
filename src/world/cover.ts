@@ -57,8 +57,11 @@ export const HUE_CLASS = {
 
 const HUE_SEED = 0x51a7e;
 const HUE_SEED_2 = 0x2c0de;
-const HEATHER_SEED = 0x4ea7;
-const OUTCROP_SEED = 0x11e57;
+const SNOWLINE_SEED = 0x5a0e;
+/** Hard rock is bare from this slope (35°). */
+export const ROCK_SLOPE = 0.7;
+/** Below this height nothing is ever snow, so the snowline is not worked out. */
+const SNOW_FLOOR = 55;
 
 /**
  * The hue field: 200-cell periodic noise with a finer rotated octave, about
@@ -84,15 +87,21 @@ export function hueVariant(x: number, y: number, hueClass: number, mask: Uint8Ar
 export const BOUNDARY_HALF = 0.55;
 /** Arable fields keep a rough grass margin this far in from the boundary. */
 export const MARGIN = 1.6;
-/** Lowland fields stop at this slope and this height above the valley floor; upland in-bye land runs steeper but stays lower. */
-const LOWLAND_SLOPE = 0.15;
-const LOWLAND_HAND = 20;
-const UPLAND_SLOPE = 0.27;
-const UPLAND_HAND = 14;
+/**
+ * Fields keep to gentle ground near the valley floor and its rivers: lowland
+ * fields stop at this slope and this height above drainage; upland in-bye
+ * land runs a little steeper but stays lower still.
+ */
+const LOWLAND_SLOPE = 0.12;
+const LOWLAND_HAND = 12;
+const UPLAND_SLOPE = 0.2;
+const UPLAND_HAND = 10;
 /** In upland country, open ground this far above the valley floor is moor. */
 const ROUGH_HAND = 12;
 /** How far lake country lowers the alpine meadow's cold score. */
 const ALPINE_LAKES = 0.13;
+/** In the home lowland, gentle ground above the fields is open down, not wood: woods start this much steeper there. */
+const HOME_OPEN = 0.06;
 /** Karst farmland keeps to ground this close to the valley floor; the rest is scrub. */
 const KARST_FARM_HAND = 7;
 
@@ -128,7 +137,11 @@ export function fieldAt(c: CoverInput, n: number = WORLD_N): Parcel {
  */
 function fieldCell(c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, upland: boolean, karst: boolean): number {
   const f = parcelAt(c, n, scratch, RIVER_BANK + 1.6 * ruleJitter(mask, x, y, RULE.margin));
-  if (f.edge < BOUNDARY_HALF) return upland ? M.wall : M.hedge;
+  // A hedge is ground for scatter to plant a broken row of crowns on; a wall is a thin line with gaps.
+  if (f.edge < BOUNDARY_HALF) {
+    if (!upland) return M.hedge;
+    return ruleJitter(mask, x, y, RULE.furrow) < 0.28 ? M.wall : M.pastureCool + (f.id >>> 3) % 3;
+  }
   const id = f.id;
   // The bank of a river is left as meadow: a verge the plough does not reach.
   if (f.bank !== 0) return M.meadowCool + (id >>> 3) % 3;
@@ -163,12 +176,13 @@ function fieldCell(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
 
 /** Open hill ground: heather where it is dry or slaty, grass moor where it is wet, in drifts. */
 function heathOrMoor(c: CoverInput, x: number, y: number, j: number, mask: Uint8Array, n: number): number {
-  const p = Math.max(1, Math.round(n / 64));
-  const drift = gradNoise(((x + 0.5) * p) / n, ((y + 0.5) * p) / n, p, HEATHER_SEED);
-  const heather = 0.9 * c.region[2] + 0.3 * c.region[1] + 1.2 * (0.55 - c.moisture) + 0.9 * drift + j * 0.3;
-  return heather > 0.25
-    ? M.heathCool + hueVariant(x, y, HUE_CLASS.heath, mask, n)
-    : M.moorCool + hueVariant(x, y, HUE_CLASS.moor, mask, n);
+  // Heather keeps to dry, exposed, well-drained ground: the windward convex
+  // tops high above their valleys, and slate country. The score follows the
+  // land, so heather follows ridges and spurs; its edge is a narrow dither.
+  const score = 3 * (c.wind - 0.55) + (c.hand - 18) / 30 + 0.5 * c.region[2] + 0.2 * c.region[1] - 3 * (c.moisture - 0.75) + j * 0.06;
+  if (score <= 0.3) return M.moorCool + hueVariant(x, y, HUE_CLASS.moor, mask, n);
+  // In bloom at the heart of the heath, browner toward its edge.
+  return score > 0.85 ? M.heathCool : score > 0.55 ? M.heathMid : M.heathWarm;
 }
 
 function rockKind(karst: number, slate: number, rock: number, j: number): number {
@@ -199,43 +213,58 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   const hand = c.hand;
   const cold = e / 100 + 0.1 * c.northness;
 
-  // Sand: the beach stamp, or low sheltered flat ground. Edge 2. Rocky shores
-  // get a shingle line and a bare rock bench instead.
+  // Sand: only where the shore is sheltered and nearly flat, in bays and
+  // coves; most coasts are grass or rock to the water. Edge 2. Rocky shores
+  // get a shingle line and a narrow rock bench instead.
   let j = ruleJitter(mask, x, y, RULE.sand);
   const dE = j * 2 * PER_CELL.e;
   const dS2 = j * 2 * PER_CELL.slope;
   if (
-    ((c.shore === 1 || c.shore === 4) && e < 1.1 + dE && s < 0.5 + dS2) ||
-    (e < 1.5 + dE && c.exposure < 0.35 + j * 2 * PER_CELL.field && s < 0.15 + dS2)
+    ((c.shore === 1 || c.shore === 4) && e < 1.1 + dE && s < 0.2 + dS2 && c.exposure < 0.45 + j * 2 * PER_CELL.field) ||
+    (e < 1.2 + dE && c.exposure < 0.3 + j * 2 * PER_CELL.field && s < 0.1 + dS2)
   ) {
     return karst > 0.5 + j * 0.05 ? M.sandPale : M.sand;
   }
   if (c.shore === 2 && s < 0.9 + dS2) {
     if (e < 1 + dE) return M.shingle;
-    if (e < 2.5 + dE) return M.rockHard + rockKind(karst, slate, c.rock, j);
+    if (e < 1.8 + dE) return M.rockHard + rockKind(karst, slate, c.rock, j);
   }
 
-  // Snow: cold and not too steep; cliffs shed it. Edge 2.
+  // Snow lies by slope and aspect, not by height alone. The snowline sits
+  // near 82 units: lower on north faces and on those turned from the sun,
+  // higher on wind-scoured ridges, wandering a few units along the range.
+  // Ground steeper than 0.85 sheds it, so ribs and gully walls break through.
+  let snowScore = 0;
+  if (e > SNOW_FLOOR) {
+    const west = c.westness === undefined ? 0 : c.westness;
+    const sp = Math.max(1, Math.round(n / 160));
+    const wander = gradNoise(((x + 0.5) * sp) / n, ((y + 0.5) * sp) / n, sp, SNOWLINE_SEED);
+    const scour = c.wind > 0.6 ? c.wind - 0.6 : 0;
+    snowScore = e / 100 + 0.12 * c.northness - 0.06 * west + 0.025 * wander - 0.25 * scour;
+  }
   j = ruleJitter(mask, x, y, RULE.snow);
-  if (cold > 0.82 + j * 2 * PER_CELL.cold && s < 1.1 + j * 2 * PER_CELL.slope) return M.snow;
+  if (snowScore > 0.82 + j * 0.03 && s < 0.85 + j * 0.1) return M.snow;
 
-  // Bare rock: faces, and steep ground on hard rock. Edge 3.
+  // Bare rock goes by steepness: ribbons along faces and gully walls. Hard
+  // rock shows from a slope of 0.7, softer rock holds its soil to 0.9 and
+  // 1.1, and karst limestone shows sooner. Edge 3.
   j = ruleJitter(mask, x, y, RULE.rock);
   const dS3 = j * 3 * PER_CELL.slope;
+  const steep = ROCK_SLOPE + 0.2 * c.rock - 0.25 * karst;
   if (s > 1.7 + dS3 || (c.shore === 3 && s > 0.9 + dS3)) return M.cliffHard + rockKind(karst, slate, c.rock, j);
-  if (s > 0.9 + dS3 && c.rock < 0.5 + j * 0.1) return M.rockHard + rockKind(karst, slate, 0, j);
+  if (s > steep + dS3) return M.rockHard + rockKind(karst, slate, c.rock, j);
 
-  // Scree: where debris gathers on a middling slope. Edge 6.
+  // Scree: the fans and aprons of debris under steep rock, lying at their
+  // angle of rest. Edge 6.
   j = ruleJitter(mask, x, y, RULE.scree);
-  const dS6 = j * 6 * PER_CELL.slope;
-  if (c.debris > 0.75 + j * 6 * PER_CELL.debris && s >= 0.45 + dS6 && s < 1.2 + dS6) {
+  if (c.debris > 0.3 + j * 6 * PER_CELL.debris && s >= 0.3 + j * 6 * PER_CELL.slope) {
     return slate > 0.5 + j * 0.05 ? M.screeSlate : M.scree;
   }
 
   // Late snow: the band under the permanent snow that melts to fellfield in
   // high summer. Edge 4.
   j = ruleJitter(mask, x, y, RULE.snowLate);
-  if (cold > 0.72 + j * 4 * PER_CELL.cold && s < 0.9 + j * 4 * PER_CELL.slope) return M.snowLate;
+  if (snowScore > 0.72 + j * 0.03 && s < 0.85 + j * 0.1) return M.snowLate;
 
   // Alpine meadow: highland and lake country, cold, gentle. Edge 10. Lake
   // country's fells are lower, so its meadows start lower.
@@ -255,14 +284,14 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   const dW = j * 4 * PER_CELL.field;
   const lowlandW = region[0] + (hand < KARST_FARM_HAND + j * 4 * PER_CELL.hand ? 0.8 * karst : 0);
   const uplandW = 0.9 * slate + 0.75 * region[3] + 0.55 * region[1];
-  if (e > 1.2 && c.wind < 0.72 + j * 4 * PER_CELL.wind) {
+  if (e > 1.2 && c.wind < 0.7 + j * 4 * PER_CELL.wind) {
     if (lowlandW > 0.5 + dW) {
       if (s < LOWLAND_SLOPE + j * PER_CELL.slope && hand < LOWLAND_HAND + j * 4 * PER_CELL.hand) {
         return fieldCell(c, x, y, mask, n, false, karst > region[0]);
       }
     } else if (
       uplandW > 0.45 + dW && s < UPLAND_SLOPE + j * PER_CELL.slope &&
-      hand < UPLAND_HAND + j * 4 * PER_CELL.hand && cold < 0.42 + j * 4 * PER_CELL.cold && c.wind < 0.6 + j * 4 * PER_CELL.wind
+      hand < UPLAND_HAND + j * 4 * PER_CELL.hand && cold < 0.38 + j * 4 * PER_CELL.cold && c.wind < 0.62 + j * 4 * PER_CELL.wind
     ) {
       return fieldCell(c, x, y, mask, n, true, false);
     }
@@ -292,7 +321,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   const dF = j * 3 * PER_CELL.field;
   if (
     hand > 2 + dH && hand < 30 - 14 * region[1] - 16 * region[3] + dH &&
-    s > 0.08 + dS * 0.5 && s < 0.8 + dS &&
+    s > 0.08 + HOME_OPEN * region[0] + dS * 0.5 && s < 0.8 + dS &&
     moisture > 0.4 + dF && c.wind < 0.5 + lee + j * 3 * PER_CELL.wind &&
     cold < 0.6 - 0.2 * (region[1] + region[3]) + j * 3 * PER_CELL.cold
   ) {
@@ -308,14 +337,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
 
   // Otherwise grass: dry scrub, valley-floor meadow, or pasture. Edge 8.
   j = ruleJitter(mask, x, y, RULE.grass);
-  if (moisture < 0.3 + j * 8 * PER_CELL.field) {
-    // Limestone shows through the karst scrub in pale outcrops on its steeper ground.
-    if (karst > 0.5 && s > 0.22 + j * 0.1) {
-      const p = Math.max(1, Math.round(n / 36));
-      if (gradNoise(((x + 0.5) * p) / n, ((y + 0.5) * p) / n, p, OUTCROP_SEED) > 0.18 + j * 0.2) return M.rockLime;
-    }
-    return M.scrubCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n);
-  }
+  if (moisture < 0.3 + j * 8 * PER_CELL.field) return M.scrubCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n);
   if (hand < 6 + j * 8 * PER_CELL.hand && s < 0.2 + j * 8 * PER_CELL.slope) {
     return M.meadowCool + hueVariant(x, y, HUE_CLASS.meadow, mask, n);
   }

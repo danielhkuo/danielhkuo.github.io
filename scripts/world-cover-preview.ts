@@ -11,7 +11,7 @@ import {
   busiest, cameraFrame, coverShares, mapWindow, paint, previewWorld, upscale, VIEW_H, VIEW_W,
 } from "../src/world/cli/cover-preview.ts";
 import { encodePng } from "../src/world/cli/png.ts";
-import { NOON, worldLook } from "../src/world/look/look.ts";
+import { worldLook } from "../src/world/bake/look.ts";
 import { isCrop, isWater } from "../src/world/look/materials.ts";
 import { buildPalette } from "../src/world/render/palette.ts";
 
@@ -33,7 +33,8 @@ const NAMES = ["home", "highland", "slate", "lakes", "karst", "skerry"];
 
 mkdirSync(outDir, { recursive: true });
 const { world, plan } = previewWorld(n, seed, `${root}world`);
-const look = worldLook(n);
+const NOON = { time: 0.5, season: 0.25, overcast: 0 };
+const look = worldLook(n, buildPalette(NOON));
 
 function save(name: string, rgba: Uint8Array, pw: number, ph: number): void {
   const file = `${outDir}${name}${tag ? `-${tag}` : ""}-${n}.png`;

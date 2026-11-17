@@ -49,6 +49,12 @@ export interface CoverInput {
    */
   riverDx?: number;
   riverDy?: number;
+  /**
+   * Optional: 1 when the river in sight due north or south of this cell is at
+   * least 2 cells wide. Only such rivers carry riverside trees; a line of
+   * trees along every rill reads as a comb.
+   */
+  riverWide?: number;
 }
 
 /** A crown or rock stamped into height and material by the bake. */

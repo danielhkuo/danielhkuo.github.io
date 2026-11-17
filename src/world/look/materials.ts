@@ -115,11 +115,14 @@ export const MATERIAL = {
   vineRow: 68,
   stubble: 69,
   stubbleRow: 70,
+
+  /** The small crowns of a hedge. Not canopy: a hedge is never inked. */
+  hedgeCrown: 71,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 71;
+export const MATERIAL_COUNT = 72;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -166,7 +169,7 @@ export const isVegetation: Uint8Array = flags([
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow, M.ploughRow, M.vineRow, M.stubble, M.stubbleRow,
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
-  M.hedge,
+  M.hedge, M.hedgeCrown,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */
