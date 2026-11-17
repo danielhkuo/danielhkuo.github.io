@@ -32,6 +32,8 @@ export const HATCH_PICK = 44;
 export const LIP_RUN = 5;
 /** From a wall this tall the lip's ink is full; a shorter crag's is soft. */
 export const LIP_FULL = 12;
+/** A break with more wall within this many rows above it is a ledge in a face, not a lip. */
+export const LIP_LEDGE = 4;
 /** A lip is evened against its neighbours' lips up to this many rows off. */
 export const LIP_SEEK = 4;
 /** Ground with no crest and no steep face near it inks only where the hollow hidden behind it is this deep: a slight swell takes no line. */
@@ -162,8 +164,13 @@ export function inkCliffs(p: Painted, isStill: Uint8Array): void {
       const i = r * w + c;
       if (face(i) || !face(i + w)) continue;
       if ((flags[i] & (F_QUIET | F_CANOPY)) !== 0 || y[i + w] - y[i] > 3) continue;
-      // A lip is where the ground above breaks into the wall: a ledge or a bench of rock inside a face is not one.
-      if ((aux[i] & AUX_ROCK) !== 0) continue;
+      // A lip is where the ground above breaks into the wall: steep rock, or a ledge with more wall close above it,
+      // is inside a face and takes none.
+      if ((flags[i] & F_CLIFF) !== 0 && (aux[i] & AUX_ROCK) !== 0) continue;
+      if (r < LIP_LEDGE) continue;
+      let ledge = false;
+      for (let q = 1; q <= LIP_LEDGE && !ledge; q++) ledge = face(i - q * w);
+      if (ledge) continue;
       let run = 1;
       while (run < LIP_FULL && r + 1 + run < h && face(i + w + run * w)) run++;
       if (run >= LIP_RUN) lip[i] = run >= LIP_FULL ? INK_FULL : INK_SOFT;
