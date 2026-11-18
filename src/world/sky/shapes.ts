@@ -12,6 +12,8 @@
 // Light is the sun (north-west and above) on that surface and on the cloud's
 // smoothed mass, so a whole flank turns to shade together; it is dimmed where a
 // nearer lobe stands in the way, by the base, and in the creases between lobes.
+// The underside has a weak light of its own, so the lobes along the base show as
+// forms in shade round a darker core, not as one flat plate.
 // Streamers are chains of flattened lobes on a level base. Nothing here is noise
 // per pixel.
 
@@ -67,6 +69,11 @@ export const SUN = (() => {
   return { x: x / len, up: up / len, toward: toward / len };
 })();
 /** Cells a shadow moves south-east per unit of height: the flier's shadow uses the same slope. */
+/** Where the underside's light comes from: the open sky on the sun's side, low and weak. Unit length. */
+const GLOW = (() => {
+  const x = -0.62, up = 0.5, toward = 0.2, len = Math.hypot(x, up, toward);
+  return { x: x / len, up: up / len, toward: toward / len };
+})();
 export const SHADOW_SLOPE = 0.354;
 
 /** A lobe in the camera's space: centre (x, y down the screen, f toward the viewer), radius r, squashed to `flat`·r tall and deep. */
@@ -303,6 +310,35 @@ const MASS_SLOPE = 2.4;
 /** How far up from the base the base's own shade reaches: this share of the cloud's height, and never more than the cap, in pixels. */
 const BASE_SHADE = 0.42;
 const BASE_SHADE_CAP = 30;
+/** Light at and under this is the underside, which is modelled again by its own, weaker lights; the change blends in over UNDER_BLEND. */
+const UNDER_FROM = -0.6;
+const UNDER_BLEND = 0.25;
+/** The underside's light at its outline, and how much darker its core is. */
+const UNDER_EDGE = -0.65;
+const UNDER_CORE = 0.4;
+/** The core is reached this share of the way from the outline to the underside's deepest point. */
+const UNDER_SPAN = 0.6;
+/** How strongly the underside's lobes are modelled, and the most light any of it gets: it stays shade. */
+const UNDER_MODEL = 0.5;
+const UNDER_TOP = -0.55;
+
+/** For each cloud pixel, how many pixels to the nearest clear one (by steps of 1 and 1.4), up to `cap`; 0 off the cloud. */
+function edgeDistance(cover: Uint8Array, w: number, h: number, cap: number): Float32Array {
+  const dist = new Float32Array(w * h);
+  for (let i = 0; i < dist.length; i++) if (cover[i]) dist[i] = cap;
+  // The margin keeps the cloud off the box's edge, so every neighbour read here is inside it.
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (!cover[i]) continue;
+    dist[i] = Math.min(dist[i], dist[i - 1] + 1, dist[i - w] + 1, dist[i - w - 1] + 1.4, dist[i - w + 1] + 1.4);
+  }
+  for (let y = h - 2; y >= 1; y--) for (let x = w - 2; x >= 1; x--) {
+    const i = y * w + x;
+    if (!cover[i]) continue;
+    dist[i] = Math.min(dist[i], dist[i + 1] + 1, dist[i + w] + 1, dist[i + w + 1] + 1.4, dist[i + w - 1] + 1.4);
+  }
+  return dist;
+}
 
 /** Rasterises lobes into a shape: nearest surface per pixel, lit, cropped to the cloud plus a margin. */
 function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
@@ -316,7 +352,7 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
   const ox = Math.floor(x0), oy = Math.floor(y0);
   const bw = Math.ceil(x1) - ox + 1, bh = Math.ceil(y1) - oy + 1;
   const depth = new Float32Array(bw * bh).fill(-Infinity);
-  const lam = new Float32Array(bw * bh), high = new Float32Array(bw * bh);
+  const lam = new Float32Array(bw * bh), high = new Float32Array(bw * bh), glow = new Float32Array(bw * bh);
   let top = 1;
   for (const l of lobes) {
     const ry = l.r * l.flat, r2 = l.r * l.r;
@@ -339,7 +375,9 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
         if (z > top) top = z;
         // The ellipsoid's normal, then the sun on it.
         const nx = dx, nu = -dy / l.flat, nf = dz / l.flat;
-        lam[i] = (nx * SUN.x + nu * SUN.up + nf * SUN.toward) / Math.hypot(nx, nu, nf);
+        const len = Math.hypot(nx, nu, nf);
+        lam[i] = (nx * SUN.x + nu * SUN.up + nf * SUN.toward) / len;
+        glow[i] = (nx * GLOW.x + nu * GLOW.up + nf * GLOW.toward) / len;
       }
     }
   }
@@ -436,6 +474,7 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
   }
   const w = cx1 - cx0 + 1 + 2 * MARGIN, h = cy1 - cy0 + 1 + 2 * MARGIN;
   const cover = new Uint8Array(w * h), light = new Float32Array(w * h), rim = new Uint8Array(w * h);
+  const creased = new Uint8Array(w * h);
   const at = (x: number, y: number): number => {
     const px = x - MARGIN + cx0, py = y - MARGIN + cy0;
     return px < 0 || py < 0 || px >= bw || py >= bh ? -Infinity : depth[py * bw + px];
@@ -464,12 +503,31 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
     // On the flank turned from the sun a lobe's own lit face counts for less, so the shade stays one calm mass.
     const own = lam[bi] > 0 ? lam[bi] * Math.min(1, Math.max(0.65, 1 + 2.2 * body)) : lam[bi];
     light[i] = 0.5 * own + body - (shaded ? 0.3 : 0) - (crease ? 0.42 : 0);
+    if (crease) creased[i] = 1;
     // Rims: on the sunward side (up or left), open sky or a lobe well behind.
     if (lam[bi] > 0.2 && !shaded) {
       const up = at(x, y - 1), left = at(x - 1, y);
       if (up === -Infinity || (left === -Infinity && at(x - 1, y - 1) === -Infinity)) rim[i] = 1;
       else if (here > up + STEP) rim[i] = 2;
     }
+  }
+
+  // The underside is not one flat plate. The sun does not reach it, so it is modelled by a weaker light, the open
+  // sky on the sun's side: each lobe along the base has a paler cap and a far side in deeper shade. That modelling
+  // fades toward the core of the underside, far from any outline, which is its darkest and calmest part. Creases
+  // stay dark.
+  const dist = edgeDistance(cover, w, h, 0.5 * Math.min(w, h));
+  let deepest = 1;
+  for (let i = 0; i < w * h; i++) if (cover[i] && light[i] < UNDER_FROM && dist[i] > deepest) deepest = dist[i];
+  const coreSpan = Math.max(3, UNDER_SPAN * deepest);
+  for (let y = MARGIN; y < h - MARGIN; y++) for (let x = MARGIN; x < w - MARGIN; x++) {
+    const i = y * w + x;
+    const s = Math.min(1, (UNDER_FROM - light[i]) / UNDER_BLEND);
+    if (!cover[i] || s <= 0) continue;
+    const bi = (y - MARGIN + cy0) * bw + x - MARGIN + cx0;
+    const c = Math.min(1, (dist[i] - 1) / coreSpan), core = c * c * (3 - 2 * c);
+    const under = UNDER_EDGE - UNDER_CORE * core + UNDER_MODEL * glow[bi] * (1 - 0.6 * core) - (creased[i] ? 0.3 : 0);
+    light[i] += s * (Math.min(under, UNDER_TOP) - light[i]);
   }
 
   // The shadow: each lobe's footprint on the ground under it, moved south-east by the sun's slope times its height.
