@@ -133,6 +133,20 @@ the real world and picks from.
 
 **Builder:** Cursor, `grok-4.7-high`.
 
+**As built.**
+- `Sky` also exposes `field`.
+- `sky.ts` exports `drawClouds(out, rect, field, sprites, t, layer, layerAlpha)`, so the drawing can be tested on
+  hand-made fields.
+- The first shapes rendered as domes on rectangular slabs with speckled halos, and the tests allowed it. Claude
+  rewrote `shapes.ts` (lobed cumulus on a pinched flat base, two-tier banks, tapered ribbons) and added tests for:
+  - rounded base corners;
+  - one clean piece with no halo;
+  - two or more crowns;
+  - a smooth dome;
+  - tapered wisps.
+
+  These pass on 14 of 16 seeds; the other two miss a limit by under 1 %.
+
 ### Tasks 2a, 2b, 2c: the three painters (parallel lanes)
 
 **Files (one lane each):**
