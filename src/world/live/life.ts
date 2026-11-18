@@ -125,7 +125,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
   const sheepGraze = art.add(["www.", "sswk"], 1, 1, wool);
   const sheepLook = art.add(["wwwk", "ssw."], 1, 1, wool);
   const feather: Readonly<Record<string, readonly [number, number, number?]>> = {
-    W: [M.whitewash, 15], g: [M.stone, 2], d: [M.roofSlate, 4, 150],
+    W: [M.whitewash, 15], g: [M.roofSlate, 6], d: [M.roofSlate, 4, 150],
   };
   // White strokes with a slate stroke under them, as a pen would draw a bird: they read over pale ground and dark.
   const gullRest = art.add([".W", "gW", "dd"], 0, 1, feather);
@@ -237,7 +237,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
   }
 
-  /** Gulls on the beaches: groups of two to five on a 32 × 32 lattice, one cell in three. */
+  /** Gulls on the beaches: a group of three to six to each cell of a 32 × 32 lattice, of which those on sand or shingle show. */
   function shoreGulls(f: LiveFrame): void {
     const { bake, t, n } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
@@ -245,9 +245,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     const cx1 = Math.floor((rx + w) / 32), cy1 = Math.floor((ry + h) / 32);
     for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor(rx / 32) - 1; cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x9011);
-      if (hc % 3 !== 0) continue;
       const fx = cx * 32 + 8 + ((hc >>> 4) % 16), fy = cy * 32 + 8 + ((hc >>> 10) % 16);
-      const count = 2 + ((hc >>> 16) & 3);
+      const count = 3 + ((hc >>> 16) & 3);
       for (let k = 0; k < count; k++) {
         const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
         const px = fx + (g % 15) - 7 - rx, py = fy + ((g >>> 8) % 9) - 4 - ry;

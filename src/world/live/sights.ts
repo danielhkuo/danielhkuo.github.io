@@ -87,7 +87,7 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
     ".wwa.",
     ".wwa.",
     "..a..",
-  ], 2, 2, { a: [M.river, 8], w: [M.whitewash, 14] });
+  ], 2, 2, { a: [M.sea, 9], w: [M.whitewash, 14] });
   const child = art.add(["k", "b"], 0, 1, { k: [M.stoneDark, 1], b: [M.roofLead, 5] });
   const fisher = art.add([
     "..m...",
