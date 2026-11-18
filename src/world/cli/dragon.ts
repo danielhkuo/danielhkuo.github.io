@@ -168,12 +168,12 @@ function readFlag(argv: readonly string[], name: string): string | undefined {
 /** The command line; 0 on success. */
 export async function main(argv: readonly string[]): Promise<number> {
   const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
-  const id = (JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string }).worldId;
+  const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
+  const id = current.worldId;
   const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
   const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
-  const data = await decodeFlightData(bin);
-  const bake = await createBakeHost(bin, mask);
+  const [data, bake, named] = await Promise.all([decodeFlightData(bin), createBakeHost(bin, mask), namedViews(bin, manifest)]);
   const view = createStreamView(data, syncPool(bake), buildPalette(MIDDAY), mask, {
     width: W,
     height: H,
@@ -182,7 +182,6 @@ export async function main(argv: readonly string[]): Promise<number> {
   });
   const st: Stage = { view, sky: createSky(manifest.seed, manifest.n, styleFrom(null), manifest.start), n: manifest.n, out: new Uint32Array(W * H) };
 
-  const named = await namedViews(bin, manifest);
   const forestArg = readFlag(argv, "--forest")?.split(",").map(Number);
   const forest = forestArg && forestArg.length === 2 && forestArg.every(Number.isFinite) ? { x: forestArg[0], y: forestArg[1] } : FOREST;
   const places: [string, { x: number; y: number }][] = [["bay", named.start], ["town", named.town], ["forest", forest]];
