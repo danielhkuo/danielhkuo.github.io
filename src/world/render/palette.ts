@@ -346,6 +346,16 @@ function buildSpecs(): Spec[] {
   set(M.lantern, all([0.93, 0.05, 98]), LINE);
   set(M.sailcloth, all([0.93, 0.018, 85]), LINE);
   set(M.quarry, all([0.58, 0.03, 258]), STONE);
+  // Verdigris sits apart from the grey of lead: greener, and a little darker in the hollows of a dome.
+  set(M.copper, all([0.54, 0.078, 166]), STONE);
+  // Coloured plaster for a crowded town. Rose, sage and sea sit outside the reserved hues so they can
+  // carry enough colour to read as different houses; butter stays inside the cap, clear of the gold.
+  set(M.plasterButter, all([0.88, 0.055, 96]), BUILT);
+  set(M.plasterRose, all([0.68, 0.1, 352]), BUILT);
+  set(M.plasterSage, all([0.58, 0.08, 145]), BUILT);
+  set(M.plasterSea, all([0.66, 0.065, 232]), BUILT);
+  set(M.ivy, evergreen([0.5, 0.068, 148]), BUILT);
+  set(M.moss, evergreen([0.64, 0.055, 128]), BUILT);
 
   return s;
 }
