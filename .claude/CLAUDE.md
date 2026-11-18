@@ -44,6 +44,21 @@ The Astryx rules below govern the Recruiter page, the contact form and ordinary 
 
 They do not govern the game layer: the renderer, title menu, HUD, Codex and rose window. That layer is hand-drawn canvas, SVG and CSS by design. Keep its styles inside the game layer, and use theme tokens for any colour it shares with the Recruiter page.
 
+## How we work
+
+- **Roadmap.** `docs/superpowers/roadmap.md` is the one list of next steps, ideas and backlog. Update it in the same
+  branch as the work that changes it.
+- **Branches.** `feat/dragon-world` is the integration branch until the world ships to `main`. Every piece of work
+  gets its own branch off it: `world/<topic>` for features (`world/clouds`), `fix/<topic>`, `docs/<topic>`. Commit
+  there, and merge back with `git merge --no-ff` once tests, types and lint pass and any visual change has been judged
+  on renders. Delete the branch after the merge. Cursor lanes and agent worktrees branch from the topic branch and
+  merge into it, never straight into `feat/dragon-world`. Nothing is pushed without the owner's say-so.
+- **Who builds.** Cursor (the cursor-delegate plugin) builds most things now that the terrain is settled: Claude
+  writes the brief and the tests, Cursor implements, a clean-copy check decides. For anything visual, Cursor builds
+  two or three variants in parallel lanes (different briefs or models); Claude renders them side by side, picks or
+  combines, and owns the verdict. Fable or Opus subagents are for judging hard art calls and for work Cursor has
+  failed three times.
+
 ## Commands
 
 - `npm run dev`: dev server (Turbopack). If CSS looks stale, check the served file and clear `.next/dev`.
