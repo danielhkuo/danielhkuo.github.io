@@ -50,6 +50,8 @@ export default function Flight() {
   const [stats, setStats] = useState<{ fps: number; pool: string; view: string } | null>(null);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     const stats = new URLSearchParams(window.location.search).has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = stats
@@ -61,12 +63,6 @@ export default function Flight() {
     };
     recomputeScale();
     window.addEventListener("resize", recomputeScale);
-
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      window.removeEventListener("resize", recomputeScale);
-      return;
-    }
 
     const keys = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
