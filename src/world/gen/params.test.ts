@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { areaScale, countFor, lengthScale, paramsFor } from "./params.ts";
+import { ARCHETYPE, areaScale, countFor, FORM_NAMES, lengthScale, paramsFor } from "./params.ts";
 import { builtRules, siteRules } from "./sites.ts";
 
 test("worlds of 6400 and below scale lengths with the world and keep their counts", () => {
@@ -9,7 +9,8 @@ test("worlds of 6400 and below scale lengths with the world and keep their count
   assert.equal(areaScale(1024), 1);
   assert.equal(countFor(3200, 2), 2);
   const p = paramsFor(6400);
-  assert.deepEqual(p.cores.archetypes.map((a) => a.count), [[1, 1], [1, 1], [1, 1], [1, 1], [2, 2], [5, 7]]);
+  // One of each island but the skerries: highland, home, fjord, lakes, slate, fen, karst, table, cone, caldera.
+  assert.deepEqual(p.cores.archetypes.map((a) => a.count), [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1], [5, 7]]);
 });
 
 test("a larger world keeps the 6400 world's lengths and holds more islands, with one home island", () => {
@@ -22,8 +23,10 @@ test("a larger world keeps the 6400 world's lengths and holds more islands, with
   }
   assert.equal(big.cores.poissonR, small.cores.poissonR);
   assert.equal(big.uplift.featureCells, small.uplift.featureCells);
-  // highland, home, lakes, slate, karst, skerry
-  assert.deepEqual(big.cores.archetypes.map((a) => a.count), [[3, 3], [1, 1], [3, 3], [3, 3], [5, 5], [13, 18]]);
+  // highland, home, fjord, lakes, slate, fen, karst, table, cone, caldera, skerry
+  assert.deepEqual(big.cores.archetypes.map((a) => a.count), [[3, 3], [1, 1], [2, 2], [3, 3], [3, 3], [2, 2], [3, 3], [2, 2], [3, 3], [3, 3], [13, 18]]);
+  assert.equal(big.cores.archetypes.filter((a) => a.id === ARCHETYPE.home).length, 1);
+  assert.equal(new Set(big.cores.archetypes.map((a) => FORM_NAMES[a.form])).size, FORM_NAMES.length);
 });
 
 test("a larger world holds more landmarks at the same spacing, still one abbey and one town", () => {
