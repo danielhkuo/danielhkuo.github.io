@@ -1,12 +1,15 @@
 // Moving water: surf on the shore, a slow swell on open water, flow in the rivers and pouring falls.
 //
-// One layer, two sweeps of the frame. The first finds, for every water pixel, how far it is from the shore and what
-// kind of shore that is (a chamfer distance, seeded only where land and water lie at the same depth, so a hill that
-// stands in front of the sea is not a shore). The second finishes that distance and repaints the water pixels it wants
-// to move. Every pixel is repainted through the palette, at another tone of its own ramp or as the river's foam, and
-// every pattern is fixed to bake space and stepped in whole pixels, so nothing swims with the camera or shimmers
-// between steps. Time enters only through `f.t`.
+// The shore distance and how far each fall has dropped depend only on the land. A frame the same size whose rect has
+// slid by at most 16 pixels, and whose overlapping land still matches, reuses the previous distance shifted with the
+// land and builds it again only along the edge the slide exposed. A jump, a resize, or a bake that changed in the
+// overlap builds the whole field as before. The paint depends on time, so it still walks every water pixel.
+//
+// Every pixel is repainted through the palette, at another tone of its own ramp or as the river's foam, and every
+// pattern is fixed to bake space and stepped in whole pixels, so nothing swims with the camera or shimmers between
+// steps. Time enters only through `f.t`.
 
+import { Buffer } from "node:buffer";
 import { FALL_TONE, FOAM_TONE } from "../bake/chunk.ts";
 import { hash2 } from "../core/hash.ts";
 import { fbm } from "../core/noise.ts";
@@ -43,6 +46,11 @@ const K_BEACH = 0, K_ROCK = 1, K_CALM = 2, K_NONE = 3;
 const FAR = 255;
 /** Surf is drawn out to this many half-pixels from the shore. */
 const REACH = 32;
+/**
+ * Screen pixels around a new edge or a changed bake pixel whose shore distance is built again. Wide enough that a shore
+ * sliding into view cannot move the picture by more than a sliver, and narrow enough to stay inside the frame budget.
+ */
+const REBUILD = 2;
 /** Land and water within this many eighths of a world row of each other meet at a shore. */
 const NEAR = 48;
 
@@ -203,6 +211,27 @@ function streakTile(seed: number): Uint8Array {
 
 const MAX_FEET = 96;
 
+/** Copy `n` bytes from one kept field onto the next. A view, not a fresh buffer. */
+function copyBytes(src: Uint8Array, srcAt: number, dst: Uint8Array, dstAt: number, n: number): void {
+  dst.set(src.subarray(srcAt, srcAt + n), dstAt);
+}
+
+/** The overlap agrees: current bake (x, y) is the kept bake (x + dx, y + dy). */
+function sameBake(bake: Uint32Array, kept: Uint32Array, w: number, h: number, dx: number, dy: number): boolean {
+  const x0 = dx < 0 ? -dx : 0, x1 = dx > 0 ? w - dx : w;
+  const y0 = dy < 0 ? -dy : 0, y1 = dy > 0 ? h - dy : h;
+  const span = x1 - x0;
+  if (span <= 0 || y1 <= y0) return true;
+  const a = Buffer.from(bake.buffer, bake.byteOffset, bake.byteLength);
+  const b = Buffer.from(kept.buffer, kept.byteOffset, kept.byteLength);
+  const bytes = span * 4;
+  for (let y = y0; y < y1; y++) {
+    const a0 = (y * w + x0) * 4, b0 = ((y + dy) * w + x0 + dx) * 4;
+    if (a.compare(b, b0, b0 + bytes, a0, a0 + bytes) !== 0) return false;
+  }
+  return true;
+}
+
 /** The moving water. `seed` is the world's. */
 export function waterLayer(seed: number): LiveLayer {
   const surf = surfTable();
@@ -210,112 +239,125 @@ export function waterLayer(seed: number): LiveLayer {
   const warp = warpTile(seed);
   const grit = gritTile(seed);
   const streaks = streakTile(seed);
-  // Scratch, sized to the frame on first use and kept.
+  // Scratch, sized to the frame on first use and kept. `dist` / `fallRun` hold the last finished field; `workD` /
+  // `workF` are the ones being written. `keptBake` is the land those fields were built from.
   let dist = new Uint8Array(0);
+  let workD = new Uint8Array(0);
   let fallRun = new Uint8Array(0);
+  let workF = new Uint8Array(0);
+  let keptBake = new Uint32Array(0);
+  let colMark = new Uint8Array(0);
   let sized = 0;
+  let have = false;
+  let keptX = 0, keptY = 0;
+  let marked = new Int16Array(0);
+  let nMarked = 0;
   const feet = new Int32Array(MAX_FEET);
   const feetRun = new Uint8Array(MAX_FEET);
 
-  return {
-    name: "water",
-    draw(f: LiveFrame): void {
-      const { out, bake, palette, t } = f;
-      const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
-      // Nothing to do over dry land: every mark this layer makes is on or beside water in view.
-      let wet = false;
-      for (let i = 0, end = w * h; i < end; i++) if (CLASS[bake[i] & 255] !== C_LAND) { wet = true; break; }
-      if (!wet) return;
-      const pw = w + 2;
-      if (sized !== w * 65536 + h) {
-        dist = new Uint8Array(pw * (h + 2));
-        fallRun = new Uint8Array(w * h);
-        sized = w * 65536 + h;
-      }
-      // The frame's border has no shore in reach.
-      dist.fill(FAR, 0, pw);
-      dist.fill(FAR, pw * (h + 1), pw * (h + 2));
-      for (let py = 1; py <= h; py++) {
-        dist[py * pw] = FAR;
-        dist[py * pw + pw - 1] = FAR;
-      }
+  // Down one span: shore distance from above and from the left.
+  const forwardSpan = (bake: Uint32Array, ry: number, w: number, pw: number, dstD: Uint8Array, py: number, px0: number, px1: number): void => {
+    const by = ry + py;
+    const base = Math.floor(by / 256) * 2560, baseUp = Math.floor((by - 1) / 256) * 2560;
+    let i = py * w + px0, j = (py + 1) * pw + px0 + 1;
+    for (let px = px0; px < px1; px++, i++, j++) {
+      const v = bake[i];
+      if (CLASS[v & 255] === C_LAND) { dstD[j] = KIND[v & 255]; continue; }
+      const qL = dstD[j - 1], qU = dstD[j - pw], qUL = dstD[j - pw - 1], qUR = dstD[j - pw + 1];
+      // Open water: every neighbour is already as far from shore as the field records.
+      if ((qL & qU & qUL & qUR) === FAR) { dstD[j] = FAR; continue; }
+      const row = base + (v >>> 16);
+      let d = FAR, q = qL;
+      if (q >= 4) d = q + 8;
+      else if (q !== K_NONE && near(row, base + (bake[i - 1] >>> 16))) d = q + 8;
+      q = qU;
+      if (q >= 4) { if (q + 8 < d) d = q + 8; }
+      else if (q !== K_NONE && q + 8 < d && near(row, baseUp + (bake[i - w] >>> 16))) d = q + 8;
+      q = qUL;
+      if (q >= 4) { if (q + 12 < d) d = q + 12; }
+      else if (q !== K_NONE && q + 12 < d && near(row, baseUp + (bake[i - w - 1] >>> 16))) d = q + 12;
+      q = qUR;
+      if (q >= 4) { if (q + 12 < d) d = q + 12; }
+      else if (q !== K_NONE && q + 12 < d && near(row, baseUp + (bake[i - w + 1] >>> 16))) d = q + 12;
+      dstD[j] = d >= REACH * 4 ? FAR : d;
+    }
+  };
 
-      // The clocks, each stepped in whole units.
-      const wave = Math.floor(((t < 0 ? 0 : t) / WAVE_PERIOD) * 256);
-      const swellT = Math.floor(t * SWELL_SPEED * (256 / SWELL_LENGTH));
-      const flow = Math.floor(t * FLOW_SPEED), flowSteep = Math.floor(t * FLOW_SPEED_STEEP);
-      const flowStill = Math.floor(t * 28);
-      const twinkle = Math.floor(t * 40);
-      const boil = Math.floor(t * 110);
-      const fallT = t * FALL_SPEED;
-      const foam = (M.river << 8) | FOAM_TONE;
-      const fallPale = (M.river << 8) | FALL_TONE;
-      let nFeet = 0;
+  // Height of each fall in the span. A column that holds one is remembered so the run below a reused row is rebuilt.
+  const fallSpan = (bake: Uint32Array, ry: number, w: number, dstF: Uint8Array, py: number, px0: number, px1: number): void => {
+    const by = ry + py;
+    const base = Math.floor(by / 256) * 2560, baseUp = Math.floor((by - 1) / 256) * 2560;
+    const shift = baseUp - base;
+    let i = py * w + px0;
+    for (let px = px0; px < px1; px++, i++) {
+      const v = bake[i];
+      if ((v & 255) !== M.river || ((v >>> 8) & 15) < 12) continue;
+      const up = py > 0 ? bake[i - w] : 0;
+      // The height counts through a gap of a pixel or two where rock shows.
+      const above = isFallPair(v, up, shift) ? dstF[i - w] : py > 2 && fallsOn(bake, i - 2 * w) ? dstF[i - 2 * w] + 1 : py > 3 && fallsOn(bake, i - 3 * w) ? dstF[i - 3 * w] + 2 : 0;
+      dstF[i] = above < 250 ? above + 1 : 255;
+      if (colMark[px] === 0) { colMark[px] = 1; marked[nMarked++] = px; }
+    }
+  };
 
-      // 1. Down the frame: shore distance from above and from the left, and the height of each fall so far.
-      for (let py = 0; py < h; py++) {
-        const by = ry + py;
-        const base = Math.floor(by / 256) * 2560, baseUp = Math.floor((by - 1) / 256) * 2560;
-        let i = py * w, j = (py + 1) * pw + 1;
-        for (let px = 0; px < w; px++, i++, j++) {
-          const v = bake[i];
-          const c = CLASS[v & 255];
-          if (c === C_LAND) {
-            dist[j] = KIND[v & 255];
-            continue;
-          }
-          const row = base + (v >>> 16);
-          let d = FAR, q = dist[j - 1];
-          if (q >= 4) d = q + 8;
-          else if (q !== K_NONE && near(row, base + (bake[i - 1] >>> 16))) d = q + 8;
-          q = dist[j - pw];
-          if (q >= 4) { if (q + 8 < d) d = q + 8; }
-          else if (q !== K_NONE && q + 8 < d && near(row, baseUp + (bake[i - w] >>> 16))) d = q + 8;
-          q = dist[j - pw - 1];
-          if (q >= 4) { if (q + 12 < d) d = q + 12; }
-          else if (q !== K_NONE && q + 12 < d && near(row, baseUp + (bake[i - w - 1] >>> 16))) d = q + 12;
-          q = dist[j - pw + 1];
-          if (q >= 4) { if (q + 12 < d) d = q + 12; }
-          else if (q !== K_NONE && q + 12 < d && near(row, baseUp + (bake[i - w + 1] >>> 16))) d = q + 12;
-          dist[j] = d >= REACH * 4 ? FAR : d;
-          if (c === C_RIVER && ((v >>> 8) & 15) >= 12) {
-            const up = py > 0 ? bake[i - w] : 0;
-            // The height counts through a gap of a pixel or two where rock shows.
-            const above = isFallPair(v, up, baseUp - base) ? fallRun[i - w] : py > 2 && fallsOn(bake, i - 2 * w) ? fallRun[i - 2 * w] + 1 : py > 3 && fallsOn(bake, i - 3 * w) ? fallRun[i - 3 * w] + 2 : 0;
-            fallRun[i] = above < 250 ? above + 1 : 255;
-          }
-        }
-      }
+  // Back up one span: the distance from below and from the right.
+  const backSpan = (bake: Uint32Array, ry: number, w: number, pw: number, dstD: Uint8Array, py: number, px0: number, px1: number): void => {
+    const by = ry + py;
+    const base = Math.floor(by / 256) * 2560, baseDown = Math.floor((by + 1) / 256) * 2560;
+    let i = py * w + px1 - 1, j = (py + 1) * pw + px1;
+    for (let px = px1 - 1; px >= px0; px--, i--, j--) {
+      const v = bake[i];
+      if (CLASS[v & 255] === C_LAND) continue;
+      const qR = dstD[j + 1], qD = dstD[j + pw], qDR = dstD[j + pw + 1], qDL = dstD[j + pw - 1];
+      let d = dstD[j];
+      if (d === FAR && (qR & qD & qDR & qDL) === FAR) continue;
+      const row = base + (v >>> 16);
+      let q = qR;
+      if (q >= 4) { if (q + 8 < d) d = q + 8; }
+      else if (q !== K_NONE && q + 8 < d && near(row, base + (bake[i + 1] >>> 16))) d = q + 8;
+      q = qD;
+      if (q >= 4) { if (q + 8 < d) d = q + 8; }
+      else if (q !== K_NONE && q + 8 < d && near(row, baseDown + (bake[i + w] >>> 16))) d = q + 8;
+      q = qDR;
+      if (q >= 4) { if (q + 12 < d) d = q + 12; }
+      else if (q !== K_NONE && q + 12 < d && near(row, baseDown + (bake[i + w + 1] >>> 16))) d = q + 12;
+      q = qDL;
+      if (q >= 4) { if (q + 12 < d) d = q + 12; }
+      else if (q !== K_NONE && q + 12 < d && near(row, baseDown + (bake[i + w - 1] >>> 16))) d = q + 12;
+      if (d >= REACH * 4) d = FAR;
+      dstD[j] = d;
+    }
+  };
 
-      // 2. Back up the frame: the distance from below and from the right, and the paint.
-      for (let py = h - 1; py >= 0; py--) {
-        const by = ry + py;
-        const base = Math.floor(by / 256) * 2560, baseDown = Math.floor((by + 1) / 256) * 2560;
-        const gritRow = (by & 255) << 8, warpRow = ((by >> 1) & 255) << 8, streakRow = (by & (STREAKS - 1)) * STREAKS;
-        const swellRow = by * 5 - swellT;
-        let i = py * w + w - 1, j = (py + 1) * pw + w;
-        for (let px = w - 1; px >= 0; px--, i--, j--) {
-          const v = bake[i];
-          const m = v & 255;
-          const c = CLASS[m];
-          if (c === C_LAND) continue;
-          const row = base + (v >>> 16);
-          let d = dist[j], q = dist[j + 1];
-          if (q >= 4) { if (q + 8 < d) d = q + 8; }
-          else if (q !== K_NONE && q + 8 < d && near(row, base + (bake[i + 1] >>> 16))) d = q + 8;
-          q = dist[j + pw];
-          if (q >= 4) { if (q + 8 < d) d = q + 8; }
-          else if (q !== K_NONE && q + 8 < d && near(row, baseDown + (bake[i + w] >>> 16))) d = q + 8;
-          q = dist[j + pw + 1];
-          if (q >= 4) { if (q + 12 < d) d = q + 12; }
-          else if (q !== K_NONE && q + 12 < d && near(row, baseDown + (bake[i + w + 1] >>> 16))) d = q + 12;
-          q = dist[j + pw - 1];
-          if (q >= 4) { if (q + 12 < d) d = q + 12; }
-          else if (q !== K_NONE && q + 12 < d && near(row, baseDown + (bake[i + w - 1] >>> 16))) d = q + 12;
-          if (d >= REACH * 4) d = FAR;
-          dist[j] = d;
+  const paint = (f: LiveFrame, w: number, h: number, rx: number, ry: number, pw: number, dist: Uint8Array, fallRun: Uint8Array): void => {
+    const { out, bake, palette, t } = f;
+    // The clocks, each stepped in whole units.
+    const wave = Math.floor(((t < 0 ? 0 : t) / WAVE_PERIOD) * 256);
+    const swellT = Math.floor(t * SWELL_SPEED * (256 / SWELL_LENGTH));
+    const flow = Math.floor(t * FLOW_SPEED), flowSteep = Math.floor(t * FLOW_SPEED_STEEP);
+    const flowStill = Math.floor(t * 28);
+    const twinkle = Math.floor(t * 40);
+    const boil = Math.floor(t * 110);
+    const fallT = t * FALL_SPEED;
+    const foam = (M.river << 8) | FOAM_TONE;
+    const fallPale = (M.river << 8) | FALL_TONE;
+    let nFeet = 0;
 
-          const light = (v >>> 8) & 255;
+    for (let py = h - 1; py >= 0; py--) {
+      const by = ry + py;
+      const base = Math.floor(by / 256) * 2560, baseDown = Math.floor((by + 1) / 256) * 2560;
+      const gritRow = (by & 255) << 8, warpRow = ((by >> 1) & 255) << 8, streakRow = (by & (STREAKS - 1)) * STREAKS;
+      const swellRow = by * 5 - swellT;
+      let i = py * w + w - 1, j = (py + 1) * pw + w;
+      for (let px = w - 1; px >= 0; px--, i--, j--) {
+        const v = bake[i];
+        const m = v & 255;
+        const c = CLASS[m];
+        if (c === C_LAND) continue;
+        const d = dist[j];
+        const row = base + (v >>> 16);
+
+        const light = (v >>> 8) & 255;
           // Inked water is a drawn line: it stays.
           if (light >= 64) continue;
           const tone = light & 15, shade = light & 0x30;
@@ -464,6 +506,96 @@ export function waterLayer(seed: number): LiveLayer {
           }
         }
       }
+  };
+
+  return {
+    name: "water",
+    draw(f: LiveFrame): void {
+      const { bake } = f;
+      const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
+      // Nothing to do over dry land: every mark this layer makes is on or beside water in view.
+      let wet = false;
+      for (let i = 0, end = w * h; i < end; i++) if (CLASS[bake[i] & 255] !== C_LAND) { wet = true; break; }
+      if (!wet) return;
+      const pw = w + 2;
+      if (sized !== w * 65536 + h) {
+        const cells = w * h, plane = pw * (h + 2);
+        dist = new Uint8Array(plane);
+        workD = new Uint8Array(plane);
+        fallRun = new Uint8Array(cells);
+        workF = new Uint8Array(cells);
+        keptBake = new Uint32Array(cells);
+        colMark = new Uint8Array(w);
+        marked = new Int16Array(w);
+        sized = w * 65536 + h;
+        have = false;
+      }
+
+      const dx = rx - keptX, dy = ry - keptY;
+      const slide = have && (dx | 0) === dx && (dy | 0) === dy && dx <= 16 && dx >= -16 && dy <= 16 && dy >= -16;
+      // Still, and the land is the land we built from: only the paint depends on the clock.
+      if (slide && dx === 0 && dy === 0 && sameBake(bake, keptBake, w, h, 0, 0)) {
+        paint(f, w, h, rx, ry, pw, dist, fallRun);
+        return;
+      }
+      const moved = slide && sameBake(bake, keptBake, w, h, dx, dy);
+      let sx0 = 0, sx1 = 0, sy0 = 0, sy1 = 0;
+      if (nMarked !== 0) { colMark.fill(0); nMarked = 0; }
+      if (moved) {
+        // Safe interior: far enough from every edge the slide exposed or covered that the kept distance still holds.
+        sx0 = 0; sx1 = w; sy0 = 0; sy1 = h;
+        if (dx !== 0) {
+          const ox0 = dx < 0 ? -dx : 0, ox1 = dx > 0 ? w - dx : w;
+          sx0 = ox0 + REBUILD; sx1 = ox1 - REBUILD;
+        }
+        if (dy !== 0) {
+          const oy0 = dy < 0 ? -dy : 0, oy1 = dy > 0 ? h - dy : h;
+          sy0 = oy0 + REBUILD; sy1 = oy1 - REBUILD;
+        }
+        if (sx1 < sx0) { sx0 = 0; sx1 = 0; }
+        if (sy1 < sy0) { sy0 = 0; sy1 = 0; }
+      }
+
+      const dstD = workD, dstF = workF;
+      // Only the frame's own border has no shore in reach; every interior sample is written below.
+      dstD.fill(FAR, 0, pw);
+      dstD.fill(FAR, pw * (h + 1), pw * (h + 2));
+      for (let y = 1; y <= h; y++) { dstD[y * pw] = FAR; dstD[y * pw + pw - 1] = FAR; }
+      const srcD = dist, srcF = fallRun;
+      for (let py = 0; py < h; py++) {
+        if (!moved || py < sy0 || py >= sy1) {
+          forwardSpan(bake, ry, w, pw, dstD, py, 0, w);
+          fallSpan(bake, ry, w, dstF, py, 0, w);
+        } else {
+          if (sx0 > 0) { forwardSpan(bake, ry, w, pw, dstD, py, 0, sx0); fallSpan(bake, ry, w, dstF, py, 0, sx0); }
+          if (sx1 > sx0) {
+            const n = sx1 - sx0;
+            copyBytes(srcD, (py + dy + 1) * pw + sx0 + dx + 1, dstD, (py + 1) * pw + sx0 + 1, n);
+            copyBytes(srcF, (py + dy) * w + sx0 + dx, dstF, py * w + sx0, n);
+            for (let m = 0; m < nMarked; m++) {
+              const px = marked[m];
+              if (px >= sx0 && px < sx1) fallSpan(bake, ry, w, dstF, py, px, px + 1);
+            }
+          }
+          if (sx1 < w) { forwardSpan(bake, ry, w, pw, dstD, py, sx1, w); fallSpan(bake, ry, w, dstF, py, sx1, w); }
+        }
+      }
+      for (let py = h - 1; py >= 0; py--) {
+        if (!moved || py < sy0 || py >= sy1) backSpan(bake, ry, w, pw, dstD, py, 0, w);
+        else {
+          if (sx1 < w) backSpan(bake, ry, w, pw, dstD, py, sx1, w);
+          if (sx0 > 0) backSpan(bake, ry, w, pw, dstD, py, 0, sx0);
+        }
+      }
+
+      paint(f, w, h, rx, ry, pw, dstD, dstF);
+
+      workD = dist; dist = dstD;
+      workF = fallRun; fallRun = dstF;
+      if (bake.length === w * h) keptBake.set(bake);
+      else for (let i = 0, n = w * h; i < n; i++) keptBake[i] = bake[i];
+      keptX = rx; keptY = ry;
+      have = true;
     },
   };
 }
