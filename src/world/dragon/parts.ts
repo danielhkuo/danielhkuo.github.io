@@ -98,7 +98,8 @@ export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figu
       const oy = py - scy;
       for (let px = px0; px <= px1; px++) {
         const ox = px - scx;
-        const ix = Math.round(ox * cos + oy * sin + cx), iy = Math.round(-ox * sin + oy * cos + cy);
+        // floor(v + 0.5), not round(v): round gives −0 just under zero, which throws the optimised loop out every time.
+        const ix = Math.floor(ox * cos + oy * sin + cx + 0.5), iy = Math.floor(-ox * sin + oy * cos + cy + 0.5);
         if (ix < 0 || iy < 0 || ix >= w || iy >= h || foot[iy * w + ix] === 0) continue;
         const di = py * fw + px;
         if (mask[di] !== 0) continue;

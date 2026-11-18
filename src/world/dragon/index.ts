@@ -8,6 +8,7 @@ import type { Pose } from "./body.ts";
 import { IVORY, LACQUER } from "./look.ts";
 import type { Land } from "./parts.ts";
 import { drawRiver } from "./river.ts";
+import { drawRiver2 } from "./river2.ts";
 import { drawWinged } from "./winged.ts";
 import { drawWyrm } from "./wyrm.ts";
 
@@ -54,7 +55,7 @@ export function createDragon(id: DragonId, n: number): Dragon {
       pose.wave += ((2 * Math.PI * dt) / WAVE_PERIOD) * (0.5 + (0.5 * s.speed) / CRUISE);
     },
     draw(out, rect, s, view) {
-      if (id === "a") drawRiver(out, rect, s, view, pose, LACQUER);
+      if (id === "a") drawRiver2(out, rect, s, view, pose, LACQUER);
       else if (id === "a-ivory") drawRiver(out, rect, s, view, pose, IVORY);
       else if (id === "b") drawWinged(out, rect, s, view, pose, LACQUER);
       else drawWyrm(out, rect, s, view, pose, LACQUER);
