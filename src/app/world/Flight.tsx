@@ -167,7 +167,13 @@ export default function Flight() {
           flight = stepFlight(flight, inputFromKeys(keys), dt, view, worldN);
           view.setCamera(flight.x, flight.y - flight.alt / 0.8);
           view.update(Math.cos(flight.heading) * flight.speed, Math.sin(flight.heading) * flight.speed);
-          view.frame(frame, t / 1000);
+          view.frame(frame, t / 1000, {
+            x: flight.x,
+            y: flight.y,
+            alt: flight.alt,
+            heading: flight.heading,
+            speed: flight.speed,
+          });
           sky.draw(frame, view.rect(), t / 1000, "below");
           drawFlier(frame, view.rect(), flight, view);
           sky.draw(frame, view.rect(), t / 1000, "above");

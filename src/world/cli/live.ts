@@ -141,7 +141,7 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const frames: Uint32Array[] = [];
   for (let t = 0; t < o.times.length; t++) {
     const time = o.times[t];
-    view.frame(out, time);
+    view.frame(out, time, { x: kite.x, y: kite.y, alt: kite.alt, heading: kite.heading, speed: kite.speed });
     const rect = view.rect();
     if (sky) sky.draw(out, rect, time, "below");
     drawFlier(out, rect, kite, view);
