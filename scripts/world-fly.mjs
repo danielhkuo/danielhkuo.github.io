@@ -120,7 +120,7 @@ const opts = parseArgs(process.argv.slice(2));
 mkdirSync(opts.out, { recursive: true });
 const server = await listen(opts.port);
 const origin = `http://127.0.0.1:${opts.port}/`;
-const browser = await puppeteer.launch({ headless: true });
+const browser = await puppeteer.launch({ headless: "shell" });
 try {
   const results = [await fly(browser, origin, opts, "plain", 1), await fly(browser, origin, opts, `throttled-x${opts.rate}`, opts.rate)];
   writeFileSync(path.join(opts.out, "result.json"), JSON.stringify(results, null, 2));
