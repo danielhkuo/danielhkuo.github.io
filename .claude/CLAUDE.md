@@ -53,11 +53,10 @@ They do not govern the game layer: the renderer, title menu, HUD, Codex and rose
   there, and merge back with `git merge --no-ff` once tests, types and lint pass and any visual change has been judged
   on renders. Delete the branch after the merge. Cursor lanes and agent worktrees branch from the topic branch and
   merge into it, never straight into `feat/dragon-world`. Nothing is pushed without the owner's say-so.
-- **Who builds.** Cursor (the cursor-delegate plugin) builds most things now that the terrain is settled: Claude
-  writes the brief and the tests, Cursor implements, a clean-copy check decides. For anything visual, Cursor builds
-  two or three variants in parallel lanes (different briefs or models); Claude renders them side by side, picks or
-  combines, and owns the verdict. Fable or Opus subagents are for judging hard art calls and for work Cursor has
-  failed three times.
+- **Who builds.** Cursor (the cursor-delegate plugin) builds plumbing, tooling and test-pinned mechanics: Claude
+  writes the brief and the tests, Cursor implements, a clean-copy check decides. Anything judged by eye (clouds,
+  water, sprites, the look) goes to Fable, which iterates on renders; Claude judges the result before the owner sees
+  it. (The owner rejected Cursor-built clouds on 2026-11-18.)
 
 ## Commands
 

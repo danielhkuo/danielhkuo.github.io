@@ -11,6 +11,7 @@ import type { Manifest } from "../pack/manifest.ts";
 import type { FlightData } from "../pack/world.ts";
 import { compose, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
+import { runLayers, type Flier, type LiveLayer } from "../live/live.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
 import type { Site, WorldView } from "./view.ts";
 
@@ -27,6 +28,10 @@ export interface StreamOptions {
   sites?: Manifest["sites"];
   /** Lay the paper grain over the frame (default true). */
   paper?: boolean;
+  /** Live layers, run in order after compositing and before the paper grain (see live/live.ts). */
+  layers?: readonly LiveLayer[];
+  /** Hears a live layer that failed; it is skipped from then on. */
+  onLayerError?: (name: string, message: string) => void;
 }
 
 export interface StreamView extends WorldView {
@@ -41,6 +46,10 @@ export interface StreamView extends WorldView {
   ready(): boolean;
   /** Chunks held in the cache. */
   cached(): number;
+  /** The bake pixel under each pixel of the last frame (width × height; 0 where haze showed). Live layers read it. */
+  bakeFrame(): Uint32Array;
+  /** Draws the frame; `flier`, when given, is handed to the live layers. */
+  frame(out: Uint32Array, time?: number, flier?: Flier): void;
 }
 
 /** n must be a multiple of 320, so the bake wraps on whole chunks both ways. */
@@ -59,6 +68,8 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
   const haze = hazeOf(data, palette);
   const groundSample = new Float32Array(1);
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
+  const bakeBuffer = new Uint32Array(width * height);
+  const disabled = new Set<string>();
 
   const keyOf = (cx: number, cy: number): string => `${wrap(cx, periodX)},${wrap(cy, periodY)}`;
 
@@ -97,8 +108,14 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
       rect.x = Math.floor(x) - (width >> 1);
       rect.y = Math.floor(0.8 * y) - (height >> 1);
     },
-    frame(out) {
-      compose(read, palette, rect, out, undefined, haze);
+    frame(out, t, flier) {
+      compose(read, palette, rect, out, undefined, haze, bakeBuffer);
+      runLayers(
+        opts.layers ?? [],
+        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, flier },
+        disabled,
+        opts.onLayerError,
+      );
       if (opts.paper !== false) paperGrain(out, rect, mask);
     },
     depthAt(px, py) {
@@ -122,6 +139,9 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
     },
     sites() {
       return sites;
+    },
+    bakeFrame() {
+      return bakeBuffer;
     },
     rect() {
       return { ...rect };

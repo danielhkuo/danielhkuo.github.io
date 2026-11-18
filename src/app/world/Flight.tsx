@@ -7,11 +7,15 @@ import { buildPalette, MIDDAY } from "../../world/render/palette";
 import type { FlightInput, FlightState } from "../../world/runtime/flight";
 import { startState, stepFlight } from "../../world/runtime/flight";
 import { fitScale } from "../../world/runtime/fit";
+import { makeLayers } from "../../world/live/registry";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { drawFlier } from "../../world/runtime/standin";
+import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
+import { createSky } from "../../world/sky/sky";
+import { styleFrom } from "../../world/sky/styles";
 
 const fell = IM_Fell_English({ weight: "400", subsets: ["latin"] });
 
@@ -35,6 +39,8 @@ interface FlightProbe {
   navStart: number;
   readyAt: number | null;
   frameMs: number[];
+  /** Main-thread ms the sky's two passes took, per frame. */
+  skyMs: number[];
   hazeFrames: number;
   frames: number;
   baked: () => number;
@@ -49,6 +55,8 @@ export default function Flight() {
   const [failed, setFailed] = useState(false);
   // Filled from the frame loop when the page is opened with ?stats.
   const [stats, setStats] = useState<{ fps: number; pool: string; view: string } | null>(null);
+  const [discoveryCaption, setDiscoveryCaption] = useState<string | null>(null);
+  const [discoveryCaptionVisible, setDiscoveryCaptionVisible] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -56,7 +64,7 @@ export default function Flight() {
     const statsOn = new URLSearchParams(window.location.search).has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     const recomputeScale = () => {
@@ -100,6 +108,16 @@ export default function Flight() {
     let lastT = 0;
     let fpsFrames = 0;
     let fpsLast = 0;
+    let lastCaptionPoll = 0;
+    let lastPolledCaption: string | null | undefined;
+
+    let storageOrNull: KeyValue | null = null;
+    try {
+      storageOrNull = window.localStorage;
+    } catch {
+      storageOrNull = null;
+    }
+    const discoveries = createDiscoveries(storageOrNull, () => performance.now());
 
     // Stops the frame loop and the workers, and shows the message in place of the canvas.
     const fail = () => {
@@ -139,9 +157,24 @@ export default function Flight() {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
+          layers: makeLayers({
+            seed: loaded.manifest.seed,
+            n: loaded.data.n,
+            sites: loaded.manifest.sites,
+            discover: (id, label) => {
+              discoveries.discover(id, label);
+            },
+          }),
+          onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
         worldN = loaded.data.n;
+        const sky = createSky(
+          loaded.manifest.seed,
+          loaded.data.n,
+          styleFrom(new URLSearchParams(window.location.search).get("clouds")),
+          loaded.manifest.start,
+        );
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("2d");
@@ -157,8 +190,20 @@ export default function Flight() {
           flight = stepFlight(flight, inputFromKeys(keys), dt, view, worldN);
           view.setCamera(flight.x, flight.y - flight.alt / 0.8);
           view.update(Math.cos(flight.heading) * flight.speed, Math.sin(flight.heading) * flight.speed);
-          view.frame(frame, t / 1000);
+          view.frame(frame, t / 1000, {
+            x: flight.x,
+            y: flight.y,
+            alt: flight.alt,
+            heading: flight.heading,
+            speed: flight.speed,
+          });
+          const skyStart = performance.now();
+          sky.draw(frame, view.rect(), t / 1000, "below");
+          const skyBelow = performance.now() - skyStart;
           drawFlier(frame, view.rect(), flight, view);
+          const skyAgain = performance.now();
+          sky.draw(frame, view.rect(), t / 1000, "above");
+          if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);
 
@@ -169,6 +214,20 @@ export default function Flight() {
             probe.frames++;
             if (!ready) probe.hazeFrames++;
             else if (probe.readyAt === null) probe.readyAt = performance.now();
+          }
+
+          if (t - lastCaptionPoll >= 250) {
+            lastCaptionPoll = t;
+            const cap = discoveries.caption();
+            if (cap !== lastPolledCaption) {
+              lastPolledCaption = cap;
+              if (cap !== null) {
+                setDiscoveryCaption(cap);
+                setDiscoveryCaptionVisible(true);
+              } else {
+                setDiscoveryCaptionVisible(false);
+              }
+            }
           }
 
           if (statsOn) {
@@ -249,6 +308,28 @@ export default function Flight() {
           imageRendering: "pixelated",
         }}
       />
+      {discoveryCaption !== null ? (
+        <p
+          style={{
+            position: "fixed",
+            top: "1.25rem",
+            left: "50%",
+            transform: "translateX(-50%)",
+            margin: 0,
+            fontFamily: fell.style.fontFamily,
+            color: "#2e2a24",
+            fontSize: "0.95rem",
+            pointerEvents: "none",
+            background: "rgba(240, 232, 210, 0.85)",
+            padding: "0.25rem 0.9rem",
+            borderRadius: "2px",
+            opacity: discoveryCaptionVisible ? 1 : 0,
+            transition: "opacity 400ms",
+          }}
+        >
+          {discoveryCaption}
+        </p>
+      ) : null}
       <p
         style={{
           position: "fixed",

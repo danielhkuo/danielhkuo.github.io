@@ -102,7 +102,10 @@ export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array): 
 /** Packed RGBA for bake pixel (bx, by) where no chunk is baked yet (the haze). */
 export type Fallback = (bx: number, by: number) => number;
 
-export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, out: Uint32Array, live?: LiveWater, fallback?: Fallback): void {
+/** When `bakeOut` is given, it receives the bake pixel under each output pixel (0 where `fallback` or paper shows). */
+export function compose(
+  chunks: ChunkSource, palette: Palette, view: ViewRect, out: Uint32Array, live?: LiveWater, fallback?: Fallback, bakeOut?: Uint32Array,
+): void {
   const { x: vx, y: vy, w, h } = view;
   const cx0 = Math.floor(vx / CHUNK), cx1 = Math.floor((vx + w - 1) / CHUNK);
   const cy0 = Math.floor(vy / CHUNK), cy1 = Math.floor((vy + h - 1) / CHUNK);
@@ -115,14 +118,21 @@ export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, o
       for (let r = r0; r < r1; r++) {
         let o = (r - vy) * w + (c0 - vx);
         if (!px) {
-          if (fallback) for (let c = c0; c < c1; c++) out[o++] = fallback(c, r);
-          else for (let c = c0; c < c1; c++) out[o++] = PAPER;
+          if (fallback) for (let c = c0; c < c1; c++) {
+            if (bakeOut) bakeOut[o] = 0;
+            out[o++] = fallback(c, r);
+          }
+          else for (let c = c0; c < c1; c++) {
+            if (bakeOut) bakeOut[o] = 0;
+            out[o++] = PAPER;
+          }
           continue;
         }
         let i = (r - cy * CHUNK) * CHUNK + (c0 - cx * CHUNK);
         if (!live) {
           for (let c = c0; c < c1; c++) {
             const v = px[i++];
+            if (bakeOut) bakeOut[o] = v;
             out[o++] = palette[((v & 255) << 8) | ((v >>> 8) & 255)];
           }
           continue;
@@ -130,6 +140,7 @@ export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, o
         const mrow = (r & 255) * 256;
         for (let c = c0; c < c1; c++) {
           const v = px[i++];
+          if (bakeOut) bakeOut[o] = v;
           const m = v & 255, light = (v >>> 8) & 255;
           // A glint: the water's lightest tone, on the few pixels the drifting mask picks.
           if (live.isWater[m] === 1 && (light & 15) > 2 && live.mask[mrow + ((c + drift) & 255)] > 251) out[o++] = palette[(m << 8) | (light & 0xf0) | 1];
