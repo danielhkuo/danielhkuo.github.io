@@ -12,6 +12,8 @@ export interface LiveFrame {
   /** Seconds. */
   t: number;
   palette: Palette;
+  /** World size in cells: positions wrap every n, bake rows every 0.8·n. */
+  n: number;
 }
 
 export interface LiveLayer {
