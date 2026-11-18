@@ -244,13 +244,13 @@ function buildSpecs(): Spec[] {
     set(M.alpineCool + v, [g[0], g[1], g[2], SNOW], UPLAND);
   }
   // Heather blooms purple in summer and is brown the rest of the year.
-  const heathBloom: Lch[] = [[0.58, 0.055, 325], [0.59, 0.045, 355], [0.61, 0.04, 96]];
-  const heathBrown: Lch[] = [[0.53, 0.03, 20], [0.54, 0.035, 55], [0.57, 0.04, 85]];
+  const heathBloom: Lch[] = [[0.62, 0.062, 328], [0.635, 0.052, 358], [0.66, 0.05, 92]];
+  const heathBrown: Lch[] = [[0.56, 0.035, 25], [0.575, 0.04, 58], [0.6, 0.045, 85]];
   for (let v = 0; v < 3; v++) {
     const b = heathBrown[v];
     set(M.heathCool + v, [[b[0] + 0.01, b[1], b[2] + 20], heathBloom[v], b, [b[0] + 0.04, b[1] - 0.012, b[2]]], UPLAND);
   }
-  const moor: Lch[] = [[0.65, 0.06, 130], [0.67, 0.065, 120], [0.69, 0.07, 109]];
+  const moor: Lch[] = [[0.69, 0.075, 127], [0.71, 0.082, 117], [0.73, 0.088, 106]];
   for (let v = 0; v < 3; v++) {
     const g = grass(moor[v]);
     set(M.moorCool + v, [g[0], g[1], g[2], [g[3][0] + 0.05, g[3][1], g[3][2]]], UPLAND);
@@ -268,7 +268,7 @@ function buildSpecs(): Spec[] {
   set(M.coniferMid, evergreen([0.39, 0.055, 165]), CANOPY);
   set(M.coniferWarm, evergreen([0.42, 0.06, 152]), CANOPY);
   set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.5, 0.02, 30]], CANOPY);
-  set(M.shrub, evergreen([0.5, 0.055, 128]), CANOPY);
+  set(M.shrub, evergreen([0.46, 0.07, 141]), CANOPY);
 
   // Crops ripen and are cut; ploughland shows in winter.
   set(M.wheat, [[0.76, 0.11, 132], [0.815, 0.082, 97], [0.7, 0.06, 80], [0.56, 0.05, 58]], LAND);
@@ -302,7 +302,8 @@ function buildSpecs(): Spec[] {
   // Lowland grass.
   const meadow: Lch[] = [[0.785, 0.1, 140], [0.8, 0.105, 131], [0.81, 0.1, 121]];
   const pasture: Lch[] = [[0.69, 0.09, 143], [0.705, 0.095, 136], [0.72, 0.095, 127]];
-  const scrub: Lch[] = [[0.72, 0.06, 118], [0.745, 0.068, 108], [0.765, 0.072, 98]];
+  // Dry sward is thin and sage-green, never straw: straw-yellow ground under dotted bushes reads as savanna.
+  const scrub: Lch[] = [[0.725, 0.08, 132], [0.745, 0.084, 126], [0.76, 0.086, 119]];
   for (let v = 0; v < 3; v++) {
     set(M.meadowCool + v, grass(meadow[v]), LAND);
     set(M.pastureCool + v, grass(pasture[v]), LAND);
@@ -320,7 +321,7 @@ function buildSpecs(): Spec[] {
   set(M.path, all([0.82, 0.035, 80]), LINE);
   // A hedge's ground is rough grass; the hedge itself is the row of crowns scatter plants on it.
   set(M.hedge, grass([0.68, 0.09, 138]), LAND);
-  set(M.bracken, [[0.6, 0.07, 96], [0.64, 0.088, 116], [0.6, 0.09, 58], [0.55, 0.06, 55]], LAND);
+  set(M.bracken, [[0.63, 0.075, 98], [0.675, 0.095, 113], [0.63, 0.095, 58], [0.57, 0.06, 55]], LAND);
   // Gorse blooms gold in spring and keeps a little of it all summer.
   set(M.gorse, [[0.66, 0.105, 100], [0.6, 0.09, 108], [0.55, 0.07, 122], [0.53, 0.06, 125]], LAND);
   set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);

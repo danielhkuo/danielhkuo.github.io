@@ -4,16 +4,25 @@
 // a fixed reach of the cell, so any window gives the same answer.
 
 /** Scree spreads this many cells down the fall line from the foot of a cliff. */
-export const FAN_REACH = 8;
+export const FAN_REACH = 16;
 /** Relief is measured against the ground this many cells round. */
 export const RELIEF_R = 4;
 /** Ground this steep feeds scree to what lies below it; it is a full source from CLIFF_FULL. */
-export const CLIFF_FEED = 1.3;
-export const CLIFF_FULL = 1.6;
-/** A fan loses this share of its strength with each cell it runs. */
-const DECAY = 0.88;
+export const CLIFF_FEED = 1.02;
+export const CLIFF_FULL = 1.3;
+/** A fan keeps this share of its strength with each cell it runs on ground where stones come to rest. */
+const DECAY = 0.9;
+/** Ground falling this steeply carries stones on: a fan loses almost nothing crossing it, and opens out where the slope eases. */
+export const CARRY_SLOPE = 0.85;
+const CARRY = 0.985;
+/** A chute is a cliff cell this far below the mean of the ground CHUTE_R cells either side: rock falls down chutes, so a fan is a cone under one. */
+const CHUTE_R = 2;
+const CHUTE_DEPTH = 0.6;
+/** An even face with no chute feeds this share of what a chute does: an apron of stones, too thin to show as a fan on its own. */
+const FACE_FEED = 0.3;
+const SHEER = 1.6;
 /** Cells of margin the helper reads beyond the region it fills: the form's curvature ring and its smoothing, and a fan's reach likewise. */
-export const COVER_FIELDS_MARGIN = 12;
+export const COVER_FIELDS_MARGIN = 20;
 
 export interface CoverFields {
   /**
@@ -44,7 +53,7 @@ export const SMOOTH_R = 3;
 /** The form's curvature is measured against the ground this many cells round. */
 export const CURVE_R = 8;
 /** A cliff feeds scree only where the smoothed ground is this steep too: a gully's wall on a moderate slope is no cliff. */
-export const FEED_FORM = 1;
+export const FEED_FORM = 0.9;
 /** Mean |cos| over the ring's eight directions: what a plane's fall to the ring is, as a share of its slope. */
 const RING_MEAN = 0.628;
 
@@ -68,7 +77,7 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
   const north = new Float32Array(W * H);
 
   // The form: a box mean, each cell summed in the same order whatever the window, so windows agree to the bit.
-  const R = SMOOTH_R, far = CURVE_R + 1;
+  const R = SMOOTH_R, far = Math.max(CURVE_R, FAN_REACH) + 1;
   const sx0 = x0 - far, sy0 = y0 - far, sx1 = x0 + w + far, sy1 = y0 + h + far;
   const rows = new Float32Array(W * H), smooth = new Float32Array(W * H);
   for (let y = sy0 - R; y < sy1 + R; y++) {
@@ -135,7 +144,13 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
       // Only a cliff of the land's own form sheds scree: a gully's wall is steep, but the smoothed ground there is not.
       const fx = (smooth[i + 1] - smooth[i - 1]) * 0.5, fy = (smooth[i + W] - smooth[i - W]) * 0.5;
       if (fx * fx + fy * fy < FEED_FORM * FEED_FORM) continue;
-      const v = s >= CLIFF_FULL ? 1 : (s - CLIFF_FEED) / (CLIFF_FULL - CLIFF_FEED);
+      const hollow = (ground[i - CHUTE_R] + ground[i + CHUTE_R] + ground[i - CHUTE_R * W] + ground[i + CHUTE_R * W]) * 0.25 - ground[i];
+      // A sheer wall needs no chute: from SHEER it feeds in full along its whole foot.
+      const sheer = s > SHEER ? 1 : s > CLIFF_FULL ? (s - CLIFF_FULL) / (SHEER - CLIFF_FULL) : 0;
+      const open = hollow / CHUTE_DEPTH;
+      const chute = FACE_FEED + (1 - FACE_FEED) * (open > sheer ? open : sheer);
+      const v = (s >= CLIFF_FULL ? 1 : (s - CLIFF_FEED) / (CLIFF_FULL - CLIFF_FEED)) * (chute > 1 ? 1 : chute < 0 ? 0 : chute);
+      if (v <= 0.05) continue;
       cliffAbove[i] = v;
       cells.push(i);
     }
@@ -168,7 +183,7 @@ export function coverFields(ground: Float32Array, W: number, H: number, x0: numb
         if (ground[j] <= 0) continue;
         const drop = (g - ground[j]) / ND[n];
         if (drop <= 0.3 * steepest) continue;
-        const pass = v * DECAY * (0.45 + 0.55 * (drop / steepest));
+        const pass = v * (drop > CARRY_SLOPE ? CARRY : DECAY) * (0.45 + 0.55 * (drop / steepest));
         if (pass > cliffAbove[j] && pass > 0.05 && pass > offer[j]) {
           if (offer[j] === 0) touched.push(j);
           offer[j] = pass;
