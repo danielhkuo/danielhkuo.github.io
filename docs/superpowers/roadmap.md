@@ -100,15 +100,14 @@ From the clouds and water (2026-11-18):
   50 px from small puffs; a bank can drift over a landmark.
 - Water: flat river reaches have no direction to flow in (the baked phase is water level); spray paints a few rock
   pixels beside tall falls; surf is missing within 16 px of the frame's edge.
-- **Frame budget (first priority).** With every layer on, the browser check measures 3.4 ms p95 unthrottled but 5.0 ms
-  at 4× CPU throttle, over the 4 ms budget. Node breakdown per frame: water 0.5–1.1 ms, paper grain 0.27, wind
-  0.12–0.18, sky about 0.1, life and sights under 0.1. The fix is to cache the water's shore-distance pass across frames
-  (it depends only on the land, which moves with the camera); Cursor's byte-identical speed pass timed out.
+- **Frame budget (first priority).** With every layer and the dragon on, the browser check measures 3.2 ms p95
+  unthrottled and 5.6 ms at 4× CPU throttle, still over the 4 ms budget. The water cache (merged 2026-11-18) and
+  `depthAt` reusing its last chunk are in. Node breakdown per frame before the cache: water 0.5–1.1 ms, paper grain
+  0.27, wind 0.12–0.18, sky about 0.1, life and sights under 0.1; the dragon adds about 0.15 ms in the browser.
 - The flight page component is large (React Doctor); split it into hooks.
 - The dragon (2026-11-18): the boost's bow of air reads as loose white curves by the head in some frames, and nearly
-  vanishes over pale meadow; judged on stills and one live frame, not watched in motion. With the dragon flying, the
-  browser check is 3.3 ms p95 unthrottled and 6.1 ms at 4× throttle (the kite was 5.3); `depthAt` now reuses its last
-  chunk, which halved the dragon's cost.
+  vanishes over pale meadow; judged on stills and one live frame, not watched in motion. `depthAt` used to rebuild a cache
+  key for every pixel, which doubled the throttled frame with the dragon on; it now reuses its last chunk.
 
 From the round-9 critics (peaks first):
 - Peaks: snow and rock lit from true normals so each arête shows a bright side and a cool far side; horizontal strata
@@ -127,8 +126,8 @@ From the first-flight review:
 ## Decisions waiting (2026-11-18 morning)
 
 - ~~**The dragon.**~~ Decided 2026-11-18: A, the river-dragon. It is now the flier (`specs/2026-11-18-dragon-options.md`).
-- **Merge `world/perf`?** The water layer reuses its shore-distance work between frames: 5.0 → 4.4 ms p95 at 4× throttle,
-  output within 0.3 % of pixels of a fresh redraw while flying.
+- ~~**Merge `world/perf`?**~~ Merged 2026-11-18. The water layer reuses its shore-distance work between frames (4×
+  throttle: 6.1 → 5.6 ms p95 with the dragon on).
 - **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
 - **Title menu wording** (rose-window look kept).
 
