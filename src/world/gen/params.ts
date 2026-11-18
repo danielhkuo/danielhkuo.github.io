@@ -6,16 +6,33 @@ export const ARCHETYPE = { home: 0, highland: 1, slate: 2, lakes: 3, karst: 4, s
 export type Archetype = (typeof ARCHETYPE)[keyof typeof ARCHETYPE];
 export const ARCHETYPE_COUNT = 6;
 
+/**
+ * How an island is built. `belts` is the fold-belt spindle and `cluster` a skerry group; the rest are landforms of
+ * their own. A form is not a region: each takes the look of one of the six archetypes (or a blend of them).
+ */
+export const FORM = { belts: 0, cluster: 1, caldera: 2, cone: 3, table: 4, fen: 5, fjord: 6 } as const;
+export type Form = (typeof FORM)[keyof typeof FORM];
+export const FORM_NAMES = ["belts", "cluster", "caldera", "cone", "table", "fen", "fjord"] as const;
+
 export const ROCK = { hard: 0, medium: 1, soft: 2 } as const;
 
 export interface ArchetypeSpec {
+  /** The region whose look, rock and climate rules the island takes. */
   id: Archetype;
+  form: Form;
+  /** Region membership as (archetype, share) pairs summing to 1, the largest on `id`; all on `id` when absent. */
+  look?: readonly (readonly [Archetype, number])[];
   /** Inclusive range of how many cores take this archetype. */
   count: readonly [number, number];
   /** Island length along strike, in cells. */
   diameter: readonly [number, number];
-  /** Island width across strike as a share of its length. */
-  aspect: number;
+  /** Island width across strike as a share of its length, drawn from this range: long to round. */
+  aspect: readonly [number, number];
+  /** The island's strike may turn this far (radians) from the world's. */
+  turn: number;
+  /** Overrides of uplift.rugged and erode.d, which otherwise follow `id`. */
+  rugged?: number;
+  d?: number;
   /** Target peak height in units. */
   peak: number;
   /** Relative odds of hard, medium and soft rock within the island. */
@@ -31,8 +48,8 @@ export interface WorldParams {
   gN: number;
   cN: number;
   cores: { poissonR: number; archetypes: readonly ArchetypeSpec[] };
-  /** tan 25°: spines run within 25° of west–east. */
-  strike: { maxSlope: number };
+  /** maxSlope is tan 25°: the world's strike lies within 25° of west–east. An island turns from it by its own `turn`, never past maxTurn (radians) from west–east. */
+  strike: { maxSlope: number; maxTurn: number };
   spine: { segments: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
   /** `rugged` per archetype (home, highland, slate, lakes, karst, skerry): 0 a smooth fold belt, 1 a massif of branching ridges. */
   uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number; rugged: readonly number[] };
@@ -252,7 +269,7 @@ export function countFor(n: number, c: number): number {
 export function paramsFor(n: number): WorldParams {
   if (!Number.isInteger(n) || n % 64 !== 0 || n < 256) throw new Error(`world size ${n} must be a multiple of 64, at least 256`);
   const s = lengthScale(n);
-  const A = ARCHETYPE;
+  const A = ARCHETYPE, F = FORM;
   const many = (lo: number, hi: number): [number, number] => [countFor(n, lo), countFor(n, hi)];
   return {
     n,
@@ -260,16 +277,23 @@ export function paramsFor(n: number): WorldParams {
     cN: n / 8,
     cores: {
       poissonR: 900 * s,
+      // Counts are per 6400 world. Region looks: caldera and cone stand on slate rock, the table on karst
+      // limestone, the fjord coast on highland, the fen on a blend of the lakes and home lowlands.
       archetypes: [
-        { id: A.highland, count: many(1, 1), diameter: [3400 * s, 3800 * s], aspect: 0.45, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [4, 5], stripeWidth: [300 * s, 600 * s] },
-        { id: A.home, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: 0.5, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.lakes, count: many(1, 1), diameter: [2700 * s, 3100 * s], aspect: 0.48, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
-        { id: A.slate, count: many(1, 1), diameter: [2400 * s, 2800 * s], aspect: 0.45, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [4, 5], stripeWidth: [150 * s, 300 * s] },
-        { id: A.karst, count: many(2, 2), diameter: [2000 * s, 2400 * s], aspect: 0.5, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.skerry, count: many(5, 7), diameter: [320 * s, 720 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
+        { id: A.highland, form: F.belts, count: many(0.8, 0.8), diameter: [3000 * s, 3400 * s], aspect: [0.38, 0.62], turn: 0.9, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.home, form: F.belts, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: [0.5, 0.5], turn: 0.1, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.highland, form: F.fjord, count: many(0.6, 0.6), diameter: [2500 * s, 2900 * s], aspect: [0.5, 0.62], turn: 0.3, peak: 120, rockBias: [0.85, 0.15, 0], ridges: [2, 3], stripeWidth: [300 * s, 600 * s] },
+        { id: A.lakes, form: F.belts, count: many(0.8, 0.8), diameter: [2400 * s, 2800 * s], aspect: [0.4, 0.7], turn: 0.9, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.slate, form: F.belts, count: many(0.8, 0.8), diameter: [2100 * s, 2500 * s], aspect: [0.36, 0.6], turn: 0.9, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [3, 5], stripeWidth: [150 * s, 300 * s] },
+        { id: A.lakes, form: F.fen, look: [[A.lakes, 0.55], [A.home, 0.45]], count: many(0.8, 0.8), diameter: [1900 * s, 2300 * s], aspect: [0.6, 0.8], turn: 1.2, peak: 24, rockBias: [0, 0.25, 0.75], ridges: [4, 6], stripeWidth: [300 * s, 600 * s], rugged: 0, d: 0.02 },
+        { id: A.karst, form: F.belts, count: many(1, 1), diameter: [1800 * s, 2200 * s], aspect: [0.4, 0.7], turn: 0.9, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.karst, form: F.table, count: many(0.8, 0.8), diameter: [1200 * s, 1500 * s], aspect: [0.55, 0.9], turn: 1.2, peak: 48, rockBias: [1, 0, 0], ridges: [1, 1], stripeWidth: [3000 * s, 3000 * s], rugged: 0 },
+        { id: A.slate, form: F.cone, count: many(1, 1), diameter: [1100 * s, 1400 * s], aspect: [0.86, 1], turn: 1.5, peak: 105, rockBias: [0.7, 0.3, 0], ridges: [1, 1], stripeWidth: [3000 * s, 3000 * s], rugged: 0, d: 0.002 },
+        { id: A.slate, form: F.caldera, count: many(1, 1), diameter: [1200 * s, 1600 * s], aspect: [1, 1], turn: 1.5, peak: 70, rockBias: [0.8, 0.2, 0], ridges: [1, 2], stripeWidth: [3000 * s, 3000 * s], rugged: 0, d: 0.003 },
+        { id: A.skerry, form: F.cluster, count: many(5, 7), diameter: [320 * s, 720 * s], aspect: [0.8, 0.8], turn: 1.5, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
       ],
     },
-    strike: { maxSlope: 0.4663076581549986 },
+    strike: { maxSlope: 0.4663076581549986, maxTurn: 1.2 },
     spine: { segments: [3, 6], ridgeGap: 120 * s, bend: 0.25, plateau: 0.35 },
     uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s, rugged: [0, 1, 0.5, 0.8, 0.35, 0] },
     rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },

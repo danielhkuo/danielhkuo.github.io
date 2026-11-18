@@ -5,6 +5,7 @@ import { type Climate, climateFields } from "./climate.ts";
 import { coast, coastContext } from "./coast.ts";
 import { drown } from "./drown.ts";
 import { runSchedule } from "./erode.ts";
+import { shapeForms } from "./forms.ts";
 import { type GlacialFeature, glacial, glacialContext } from "./glacial.ts";
 import { type HydroResult, hydrology } from "./hydro.ts";
 import type { WorldParams } from "./params.ts";
@@ -79,6 +80,8 @@ export function makeLand(p: WorldParams, seed: number): Land {
   for (let i = 0; i < t.h.length; i++) t.debris[i] += slid.debris[i];
   // Scree does not soften a cirque: its headwall and lip are cut again, as the bake will cut them at cell size.
   applyStamps(t.h, gN, p.n / gN, gl.cirques);
+  // S5b forms: a cone's crater, a table's top and sides, a fen's level.
+  shapeForms(t.h, gN, dr.isSea, plan, p, seed);
   // S6 coasts: exposure, cliffs, stacks, coves, beaches, shelf.
   const co = coast(t.h, gN, coastContext(plan, gN), p, seed);
   return {
