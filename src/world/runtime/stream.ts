@@ -11,6 +11,7 @@ import type { Manifest } from "../pack/manifest.ts";
 import type { FlightData } from "../pack/world.ts";
 import { compose, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
+import type { LiveLayer } from "../live/live.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
 import type { Site, WorldView } from "./view.ts";
 
@@ -27,6 +28,10 @@ export interface StreamOptions {
   sites?: Manifest["sites"];
   /** Lay the paper grain over the frame (default true). */
   paper?: boolean;
+  /** Live layers, run in order after compositing and before the paper grain (see live/live.ts). */
+  layers?: readonly LiveLayer[];
+  /** Hears a live layer that failed; it is skipped from then on. */
+  onLayerError?: (name: string, message: string) => void;
 }
 
 export interface StreamView extends WorldView {
@@ -41,6 +46,8 @@ export interface StreamView extends WorldView {
   ready(): boolean;
   /** Chunks held in the cache. */
   cached(): number;
+  /** The bake pixel under each pixel of the last frame (width × height; 0 where haze showed). Live layers read it. */
+  bakeFrame(): Uint32Array;
 }
 
 /** n must be a multiple of 320, so the bake wraps on whole chunks both ways. */
@@ -122,6 +129,9 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
     },
     sites() {
       return sites;
+    },
+    bakeFrame() {
+      return new Uint32Array(0);
     },
     rect() {
       return { ...rect };
