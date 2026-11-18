@@ -24,9 +24,14 @@ export interface LiveLayer {
  * skipped on every later call with the same `disabled` set; the others still run.
  */
 export function runLayers(layers: readonly LiveLayer[], f: LiveFrame, disabled: Set<string>, onError?: (name: string, message: string) => void): void {
-  void layers;
-  void f;
-  void disabled;
-  void onError;
-  throw new Error("not implemented");
+  for (const layer of layers) {
+    if (disabled.has(layer.name)) continue;
+    try {
+      layer.draw(f);
+    } catch (e) {
+      disabled.add(layer.name);
+      const message = e instanceof Error ? e.message : String(e);
+      onError?.(layer.name, message);
+    }
+  }
 }

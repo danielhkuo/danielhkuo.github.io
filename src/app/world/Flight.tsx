@@ -141,6 +141,8 @@ export default function Flight() {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
+          layers: [],
+          onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
         worldN = loaded.data.n;
