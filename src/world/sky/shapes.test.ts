@@ -152,14 +152,14 @@ test("one sun, north-west and above: crowns are lit, the undersides and the sout
 
 test("the light falls in clean steps, not speckle: neighbours rarely differ much", () => {
   for (const s of all()) {
-    // Lobes meet at creases, so some neighbours do differ; noise would make most of them differ.
+    // Lobes meet at creases, drawn a tone darker, so some neighbours do differ; noise would make most of them differ.
     let jumps = 0, pairs = 0;
     for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w - 1; x++) {
       if (!solid(s, x, y) || !solid(s, x + 1, y)) continue;
       pairs++;
       if (Math.abs(s.light[y * s.w + x] - s.light[y * s.w + x + 1]) > 0.25) jumps++;
     }
-    assert.ok(pairs === 0 || jumps <= 0.12 * pairs, `${s.kind} ${s.w}x${s.h}: ${jumps} jumps in ${pairs} pairs`);
+    assert.ok(pairs === 0 || jumps <= 0.2 * pairs, `${s.kind} ${s.w}x${s.h}: ${jumps} jumps in ${pairs} pairs`);
   }
 });
 

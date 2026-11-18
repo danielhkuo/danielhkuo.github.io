@@ -406,7 +406,7 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
     const body = 0.62 * massLight(x - MARGIN + cx0, y - MARGIN + cy0) + lift;
     // On the flank turned from the sun a lobe's own lit face counts for less, so the shade stays one calm mass.
     const own = lam[bi] > 0 ? lam[bi] * Math.min(1, Math.max(0.65, 1 + 2.2 * body)) : lam[bi];
-    light[i] = 0.5 * own + body - (shaded ? 0.3 : 0) - (crease ? 0.2 : 0);
+    light[i] = 0.5 * own + body - (shaded ? 0.3 : 0) - (crease ? 0.42 : 0);
     // Rims: on the sunward side (up or left), open sky or a lobe well behind.
     if (lam[bi] > 0.2 && !shaded) {
       const up = at(x, y - 1), left = at(x - 1, y);

@@ -41,6 +41,17 @@ const BANK_GAP_Y = 540;
 const BANKS_AT_6400 = 38;
 /** Height of the flier over the sea at the start: the page's camera is lifted by it. */
 const START_LIFT = 18;
+/** The second opening heap: its middle this far along the flier's line on screen, and this far to the right of it, pixels. */
+const AHEAD = 285;
+const ABEAM = 80;
+
+/** Where the flight starts (cells) and, if known, which way the flier heads (a unit vector). */
+export interface Opening {
+  x: number;
+  y: number;
+  dx?: number;
+  dy?: number;
+}
 
 function modN(v: number, n: number): number {
   const m = v % n;
@@ -73,9 +84,10 @@ function scatter(rng: Rng, n: number, cols: number, visit: (x: number, y: number
  * Low clouds use heap, puff and wisp shapes; banks use bank shapes.
  * Heaps stand where the weather is heavy, puffs sail in twos and threes where it is fair, and where it is fine the sky
  * is clear. Banks keep BANK_GAP apart. Wind is 2–4 cells a second. With `opening` (the flight's start), the view there
- * at t = 0 is cleared and set with a composed group: a great heap low on the seaward side, puffs, and a streamer.
+ * at t = 0 is cleared and set with a composed group: a great heap low on the seaward side, puffs, and a streamer; and,
+ * when the start has a heading, a second heap ahead and to the right of the flier's line.
  */
-export function makeField(seed: number, n: number, shapes: readonly CloudShape[], opening?: { x: number; y: number }): SkyField {
+export function makeField(seed: number, n: number, shapes: readonly CloudShape[], opening?: Opening): SkyField {
   const rng = rngFor(seed, "sky-field");
   const speed = rng.range(2.5, 3.5);
   const dir = rng.range(0, Math.PI * 2);
@@ -170,15 +182,15 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
       for (const i of pool) if (i !== skip && (best < 0 || Math.abs(shapes[i].w - width) < Math.abs(shapes[best].w - width))) best = i;
       return best;
     };
+    let first = -1;
     if (heaps.length > 0) {
       // The great heap, low and seaward: its crown level with the flier, its base near the bottom of the frame.
       // Of the heaps a third of the frame wide or more, the one that stands tallest for its width.
-      let h = -1;
       for (const i of heaps) {
-        if (shapes[i].w < 140 && h >= 0) continue;
-        if (h < 0 || shapes[h].w < 140 || shapes[i].h / shapes[i].w > shapes[h].h / shapes[h].w) h = i;
+        if (shapes[i].w < 140 && first >= 0) continue;
+        if (first < 0 || shapes[first].w < 140 || shapes[i].h / shapes[i].w > shapes[first].h / shapes[first].w) first = i;
       }
-      set(h, 88 - (shapes[h].w >> 1), 214 - shapes[h].h);
+      set(first, 88 - (shapes[first].w >> 1), 214 - shapes[first].h);
     }
     if (puffs.length > 0) {
       const a = nearest(puffs, 58), b = nearest(puffs, 36, a), c = nearest(puffs, 46, a);
@@ -187,6 +199,28 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
       set(c, 44, 30);
     }
     if (wisps.length > 0) set(nearest(wisps, 110), 232, 196);
+    if (heaps.length > 1 && opening.dx !== undefined && opening.dy !== undefined) {
+      // A second heap ahead, just off the first frame: the flier, flying on as it starts, passes it close on its
+      // right-hand side a few seconds in. The widest heap that is not the first.
+      let h = -1;
+      for (const i of heaps) if (i !== first && (h < 0 || shapes[i].w > shapes[h].w)) h = i;
+      const hx = opening.dx, hy = 0.8 * opening.dy, len = Math.hypot(hx, hy) || 1;
+      // AHEAD along the line, or as much farther as takes its box clear of the first frame.
+      let sx = 0, sy = 0;
+      for (let ahead = AHEAD; ahead < AHEAD + VIEW_W; ahead += 4) {
+        sx = Math.round(VIEW_W / 2 + (ahead * hx - ABEAM * hy) / len - shapes[h].w / 2);
+        sy = Math.round(VIEW_H / 2 + (ahead * hy + ABEAM * hx) / len - shapes[h].h / 2);
+        if (sx >= VIEW_W || sy >= VIEW_H || sx + shapes[h].w <= 0 || sy + shapes[h].h <= 0) break;
+      }
+      // Clear its place of other low cloud, then set it.
+      low = low.filter((c) => {
+        const s = shapes[c.shape];
+        const dx = torusDelta(rx + sx + shapes[h].w / 2, c.x + s.w / 2, n);
+        const dy = torusDelta(ry + sy + shapes[h].h / 2, 0.8 * c.y - LOW_ALT + s.h / 2, 0.8 * n);
+        return Math.abs(dx) >= (shapes[h].w + s.w) / 2 + 30 || Math.abs(dy) >= (shapes[h].h + s.h) / 2 + 30 || inView(c, 0);
+      });
+      set(h, sx, sy);
+    }
   }
 
   low.sort((a, b) => a.y - b.y || a.x - b.x);

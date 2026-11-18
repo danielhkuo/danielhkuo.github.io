@@ -171,6 +171,28 @@ test("the first view has cloud in it: a great heap to seaward, puffs and a strea
   assert.notDeepEqual(fix().opened.clouds, fix().field.clouds);
 });
 
+test("a start with a heading sets a second heap ahead, off the first frame, to the right of the flier's line", () => {
+  const heading = { dx: 0.96, dy: -0.28 };
+  const headed = makeField(3, N, fix().shapes, { ...START, ...heading });
+  const key = (c: Cloud) => `${c.shape}:${c.x}:${c.y}`;
+  const before = new Set(fix().opened.clouds.map(key));
+  const added = headed.clouds.filter((c) => !before.has(key(c)));
+  assert.equal(added.length, 1);
+  const s = fix().shapes[added[0].shape];
+  assert.equal(s.kind, "heap");
+  // The first frame is as it was without the heading.
+  assert.deepEqual(lowCover(headed, OPEN.x, OPEN.y).mask, lowCover(fix().opened, OPEN.x, OPEN.y).mask);
+  assert.ok(!boxes(headed, "low", OPEN.x, OPEN.y).some((b) => b.c === added[0]), "it is off the first frame");
+  // Its middle, from the flier at the centre of the frame: 285 px or a little more along the heading on screen, and
+  // 80 px to its right.
+  const sx = near(Math.round(added[0].x), OPEN.x, N, W) + s.w / 2 - W / 2, sy = near(Math.round(KY * added[0].y) - ALT.low, OPEN.y, KY * N, H) + s.h / 2 - H / 2;
+  const hx = heading.dx, hy = KY * heading.dy, len = Math.hypot(hx, hy);
+  const along = (sx * hx + sy * hy) / len, right = (-sx * hy + sy * hx) / len;
+  assert.ok(along >= 283 && along <= 360 && Math.abs(right - 80) <= 2, `along ${along.toFixed(1)}, right ${right.toFixed(1)}`);
+  // The flier's line stays clear of it: the heap's top is below the line where they pass.
+  assert.ok(right - s.h / 2 > 20, `the heap's top is ${(right - s.h / 2).toFixed(0)} px from the line`);
+});
+
 test("the opening changes the sky only round the start", () => {
   const key = (c: Cloud) => `${c.shape}:${c.x}:${c.y}:${c.layer}`;
   const plain = new Set(fix().field.clouds.map(key));

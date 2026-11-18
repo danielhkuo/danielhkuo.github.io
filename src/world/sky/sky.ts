@@ -3,7 +3,7 @@
 // each bank again as a veil over it, so the flier shows faintly inside the bank.
 
 import type { ViewRect } from "../render/compose.ts";
-import { ALT, makeField, type CloudLayer, type SkyField } from "./field.ts";
+import { ALT, makeField, type CloudLayer, type Opening, type SkyField } from "./field.ts";
 import { makeShapes, SHADOW_SLOPE, SHAPE_COUNTS, type CloudShape } from "./shapes.ts";
 import type { Sprite } from "./sprite.ts";
 import type { CloudStyle } from "./styles.ts";
@@ -152,7 +152,7 @@ export function drawShadows(
  * Shapes from SHAPE_COUNTS, painted with the style's painter, and the field, all from `seed`. `opening` is the
  * flight's start: the field composes the first view round it.
  */
-export function createSky(seed: number, n: number, style: CloudStyle, opening?: { x: number; y: number }): Sky {
+export function createSky(seed: number, n: number, style: CloudStyle, opening?: Opening): Sky {
   const shapes = makeShapes(seed, SHAPE_COUNTS);
   const sprites: Sprite[] = new Array(shapes.length);
   for (let i = 0; i < shapes.length; i++) sprites[i] = style.paint(shapes[i]);
