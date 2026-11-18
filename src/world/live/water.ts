@@ -9,7 +9,6 @@
 // pattern is fixed to bake space and stepped in whole pixels, so nothing swims with the camera or shimmers between
 // steps. Time enters only through `f.t`.
 
-import { Buffer } from "node:buffer";
 import { FALL_TONE, FOAM_TONE } from "../bake/chunk.ts";
 import { hash2 } from "../core/hash.ts";
 import { fbm } from "../core/noise.ts";
@@ -222,12 +221,10 @@ function sameBake(bake: Uint32Array, kept: Uint32Array, w: number, h: number, dx
   const y0 = dy < 0 ? -dy : 0, y1 = dy > 0 ? h - dy : h;
   const span = x1 - x0;
   if (span <= 0 || y1 <= y0) return true;
-  const a = Buffer.from(bake.buffer, bake.byteOffset, bake.byteLength);
-  const b = Buffer.from(kept.buffer, kept.byteOffset, kept.byteLength);
-  const bytes = span * 4;
+  // Plain typed-array reads: Node's Buffer is fast in Node but a byte-by-byte polyfill in the browser.
   for (let y = y0; y < y1; y++) {
-    const a0 = (y * w + x0) * 4, b0 = ((y + dy) * w + x0 + dx) * 4;
-    if (a.compare(b, b0, b0 + bytes, a0, a0 + bytes) !== 0) return false;
+    let i = y * w + x0, j = (y + dy) * w + x0 + dx;
+    for (const end = i + span; i < end; i++, j++) if (bake[i] !== kept[j]) return false;
   }
   return true;
 }
@@ -250,6 +247,8 @@ export function waterLayer(seed: number): LiveLayer {
   let sized = 0;
   let have = false;
   let keptX = 0, keptY = 0;
+  /** The bake version the kept work was built from; -1 when unknown. */
+  let keptVersion = -1;
   let marked = new Int16Array(0);
   let nMarked = 0;
   const feet = new Int32Array(MAX_FEET);
@@ -533,12 +532,14 @@ export function waterLayer(seed: number): LiveLayer {
 
       const dx = rx - keptX, dy = ry - keptY;
       const slide = have && (dx | 0) === dx && (dy | 0) === dy && dx <= 16 && dx >= -16 && dy <= 16 && dy >= -16;
+      // The view says the land hasn't changed since the kept frame: no need to compare it pixel by pixel.
+      const trusted = f.bakeVersion !== undefined && f.bakeVersion === keptVersion;
       // Still, and the land is the land we built from: only the paint depends on the clock.
-      if (slide && dx === 0 && dy === 0 && sameBake(bake, keptBake, w, h, 0, 0)) {
+      if (slide && dx === 0 && dy === 0 && (trusted || sameBake(bake, keptBake, w, h, 0, 0))) {
         paint(f, w, h, rx, ry, pw, dist, fallRun);
         return;
       }
-      const moved = slide && sameBake(bake, keptBake, w, h, dx, dy);
+      const moved = slide && (trusted || sameBake(bake, keptBake, w, h, dx, dy));
       let sx0 = 0, sx1 = 0, sy0 = 0, sy1 = 0;
       if (nMarked !== 0) { colMark.fill(0); nMarked = 0; }
       if (moved) {
@@ -595,6 +596,7 @@ export function waterLayer(seed: number): LiveLayer {
       if (bake.length === w * h) keptBake.set(bake);
       else for (let i = 0, n = w * h; i < n; i++) keptBake[i] = bake[i];
       keptX = rx; keptY = ry;
+      keptVersion = f.bakeVersion ?? -1;
       have = true;
     },
   };

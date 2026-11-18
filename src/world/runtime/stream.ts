@@ -112,7 +112,7 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
       compose(read, palette, rect, out, undefined, haze, bakeBuffer);
       runLayers(
         opts.layers ?? [],
-        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, flier },
+        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier },
         disabled,
         opts.onLayerError,
       );
