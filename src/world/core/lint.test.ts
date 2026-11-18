@@ -13,6 +13,8 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 /** Paths (relative to src/world) whose arithmetic must be deterministic. */
 const DETERMINISTIC = /^(core|gen|bake|pack|sites|look)\/|^[^/]+\.ts$/;
 const EXEMPT = /^(bench|cli|render|runtime|testing)\//;
+/** Paths that only ever run in Node (tools, test helpers): they may import node: modules. */
+const NODE_ONLY = /^(cli|testing)\//;
 
 const ARITH: [RegExp, string][] = [
   [
@@ -44,6 +46,8 @@ export function findViolations(path: string, source: string): string[] {
   const src = stripComments(source);
   const out: string[] = [];
   for (const [re, name] of SYNTAX) if (re.test(src)) out.push(`${path}: ${name}`);
+  // Code the browser runs may not lean on Node: Next swaps in slow polyfills (a byte-by-byte Buffer cost 29 ms a frame).
+  if (!NODE_ONLY.test(path) && /from\s+["']node:/.test(src)) out.push(`${path}: node import`);
   if (DETERMINISTIC.test(path) && !EXEMPT.test(path)) {
     for (const [re, name] of ARITH) if (re.test(src)) out.push(`${path}: ${name}`);
   }
@@ -77,6 +81,8 @@ test("the lint catches each banned form", () => {
   assert.ok(flags("cli/x.ts", 'import { a } from "@/lib/a";'));
   assert.ok(flags("cli/x.ts", 'import { a } from "./a";'));
   assert.ok(flags("render/x.ts", "class A { constructor(private a: number) {} }"));
+  assert.ok(flags("live/x.ts", 'import { Buffer } from "node:buffer";'));
+  assert.ok(!flags("cli/x.ts", 'import { readFileSync } from "node:fs";'));
   // Exempt and allowed forms.
   assert.ok(!flags("bench/x.ts", "const v = Math.sin(x);"));
   assert.ok(!flags("gen/x.ts", "const v = Math.sqrt(Math.abs(x)) + Math.imul(a, b);"));
