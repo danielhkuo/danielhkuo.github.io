@@ -27,6 +27,11 @@ export interface Structure {
   /** Per cell: a material painted on the ground where nothing stands (yards, streets); 0 leaves the cover. */
   paint: Uint8Array;
   /**
+   * Per cell: extra cast-shadow depth 0–3 from picture marks (a crown, a lattice). The bake raises the
+   * shadow depth to at least this, on land and on water. Absent when the structure casts none.
+   */
+  shadow?: Uint8Array;
+  /**
    * Marks on faces, five numbers each: dx, dy (the cell whose south face carries it), z (height above `base`),
    * material, light byte. Drawn in bake-pixel space: windows, doors, arches, clock faces, cross arms, sails.
    */

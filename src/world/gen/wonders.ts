@@ -91,7 +91,7 @@ export function wonderRules(n: number): WonderRules {
     visible: 0.8,
     heightCap: 152,
     baths: { cliff: [12, 35], open: 120 * k, relief: 9 },
-    railway: { flat: 220 * k, depth: 5, track: [150 * k, 300 * k], between: 1600 * k, lone: 40 * k },
+    railway: { flat: 220 * k, depth: 3, track: [150 * k, 300 * k], between: 1600 * k, lone: 40 * k },
     church: { across: 120 * k, shore: 20 * k, depth: 2 },
     hotel: { rock: 160 * k, exposure: 0.66, top: 14 },
     marsh: { around: 40, causeway: [40 * k, 160 * k] },
@@ -276,7 +276,7 @@ const BATHS: Kind = {
       out.push({
         x, y, level, height: 22, score: 3 - Math.abs(level - 27) / 5 - (hi - lo) / r.baths.relief,
         box: [x - 20, y - 10, x + 26, y + 38],
-        anchors: { quay: [x, y + 35], funicularTop: [x + 20, y + 6], funicularFoot: [x + 20, y + 30] },
+        anchors: { quay: [x, y + 29], funicularTop: [x + 20, y + 6], funicularFoot: [x + 20, y + 26] },
         probes: [[x, y, level, 22], [x, y + 20, level * 0.4, 6], [x, y + 33, 0, 3]],
       });
     }
@@ -510,8 +510,18 @@ const HOTEL: Kind = {
     s.x = Math.floor(w.x) - W.HOTEL_ROCK[0];
     s.y = Math.floor(w.y) - W.HOTEL_ROCK[1];
     s.base = 0;
-    // Whatever rock stands within the hotel's oval is cut to its terrace, so none stands through the floor.
-    const conforms: Conform[] = [{ kind: "dredge", x: w.x, y: w.y, rx: 18, ry: 9, round: true, level: 5, skirt: 2, limit: 0 }];
+    // The hotel's own stack is cut, then raised, so the bake draws the cliff. Any other stack nearby is
+    // dredged down, so the hotel leads.
+    const conforms: Conform[] = [
+      { kind: "dredge", x: w.x, y: w.y, rx: 18, ry: 9, round: true, level: 5, skirt: 2, limit: 0 },
+      { kind: "raise", x: w.x, y: w.y, rx: 17, ry: 9, round: true, level: 5.5, skirt: 1.5, limit: 0 },
+    ];
+    for (const rock of land.c.stacks) {
+      const dx = torusDelta(w.x, rock.x, land.c.n), dy = torusDelta(w.y, rock.y, land.c.n);
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 4 || d > 25) continue;
+      conforms.push({ kind: "dredge", x: rock.x, y: rock.y, rx: rock.r + 1, ry: rock.r + 1, round: true, level: 12, skirt: 1, limit: 0 });
+    }
     return { structures: [s], conforms };
   },
 };
@@ -599,7 +609,10 @@ const MARSH: Kind = {
     const len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
     const bow = ((hash2(Math.floor(ax), Math.floor(ay), land.seed) & 1) === 0 ? 1 : -1) * 0.04 * len;
     // The rise is built up out of the marsh; it is never cut.
-    const conforms: Conform[] = [{ kind: "raise", x: s.x + YARD[0], y: s.y + YARD[1], rx: 15.5, ry: 10.5, round: true, level: W.MARSH_RISE, skirt: 6, limit: 0 }];
+    const conforms: Conform[] = [
+      { kind: "raise", x: s.x + YARD[0], y: s.y + YARD[1], rx: 15.5, ry: 10.5, round: true, level: W.MARSH_RISE, skirt: 6, limit: 0 },
+      { kind: "raise", x: s.x + YARD[0] + 6, y: s.y + YARD[1] - 4, rx: 8, ry: 6.5, round: true, level: W.MARSH_RISE, skirt: 5, limit: 0 },
+    ];
     return { structures: [s, ...W.marshCauseway(ax, ay, bx, by, bow)], conforms };
   },
 };
@@ -646,7 +659,7 @@ const MAST: Kind = {
       out.push({
         x, y, level, height: W.MAST_TALL,
         score: rays / 16 + c.exposure[i] + Math.min(level, 40) / 40 - (hi - lo) / (2 * r.mast.relief),
-        box: [x - 20, y - 10, x + 24, y + 10],
+        box: [x - 20, y - 10, x + 24, y + 26],
         anchors: { mast: [fx, fy] },
         probes: [[fx, fy, level, W.MAST_TALL], [x + 10, y + 1, level, 6]],
       });
@@ -704,7 +717,7 @@ const BRIDGE_TOWN: Kind = {
         if (tl < 1e-6 || (ty * ty) / (tl * tl) < 0.85) continue;
         tally.pass(L0);
         const water = v[k + 3];
-        const len = Math.max(40, Math.min(52, 2 * Math.ceil((wide + 36) / 2)));
+        const len = Math.max(32, Math.min(52, Math.round(wide + 28)));
         const xa = Math.floor(px) - len / 2, xb = xa + len - 1, row = Math.floor(py);
         const ha = groundAt(land, xa - 3, row), hb = groundAt(land, xb + 3, row);
         if (!isDry(c, nodeOf(c, xa - 3, row)) || !isDry(c, nodeOf(c, xb + 3, row)) || Math.abs(ha - hb) > r.bridgeTown.level) continue;
@@ -741,7 +754,7 @@ const BRIDGE_TOWN: Kind = {
         const up = Math.max(0, k - 48), down = Math.min(v.length - 4, k + 48);
         out.push({
           x: px, y: py, level: water, height: deck + W.BRIDGE_TALL,
-          score: (3 * farm) / looked + (ty * ty) / (tl * tl) + Math.min(wide, 8) / 6 - (0.5 * Math.abs(ha - hb)) / r.bridgeTown.level - (deck > 6 ? (deck - 6) / 3 : 0),
+          score: (3 * farm) / looked + (ty * ty) / (tl * tl) + Math.min(wide, 12) / 6 - (0.5 * Math.abs(ha - hb)) / r.bridgeTown.level - (deck > 6 ? (deck - 6) / 3 : 0),
           box: [sx - 2, sy - 2, sx + len + 2 * W.BRIDGE_END + 2, sy + W.BRIDGE_H + MEADOW],
           anchors: { west: [xa, row], east: [xb, row], upstream: [v[up], v[up + 1]], downstream: [v[down], v[down + 1]] },
           probes: [[px, py + 4, water, deck + 14], [xa, py + 4, water, deck + 10], [xb, py + 4, water, deck + 10]],
@@ -826,7 +839,7 @@ const OAK: Kind = {
           // Best a little way up from the village, and behind it as the camera looks, so the village lies at its feet.
           score: Math.min(prom, 10) / 5 + Math.min(level - below, 20) / 12 + (v.y > y + 20 ? 1 : 0) - (1.5 * d) / r.oak.village[1] + (2 * open) / 48,
           box: [ox - 1, oy - 1, ox + W.OAK_W + 1, oy + W.OAK_H + 1],
-          anchors: { crown: [x, y], swing: [ox + W.OAK_SWING[0], oy + W.OAK_SWING[1]], treehouse: [ox + W.OAK_HOUSE[0], oy + W.OAK_HOUSE[1]], village: [v.x, v.y] },
+          anchors: { crown: [x, y], swing: [ox + W.OAK_SWING[0], oy + W.OAK_SWING[1]], village: [v.x, v.y] },
           probes: [[x, y, level, W.OAK_TALL]],
         });
       }
