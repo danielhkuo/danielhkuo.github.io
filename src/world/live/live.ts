@@ -16,6 +16,11 @@ export interface LiveFrame {
   n: number;
   /** The flier this frame, when there is one: for layers that react to it (birds scattering, a bell as it passes). */
   flier?: Flier;
+  /**
+   * Changes whenever the land the view can draw changes (a chunk baked or dropped). While it stays the same, the land
+   * under a moved camera is the land from before, shifted: layers that cache work from the land can trust it.
+   */
+  bakeVersion?: number;
 }
 
 /** Where the flier is: world cells, units up, heading in radians (0 east, π/2 south), cells a second. */
