@@ -1,0 +1,200 @@
+{
+  "format": 1,
+  "worldId": "3dc7c811b7c0",
+  "n": 6400,
+  "seed": 3,
+  "bytes": 3240327,
+  "sections": [
+    {
+      "name": "meta",
+      "bytes": 143,
+      "sha256": "af9b124e37ead02b66c4783330a2e08b038a636011244e2f06bf5bffaad95cb6"
+    },
+    {
+      "name": "ground",
+      "bytes": 1019232,
+      "sha256": "6ee3ef00e33adb7c468b6c913cfb5f1087b2d2b4c0df41eaf412ff221ea692bd"
+    },
+    {
+      "name": "base",
+      "bytes": 186400,
+      "sha256": "59963c8e8792f109f605b3c8e64888becd4e3e8dfbe205a11bd84de5df60dfd7"
+    },
+    {
+      "name": "conform",
+      "bytes": 124107,
+      "sha256": "5dd021c772d9de5cd307c33d0815cb2ea6fc6caf549f5a7194245a31d257c6c3"
+    },
+    {
+      "name": "wlevel",
+      "bytes": 6864,
+      "sha256": "55b3331ef2f64ab1f656d52664637e8c3f23e83ffca6c1eca4211992ec0e0189"
+    },
+    {
+      "name": "wkind",
+      "bytes": 26399,
+      "sha256": "dc697096a04458acd312e231262bcaf0c13bed00ae0b5239f7b61aea2c4d3577"
+    },
+    {
+      "name": "hand",
+      "bytes": 382306,
+      "sha256": "a978808914a849d81cf4403a46697038452d41481bd3917835402ca919f58afb"
+    },
+    {
+      "name": "shore",
+      "bytes": 29362,
+      "sha256": "74dc2b8043415b1fe78d20dd1087bfa1f7f4c9403359ad2bc5d20d6db92ccf30"
+    },
+    {
+      "name": "falls",
+      "bytes": 393,
+      "sha256": "f2613b3a8cb0498c87898a4cc41f99105138724ed0c304d1687a5d5ab44479d2"
+    },
+    {
+      "name": "moisture",
+      "bytes": 32676,
+      "sha256": "8db1d5f7433174d6d2a8bf43c2ed40230827ec71929225d0cbc45fbb736d6687"
+    },
+    {
+      "name": "wind",
+      "bytes": 96521,
+      "sha256": "b47a77770a53aa485599dbb9de5dde6dad44caf10a2d9e7d815a1a48d2e07245"
+    },
+    {
+      "name": "exposure",
+      "bytes": 118833,
+      "sha256": "139eb90a64f7cd170aaedb87a7d651912aa5fac3c7e0e2242f838d9fc746a8ec"
+    },
+    {
+      "name": "debris",
+      "bytes": 41222,
+      "sha256": "d92c75be31b7a7dd8ca6deee74f130ed4f15a99199c0db740321fbea5fce7a5c"
+    },
+    {
+      "name": "rock",
+      "bytes": 9329,
+      "sha256": "ad673b3e6d91d921ca959338fdd8b62b0286258e712d40a8c588b13be7c2768e"
+    },
+    {
+      "name": "regions",
+      "bytes": 305138,
+      "sha256": "e2520e195dadc73547819c7c8f2bf870d962d7bcb86c4ffeb839268da26877ae"
+    },
+    {
+      "name": "rivers",
+      "bytes": 93632,
+      "sha256": "2ef1068b204dae967478eec123f775f5cb140344a19fe41da7fc19b74cc6c8d9"
+    },
+    {
+      "name": "roads",
+      "bytes": 42226,
+      "sha256": "1d678f98a337aca4fb1079211cd52700b87b134c04874886c041ff35e35fcd51"
+    },
+    {
+      "name": "stamps",
+      "bytes": 542587,
+      "sha256": "07c35ff02aa871ddcc913f06ade1ac9913ebe30954ab96b66ccfc3482f9c3bc8"
+    },
+    {
+      "name": "ponds",
+      "bytes": 1288,
+      "sha256": "a5eb7888b70fe09e0ee725fd4e6c8a2dfdf2b0d154609ec65e4f68375347fb34"
+    },
+    {
+      "name": "bars",
+      "bytes": 2888,
+      "sha256": "8e650ff89352d662329cbba21afa5768a8e23ddfc62f786d14ee344c0bbf2f9e"
+    },
+    {
+      "name": "built",
+      "bytes": 145189,
+      "sha256": "fac0994999c437103df3d6ca5119c2a21c72787ac120f6a83ada0012b4e5ed9f"
+    },
+    {
+      "name": "occl",
+      "bytes": 33358,
+      "sha256": "376ff3a7d2da32fd8f0efd6e927e69f4b51694ae6fd5c13c273ede370d5c0444"
+    }
+  ],
+  "block": 16,
+  "sites": [
+    {
+      "id": "abbey-0",
+      "type": "abbey",
+      "x": 82,
+      "y": 3562
+    },
+    {
+      "id": "town-0",
+      "type": "town",
+      "x": 5770,
+      "y": 3682
+    },
+    {
+      "id": "lighthouse-0",
+      "type": "lighthouse",
+      "x": 2162,
+      "y": 1734
+    },
+    {
+      "id": "lighthouse-1",
+      "type": "lighthouse",
+      "x": 6270,
+      "y": 6126
+    },
+    {
+      "id": "bridge-0",
+      "type": "bridge",
+      "x": 1203.5,
+      "y": 5340.5
+    },
+    {
+      "id": "bridge-1",
+      "type": "bridge",
+      "x": 4280,
+      "y": 4105.25
+    },
+    {
+      "id": "cathedral-0",
+      "type": "cathedral",
+      "x": 3050,
+      "y": 6254
+    },
+    {
+      "id": "cathedral-1",
+      "type": "cathedral",
+      "x": 3654,
+      "y": 1902
+    },
+    {
+      "id": "windmill-0",
+      "type": "windmill",
+      "x": 1126,
+      "y": 606
+    },
+    {
+      "id": "windmill-1",
+      "type": "windmill",
+      "x": 5926,
+      "y": 1586
+    },
+    {
+      "id": "yew-0",
+      "type": "yew",
+      "x": 2642,
+      "y": 4346
+    },
+    {
+      "id": "yew-1",
+      "type": "yew",
+      "x": 4730,
+      "y": 474
+    }
+  ],
+  "start": {
+    "x": 5726.095174764309,
+    "y": 3784.3249485987326,
+    "dx": 0.9593655015712705,
+    "dy": -0.2821663239915502
+  }
+}
