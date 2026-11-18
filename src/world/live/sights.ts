@@ -1,5 +1,5 @@
 // Occasional sights: a skein of birds crossing the sky, a child's kite over the town, a fishing boat shooting its
-// net, a rainbow standing over the land for a while.
+// net, a shower passing on the wind with a rainbow standing in it for a while.
 //
 // Each is set by the seed and the clock. The skeins fly straight lines round the world for ever, few enough that one
 // crosses a flight every minute or two. The kite, the nets and the rainbows come and go on their own clocks, easing in
@@ -34,13 +34,28 @@ export const RAINBOW_STAYS = 56;
 /** Outer radius of the bow in pixels, the width of a band, and its strongest coverage (0–255). */
 const BOW = 66;
 const BAND = 2;
-const BOW_ALPHA = 74;
+const BOW_ALPHA = 76;
+/**
+ * The bow's washes, outside in, as palette colours (material, tone): tile, straw, meadow, the clear sea and the mauve
+ * of the flowers. Laid thin, they take the day's light with the land and stay well clear of the dragon's vermilion
+ * and gold.
+ */
+const BANDS: readonly (readonly [number, number])[] = [[M.roofTile, 10], [M.wheat, 8], [M.meadowMid, 9], [M.seaClear, 5], [M.flowerMauve, 5]];
+/** Seconds the shower eases in and out over, and the bow: the bow is slower, so it follows the rain. */
+const RAIN_EASE = 5;
+const BOW_EASE = 16;
+/** Pixels a second the shower and its bow drift downwind (east), and how far the rain's middle leads the bow's. */
+const RAIN_DRIFT = 1.6;
+const RAIN_LEAD = 16;
+/** The curtain of rain: half its width and its height in pixels, how many streaks fall in it, and their strongest coverage. */
+const RAIN_HALF = 92;
+const RAIN_TALL = 100;
+const STREAKS = 72;
+const RAIN_ALPHA = 128;
+/** Pixels a streak leans downwind for each pixel it falls. */
+const RAIN_SLANT = 1 / 3;
 
 const TAU = 2 * Math.PI;
-
-const rgb = (r: number, g: number, b: number): number => (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
-/** The bow's washes, outside in: thin watercolour, far paler than the dragon's vermilion and gold. */
-const BANDS = [rgb(226, 150, 150), rgb(238, 196, 150), rgb(240, 228, 160), rgb(160, 212, 168), rgb(150, 190, 228), rgb(178, 162, 222)];
 
 const flags = (ids: readonly number[]): Uint8Array => {
   const t = new Uint8Array(256);
@@ -125,6 +140,18 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
     bowOff.push(dx, dy, band);
   }
   const bow = new Int16Array(bowOff);
+  const bands = new Uint32Array(BANDS.length);
+  let bandsOf: LiveFrame["palette"] | null = null;
+  let bandsProbe = 0;
+
+  // The rain: for each streak, how far across the curtain it falls, where in its fall it starts and how fast it falls.
+  const rain = new Float32Array(STREAKS * 3);
+  for (let k = 0; k < STREAKS; k++) {
+    const h = hash2(k, 9, seed ^ 0x7a14);
+    rain[k * 3] = ((h & 1023) / 1023 * 2 - 1) * RAIN_HALF;
+    rain[k * 3 + 1] = ((h >>> 10) & 1023) / 1024 * RAIN_TALL;
+    rain[k * 3 + 2] = 52 + ((h >>> 20) & 15) * 1.5;
+  }
 
   const layer: SightsLayer = {
     name: "sights",
@@ -191,13 +218,15 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
       const kx = px + Math.round(up * (9 + 4 * psin(t * 0.5) + 1.5 * psin(t * 1.3 + 1)));
       const ky = gy - 2 - Math.round(up * (KITE_HEIGHT + 3 * psin(t * 0.7 + 2)));
       stamp(f, child, px, gy, false);
-      // The string: a pale line that sags.
-      const line = palette[(M.whitewash << 8) | 12];
+      // The string: a white thread that sags, with ink along its windward side so it shows on walls and grass alike.
+      const line = palette[(M.whitewash << 8) | 15], ink = palette[(M.stoneDark << 8) | 1];
       const rise = gy - 2 - ky;
       for (let j = 1; j < rise - 3; j++) {
         const u = j / rise;
         const lx = px + Math.round((kx - px) * u * u), ly = gy - 2 - j;
-        if (ly >= 0 && ly < h && lx >= 0 && lx < w) blend(out, ly * w + lx, line, 150);
+        if (ly < 0 || ly >= h || lx < 1 || lx >= w) continue;
+        out[ly * w + lx] = line;
+        blend(out, ly * w + lx - 1, ink, 150);
       }
       stamp(f, kite, kx, ky, false);
       // A tail of ribbons, swinging.
@@ -248,30 +277,66 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
   }
 
   /** The rainbow of tile (tx, ty) at time t, into `bowAt`; false when none stands there then. */
-  const bowAt = { x: 0, y: 0, shown: 0 };
+  const bowAt = { x: 0, y: 0, shown: 0, rain: 0, drift: 0 };
   function bowIn(tx: number, ty: number, t: number): boolean {
     const slot = Math.floor(t / RAINBOW_EVERY);
     const tiles = n / RAINBOW_TILE;
     const hc = hash2(modP(tx, tiles) + 64 * modP(ty, tiles), slot, seed ^ 0xa12c);
     if (hc % 5 >= 3) return false;
     const begins = 8 + ((hc >>> 4) % (RAINBOW_EVERY - RAINBOW_STAYS - 16));
-    bowAt.shown = easeInOut(t - slot * RAINBOW_EVERY - begins, RAINBOW_STAYS, 10);
-    if (bowAt.shown === 0) return false;
+    const at = t - slot * RAINBOW_EVERY - begins;
+    bowAt.rain = easeInOut(at, RAINBOW_STAYS, RAIN_EASE);
+    if (bowAt.rain === 0) return false;
+    bowAt.shown = easeInOut(at, RAINBOW_STAYS, BOW_EASE);
+    bowAt.drift = RAIN_DRIFT * (at - RAINBOW_STAYS / 2);
     bowAt.x = tx * RAINBOW_TILE + ((hc >>> 10) & 1023) / 1024 * RAINBOW_TILE;
     bowAt.y = ty * RAINBOW_TILE + ((hc >>> 20) & 1023) / 1024 * RAINBOW_TILE;
     return true;
   }
 
-  function rainbows(f: LiveFrame): void {
-    const { out, t } = f;
+  /** The shower: streaks falling aslant in a curtain whose foot has its middle at frame pixel (mx, by), thinning to its edges. */
+  function shower(f: LiveFrame, mx: number, by: number, amount: number): void {
+    const { out, t, palette } = f;
     const w = f.rect.w, h = f.rect.h;
+    const grey = palette[(M.whitewash << 8) | 2], pale = palette[(M.sea << 8) | 1];
+    for (let k = 0; k < STREAKS; k++) {
+      const off = rain[k * 3], v = (rain[k * 3 + 1] + t * rain[k * 3 + 2]) % RAIN_TALL;
+      const side = 1 - (off * off) / (RAIN_HALF * RAIN_HALF);
+      const ends = v < 20 ? v / 20 : v > RAIN_TALL - 20 ? (RAIN_TALL - v) / 20 : 1;
+      const a = RAIN_ALPHA * amount * side * ends;
+      if (a < 8) continue;
+      const x = mx + Math.round(off + RAIN_SLANT * (v - RAIN_TALL / 2)), y = by - RAIN_TALL + Math.floor(v);
+      const ink = k % 3 === 0 ? pale : grey;
+      const len = 5 + (k & 3);
+      for (let j = 0; j < len; j++) {
+        const px = x + Math.floor(j * RAIN_SLANT), py = y + j;
+        if (px < 0 || px >= w || py < 0 || py >= h) continue;
+        // Faint where it starts, strongest at the drop.
+        blend(out, py * w + px, ink, Math.round((a * (j + 2)) / (len + 1)));
+      }
+    }
+  }
+
+  function rainbows(f: LiveFrame): void {
+    const { out, t, palette } = f;
+    const w = f.rect.w, h = f.rect.h;
+    const probe = palette[(BANDS[0][0] << 8) | BANDS[0][1]];
+    if (palette !== bandsOf || probe !== bandsProbe) {
+      bandsOf = palette;
+      bandsProbe = probe;
+      for (let b = 0; b < BANDS.length; b++) bands[b] = palette[(BANDS[b][0] << 8) | BANDS[b][1]];
+    }
+    const reach = RAIN_HALF + RAIN_LEAD + RAIN_TALL * RAIN_SLANT;
     const midX = f.rect.x + w / 2, midY = (f.rect.y + h / 2) / 0.8;
     const tx0 = Math.floor(midX / RAINBOW_TILE), ty0 = Math.floor(midY / RAINBOW_TILE);
     for (let ty = ty0 - 1; ty <= ty0 + 1; ty++) for (let tx = tx0 - 1; tx <= tx0 + 1; tx++) {
       if (!bowIn(tx, ty, t)) continue;
-      const x = bowAt.x, y = bowAt.y, shown = bowAt.shown;
-      const cx = frameX(f, x, BOW), cy = frameY(f, 0.8 * y, BOW);
-      if (cx >= w + BOW || cy >= h + BOW) continue;
+      const y = bowAt.y, shown = bowAt.shown;
+      // The shower passes on the wind and the bow goes with it.
+      const cx = frameX(f, bowAt.x + bowAt.drift, reach), cy = frameY(f, 0.8 * y, RAIN_TALL);
+      if (cx >= w + reach || cy >= h + RAIN_TALL) continue;
+      shower(f, cx + RAIN_LEAD, cy + 6, bowAt.rain);
+      if (shown === 0) continue;
       // The bow stands at row y: land nearer the viewer hides it. y in the frame's own turn of the torus.
       const yy = y + Math.round((midY - y) / n) * n;
       note("rainbow", cx, cy);
@@ -283,7 +348,7 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
         // Thinner at the feet and at its two edges.
         const foot = bow[k + 1] < 22 ? bow[k + 1] / 22 : 1;
         const edge = band === 0 || band === BANDS.length - 1 ? 0.6 : 1;
-        blend(out, py * w + px, BANDS[band], Math.round(BOW_ALPHA * shown * foot * edge));
+        blend(out, py * w + px, bands[band], Math.round(BOW_ALPHA * shown * foot * edge));
       }
     }
   }
