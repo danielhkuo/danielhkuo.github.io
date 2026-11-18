@@ -99,8 +99,8 @@
 **Interfaces:**
 - Produces:
   - `occlusionFloor(ground: ArrayLike<number>, gN: number, cellsPerNode: number, block: number): Uint8Array`, one byte per `block`-cell square. For each G node it computes `max(0, max over k = 1…ceil(200/cellsPerNode) of h[x, y+k] − 0.8·k·cellsPerNode)`, wrapping. Each block holds the ceiling of its nodes' maximum, clamped to 255.
-  - `interface Manifest { format: 1; worldId: string; n: number; seed: number; bytes: number; sections: WorldSection[]; block: 16; sites: { id: string; type: string; x: number; y: number }[]; start: { x: number; y: number; heading: number } }`
-  - `startOf(sites: PlacedSite[], ground: ArrayLike<number>, gN: number, n: number): Manifest["start"]`.
+  - `interface Manifest { format: 1; worldId: string; n: number; seed: number; bytes: number; sections: WorldSection[]; block: 16; sites: { id: string; type: string; x: number; y: number }[]; start: Start }`, with `interface Start { x: number; y: number; dx: number; dy: number }` (a unit heading vector: pack/ may not use atan)
+  - `startOf(sites: readonly PlacedSite[], n: number): Start`.
     - The start sits 150 cells past the town's `harbour.mouthX/mouthY`, along the line from the abbey to the mouth, and heads toward the abbey. Heading is in radians, 0 = east, π/2 = south.
     - Without a town, it starts 300 cells south of the abbey, heading north.
   - `buildWorld(opts: { n: number; seed: number; cache?: boolean; out: string }): Promise<Manifest>`. It writes these files:
@@ -117,8 +117,8 @@
 - [ ] **Step 1: Write the failing tests.**
   - `occlusion equals a brute-force march on a random 64² field`.
   - `a flat field has no floor`: all zeros.
-  - `a wall 40 high, two nodes south, sets a floor of 34`: with cellsPerNode 4, `ceil(40 − 0.8·8) = 34`.
-  - `the start lies over the sea and heads toward the abbey`: on the mini-world, `ground at start ≤ 0`, and the heading vector's dot product with (abbey − start) is > 0.9 of its length.
+  - `a wall 40 high sets the floor north of it, and the floor wraps`: block rows read 18, 31, 37, 0 northward from the wall's block, and 5 across the wrap (each block takes its nearest node to the wall).
+  - `the start lies offshore of the town's river mouth and heads toward the abbey`, on hand-placed sites, with a case across the wrap and the two fallbacks. (Seed 3's start is over the sea, at ground −0.99; no test guards that for other seeds.)
   - `building twice gives identical bytes and the same worldId`: build n = 1024 into a temp folder.
   - `current.json names the new world`.
 - [ ] **Step 2:** Run the tests. Expect a fail.
@@ -245,7 +245,7 @@
   - `the flier is hidden behind a hill to its south and seen over open ground`, on a `fieldWorld` fixture.
   - `the shadow falls south-east, 0.354 cells per unit of height`.
   - `fitScale picks the largest whole scale that fits`: (1920, 1080) gives 4, (1000, 700) gives 2, and (300, 200) gives 1.
-  - `the page shows an error when the world cannot load`: a pure `loadState` reducer in `Flight.tsx`, exported and tested.
+  - The loader lives in `src/world/runtime/load.ts` (`loadWorld`), tested for a missing world, a stale id, a truncated or damaged file, bad JSON and a network failure; the page shows `LOAD_FAILED` when it throws.
 - [ ] **Step 2:** Run the tests. Expect a fail.
 - [ ] **Step 3:** Implement the flight model, the stand-in and the page.
 - [ ] **Step 4:** Run `npm test`, `npm run lint` and `npx tsc --noEmit`. Expect all clean.

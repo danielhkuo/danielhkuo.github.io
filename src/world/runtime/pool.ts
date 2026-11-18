@@ -6,6 +6,8 @@
 export interface WorkerLike {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
   onmessage: ((e: { data: unknown }) => void) | null;
+  /** A Worker whose script fails to load or throws at the top level reports here, not through a message. */
+  onerror?: ((e: { message?: string }) => void) | null;
   terminate(): void;
 }
 
@@ -30,7 +32,8 @@ export interface BakePool {
   want(list: readonly ChunkWant[]): void;
   onBaked: ((cx: number, cy: number, px: Uint32Array) => void) | null;
   onError: ((message: string) => void) | null;
-  stats(): { inFlight: number; queued: number; baked: number; bakeMs: number };
+  /** `workers` counts the workers still alive: none left means nothing more will be baked. */
+  stats(): { inFlight: number; queued: number; baked: number; bakeMs: number; workers: number };
   dispose(): void;
 }
 
@@ -114,7 +117,9 @@ export function createPool(spawn: () => WorkerLike, size: number, init: { url: s
       }
       let queued = 0;
       for (const wish of wishes) if (!busy.has(chunkKey(wish.cx, wish.cy))) queued += 1;
-      return { inFlight, queued, baked, bakeMs };
+      let workers = 0;
+      for (const slot of slots) if (!slot.stopped) workers += 1;
+      return { inFlight, queued, baked, bakeMs, workers };
     },
     dispose() {
       if (disposed) return;
@@ -208,6 +213,7 @@ export function createPool(spawn: () => WorkerLike, size: number, init: { url: s
     const slot: Slot = { worker, ready: false, job: null, replacement, stopped: false };
     slots.push(slot);
     worker.onmessage = (e) => onMessage(slot, e.data);
+    worker.onerror = (e) => fail(slot, e?.message || "the bake worker failed");
     const msg: ToWorker = { type: "init", url: init.url, mask: init.mask };
     worker.postMessage(msg);
   }

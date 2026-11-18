@@ -154,7 +154,8 @@ function openPack(bin: Uint8Array): { parts: Map<string, Uint8Array>; meta: Meta
   return { parts, meta: parseMeta(metaBytes) };
 }
 
-async function verifySections(bin: Uint8Array, verify: readonly WorldSection[]): Promise<void> {
+/** Checks that every listed section is in the file with its length and hash; throws WorldDecodeError if not. */
+export async function verifyWorld(bin: Uint8Array, verify: readonly WorldSection[]): Promise<void> {
   let sections: PackSection[];
   try {
     sections = readPack(bin);
@@ -745,7 +746,7 @@ export async function encodeWorld(w: BakeWorld, extra?: { occlusion?: Occlusion 
 }
 
 async function decodeWorldInner(bin: Uint8Array, verify?: readonly WorldSection[]): Promise<BakeWorld> {
-  if (verify) await verifySections(bin, verify);
+  if (verify) await verifyWorld(bin, verify);
   const { parts, meta } = openPack(bin);
   const { n, gN, cN } = meta;
   const c2 = cN * cN;
@@ -798,7 +799,7 @@ async function decodeWorldInner(bin: Uint8Array, verify?: readonly WorldSection[
   if (flagged(meta, "bars")) world.bars = (await decodeValue(await loadRaw(requirePart(parts, BARS)))) as BakeWorld["bars"];
   if (flagged(meta, "built")) world.built = indexBuilt((await decodeValue(await loadRaw(requirePart(parts, BUILT)))) as Built, n);
   if (roads) world.roads = roads;
-  if (typeof meta.block === "number") await loadOcclusion(parts, meta);
+  // The occlusion floor is for the flier on the main thread (decodeFlightData); the bake does not read it.
   return world;
 }
 

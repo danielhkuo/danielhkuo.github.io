@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Manifest } from "../pack/manifest.ts";
+import { readPack } from "../pack/codec.ts";
 import { encodeWorld } from "../pack/world.ts";
 import { fieldWorld } from "../testing/bakefix.ts";
 import { LOAD_FAILED, loadWorld, WorldLoadError } from "./load.ts";
@@ -65,4 +66,14 @@ test("a stale id, a truncated file or bad JSON are refused", async () => {
 
 test("a network failure is the same error", async () => {
   await assert.rejects(loadWorld(async () => { throw new TypeError("offline"); }, "/world"), WorldLoadError);
+});
+
+test("a file damaged without changing its length is refused", async () => {
+  const { bin, files } = await site();
+  // A section only the workers decode: the page must still notice before it hands the file over.
+  const regions = readPack(bin).find((s) => s.name === "regions")!;
+  const bad = bin.slice();
+  bad[regions.bytes.byteOffset - bin.byteOffset + (regions.bytes.length >> 1)] ^= 0x5a;
+  files.set(`/world/${ID}/world.bin`, bad);
+  await assert.rejects(loadWorld(fetcher(files), "/world"), WorldLoadError);
 });

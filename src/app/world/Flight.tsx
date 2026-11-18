@@ -3,7 +3,7 @@
 import { IM_Fell_English } from "next/font/google";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { buildPalette } from "../../world/render/palette";
+import { buildPalette, MIDDAY } from "../../world/render/palette";
 import type { FlightInput, FlightState } from "../../world/runtime/flight";
 import { startState, stepFlight } from "../../world/runtime/flight";
 import { fitScale } from "../../world/runtime/fit";
@@ -44,6 +44,7 @@ interface FlightProbe {
 
 export default function Flight() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // CSS pixels per frame pixel: a whole number of device pixels, so the frame stays hard-edged at any display scaling.
   const [scale, setScale] = useState(1);
   const [failed, setFailed] = useState(false);
   // Filled from the frame loop when the page is opened with ?stats.
@@ -52,14 +53,15 @@ export default function Flight() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const stats = new URLSearchParams(window.location.search).has("stats");
+    const statsOn = new URLSearchParams(window.location.search).has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
-    const probe: FlightProbe | null = stats
+    const probe: FlightProbe | null = statsOn
       ? { navStart: 0, readyAt: null, frameMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     const recomputeScale = () => {
-      setScale(fitScale(window.innerWidth, window.innerHeight, FRAME_W, FRAME_H));
+      const dpr = window.devicePixelRatio || 1;
+      setScale(fitScale(window.innerWidth * dpr, window.innerHeight * dpr, FRAME_W, FRAME_H) / dpr);
     };
     recomputeScale();
     window.addEventListener("resize", recomputeScale);
@@ -99,8 +101,11 @@ export default function Flight() {
     let fpsFrames = 0;
     let fpsLast = 0;
 
+    // Stops the frame loop and the workers, and shows the message in place of the canvas.
     const fail = () => {
       if (probe) probe.error = LOAD_FAILED;
+      cancelAnimationFrame(raf);
+      pool?.dispose();
       if (alive) setFailed(true);
     };
 
@@ -124,10 +129,12 @@ export default function Flight() {
         );
         pool.onError = (message) => {
           if (probe) probe.workerErrors.push(message);
-          if (!readyFrame) fail();
+          // Before the first full view any failure is fatal; after it, only losing every worker is, since the
+          // land would never be painted again.
+          if (!readyFrame || (pool && pool.stats().workers === 0)) fail();
         };
 
-        const palette = buildPalette({ time: 0.5, season: 0.25, overcast: 0 });
+        const palette = buildPalette(MIDDAY);
         view = createStreamView(loaded.data, pool, palette, mask, {
           width: FRAME_W,
           height: FRAME_H,
@@ -164,7 +171,7 @@ export default function Flight() {
             else if (probe.readyAt === null) probe.readyAt = performance.now();
           }
 
-          if (stats) {
+          if (statsOn) {
             fpsFrames++;
             if (t - fpsLast >= 500) {
               const ps = pool.stats();

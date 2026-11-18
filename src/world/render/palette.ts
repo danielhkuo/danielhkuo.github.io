@@ -530,6 +530,9 @@ function shadowed(c: Lab, depth: number, overcast: number): Lab {
 }
 
 /** The whole table for one moment: 256 materials × 256 light bytes. */
+/** The light the world is baked and shown in until time of day lands: midday, early summer, clear. The bake workers and the page must agree on it. */
+export const MIDDAY: PaletteOptions = { time: 0.5, season: 0.25, overcast: 0 };
+
 export function buildPalette(o: PaletteOptions): Palette {
   const pal = new Uint32Array(256 * 256);
   const g = gradeAt(o.time);

@@ -6,6 +6,7 @@ class FakeWorker implements WorkerLike {
   sent: unknown[] = [];
   terminated = false;
   onmessage: ((e: { data: unknown }) => void) | null = null;
+  onerror: ((e: { message?: string }) => void) | null = null;
   postMessage(msg: unknown): void {
     this.sent.push(msg);
   }
@@ -135,5 +136,29 @@ test("stats count chunks baked and the time spent", () => {
   workers[0].finish(7);
   workers[0].finish(9);
   const s = pool.stats();
-  assert.deepEqual([s.baked, s.bakeMs, s.inFlight, s.queued], [2, 16, 0, 0]);
+  assert.deepEqual([s.baked, s.bakeMs, s.inFlight, s.queued, s.workers], [2, 16, 0, 0, 1]);
+});
+
+test("a worker whose script fails to load is reported and replaced", () => {
+  const { pool, workers, errors } = setup(1, false);
+  pool.want(want([3, 3, 0]));
+  workers[0].onerror?.({ message: "script failed" });
+  assert.deepEqual(errors, ["script failed"]);
+  assert.ok(workers[0].terminated);
+  assert.equal(workers.length, 2);
+  workers[1].reply({ type: "ready" });
+  assert.deepEqual(workers[1].bakes().map((b) => `${b.cx},${b.cy}`), ["3,3"]);
+});
+
+test("stats count the workers still alive", () => {
+  const { pool, workers } = setup(2);
+  assert.equal(pool.stats().workers, 2);
+  workers[0].reply({ type: "error", message: "a" });
+  assert.equal(pool.stats().workers, 2, "replaced");
+  workers[2].reply({ type: "ready" });
+  workers[2].reply({ type: "error", message: "b" });
+  assert.equal(pool.stats().workers, 1, "a replacement is not replaced");
+  workers[1].onerror?.({});
+  workers[3].reply({ type: "error", message: "c" });
+  assert.equal(pool.stats().workers, 0);
 });

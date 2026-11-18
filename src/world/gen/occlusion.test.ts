@@ -27,10 +27,12 @@ test("occlusion equals a brute-force march on a random field", () => {
   assert.deepEqual(occlusionFloor(h, gN, 4, 32), brute(h, gN, 4, 32));
 });
 
-test("a flat field has no floor", () => {
+test("a flat field's floor lies just under its own ground, and sea level has none", () => {
+  // Land one node south stands 30 high and 3.2 rows nearer: a flier below 26.8 would be under the ground anyway.
   const out = occlusionFloor(new Float64Array(64 * 64).fill(30), 64, 4, 16);
   assert.equal(out.length, 16 * 16);
-  assert.ok(out.every((v) => v === 0));
+  assert.ok(out.every((v) => v === 27));
+  assert.ok(occlusionFloor(new Float64Array(64 * 64), 64, 4, 16).every((v) => v === 0));
 });
 
 test("a wall 40 high sets the floor north of it, and the floor wraps", () => {

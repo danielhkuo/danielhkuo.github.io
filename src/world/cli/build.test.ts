@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -63,4 +63,11 @@ test("the file carries the occlusion floor of the baked ground", async () => {
   assert.equal(fd.block, OCCLUSION_BLOCK);
   const bw = buildBakeWorld({ params: paramsFor(N), seed: SEED, world });
   assert.deepEqual(fd.occlusion, occlusionFloor(bw.ground, bw.gN, N / bw.gN, OCCLUSION_BLOCK));
+});
+
+test("a world over its budget is refused before anything is written", async () => {
+  const { world } = await built();
+  const dir = mkdtempSync(join(tmpdir(), "world-build-over-"));
+  await assert.rejects(buildWorld({ n: N, seed: SEED, out: dir, world, maxBytes: 1000 }), /budget/);
+  assert.deepEqual(readdirSync(dir), [], "no world folder and no current.json");
 });

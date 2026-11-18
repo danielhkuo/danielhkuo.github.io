@@ -14,19 +14,6 @@ export function occlusionFloor(ground: ArrayLike<number>, gN: number, cellsPerNo
   const per = block / cellsPerNode;
   const side = (gN * cellsPerNode) / block;
   const out = new Uint8Array(side * side);
-  // A level field has no hill south of a flier. The slope of that same height
-  // stays under the ground, so the stored floor is zero.
-  const nodes = gN * gN;
-  const base = ground[0];
-  let flat = true;
-  for (let i = 1; i < nodes; i++) {
-    if (ground[i] !== base) {
-      flat = false;
-      break;
-    }
-  }
-  if (flat) return out;
-
   // Per column, the floor at row y is the max of h[y+k] − slope·k over the next
   // K rows. That max is the head of a deque of (h − slope·row) kept high-to-low,
   // swept north from a full window so the ring is already warm. Block rows fold

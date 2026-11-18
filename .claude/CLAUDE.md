@@ -27,7 +27,7 @@ The towers, the Recruiter page, the terminal's filesystem and the agent files ar
 - **Software pixel renderer.** TypeScript writes a low-resolution RGBA buffer, which is scaled up with hard pixels. There is no WebGL scene graph, no three.js, and no meshes or polygons.
 - **What it draws.** Terrain is a procedural heightmap drawn as stacked columns. The dragon and the towers are sprite stacks. The default camera is overhead.
 - **Deterministic.** Everything derives from a seed through our own seeded RNG. Never call `Math.random()` in world code.
-- **Off the main thread.** Rendering runs in a worker on an `OffscreenCanvas`, so menus never wait on a frame.
+- **Off the main thread.** Baking, the expensive part, runs in a pool of workers. The main thread only composes baked chunks through the palette (about 2 ms a frame), so menus never wait on a bake.
 - **Our own code.** The Forge demo that inspired the technique is reference only. Never copy its source.
 - **Tuned in the bench.** The look is tuned on the tuning bench (seed and parameter sliders, screenshots) before it ships. Report any visual change with a screenshot.
 

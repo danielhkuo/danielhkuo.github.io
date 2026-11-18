@@ -14,8 +14,8 @@ import { paramsFor } from "../gen/params.ts";
 import { makeWorld, settleWorld, type World } from "../gen/pipeline.ts";
 import { sha256 } from "../pack/codec.ts";
 import { startOf, type Manifest } from "../pack/manifest.ts";
-import { decodeWorld, encodeWorld } from "../pack/world.ts";
-import { buildPalette } from "../render/palette.ts";
+import { decodeWorld, encodeWorld, WORLD_FORMAT } from "../pack/world.ts";
+import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { createView } from "../runtime/view.ts";
 import { encodePng } from "./png.ts";
 import { cachedTerrain } from "./worldcache.ts";
@@ -34,6 +34,8 @@ export interface BuildOptions {
   cache?: boolean;
   /** A world already made for (n, seed): used instead of generating. */
   world?: World;
+  /** Refuse, writing nothing, when world.bin would be larger than this. */
+  maxBytes?: number;
 }
 
 const VIEW_W = 400;
@@ -47,10 +49,13 @@ export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
   const bw = buildBakeWorld({ params, seed, world });
   const occlusion = occlusionFloor(bw.ground, bw.gN, n / bw.gN, OCCLUSION_BLOCK);
   const { bin, sections } = await encodeWorld(bw, { occlusion: { block: OCCLUSION_BLOCK, data: occlusion } });
+  if (opts.maxBytes !== undefined && bin.length > opts.maxBytes) {
+    throw new Error(`world.bin would be ${bin.length} bytes, over the budget of ${opts.maxBytes}; nothing was written`);
+  }
   const worldId = (await sha256(bin)).slice(0, 12);
   const sites = world.settlement.sites.map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y }));
   const manifest: Manifest = {
-    format: 1,
+    format: WORLD_FORMAT,
     worldId,
     n,
     seed,
@@ -124,18 +129,20 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const params = paramsFor(n);
   const world = cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
-  const manifest = await buildWorld({ n, seed, out, cache, world });
+  let manifest: Manifest;
+  try {
+    manifest = await buildWorld({ n, seed, out, cache, world, maxBytes: n === 6400 ? BUDGET_BYTES : undefined });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    return 1;
+  }
   for (let i = 0; i < manifest.sections.length; i++) {
     const s = manifest.sections[i];
     console.log(`${s.name} ${(s.bytes / 1024).toFixed(1)} KB`);
   }
   console.log(`total ${(manifest.bytes / 1024).toFixed(1)} KB`);
-  if (n === 6400 && manifest.bytes > BUDGET_BYTES) {
-    console.log(`world.bin is ${manifest.bytes} bytes, over the budget of ${BUDGET_BYTES}`);
-    return 1;
-  }
 
-  const look = worldLook(n, buildPalette({ time: 0.5, season: 0.25, overcast: 0 }));
+  const look = worldLook(n, buildPalette(MIDDAY));
   const mask = new Uint8Array(readFileSync(join(process.cwd(), "public", "world", "bluenoise.bin")));
   const original = buildBakeWorld({ params, seed, world });
   const decoded = await decodeWorld(new Uint8Array(readFileSync(join(out, manifest.worldId, "world.bin"))));

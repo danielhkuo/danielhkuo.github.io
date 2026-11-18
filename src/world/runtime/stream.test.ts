@@ -46,7 +46,7 @@ class FakePool implements BakePool {
     }
   }
   stats() {
-    return { inFlight: 0, queued: 0, baked: 0, bakeMs: 0 };
+    return { inFlight: 0, queued: 0, baked: 0, bakeMs: 0, workers: 1 };
   }
   dispose(): void {}
   last(): ChunkWant[] {

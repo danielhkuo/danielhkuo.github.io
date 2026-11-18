@@ -3,7 +3,7 @@
 // as one error the page can show.
 
 import type { Manifest } from "../pack/manifest.ts";
-import { decodeFlightData, type FlightData } from "../pack/world.ts";
+import { decodeFlightData, verifyWorld, type FlightData } from "../pack/world.ts";
 
 /** What the page shows when the world cannot be loaded. */
 export const LOAD_FAILED = "The realm could not be loaded.";
@@ -32,29 +32,22 @@ export async function loadWorld(fetchFn: (url: string) => Promise<Response>, bas
   try {
     const curRes = await fetchFn(`${base}/current.json`);
     if (!curRes.ok) throw new Error(`current.json ${curRes.status}`);
-    let current: unknown;
-    try {
-      current = await curRes.json();
-    } catch (e) {
-      throw e;
-    }
+    const current: unknown = await curRes.json();
     const worldId = (current as { worldId?: unknown }).worldId;
     if (typeof worldId !== "string") throw new TypeError("worldId");
 
     const manifestRes = await fetchFn(`${base}/${worldId}/manifest.json`);
     if (!manifestRes.ok) throw new Error(`manifest ${manifestRes.status}`);
-    let manifest: Manifest;
-    try {
-      manifest = (await manifestRes.json()) as Manifest;
-    } catch (e) {
-      throw e;
-    }
+    const manifest = (await manifestRes.json()) as Manifest;
+    if (!manifest || typeof manifest.bytes !== "number" || !Array.isArray(manifest.sections)) throw new TypeError("manifest");
 
     const binUrl = `${base}/${worldId}/world.bin`;
     const binRes = await fetchFn(binUrl);
     if (!binRes.ok) throw new Error(`world.bin ${binRes.status}`);
     const buf = new Uint8Array(await binRes.arrayBuffer());
     if (buf.length !== manifest.bytes) throw new Error("length mismatch");
+    // Deflate carries no checksum: a damaged section could decode into wrong land in a worker, so check every hash here.
+    await verifyWorld(buf, manifest.sections);
 
     const data = await decodeFlightData(buf);
     return { manifest, binUrl, data };
