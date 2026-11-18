@@ -30,6 +30,25 @@ export function toneOf(ramp: Ramp, light: number): number {
 }
 
 const NONE = 255;
+/** The share of a cloud the painter keeps in full sun: it keys each cloud, as a painter would, to stay inside this. */
+export const SUNLIT: readonly [number, number] = [0.3, 0.6];
+
+/**
+ * How much to stretch a shape's light, about the ramp's deepest cut, so that its sunlit share (light ≥ the ramp's
+ * first cut) lies inside SUNLIT: 1 when it already does. The deep shade stays where it is; the light tones spread
+ * or draw in.
+ */
+function exposure(ramp: Ramp, shape: CloudShape): number {
+  const values: number[] = [];
+  for (let i = 0; i < shape.light.length; i++) if (shape.cover[i]) values.push(shape.light[i]);
+  values.sort((a, b) => b - a);
+  const lit = ramp.cuts[0], deep = ramp.cuts[ramp.cuts.length - 1];
+  // The light of the pixel that must be the last sunlit one, at the least share and at the most.
+  const least = values[Math.min(values.length - 1, Math.ceil(SUNLIT[0] * values.length))];
+  const most = values[Math.min(values.length - 1, Math.floor(SUNLIT[1] * values.length))];
+  if (least < lit) return least > deep + 0.05 ? (lit - deep) / (least - deep) : 1;
+  return most >= lit ? (lit - deep) / (most + 1e-4 - deep) : 1;
+}
 
 /** A painter for one ramp. */
 export function cumulusPainter(ramp: Ramp): Painter {
@@ -37,7 +56,8 @@ export function cumulusPainter(ramp: Ramp): Painter {
     const { w, h } = shape;
     const n = w * h;
     let tone = new Uint8Array(n).fill(NONE);
-    for (let i = 0; i < n; i++) if (shape.cover[i]) tone[i] = toneOf(ramp, shape.light[i]);
+    const key = exposure(ramp, shape), deep = ramp.cuts[ramp.cuts.length - 1];
+    for (let i = 0; i < n; i++) if (shape.cover[i]) tone[i] = toneOf(ramp, deep + (shape.light[i] - deep) * key);
     // Clean steps: a pixel none of whose four neighbours shares its tone takes the tone most of them have. Twice,
     // since clearing one lone pixel can strand its neighbour. The shape's margin keeps every cloud pixel off the
     // box's edge, so the neighbours are always inside it.

@@ -149,6 +149,7 @@ function cumulus(rng: Rng, plan: CumulusPlan): Lobe[] {
   const { width, grain } = plan;
   const lobes: Lobe[] = [];
   const tops: Lobe[] = [];
+  const under: Lobe[] = [];
   const tallest = plan.humps[0].h;
   const halfAt = (x: number): number => 0.5 * plan.depth * width * Math.sqrt(Math.max(0, 1 - Math.pow((2 * x) / width - 1, 2)));
   const cols = Math.max(2, Math.round(width / grain));
@@ -160,20 +161,22 @@ function cumulus(rng: Rng, plan: CumulusPlan): Lobe[] {
     for (let level = 0; level < 12; level++) {
       const room = top - z;
       const r = Math.max(2.5, Math.min(grain * range(rng, 0.74, 1.22), room + 0.2 * grain));
-      // Low lobes spread north and south over the footprint; the crest stands over its middle.
-      const d = 0.7 * halfAt(x) * range(rng, -1, 1) * (1 - 0.7 * (z / tallest));
+      // The lowest lobes stand in a rank along the front of the footprint, so the base runs level; those above
+      // spread north and south, less the higher they are, and the crest stands over the middle.
+      const d = halfAt(x) * (level === 0 ? range(rng, 0.4, 0.62) : 0.7 * range(rng, -1, 0.7) * (1 - 0.7 * (z / tallest)));
       const lobe = lobeAt(x + range(rng, -0.25, 0.25) * grain, d, Math.max(z, 0.45 * r), r);
       lobes.push(lobe);
       if (room < 1.1 * grain) {
         tops.push(lobe);
         break;
       }
+      under.push(lobe);
       z += grain * range(rng, 0.7, 0.95);
     }
   }
   // Billows on the faces of the bigger lobes below the crest, toward the viewer, so no face is one smooth ball.
-  for (const b of lobes.slice()) {
-    if (b.r < 11 || tops.includes(b)) continue;
+  for (const b of under) {
+    if (b.r < 11) continue;
     for (const c of bud(rng, b, 2, [0.4, 0.62], [0.55, 0.8])) lobes.push({ ...c, f: Math.max(c.f, b.f + 0.45 * b.r) });
   }
   for (const b of tops) {
@@ -240,6 +243,9 @@ const CREASE: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1],
 const STEP = 2.2;
 /** How steeply the smoothed mass is taken to slope: more turns its flanks further from the sun. */
 const MASS_SLOPE = 2.4;
+/** How far up from the base the base's own shade reaches: this share of the cloud's height, and never more than the cap, in pixels. */
+const BASE_SHADE = 0.42;
+const BASE_SHADE_CAP = 30;
 
 /** Rasterises lobes into a shape: nearest surface per pixel, lit, cropped to the cloud plus a margin. */
 function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
@@ -394,7 +400,9 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
     // A crease: a lobe well in front, one or two pixels away.
     let crease = false;
     for (const [ax, ay] of CREASE) if (at(x + ax, y + ay) > here + STEP) crease = true;
-    const lift = 0.45 * (high[bi] / top - 0.5);
+    // Higher is brighter; and the lowest part of the cloud, by its base, lies in its own shade.
+    const up = high[bi] / top, under = Math.max(0, 1 - high[bi] / Math.min(BASE_SHADE * top, BASE_SHADE_CAP));
+    const lift = 0.45 * (up - 0.5) - 0.75 * under * under;
     const body = 0.62 * massLight(x - MARGIN + cx0, y - MARGIN + cy0) + lift;
     // On the flank turned from the sun a lobe's own lit face counts for less, so the shade stays one calm mass.
     const own = lam[bi] > 0 ? lam[bi] * Math.min(1, Math.max(0.65, 1 + 2.2 * body)) : lam[bi];
