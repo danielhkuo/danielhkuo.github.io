@@ -20,13 +20,14 @@ import type { LiveFrame, LiveLayer } from "./live.ts";
 /** Seconds from one wave reaching a shore to the next. */
 export const WAVE_PERIOD = 5.2;
 /** How strongly each wave of a set runs in (0 a lull … 3 the big one); the set repeats. */
-const SET = [2, 3, 3, 1, 0, 2, 3, 1, 0] as const;
+const SETS = 9;
+const SET = [2, 3, 3, 1, 2, 3, 2, 0, 1] as const;
 /** Bake pixels between swell crests on open water, and how fast they travel (pixels a second). */
 const SWELL_LENGTH = 51.2;
 const SWELL_SPEED = 3.2;
-/** River flow, in eighths of a unit of height lost a second: on an easy reach and on a steep one. */
+/** River flow: eighths of a unit of height lost a second on an easy reach, halves of a unit on a steep one. */
 const FLOW_SPEED = 5;
-const FLOW_SPEED_STEEP = 11;
+const FLOW_SPEED_STEEP = 9;
 /** Height lost per pixel (in eighths of a unit) from which a reach counts as steep. */
 const STEEP = 5;
 /** Falling water, pixels a second. */
@@ -85,14 +86,16 @@ function surfTable(): Uint8Array {
           if (d <= 1.5) rock = 150 * clamp01(0.4 + 0.6 * pcos(2 * Math.PI * u));
         } else {
           // Beach. The crest comes in from d0, breaks at `brk`, runs up the sand, and drains away.
-          const d0 = 6 + 9 * a, brk = 4 + 7 * a;
+          const d0 = 5 + 9 * a;
           if (u < 0.5) {
             const k = 1 - u / 0.5;
             const p = 1 + (d0 - 1) * k * Math.sqrt(k);
             const off = d - p;
-            if (off >= -0.75 && off <= (p > brk ? 0.75 : 1.25)) {
-              beach = p > brk ? 90 + 80 * (1 - (p - brk) / (d0 - brk)) : 255 - 80 * clamp01((p - brk + 4) / 4);
-            } else if (p <= brk && off > 1.25) {
+            // Far out the crest is a dotted line of foam; it fills in as it nears the sand.
+            const full = clamp01((d0 - p) / (d0 * 0.55));
+            if (off >= -0.75 && off <= (full < 1 ? 0.75 : 1.25)) {
+              beach = 178 + 77 * full;
+            } else if (full >= 1 && off > 1.25) {
               // Lace left behind the broken crest.
               const trail = 1.5 + 3 * a;
               if (off < 1.25 + trail) beach = 200 * (1 - (off - 1.25) / trail);
@@ -234,10 +237,7 @@ export function waterLayer(seed: number): LiveLayer {
       }
 
       // The clocks, each stepped in whole units.
-      const wave = Math.floor((t / WAVE_PERIOD) * 256);
-      const wave0 = wave >> 8;
-      const set0 = SET[((wave0 % SET.length) + SET.length) % SET.length];
-      const set1 = SET[(((wave0 + 1) % SET.length) + SET.length) % SET.length];
+      const wave = Math.floor(((t < 0 ? 0 : t) / WAVE_PERIOD) * 256);
       const swellT = Math.floor(t * SWELL_SPEED * (256 / SWELL_LENGTH));
       const flow = Math.floor(t * FLOW_SPEED), flowSteep = Math.floor(t * FLOW_SPEED_STEEP);
       const flowStill = Math.floor(t * 28);
@@ -322,9 +322,12 @@ export function waterLayer(seed: number): LiveLayer {
             const bend = warp[warpRow | ((bx >> 1) & 255)];
             if (d !== FAR) {
               const kind = c === C_LAKE ? K_CALM : d & 3;
-              const ph = wave + (bend >> 1);
-              const s = ph >> 8 === wave0 ? set0 : set1;
-              const I = surf[((kind * 4 + s) * 256 + (ph & 255)) * REACH + (d >> 2)];
+              // Two trains of waves half a period apart: one is breaking while the last drains.
+              const ph = wave + bend, ph2 = ph + 128;
+              const at = (kind * 4 * 256) * REACH + (d >> 2);
+              const I1 = surf[at + ((SET[(ph >> 8) % SETS] << 8) | (ph & 255)) * REACH];
+              const I2 = surf[at + ((SET[((ph2 >> 8) + 4) % SETS] << 8) | (ph2 & 255)) * REACH];
+              const I = I1 > I2 ? I1 : I2;
               if (I !== 0) {
                 const g = grit[gritRow | (bx & 255)];
                 if (I > 170) {
@@ -367,7 +370,8 @@ export function waterLayer(seed: number): LiveLayer {
               const level = Math.floor(row * 0.8) - by * 8;
               const lane = eRiver && ((e >>> 8) & 15) === tone ? bx : by;
               const lg = grit[((lane & 255) << 8) | 91];
-              const at = (level + (steep ? flowSteep : flow) + (lg >> 4)) & 7;
+              // On a steep reach the level is read coarser, or a drop of a unit a pixel would light a whole column at once.
+              const at = ((steep ? (level >> 2) + flowSteep : level + flow) + (lg >> 4)) & 7;
               if (steep) {
                 // A riffle: broken white water.
                 if (at < 3 && g < 170) out[i] = palette[(at === 0 && g < 90 ? foam : fallPale) | shade];
