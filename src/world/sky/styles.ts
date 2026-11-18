@@ -1,27 +1,25 @@
-// The three cloud styles the owner compares. Each is a painter plus how strongly its layers show.
+// The cloud styles. Each is a painter plus how its layers show.
 
-import { paintLayered } from "./paint/layered.ts";
-import { paintStorybook } from "./paint/storybook.ts";
-import { paintWatercolour } from "./paint/watercolour.ts";
+import { paintCumulus } from "./paint/cumulus.ts";
 import type { Painter } from "./sprite.ts";
 
 export interface CloudStyle {
-  name: "watercolour" | "storybook" | "layered";
+  name: "cumulus";
   paint: Painter;
-  /** Draw the high streak layer. */
-  high: boolean;
-  /** 0–255: how strongly low clouds and banks show over what is under them. */
-  lowAlpha: number;
-  bankAlpha: number;
+  /** 0–255: how much of a bank lies over the flier inside it. 255 hides the flier; 0 leaves it clear. */
+  veil: number;
+  /** Of 256, per channel (red, green, blue): how much of the land's colour a cloud's shadow keeps. 256 draws no shadow. */
+  shadowKeep: readonly [number, number, number];
 }
 
 export const STYLES: Readonly<Record<CloudStyle["name"], CloudStyle>> = {
-  watercolour: { name: "watercolour", paint: paintWatercolour, high: false, lowAlpha: 235, bankAlpha: 190 },
-  storybook: { name: "storybook", paint: paintStorybook, high: false, lowAlpha: 255, bankAlpha: 200 },
-  layered: { name: "layered", paint: paintLayered, high: true, lowAlpha: 225, bankAlpha: 185 },
+  cumulus: { name: "cumulus", paint: paintCumulus, veil: 150, shadowKeep: [192, 204, 228] },
 };
 
-/** The style a `?clouds=` value names; watercolour when it names none. */
+export const STYLE_NAMES: readonly CloudStyle["name"][] = ["cumulus"];
+
+/** The style a `?clouds=` value names; cumulus when it names none. */
 export function styleFrom(query: string | null): CloudStyle {
-  return query === "storybook" || query === "layered" ? STYLES[query] : STYLES.watercolour;
+  for (const name of STYLE_NAMES) if (name === query) return STYLES[name];
+  return STYLES.cumulus;
 }
