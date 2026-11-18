@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ViewRect } from "../render/compose.ts";
-import { CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
+import { BOOST, BRAKE, CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
 import { createDragon } from "./index.ts";
 import type { Land } from "./parts.ts";
 import { LACQUER } from "./look.ts";
 import { RIVER_REACH } from "./river.ts";
+import { windAmount } from "./wind.ts";
 
 const W = 400, H = 225, N = 1280, GREY = 0xff808080, SHADE = 0xff535353;
 /** One dragon now (the owner chose A); the loops below keep their shape so another could be added. */
@@ -22,10 +23,10 @@ const LENGTH: Record<DragonId, [number, number]> = { a: [60, 90] };
 const rect: ViewRect = { x: 500 - 200, y: Math.floor(0.8 * 500 - 30) - 112, w: W, h: H };
 const flat: Land = { depthAt: (_px, py) => (rect.y + py) / 0.8, groundHeight: () => 0 };
 
-/** The dragon after flying straight along `heading` for 240 frames, drawn over `land`; `turn` bends the path. */
-function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0): Uint32Array {
+/** The dragon after flying straight along `heading` for 240 frames at `speed`, drawn over `land`; `turn` bends the path. */
+function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0, speed = CRUISE): Uint32Array {
   const dragon = createDragon(N);
-  let s: FlightState = { x: 0, y: 0, heading, speed: CRUISE, alt: 30, bank };
+  let s: FlightState = { x: 0, y: 0, heading, speed, alt: 30, bank };
   for (let k = 240; k >= 0; k--) {
     const h = heading - turn * k;
     s = { ...s, heading: h, x: 500 - Math.cos(heading) * k + turn * k * k * 0.3, y: 500 - Math.sin(heading) * k };
@@ -37,6 +38,10 @@ function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0): U
 }
 
 const isBody = (v: number) => v !== GREY && v !== SHADE;
+/** Wind is pale air blended over what lies under it: neither the ground, nor its shadow, nor any colour of the dragon. */
+const PAINT = new Set<number>(Object.values(LACQUER));
+const isWind = (v: number) => isBody(v) && !PAINT.has(v);
+const windIn = (out: Uint32Array) => out.reduce((count, v) => count + (isWind(v) ? 1 : 0), 0);
 
 test("the dragon is drawn, with a shadow, in its reserved colours", () => {
   for (const id of DRAGON_IDS) {
@@ -119,10 +124,44 @@ test("the dragon stays within its reach of the flier, and is its stated length",
   }
 });
 
-test("the dragon draws in under 0.3 ms a frame", () => {
-  for (const id of DRAGON_IDS) {
+test("there is no wind at cruising speed or below", () => {
+  assert.equal(windAmount(CRUISE), 0);
+  assert.equal(windAmount(CRUISE * BRAKE), 0);
+  assert.equal(windAmount(0), 0);
+  for (const speed of [CRUISE, CRUISE * BRAKE, CRUISE * 1.02]) {
+    for (const heading of [0, 1, 2.5, 4]) assert.equal(windIn(flown("a", heading, flat, 0, 0, speed)), 0, `${speed} at ${heading}`);
+  }
+});
+
+test("a boost draws wind: pale streaks along the body, more of them the faster it flies", () => {
+  assert.equal(windAmount(CRUISE * BOOST), 1);
+  for (const heading of [0, 1, 2.5, 4]) {
+    const full = windIn(flown("a", heading, flat, 0, 0, CRUISE * BOOST));
+    const part = windIn(flown("a", heading, flat, 0, 0, CRUISE * 1.25));
+    assert.ok(full > 40, `at ${heading}: ${full} pixels of wind`);
+    assert.ok(part > 0 && part < full, `at ${heading}: ${part} pixels part-way, ${full} at full boost`);
+    // Wind is only ever lighter than what it lies over.
+    for (const v of flown("a", heading, flat, 0, 0, CRUISE * BOOST)) if (isWind(v)) assert.ok((v & 255) > 0x53, `at ${heading}`);
+  }
+});
+
+test("the wind is deterministic, and stays within the dragon's reach", () => {
+  for (const heading of [0, 0.7, Math.PI / 2, 2.5, 4, 5.2]) {
+    const out = flown("a", heading, flat, 0.002, 0.5, CRUISE * BOOST);
+    assert.deepEqual(out, flown("a", heading, flat, 0.002, 0.5, CRUISE * BOOST), `at ${heading}`);
+    let far = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (isBody(out[y * W + x])) far = Math.max(far, Math.hypot(x - 200, y - 112));
+    }
+    assert.ok(far <= RIVER_REACH, `at ${heading}: reaches ${far.toFixed(1)}`);
+  }
+});
+
+test("the dragon draws in under 0.2 ms a frame, boosting or not", () => {
+  for (const speed of [CRUISE, CRUISE * BOOST]) {
+    const id = "a";
     const dragon = createDragon(N);
-    let s: FlightState = { x: 0, y: 500, heading: 0.6, speed: CRUISE, alt: 30, bank: 0 };
+    let s: FlightState = { x: 0, y: 500, heading: 0.6, speed, alt: 30, bank: 0 };
     for (let k = 240; k >= 0; k--) {
       s = { ...s, x: 500 - Math.cos(0.6) * k, y: 500 - Math.sin(0.6) * k };
       dragon.step(s, 1 / 60);
@@ -142,8 +181,8 @@ test("the dragon draws in under 0.3 ms a frame", () => {
       }
       best = Math.min(best, (performance.now() - t0) / 200);
     }
-    console.log(`dragon ${id}: ${best.toFixed(3)} ms a frame`);
-    assert.ok(best < 0.3, `${id}: ${best.toFixed(3)} ms`);
+    console.log(`dragon ${id} at ×${speed / CRUISE}: ${best.toFixed(3)} ms a frame`);
+    assert.ok(best < 0.2, `${id}: ${best.toFixed(3)} ms`);
   }
 });
 

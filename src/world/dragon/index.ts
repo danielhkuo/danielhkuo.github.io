@@ -4,13 +4,12 @@
 import type { ViewRect } from "../render/compose.ts";
 import { createChain } from "../runtime/chain.ts";
 import { CRUISE, type FlightState } from "../runtime/flight.ts";
-import type { Pose } from "./body.ts";
+import { WAVE_PERIOD, waveRate, type Pose } from "./body.ts";
 import { LACQUER } from "./look.ts";
 import type { Land } from "./parts.ts";
 import { drawRiver } from "./river.ts";
 
-/** Seconds for one wave to pass down the body at cruising speed. */
-export const WAVE_PERIOD = 2.4;
+export { WAVE_PERIOD };
 /** Points of path remembered: enough for the whole body at a crawl. */
 const PATH = 640;
 
@@ -31,7 +30,7 @@ export function createDragon(n: number): Dragon {
       pose.chain.push(s.x, s.y, s.alt);
       pose.time += dt;
       // The wave quickens with speed, so a boost tightens the undulation.
-      pose.wave += ((2 * Math.PI * dt) / WAVE_PERIOD) * (0.5 + (0.5 * s.speed) / CRUISE);
+      pose.wave += waveRate(s.speed) * dt;
     },
     draw(out, rect, s, view) {
       drawRiver(out, rect, s, view, pose, LACQUER);

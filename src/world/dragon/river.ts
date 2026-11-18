@@ -4,10 +4,11 @@
 
 import type { ViewRect } from "../render/compose.ts";
 import { CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
-import { skinOf, smooth, RING_STEP, type Pose } from "./body.ts";
+import { skinOf, smooth, waveRate, RING_STEP, type Pose } from "./body.ts";
 import { LACQUER, type Look } from "./look.ts";
 import { castShadow, drawGroup, drawStrand, figure, pieceOf, place, type Land, type Piece } from "./parts.ts";
 import { ball, filled, limb, put, vox } from "./vox.ts";
+import { drawWind, WIND_BACK, windAmount } from "./wind.ts";
 
 /** Body rings behind the head, and the path between them, cells. */
 const RINGS = 22;
@@ -226,6 +227,10 @@ const turn = new Float64Array(JOINTS);
 /** Each joint's lean with the wave: −1 … 1, positive when the body there bends to the right. */
 const bend = new Float64Array(JOINTS);
 const whisker = new Float64Array(WHISKER_POINTS * 3);
+/** Fine points of path the wind of a boost needs: more than the body's. */
+const WIND_JOINTS = Math.ceil(WIND_BACK / FINE) + 2;
+/** The body's swing to its right, d cells behind the head, where the wave's phase is `phase`. */
+const sway = (d: number, phase: number): number => WAVE_SWING * smooth(d / 22) * Math.sin(phase);
 
 /** a − b as an angle in (−π, π]. */
 function turned(a: number, b: number): number {
@@ -239,11 +244,12 @@ function turned(a: number, b: number): number {
  * Draws the river-dragon with its head at the flier: its shadow, then the tail fin, the rings from tail to neck
  * (feet under their rings), the mane, the head, and the two whiskers. The body lies along pose.chain, swung to
  * either side by a wave of phase pose.wave, and each ring rolls into the turn the head was making when it passed
- * there (s.bank at the head). Every pixel is depth-tested against the land.
+ * there (s.bank at the head). Above cruising speed the wind of the boost is drawn under the body. Every pixel is depth-tested against the land.
  */
 export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, pose: Pose, look: Look = LACQUER): void {
   const kit = kitOf(look), n = pose.n;
-  const joints = pose.chain.joints(JOINTS, FINE);
+  const windy = windAmount(s.speed) > 0;
+  const joints = pose.chain.joints(windy ? WIND_JOINTS : JOINTS, FINE);
   const k = (2 * Math.PI) / WAVE_LENGTH;
   const finFrom = FIN_ROOT * FINE;
   for (let j = 0; j < JOINTS; j++) {
@@ -301,6 +307,10 @@ export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view
   place(fig, kit.head, s.x, s.y, s.alt - 3, s.heading);
 
   castShadow(out, rect, view, fig, n);
+  // The wind of a boost lies under the body, so the streaks peel out from behind its outline.
+  if (windy) {
+    drawWind(out, rect, view, s, joints, FINE, n, pose.time, pose.wave, waveRate(s.speed), k, sway, RIVER_REACH - 1);
+  }
   drawGroup(out, rect, view, fig, 0, fin, n);
   drawGroup(out, rect, view, fig, fin, body, n);
 
