@@ -13,7 +13,7 @@ import { occlusionFloor } from "../gen/occlusion.ts";
 import { paramsFor } from "../gen/params.ts";
 import { makeWorld, settleWorld, type World } from "../gen/pipeline.ts";
 import { sha256 } from "../pack/codec.ts";
-import { startOf, type Manifest } from "../pack/manifest.ts";
+import { manifestWonders, startOf, type Manifest } from "../pack/manifest.ts";
 import { decodeWorld, encodeWorld, WORLD_FORMAT } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { createView } from "../runtime/view.ts";
@@ -63,8 +63,11 @@ export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
     sections,
     block: OCCLUSION_BLOCK,
     sites,
+    wonders: manifestWonders(world.settlement.wonders, n),
     start: startOf(world.settlement.sites, n),
   };
+  // A wonder the land could not host is named here and left out; it is never forced.
+  for (const line of world.settlement.wonderSkips) console.log(`wonder skipped: ${line}`);
 
   const dir = join(out, worldId);
   mkdirSync(dir, { recursive: true });

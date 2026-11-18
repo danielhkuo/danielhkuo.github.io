@@ -18,6 +18,7 @@ import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
 import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules } from "./sites.ts";
 import * as S from "./structures.ts";
+import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
 /** The fields siting reads, from the generator's stages. */
 export function siteFieldsOf(t: Terrain): SiteFields {
@@ -52,6 +53,9 @@ export interface Settlement {
   built: Built;
   /** Ground on G with pads, quays and the harbour cut in. */
   ground: Float64Array;
+  /** The wonders that found their land, and one line for each that did not. */
+  wonders: PlacedWonder[];
+  wonderSkips: string[];
 }
 
 export interface SettleOptions extends PlaceOptions {
@@ -60,6 +64,9 @@ export interface SettleOptions extends PlaceOptions {
   occupied?: ReadonlySet<string>;
   /** Lay the road network (default). Off, sites and buildings are placed without it: quick, for tuning their look. */
   lanes?: boolean;
+  /** Site the wonders (default), none of them, or only the types listed. */
+  wonders?: boolean | readonly WonderType[];
+  wonderRules?: WonderRules;
 }
 
 const MATS = { path: M.path, road: M.road, retaining: M.stone, yard: M.pastureWarm, vine: M.vine };
@@ -1360,8 +1367,37 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   // A main road is two pixels wide: its crown, and a darker verge beside it.
   const roads = lanes.concat(lanes.filter((r) => r.width >= 2).map(verge));
 
+  // The wonders come last and only add to what is built: a world without them is the same world.
+  let wonders: PlacedWonder[] = [], wonderSkips: string[] = [];
+  if (opts.wonders !== false) {
+    const land = wonderLandOf(t, w, roads);
+    const found = placeWonders(land, placed.sites, opts.wonderRules, { only: Array.isArray(opts.wonders) ? opts.wonders : undefined });
+    wonders = found.wonders;
+    wonderSkips = found.skipped;
+    for (const wonder of wonders) {
+      const made = standWonder(land, wonder);
+      for (const cf of made.conforms) addConform(w, cf);
+      for (const st of made.structures) w.structures.push(st);
+    }
+  }
+
   return {
     sites: placed.sites, shortfall: placed.shortfall, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
-    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g,
+    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips,
   };
+}
+
+/** What wonder siting reads: the settled land, its lakes and coves, and the nodes that are already built on. */
+function wonderLandOf(t: Terrain, w: Work, roads: readonly RoadLine[]): WonderLand {
+  const c = w.c, gN = c.gN;
+  const busy = Uint8Array.from(w.blocked);
+  const mark = (x0: number, y0: number, x1: number, y1: number): void => {
+    for (let j = Math.floor(y0 / 4); j <= Math.floor(y1 / 4); j++) for (let i = Math.floor(x0 / 4); i <= Math.floor(x1 / 4); i++) busy[wrap(j, gN) * gN + wrap(i, gN)] = 1;
+  };
+  for (const s of w.structures) mark(s.x, s.y, s.x + s.w - 1, s.y + s.h - 1);
+  for (const cf of w.conforms) mark(cf.x - cf.rx - cf.skirt, cf.y - cf.ry - cf.skirt, cf.x + cf.rx + cf.skirt, cf.y + cf.ry + cf.skirt);
+  for (const r of roads) for (let k = 0; k + 1 < r.vertices.length; k += 2) mark(r.vertices[k], r.vertices[k + 1], r.vertices[k], r.vertices[k + 1]);
+  const coves: WonderLand["coves"][number][] = [];
+  for (const s of t.land.stamps) if (s.kind === "cove") coves.push({ x: s.x, y: s.y, ax: s.ax, ay: s.ay, len: s.len, width: s.width });
+  return { c, g: w.g, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy };
 }
