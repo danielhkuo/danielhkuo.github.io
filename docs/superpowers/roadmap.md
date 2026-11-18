@@ -70,6 +70,32 @@ Candidates until the list arrives: a whale breaching offshore; a shooting star a
 over the hills; a red fox crossing a field; a heron standing in a river shallows; a ship in full sail on the horizon;
 a hermit monk walking the abbey road; bells ringing at the abbey on the hour.
 
+## Rare structures (owner's references, 2026-11-18)
+
+The owner wants more wondrous buildings in the Ghibli spirit, naming the bathhouse in *Spirited Away* and the railway
+across the sea. Each is an homage translated into this world's European, church-built setting: our own design, never
+the film's building, name or spirits. A structure is a place, hidden somewhere remote and logged when found; its
+rarity comes from a moment at that place (a train crossing, a seaplane landing, a dome opening), timed by the clock and
+a seeded roll. Candidates, not yet picked:
+
+- **The thermal baths:** a domed bathhouse stepped down a sea cliff in steaming terraced pools, with its own quay and a
+  funicular. Every window lights at dusk; a ferry calls now and then.
+- **The tide railway:** a single track running out across the shallows to a lone halt (lamp, bench, name board) far
+  from shore. Rarely, a two-carriage train glides over water that hides the rails.
+- **The drowned church:** a bell tower standing out of a lake, the village visible under clear water.
+- **The hotel in the cove:** a white hotel on a rock in a sheltered cove, with a seaplane pontoon. Rarely, a seaplane
+  lands and taxis in.
+- **The floating garden:** a small island above the clouds, roots trailing beneath, a ruined cloister and orchard on
+  top. Seen only from above a cloud bank.
+- **The marsh house:** a shuttered house across a tidal marsh, reached by a causeway at low tide; one window lit.
+- **The airship mast:** an iron mooring tower on a headland. Rarely, an airship is tied up there.
+- **The land-ship:** a sailing ship on wheels crossing a salt flat under full sail.
+- **The bridge town:** houses and shops built along an old stone bridge over the river.
+- **The great oak:** one enormous tree above the village, taller than the spire, with a treehouse and a swing.
+- **The observatory:** a domed observatory on the highest summit; at night the dome opens.
+- **The clock automata:** on the hour, carved saints process out of the town clock (church-built, like old astronomical
+  clocks).
+
 ## Interactions
 
 - Landing on a tower or landmark opens that project (needs the landmarks below).
@@ -129,7 +155,10 @@ From the first-flight review:
 - ~~**Merge `world/perf`?**~~ Merged 2026-11-18. The water layer reuses its shore-distance work between frames (4×
   throttle: 6.1 → 5.6 ms p95 with the dragon on).
 - **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
-- **Title menu wording** (rose-window look kept).
+- **Title menu wording** (rose-window look kept). Three option sets offered 2026-11-18: plain, storybook, game-menu.
+- **A bigger map?** Today: 6400², a 107 s lap, 3.24 MB. `paramsFor` scales every length with size, so a larger `n`
+  alone magnifies the same islands; more world means more islands at today's scale, a re-tune, and splitting
+  `world.bin` into streamed region packs (9600² is about 7 MB).
 
 ## Open checks
 
