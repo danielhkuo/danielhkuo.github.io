@@ -80,8 +80,8 @@ a hermit monk walking the abbey road; bells ringing at the abbey on the hour.
 
 ## Later
 
-- **The dragon: what's left.** Boost streaks; landing (coiling onto a site's pad) with the landmarks. The river-dragon
-  itself is built and flying.
+- **The dragon: what's left.** Landing (coiling onto a site's pad), with the landmarks. The river-dragon is built and
+  flying, boost streaks included.
 - **Landmarks and projects.** Sprites for the abbey, lighthouse, windmill, bridge, ruined cathedral, churchyard yew
   and the town's bell tower; the six pinned repos assigned to sites; landing opens a project page; the abbey holds
   About Me and the terminal (the Artificer).
@@ -105,6 +105,10 @@ From the clouds and water (2026-11-18):
   0.12–0.18, sky about 0.1, life and sights under 0.1. The fix is to cache the water's shore-distance pass across frames
   (it depends only on the land, which moves with the camera); Cursor's byte-identical speed pass timed out.
 - The flight page component is large (React Doctor); split it into hooks.
+- The dragon (2026-11-18): the boost's bow of air reads as loose white curves by the head in some frames, and nearly
+  vanishes over pale meadow; judged on stills and one live frame, not watched in motion. With the dragon flying, the
+  browser check is 3.3 ms p95 unthrottled and 6.1 ms at 4× throttle (the kite was 5.3); `depthAt` now reuses its last
+  chunk, which halved the dragon's cost.
 
 From the round-9 critics (peaks first):
 - Peaks: snow and rock lit from true normals so each arête shows a bright side and a cool far side; horizontal strata
@@ -132,5 +136,3 @@ From the first-flight review:
 
 - Owner: open `/world` in Safari (Chrome is measured; Safari is not).
 - `npm run a11y` points at `scripts/run-axe.mjs`, which was never committed: restore or remove the script.
-- Housekeeping: about twenty old agent worktrees under `.claude/worktrees/` and their branches can be removed (every
-  `fable-*` branch is merged).

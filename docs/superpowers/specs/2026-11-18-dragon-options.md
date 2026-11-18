@@ -14,9 +14,11 @@ follow, for the record.
 - the feathered tail fin;
 - the shadow and the depth test;
 - the wake on water and startled birds, through the live layers;
+- boost streaks: above cruise, pale streaks peel off the flanks and slip back along the path, with a faint bow of air at
+  the snout (`wind.ts`, Fable, 2026-11-18);
 - the bench, `npm run world:dragon`.
 
-**Next:** boost streaks. Later, with the landmarks: coiling down onto a site's pad to land.
+**Next**, with the landmarks: coiling down onto a site's pad to land.
 
 ## What is already settled
 
