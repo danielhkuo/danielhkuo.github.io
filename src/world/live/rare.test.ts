@@ -5,7 +5,7 @@ import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { differing, drawn, frameOf, manifest, seaFrame, shot, type Shot } from "../testing/liveShot.ts";
 import type { Flier, LiveFrame } from "./live.ts";
 import {
-  HERON_LIFT, HILL, isField, isRoad, isSea, RARE, rareLayer, rareSlot, rareWindow, SHIP_DEEP, WAKE_LASTS, WAKE_LOW, wakeLayer,
+  HERON_LIFT, HILL, isField, isRoad, isSea, RARE, rareLayer, rareSlot, rareWindow, SHIP_DEEP, WAKE_LONG, WAKE_LOW, wakeLayer,
   WHALE_DEEP, type RareKind, type RareSeen,
 } from "./rare.ts";
 import { makeLayers, type LayerContext } from "./registry.ts";
@@ -171,6 +171,33 @@ test("the heron stands only in a river, a step from the bank, and lifts off at t
   }
   assert.equal(sightings("heron", 6, (rx, ry, t) => country(rx, ry, t, M.meadowMid, 8, 20)).length, 0, "not in a meadow");
   assert.equal(sightings("heron", 6, (rx, ry, t) => country(rx, ry, t, M.river, 8, 20)).length, 0, "not in midstream");
+  // Where there is broad water in reach it stands in that, not in a brook a pixel wide beside it.
+  const both = (rx: number, ry: number, t: number): LiveFrame => {
+    const f = streams(rx, ry, t);
+    for (let r = 0; r < H; r++) {
+      if ((((ry + r) % 24) + 24) % 24 !== 12) continue;
+      for (let c = 0; c < W; c++) f.bake[r * W + c] = (f.bake[r * W + c] & ~0xff) | M.river;
+    }
+    return f;
+  };
+  const choosy = sightings("heron", 6, both);
+  assert.ok(choosy.length > 0);
+  for (const { f, s } of choosy) {
+    const up = f.bake[(s.py - 1) * W + s.px] & 255, down = f.bake[(s.py + 1) * W + s.px] & 255;
+    assert.ok(up === M.river || down === M.river, "in the broad stream");
+  }
+  // It reads at a glance: a dozen pixels and more, the white of its neck and the dark of its crest among them.
+  const one = standing.find(({ s }) => s.inView);
+  assert.ok(one, "a heron in full view");
+  const bare = streams(one.f.rect.x, one.f.rect.y, one.f.t);
+  let drawnPx = 0, white = 0, dark = 0;
+  for (let i = 0; i < bare.out.length; i++) {
+    if (one.f.out[i] === bare.out[i]) continue;
+    drawnPx++;
+    if (one.f.out[i] === palette[(M.whitewash << 8) | 15]) white++;
+    if (one.f.out[i] === palette[(M.roofSlate << 8) | 1]) dark++;
+  }
+  assert.ok(drawnPx >= 16 && white >= 4 && dark >= 4, `a heron of ${drawnPx} pixels, ${white} white, ${dark} dark`);
   assert.equal(sightings("heron", 6, (rx, ry, t) => country(rx, ry, t, M.sea, 12, 0)).length, 0, "not at sea");
   // Flying: off the water, higher and further each second.
   const a = sightings("heron", HERON_LIFT + 1, streams), b = sightings("heron", HERON_LIFT + 3, streams);
@@ -367,7 +394,7 @@ test("the wake trails only behind a low flier over water", async () => {
       const dx = (i % W) - 200, dy = (Math.floor(i / W) - 112) / 0.8;
       const along = dx * hx + dy * hy, across = dx * hy - dy * hx;
       assert.ok(along < 2, "behind it, never ahead");
-      assert.ok(-along <= 60 * WAKE_LASTS + 2, "no further back than the foam lasts");
+      assert.ok(-along <= WAKE_LONG + 2, "a short wake: no further back than WAKE_LONG");
       // A V: no wider than it is long.
       assert.ok(Math.abs(across) <= 3.5 + 0.45 * -along, `across ${across} at ${along}`);
       if (across > 0) left++;
@@ -386,8 +413,8 @@ test("the wake trails only behind a low flier over water", async () => {
   let near = 0, far = 0;
   for (const i of changed(f, base)) {
     const gain = (f.out[i] & 255) - (base[i] & 255);
-    if (Math.floor(i / W) - 112 < 20) near = Math.max(near, gain);
-    else if (Math.floor(i / W) - 112 > 50) far = Math.max(far, gain);
+    if (Math.floor(i / W) - 112 < 8) near = Math.max(near, gain);
+    else if (Math.floor(i / W) - 112 > 22) far = Math.max(far, gain);
   }
   assert.ok(far > 0 && near > 2 * far, `near ${near}, far ${far}`);
 
@@ -423,6 +450,53 @@ test("the wake trails only behind a low flier over water", async () => {
   const abbey = await shot("abbey");
   const overLand = { x: abbey.rect.x + 200, y: (abbey.rect.y + 130) / 0.8, alt: 40, heading: 0.4, speed: 60 };
   assert.equal(differing(drawn(wake, abbey, 3, overLand), abbey.out), 0);
+});
+
+test("the wake lies along the way the flier has come, so it bends through a turn", () => {
+  const wake = wakeLayer();
+  const rx = 3000, ry = 2000;
+  // North for a second, then a hard turn to the right: each frame the camera's frame is the same, the flier moves.
+  let x = rx + 200, y = (ry + 150) / 0.8, heading = -Math.PI / 2;
+  const track: [number, number][] = [];
+  let f = country(rx, ry, 0, M.sea, 12, 0);
+  for (let k = 0; k < 75; k++) {
+    if (k >= 30) heading += 3 / 30;
+    x += 2 * Math.cos(heading);
+    y += 2 * Math.sin(heading);
+    track.push([x, y]);
+    f = country(rx, ry, k / 30, M.sea, 12, 0);
+    f.flier = { x, y, alt: 10, heading, speed: 60 };
+    wake.draw(f);
+  }
+  const sea = country(rx, ry, 0, M.sea, 12, 0).out[0];
+  const hx = Math.cos(heading), hy = Math.sin(heading);
+  let foam = 0, offLine = 0;
+  for (let i = 0; i < f.out.length; i++) {
+    if (f.out[i] === sea) continue;
+    foam++;
+    const wx = rx + (i % W), wy = (ry + Math.floor(i / W)) / 0.8;
+    // Beside the track, within the V's half-width at its end, and no further back along it than WAKE_LONG.
+    let best = Infinity, at = 0;
+    for (let k = 0; k < track.length; k++) {
+      const d = Math.hypot(wx - track[k][0], wy - track[k][1]);
+      if (d < best) { best = d; at = k; }
+    }
+    assert.ok(best <= 2.5 + 0.3 * WAKE_LONG, `foam ${best.toFixed(1)} cells off the track`);
+    assert.ok(2 * (track.length - 1 - at) <= WAKE_LONG + 3, "no older than the wake is long");
+    // And not where a straight wake would lie: behind the heading, in its V.
+    const along = (wx - x) * hx + (wy - y) * hy, across = (wx - x) * hy - (wy - y) * hx;
+    if (along >= 2 || Math.abs(across) > 3.5 + 0.45 * -along) offLine++;
+  }
+  assert.ok(foam > 30, `foam behind a turning flier: ${foam} pixels`);
+  assert.ok(offLine > 8, `the wake bends with the turn (${offLine} of ${foam} pixels off the straight V)`);
+  // A jump (the flier set down elsewhere) forgets the track: the wake is straight again behind the new place.
+  const g = country(rx, ry, 2.6, M.sea, 12, 0);
+  g.flier = { x: rx + 100, y: (ry + 60) / 0.8, alt: 10, heading: 0, speed: 60 };
+  wake.draw(g);
+  for (let i = 0; i < g.out.length; i++) {
+    if (g.out[i] === sea) continue;
+    assert.ok((i % W) < 102 && Math.abs(Math.floor(i / W) - 60) <= 12, `foam at ${i % W}, ${Math.floor(i / W)} after a jump`);
+  }
 });
 
 // ── Cost ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
