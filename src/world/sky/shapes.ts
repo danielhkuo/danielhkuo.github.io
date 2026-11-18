@@ -1,208 +1,470 @@
-// Cloud shapes: a coverage mask and a dome height per pixel, generated once from
-// the world seed. Painters turn them into sprites; the field places them.
+// Cloud shapes: each cloud is sculpted once, from the world seed, out of round
+// lobes in the camera's own space, then lit by one sun. A painter turns the result
+// into a sprite; the field places it.
 //
-// A heap is a row of round lobes, tallest in the middle, the outer ones smaller and
-// riding higher so the ends curve in, all cut flat at the base. A bank is two tiers
-// of such lobes. A wisp or a streak is a tapered ribbon along a gently bent line.
-// Edges are a narrow soft band; the lobes' outlines are pushed about by slow noise,
-// never by per-pixel speckle.
+// A cumulus is a few big trunk lobes standing on a level base, some with towers
+// stacked on them, each budding smaller billows and those budding bumps, with a
+// skirt of small lobes along the front of the base. The frontmost surface wins each
+// pixel, so the edge is crisp: a pixel is cloud or it is not. Light is the sun on
+// that surface (north-west and above), dimmed where a nearer lobe stands in the way,
+// low in the cloud, and in the creases between lobes. Streamers are long, low
+// shelves of the same billows. Nothing here is noise per pixel.
 
-import { gradNoise } from "../core/noise.ts";
 import { rngFor, type Rng } from "../core/rng.ts";
 
-export type CloudKind = "heap" | "wisp" | "bank" | "streak";
+export type CloudKind = "heap" | "puff" | "wisp" | "bank";
 
-/** One shape: `cover` (0–1, how much cloud) and `dome` (0–1, the height of the cloud's top, for lighting), w·h row-major. */
+/** The cloud's shadow on level ground, for a cloud whose base is on the ground: the box sits (dx, dy) from the shape's top-left. */
+export interface CloudShadow {
+  w: number;
+  h: number;
+  dx: number;
+  dy: number;
+  /** 1 where the ground is shaded, w·h row-major. */
+  mask: Uint8Array;
+}
+
+/** One sculpted cloud, w·h row-major. */
 export interface CloudShape {
   kind: CloudKind;
   w: number;
   h: number;
-  cover: Float32Array;
-  dome: Float32Array;
+  /** 1 where there is cloud, 0 elsewhere: no soft edge. */
+  cover: Uint8Array;
+  /** Sun on the surface, about −1.5 (deep in shade) to 1.2 (a crown facing the sun); 0 off the cloud. */
+  light: Float32Array;
+  /** 1 where a sunlit crown meets open sky on its sunward side, 2 where it stands in front of a farther lobe; else 0. */
+  rim: Uint8Array;
+  shadow: CloudShadow;
 }
 
 /** Box sizes in pixels, [min, max] inclusive. */
 export const SHAPE_SIZES: Readonly<Record<CloudKind, { w: readonly [number, number]; h: readonly [number, number] }>> = {
-  heap: { w: [40, 140], h: [18, 60] },
-  wisp: { w: [60, 200], h: [8, 24] },
-  bank: { w: [120, 220], h: [50, 110] },
-  streak: { w: [100, 260], h: [3, 8] },
+  heap: { w: [110, 250], h: [45, 130] },
+  puff: { w: [18, 84], h: [10, 48] },
+  wisp: { w: [50, 170], h: [8, 30] },
+  bank: { w: [190, 320], h: [100, 190] },
 };
 
-/** How many shapes of each kind the sky makes: about forty. */
-export const SHAPE_COUNTS: Readonly<Record<CloudKind, number>> = { heap: 18, wisp: 8, bank: 6, streak: 8 };
+/** How many shapes of each kind the sky makes. */
+export const SHAPE_COUNTS: Readonly<Record<CloudKind, number>> = { heap: 10, puff: 12, wisp: 7, bank: 5 };
 
-const KINDS: readonly CloudKind[] = ["heap", "wisp", "bank", "streak"];
+const KINDS: readonly CloudKind[] = ["heap", "puff", "wisp", "bank"];
 /** Empty pixels kept round every shape. */
-const MARGIN = 2;
-/** Width of the soft edge, pixels. */
-const SOFT = 1.4;
-/** How far slow noise pushes a lobe's outline, as a share of its radius. */
-const WOBBLE = 0.07;
-const NOISE_PERIOD = 256;
+const MARGIN = 1;
 
+/**
+ * The sun, in the camera's space (x right, up the screen, toward the viewer): north-west and above, as on the land.
+ * Unit length.
+ */
+export const SUN = (() => {
+  const x = -0.58, up = 0.68, toward = 0.45, len = Math.hypot(x, up, toward);
+  return { x: x / len, up: up / len, toward: toward / len };
+})();
+/** Cells a shadow moves south-east per unit of height: the flier's shadow uses the same slope. */
+export const SHADOW_SLOPE = 0.354;
+
+/** A lobe in the camera's space: centre (x, y down the screen, f toward the viewer), radius r, squashed to `flat`·r tall and deep. */
 interface Lobe {
   x: number;
   y: number;
+  f: number;
   r: number;
+  flat: number;
 }
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+// The camera maps a point d cells south and z up to screen row 0.8·d − z, at depth (d + 0.8·z) / 1.28 toward the viewer.
+const K = 1.28;
+/** Height above the base of the point at screen row y and depth f. */
+const heightOf = (y: number, f: number): number => (0.8 * K * f - y) / (0.64 + 1);
+/** Cells south of the model's origin of that point. */
+const southOf = (y: number, f: number): number => K * f - 0.8 * heightOf(y, f);
+
+/** A lobe centred `d` cells south of the origin and `z` above the base. */
+function lobeAt(x: number, d: number, z: number, r: number, flat = 1): Lobe {
+  return { x, y: 0.8 * d - z, f: (d + 0.8 * z) / K, r, flat };
+}
+
 const range = (rng: Rng, lo: number, hi: number): number => lo + rng.float() * (hi - lo);
 const intIn = (rng: Rng, lo: number, hi: number): number => lo + rng.int(hi - lo + 1);
 
 /**
- * A row of `count` lobes across [x0, x1] standing on `base`: radii set by their spacing (about 0.6–0.95 of it, largest in
- * the middle), so neighbouring crowns stay distinct and the crown is highest in the middle.
+ * Buds `count` smaller lobes on the sunward and upper faces of `parent`: spread round its outline from just under the
+ * right shoulder, over the top, to under the left, each pushed out toward the viewer by a random share.
  */
-function lobeRow(rng: Rng, count: number, x0: number, x1: number, base: number, scale: number): Lobe[] {
-  const step = (x1 - x0) / count;
+function bud(rng: Rng, parent: Lobe, count: number, size: readonly [number, number], reach: readonly [number, number]): Lobe[] {
   const out: Lobe[] = [];
-  // Where the crown peaks: rarely dead centre, so heaps lean one way or the other.
-  const peak = range(rng, 0.38, 0.62);
   for (let i = 0; i < count; i++) {
-    const t = (i + 0.5) / count;
-    // 1 at the peak, 0 at the ends.
-    const mid = 1 - Math.abs(t - peak) / Math.max(peak, 1 - peak);
-    const r = scale * step * (0.6 + 0.35 * mid) * range(rng, 0.9, 1.08);
-    // Centres a little above the base, outer ones slightly more; being smaller, the outer crowns stay below the middle.
-    const lift = 0.25 + 0.15 * (1 - mid);
-    out.push({ x: x0 + step * (i + 0.5) + range(rng, -0.06, 0.06) * step, y: base - lift * r, r });
+    const a = Math.PI * (-0.12 + 1.24 * ((i + range(rng, 0.15, 0.85)) / count));
+    const toward = range(rng, -0.1, 0.75);
+    const flatPart = Math.sqrt(1 - toward * toward);
+    const rho = parent.r * range(rng, reach[0], reach[1]);
+    out.push({
+      x: parent.x + Math.cos(a) * flatPart * rho,
+      y: parent.y - Math.sin(a) * flatPart * rho * parent.flat,
+      f: parent.f + toward * rho * parent.flat,
+      r: parent.r * range(rng, size[0], size[1]),
+      flat: 1,
+    });
   }
   return out;
 }
 
-/** Highest point of a set of lobes above `base`. */
-const crownOf = (lobes: readonly Lobe[], base: number): number => Math.max(...lobes.map((l) => base - l.y + l.r));
+/** One swell of a cumulus's outline: its crest `h` high at `x`, falling to nothing `s` to either side. */
+interface Hump {
+  x: number;
+  h: number;
+  s: number;
+}
+
+interface CumulusPlan {
+  /** Width of the footprint, pixels, and its depth north to south as a share of that. */
+  width: number;
+  depth: number;
+  /** The tallest swell first. */
+  humps: readonly Hump[];
+  /** Height of the low shelf that runs the whole width, under the swells. */
+  shelf: number;
+  /** Spacing of the body's lobes, pixels: the size of a billow. */
+  grain: number;
+}
+
+/** How high the cloud's top stands at `x`: the tallest swell there, or the shelf. */
+function crest(plan: CumulusPlan, x: number): number {
+  const edge = 1 - Math.pow(Math.abs((2 * x) / plan.width - 1), 3);
+  let h = plan.shelf * edge;
+  for (const m of plan.humps) {
+    const u = (x - m.x) / m.s;
+    if (u > -1 && u < 1) h = Math.max(h, m.h * Math.pow(1 - u * u, 0.7));
+  }
+  return h;
+}
 
 /**
- * Rasterises lobes cut flat at `base`: cover from the distance to the nearest outline (pushed in and out by slow noise),
- * pinched in below the widest row so the base is narrower than the cloud; dome from the lobes' spherical caps.
+ * The lobes of one cumulus on its base (height 0), its footprint running from x = 0 to `width`. Body lobes are packed
+ * under the outline in columns, base to crest, so the cloud is solid; those at the top bud smaller billows, so the
+ * outline is a cauliflower's; a few flattened lobes skirt the front of the base.
  */
-function paintLobes(w: number, h: number, lobes: readonly Lobe[], base: number, noiseSeed: number, pinch: number, waistAt: number): { cover: Float32Array; dome: Float32Array } {
-  const cover = new Float32Array(w * h), dome = new Float32Array(w * h);
-  const top = crownOf(lobes, base);
-  let left = w, right = 0;
+function cumulus(rng: Rng, plan: CumulusPlan): Lobe[] {
+  const { width, grain } = plan;
+  const lobes: Lobe[] = [];
+  const tops: Lobe[] = [];
+  const tallest = plan.humps[0].h;
+  const halfAt = (x: number): number => 0.5 * plan.depth * width * Math.sqrt(Math.max(0, 1 - Math.pow((2 * x) / width - 1, 2)));
+  const cols = Math.max(2, Math.round(width / grain));
+  for (let i = 0; i < cols; i++) {
+    const x = width * ((i + range(rng, 0.2, 0.8)) / cols);
+    const top = crest(plan, x) * range(rng, 0.9, 1.05);
+    if (top < 4) continue;
+    let z = grain * range(rng, 0.3, 0.5);
+    for (let level = 0; level < 12; level++) {
+      const room = top - z;
+      const r = Math.max(2.5, Math.min(grain * range(rng, 0.74, 1.22), room + 0.2 * grain));
+      // Low lobes spread north and south over the footprint; the crest stands over its middle.
+      const d = 0.7 * halfAt(x) * range(rng, -1, 1) * (1 - 0.7 * (z / tallest));
+      const lobe = lobeAt(x + range(rng, -0.25, 0.25) * grain, d, Math.max(z, 0.45 * r), r);
+      lobes.push(lobe);
+      if (room < 1.1 * grain) {
+        tops.push(lobe);
+        break;
+      }
+      z += grain * range(rng, 0.7, 0.95);
+    }
+  }
+  // Billows on the faces of the bigger lobes below the crest, toward the viewer, so no face is one smooth ball.
+  for (const b of lobes.slice()) {
+    if (b.r < 11 || tops.includes(b)) continue;
+    for (const c of bud(rng, b, 2, [0.4, 0.62], [0.55, 0.8])) lobes.push({ ...c, f: Math.max(c.f, b.f + 0.45 * b.r) });
+  }
+  for (const b of tops) {
+    if (b.r < 5) continue;
+    for (const c of bud(rng, b, b.r > 14 ? intIn(rng, 3, 5) : intIn(rng, 2, 3), [0.38, 0.62], [0.7, 0.95])) {
+      lobes.push(c);
+      if (c.r >= 7) for (const g of bud(rng, c, 2, [0.4, 0.6], [0.7, 0.95])) lobes.push(g);
+    }
+  }
+  // The skirt: low, flattened lobes along the front of the base, so the cloud ends in soft scallops, not in a ruled line.
+  const skirt = Math.max(2, Math.round(width / 20));
+  for (let i = 0; i < skirt; i++) {
+    const x = width * (0.06 + 0.88 * ((i + range(rng, 0.2, 0.8)) / skirt));
+    const r = Math.max(2.5, Math.min(0.6 * grain, 0.2 * crest(plan, x) + 3) * range(rng, 0.8, 1.25));
+    const flat = range(rng, 0.55, 0.75);
+    lobes.push(lobeAt(x, halfAt(x) * range(rng, 0.6, 1), r * flat * range(rng, 0.6, 1), r, flat));
+  }
+  return lobes;
+}
+
+/** A plan with one main swell and `sides` lesser ones toward the ends. */
+function planOf(rng: Rng, width: number, tall: readonly [number, number], spread: readonly [number, number], sides: number, grain: number): CumulusPlan {
+  const at = range(rng, 0.34, 0.66);
+  const h = width * range(rng, tall[0], tall[1]);
+  const humps: Hump[] = [{ x: at * width, h, s: width * range(rng, spread[0], spread[1]) }];
+  // Lesser swells on alternate sides of the main one, the first on its roomier side.
+  let left = at > 0.5;
+  for (let k = 0; k < sides; k++) {
+    const room = left ? at : 1 - at;
+    const x = left ? at - room * range(rng, 0.45, 0.8) : at + room * range(rng, 0.45, 0.8);
+    humps.push({ x: x * width, h: h * range(rng, 0.45, 0.72), s: width * range(rng, 0.16, 0.26) });
+    left = !left;
+  }
+  return { width, depth: range(rng, 0.2, 0.28), humps, shelf: h * range(rng, 0.2, 0.3), grain };
+}
+
+/**
+ * A streamer: a long, low cloud with a level base. A chain of flattened lobes, close-set so they run together,
+ * swelling toward the middle and thinning to the ends, with a few small billows riding its top.
+ */
+function streamer(rng: Rng, length: number, thick: number): Lobe[] {
+  const lobes: Lobe[] = [];
+  const count = Math.max(5, Math.round(length / (thick * 0.75)));
+  const skew = range(rng, 0.7, 1.4);
+  for (let i = 0; i < count; i++) {
+    const u = (i + 0.5) / count;
+    const swell = Math.pow(Math.sin(Math.PI * Math.pow(u, skew)), 0.7);
+    const r = thick * (0.28 + 0.72 * swell) * range(rng, 0.85, 1.15);
+    const flat = range(rng, 0.5, 0.62);
+    // Sunk a little into the base, which cuts the chain's underside level.
+    const lobe = lobeAt(u * length, range(rng, -0.2, 0.2) * r, r * flat * range(rng, 0.6, 0.9), r, flat);
+    lobes.push(lobe);
+    if (r > 0.8 * thick && rng.float() < 0.45) {
+      const b = r * range(rng, 0.4, 0.55);
+      lobes.push({ x: lobe.x + range(rng, -0.4, 0.4) * r, y: lobe.y - r * flat * 0.8, f: lobe.f + 0.2 * r, r: b, flat: 0.85 });
+    }
+  }
+  return lobes;
+}
+
+/** Offsets where a nearer lobe makes a crease on the one behind it. */
+const CREASE: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** A lobe this much nearer than its neighbour pixel stands in front of it. */
+const STEP = 2.2;
+/** How steeply the smoothed mass is taken to slope: more turns its flanks further from the sun. */
+const MASS_SLOPE = 2.4;
+
+/** Rasterises lobes into a shape: nearest surface per pixel, lit, cropped to the cloud plus a margin. */
+function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const l of lobes) {
-    left = Math.min(left, l.x - l.r);
-    right = Math.max(right, l.x + l.r);
+    x0 = Math.min(x0, l.x - l.r);
+    x1 = Math.max(x1, l.x + l.r);
+    y0 = Math.min(y0, l.y - l.r * l.flat);
+    y1 = Math.max(y1, l.y + l.r * l.flat);
   }
-  const cx = (left + right) / 2, halfW = (right - left) / 2;
-  // Below `waist` the cloud narrows toward its base, to (1 − pinch) of its width at the base itself.
-  const waist = base - waistAt * top;
-  for (let y = MARGIN; y < h - MARGIN; y++) for (let x = MARGIN; x < w - MARGIN; x++) {
-    let sd = -1e9, z = 0;
-    for (const l of lobes) {
-      const dx = x + 0.5 - l.x, dy = y + 0.5 - l.y, d = Math.sqrt(dx * dx + dy * dy);
-      // The outline wobbles slowly with the direction round the lobe, never pixel by pixel.
-      const ang = d > 1e-6 ? dx / d + 2 * (dy / d) : 0;
-      const r = l.r * (1 + WOBBLE * gradNoise(l.x * 0.37 + ang * 2.1, l.y * 0.37 + ang * 1.3, NOISE_PERIOD, noiseSeed));
-      sd = Math.max(sd, r - d);
-      if (d < r) z = Math.max(z, (base - l.y) + Math.sqrt(r * r - d * d));
+  const ox = Math.floor(x0), oy = Math.floor(y0);
+  const bw = Math.ceil(x1) - ox + 1, bh = Math.ceil(y1) - oy + 1;
+  const depth = new Float32Array(bw * bh).fill(-Infinity);
+  const lam = new Float32Array(bw * bh), high = new Float32Array(bw * bh);
+  let top = 1;
+  for (const l of lobes) {
+    const ry = l.r * l.flat, r2 = l.r * l.r;
+    const pxa = Math.max(0, Math.floor(l.x - l.r - ox)), pxb = Math.min(bw - 1, Math.ceil(l.x + l.r - ox));
+    const pya = Math.max(0, Math.floor(l.y - ry - oy)), pyb = Math.min(bh - 1, Math.ceil(l.y + ry - oy));
+    for (let py = pya; py <= pyb; py++) {
+      const sy = py + 0.5 + oy, dy = (sy - l.y) / l.flat;
+      for (let px = pxa; px <= pxb; px++) {
+        const dx = px + 0.5 + ox - l.x;
+        const q = r2 - dx * dx - dy * dy;
+        if (q <= 0) continue;
+        const dz = Math.sqrt(q);
+        const f = l.f + dz * l.flat;
+        const i = py * bw + px;
+        if (f <= depth[i]) continue;
+        const z = heightOf(sy, f);
+        if (z < 0) continue;
+        depth[i] = f;
+        high[i] = z;
+        if (z > top) top = z;
+        // The ellipsoid's normal, then the sun on it.
+        const nx = dx, nu = -dy / l.flat, nf = dz / l.flat;
+        lam[i] = (nx * SUN.x + nu * SUN.up + nf * SUN.toward) / Math.hypot(nx, nu, nf);
+      }
     }
-    if (y + 0.5 > waist) {
-      const u = (y + 0.5 - waist) / (base - waist);
-      sd = Math.min(sd, halfW * (1 - pinch * u * u) - Math.abs(x + 0.5 - cx));
-    }
-    // The flat base: a crisp cut, softened over one pixel.
-    const c = clamp01(0.5 + sd / SOFT) * clamp01(0.5 - (y + 0.5 - base) / 0.8);
-    cover[y * w + x] = c;
-    dome[y * w + x] = c > 0 ? clamp01(z / top) : 0;
   }
-  return { cover, dome };
-}
 
-/** Lobes for a box `w` wide, then the box height that fits them (inside `hr`), and the lobes moved onto its base. */
-function fitLobes(w: number, hr: readonly [number, number], build: (base: number) => Lobe[]): { h: number; base: number; lobes: Lobe[] } {
-  const trial = build(0);
-  let h = Math.ceil(crownOf(trial, 0)) + 2 * MARGIN + 2;
-  h = Math.max(hr[0], Math.min(hr[1], h));
-  const base = h - MARGIN - 1;
-  return { h, base, lobes: build(base) };
-}
+  // One piece: keep the largest connected mass and drop the crumbs that stand apart from it.
+  const piece = new Int32Array(bw * bh);
+  let pieces = 0, best = 0, bestSize = 0;
+  const stack: number[] = [];
+  for (let start = 0; start < depth.length; start++) {
+    if (depth[start] === -Infinity || piece[start]) continue;
+    pieces++;
+    let size = 0;
+    piece[start] = pieces;
+    stack.push(start);
+    while (stack.length > 0) {
+      const i = stack.pop() as number, px = i % bw;
+      size++;
+      for (const j of [px > 0 ? i - 1 : -1, px < bw - 1 ? i + 1 : -1, i - bw, i + bw]) {
+        if (j >= 0 && j < depth.length && depth[j] !== -Infinity && !piece[j]) {
+          piece[j] = pieces;
+          stack.push(j);
+        }
+      }
+    }
+    if (size > bestSize) { bestSize = size; best = pieces; }
+  }
+  for (let i = 0; i < depth.length; i++) if (piece[i] !== best) depth[i] = -Infinity;
 
-function makeHeap(rng: Rng, noiseSeed: number): CloudShape {
-  const r = SHAPE_SIZES.heap;
-  const w = intIn(rng, r.w[0], r.w[1]);
-  const count = Math.max(3, Math.min(7, Math.round(w / 20)));
-  const usable = w - 2 * MARGIN;
-  const step = usable / (count + 0.6);
-  const x0 = MARGIN + 0.3 * step, x1 = x0 + step * count;
-  const seed = rng.next();
-  // Squash the lobes when the crown would not fit the tallest heap allowed.
-  const room = r.h[1] - 2 * MARGIN - 2;
-  const tall = crownOf(lobeRow(rngFor(seed, "heap"), count, x0, x1, 0, 1), 0);
-  const scale = Math.min(1, room / tall);
-  const fit = fitLobes(w, r.h, (base) => lobeRow(rngFor(seed, "heap"), count, x0, x1, base, scale));
-  return { kind: "heap", w, h: fit.h, ...paintLobes(w, fit.h, fit.lobes, fit.base, noiseSeed, 0.45, 0.5) };
-}
-
-function makeBank(rng: Rng, noiseSeed: number): CloudShape {
-  const r = SHAPE_SIZES.bank;
-  const w = intIn(rng, r.w[0], r.w[1]);
-  const lowCount = Math.max(4, Math.min(7, Math.round(w / 32)));
-  const usable = w - 2 * MARGIN;
-  const step = usable / (lowCount + 0.6);
-  const x0 = MARGIN + 0.3 * step, x1 = x0 + step * lowCount;
-  const upCount = Math.max(2, lowCount - 2);
-  const seed = rng.next();
-  // A broad lower tier, and a narrower upper tier of crowns standing on its shoulders.
-  const build = (base: number): Lobe[] => {
-    const lower = lobeRow(rngFor(seed, "bank-low"), lowCount, x0, x1, base, 1.2);
-    const shoulder = base - 1.05 * Math.max(...lower.map((l) => l.r));
-    const span = 0.62 * (x1 - x0);
-    const upper = lobeRow(rngFor(seed, "bank-up"), upCount, w / 2 - span / 2, w / 2 + span / 2, shoulder, 0.72);
-    return [...lower, ...upper];
+  // Fill holes: clear pixels walled in by cloud become its deepest, darkest recesses.
+  let floor = Infinity;
+  for (let i = 0; i < depth.length; i++) if (depth[i] !== -Infinity && depth[i] < floor) floor = depth[i];
+  const open = new Uint8Array(bw * bh);
+  const queue: number[] = [];
+  const visit = (i: number): void => {
+    if (depth[i] === -Infinity && !open[i]) {
+      open[i] = 1;
+      queue.push(i);
+    }
   };
-  const fit = fitLobes(w, r.h, build);
-  return { kind: "bank", w, h: fit.h, ...paintLobes(w, fit.h, fit.lobes, fit.base, noiseSeed, 0.55, 0.4) };
-}
+  for (let px = 0; px < bw; px++) { visit(px); visit((bh - 1) * bw + px); }
+  for (let py = 0; py < bh; py++) { visit(py * bw); visit(py * bw + bw - 1); }
+  while (queue.length > 0) {
+    const i = queue.pop() as number, px = i % bw, py = (i - px) / bw;
+    if (px > 0) visit(i - 1);
+    if (px < bw - 1) visit(i + 1);
+    if (py > 0) visit(i - bw);
+    if (py < bh - 1) visit(i + bw);
+  }
+  for (let i = 0; i < depth.length; i++) {
+    if (depth[i] !== -Infinity || open[i]) continue;
+    depth[i] = floor - 3;
+    lam[i] = -0.7;
+  }
 
-/** A ribbon along a gently bent centre line, thickest in the middle and tapering to points, with soft breaks. */
-function makeRibbon(rng: Rng, noiseSeed: number, kind: "wisp" | "streak"): CloudShape {
-  const r = SHAPE_SIZES[kind];
-  let w = intIn(rng, r.w[0], r.w[1]), h = intIn(rng, r.h[0], r.h[1]);
-  if (w < 4 * h) h = Math.max(r.h[0], Math.floor(w / 4));
-  if (w < 4 * h) w = Math.min(r.w[1], 4 * h);
-  const cover = new Float32Array(w * h), dome = new Float32Array(w * h);
-  // Ribbons are thin: a one-pixel margin is enough to keep the border clear.
-  const m = 1, half = (h - 2 * m) / 2;
-  const bend = range(rng, -0.35, 0.35) * half, phase = range(rng, 0, Math.PI);
-  // One end drawn out longer than the other, and the thickness swelling and thinning along the way.
-  const skew = range(rng, 0.8, 1.25), swell = kind === "wisp" ? 0.55 : 0.9;
-  const x0 = m, x1 = w - m;
-  for (let x = x0; x < x1; x++) {
-    const u = Math.pow((x + 0.5 - x0) / (x1 - x0), skew);
-    const taper = Math.pow(Math.sin(Math.PI * u), 3);
-    // Slow breaks: the ribbon thins and, for streaks, now and then parts.
-    const n = gradNoise(x * 0.045, 7.3, NOISE_PERIOD, noiseSeed);
-    const thin = clamp01(0.8 + swell * n);
-    const t = half * taper * thin;
-    const yc = m + half + bend * Math.sin(Math.PI * u + phase) * (1 - 2 * Math.abs(u - 0.5));
-    // A column draws only if its middle pixel is solid, so no faint pixels hang off the ribbon's thinnest ends.
-    const core = Math.abs(Math.floor(yc) + 0.5 - yc);
-    if (t <= core) continue;
-    for (let y = m; y < h - m; y++) {
-      const dy = Math.abs(y + 0.5 - yc);
-      // Only where the ribbon has a core: no faint pixels hanging off its thinnest ends.
-      const c = t >= 0.3 ? clamp01(0.5 + (t - dy) / SOFT) : 0;
-      const q = dy / (2 * t + 2);
-      cover[y * w + x] = c;
-      dome[y * w + x] = c > 0 ? clamp01((1 - q * q) * taper) : 0;
+  // The mass: the surface with its lobes smoothed away, lit as one great form, so a whole flank turns from the sun
+  // together and the lobes only scallop the edge between light and shade.
+  const mass = new Float32Array(bw * bh), pass = new Float32Array(bw * bh);
+  for (let i = 0; i < mass.length; i++) mass[i] = depth[i] === -Infinity ? floor - 2 : depth[i];
+  const blur = Math.max(2, Math.round(Math.min(bw, bh) / 9));
+  for (let round = 0; round < 2; round++) {
+    for (let py = 0; py < bh; py++) {
+      let sum = 0;
+      for (let k = -blur; k <= blur; k++) sum += mass[py * bw + Math.min(bw - 1, Math.max(0, k))];
+      for (let px = 0; px < bw; px++) {
+        pass[py * bw + px] = sum / (2 * blur + 1);
+        sum += mass[py * bw + Math.min(bw - 1, px + blur + 1)] - mass[py * bw + Math.max(0, px - blur)];
+      }
+    }
+    for (let px = 0; px < bw; px++) {
+      let sum = 0;
+      for (let k = -blur; k <= blur; k++) sum += pass[Math.min(bh - 1, Math.max(0, k)) * bw + px];
+      for (let py = 0; py < bh; py++) {
+        mass[py * bw + px] = sum / (2 * blur + 1);
+        sum += pass[Math.min(bh - 1, py + blur + 1) * bw + px] - pass[Math.max(0, py - blur) * bw + px];
+      }
     }
   }
-  return { kind, w, h, cover, dome };
+  /** The sun on the mass at a pixel of the working buffer, less what a face turned to the viewer gets: 0 on the flat. */
+  const massLight = (px: number, py: number): number => {
+    const xa = Math.max(0, px - 2), xb = Math.min(bw - 1, px + 2), ya = Math.max(0, py - 2), yb = Math.min(bh - 1, py + 2);
+    const gx = MASS_SLOPE * (mass[py * bw + xb] - mass[py * bw + xa]) / (xb - xa);
+    const gy = MASS_SLOPE * (mass[yb * bw + px] - mass[ya * bw + px]) / (yb - ya);
+    return (-gx * SUN.x + gy * SUN.up + SUN.toward) / Math.hypot(gx, gy, 1) - SUN.toward;
+  };
+
+  // Crop to the cloud.
+  let cx0 = bw, cx1 = -1, cy0 = bh, cy1 = -1;
+  for (let py = 0; py < bh; py++) for (let px = 0; px < bw; px++) {
+    if (depth[py * bw + px] === -Infinity) continue;
+    if (px < cx0) cx0 = px;
+    if (px > cx1) cx1 = px;
+    if (py < cy0) cy0 = py;
+    if (py > cy1) cy1 = py;
+  }
+  const w = cx1 - cx0 + 1 + 2 * MARGIN, h = cy1 - cy0 + 1 + 2 * MARGIN;
+  const cover = new Uint8Array(w * h), light = new Float32Array(w * h), rim = new Uint8Array(w * h);
+  const at = (x: number, y: number): number => {
+    const px = x - MARGIN + cx0, py = y - MARGIN + cy0;
+    return px < 0 || py < 0 || px >= bw || py >= bh ? -Infinity : depth[py * bw + px];
+  };
+  // How far a lobe's cast shade reaches, in pixels along the sun's line.
+  const reach = Math.min(70, 0.55 * h);
+  for (let y = MARGIN; y < h - MARGIN; y++) for (let x = MARGIN; x < w - MARGIN; x++) {
+    const here = at(x, y);
+    if (here === -Infinity) continue;
+    const bi = (y - MARGIN + cy0) * bw + x - MARGIN + cx0;
+    const i = y * w + x;
+    cover[i] = 1;
+    // Cast shade: walk toward the sun; a surface standing nearer the viewer than the ray is in the way.
+    let shaded = false;
+    for (let t = 2; t <= reach && !shaded; t += 1.5) {
+      const d = at(Math.round(x + SUN.x * t), Math.round(y - SUN.up * t));
+      if (d > here + SUN.toward * t + 1.5) shaded = true;
+    }
+    // A crease: a lobe well in front, one or two pixels away.
+    let crease = false;
+    for (const [ax, ay] of CREASE) if (at(x + ax, y + ay) > here + STEP) crease = true;
+    const lift = 0.45 * (high[bi] / top - 0.5);
+    const body = 0.62 * massLight(x - MARGIN + cx0, y - MARGIN + cy0) + lift;
+    // On the flank turned from the sun a lobe's own lit face counts for less, so the shade stays one calm mass.
+    const own = lam[bi] > 0 ? lam[bi] * Math.min(1, Math.max(0.65, 1 + 2.2 * body)) : lam[bi];
+    light[i] = 0.5 * own + body - (shaded ? 0.3 : 0) - (crease ? 0.2 : 0);
+    // Rims: on the sunward side (up or left), open sky or a lobe well behind.
+    if (lam[bi] > 0.2 && !shaded) {
+      const up = at(x, y - 1), left = at(x - 1, y);
+      if (up === -Infinity || (left === -Infinity && at(x - 1, y - 1) === -Infinity)) rim[i] = 1;
+      else if (here > up + STEP) rim[i] = 2;
+    }
+  }
+
+  // The shadow: each lobe's footprint on the ground under it, moved south-east by the sun's slope times its height.
+  const feet: { x: number; y: number; rx: number; ry: number }[] = [];
+  let sx0 = Infinity, sx1 = -Infinity, sy0 = Infinity, sy1 = -Infinity;
+  for (const l of lobes) {
+    if (l.r < 3) continue;
+    const z = Math.max(0, heightOf(l.y, l.f)), south = southOf(l.y, l.f);
+    const fx = l.x + SHADOW_SLOPE * z - ox - cx0 + MARGIN, fy = 0.8 * (south + SHADOW_SLOPE * z) - oy - cy0 + MARGIN;
+    const rx = l.r * 0.92, ry = Math.max(1, 0.8 * rx * (l.flat < 1 ? 0.55 : 0.8));
+    feet.push({ x: fx, y: fy, rx, ry });
+    sx0 = Math.min(sx0, fx - rx);
+    sx1 = Math.max(sx1, fx + rx);
+    sy0 = Math.min(sy0, fy - ry);
+    sy1 = Math.max(sy1, fy + ry);
+  }
+  const dx = Math.floor(sx0), dy = Math.floor(sy0);
+  const sw = Math.max(1, Math.ceil(sx1) - dx), sh = Math.max(1, Math.ceil(sy1) - dy);
+  const mask = new Uint8Array(sw * sh);
+  for (const ft of feet) {
+    const ya = Math.max(0, Math.floor(ft.y - ft.ry - dy)), yb = Math.min(sh - 1, Math.ceil(ft.y + ft.ry - dy));
+    for (let y = ya; y <= yb; y++) {
+      const v = (y + 0.5 + dy - ft.y) / ft.ry;
+      if (v * v >= 1) continue;
+      const half = ft.rx * Math.sqrt(1 - v * v);
+      const xa = Math.max(0, Math.round(ft.x - half - dx)), xb = Math.min(sw, Math.round(ft.x + half - dx));
+      for (let x = xa; x < xb; x++) mask[y * sw + x] = 1;
+    }
+  }
+  return { kind, w, h, cover, light, rim, shadow: { w: sw, h: sh, dx, dy, mask } };
 }
 
-/** The shapes, ordered by kind (heap, wisp, bank, streak) and then by index. Deterministic in the seed. */
+function make(kind: CloudKind, rng: Rng): CloudShape {
+  const size = SHAPE_SIZES[kind];
+  // Draw again in the rare case a shape falls outside its kind's box.
+  for (let tries = 0; ; tries++) {
+    let lobes: Lobe[];
+    if (kind === "heap") {
+      const width = range(rng, 105, 210);
+      lobes = cumulus(rng, planOf(rng, width, [0.3, 0.46], [0.26, 0.4], width < 140 ? 1 : intIn(rng, 1, 2), range(rng, 13, 17)));
+    } else if (kind === "bank") {
+      const width = range(rng, 190, 270);
+      lobes = cumulus(rng, planOf(rng, width, [0.46, 0.6], [0.24, 0.32], 2, range(rng, 19, 24)));
+    } else if (kind === "puff") {
+      const width = range(rng, 16, 62);
+      lobes = cumulus(rng, planOf(rng, width, [0.36, 0.52], [0.4, 0.55], width > 44 ? 1 : 0, Math.max(5, width / range(rng, 3.6, 5))));
+    } else {
+      lobes = streamer(rng, range(rng, 56, 150), range(rng, 8, 12));
+    }
+    const s = sculpt(kind, lobes);
+    const fits = s.w >= size.w[0] && s.w <= size.w[1] && s.h >= size.h[0] && s.h <= size.h[1];
+    if (fits || tries >= 20) return s;
+  }
+}
+
+/** The shapes, ordered by kind (heap, puff, wisp, bank) and then by index. Deterministic in the seed. */
 export function makeShapes(seed: number, counts: Readonly<Record<CloudKind, number>>): CloudShape[] {
-  const rng = rngFor(seed, "sky-shapes");
   const out: CloudShape[] = [];
   for (const kind of KINDS) {
-    for (let i = 0; i < counts[kind]; i++) {
-      const noiseSeed = rng.next();
-      out.push(kind === "heap" ? makeHeap(rng, noiseSeed) : kind === "bank" ? makeBank(rng, noiseSeed) : makeRibbon(rng, noiseSeed, kind));
-    }
+    for (let i = 0; i < counts[kind]; i++) out.push(make(kind, rngFor(seed, `sky-shape-${kind}-${i}`)));
   }
   return out;
 }

@@ -148,6 +148,7 @@ export default function Flight() {
           loaded.manifest.seed,
           loaded.data.n,
           styleFrom(new URLSearchParams(window.location.search).get("clouds")),
+          loaded.manifest.start,
         );
 
         const ctx = canvas.getContext("2d");

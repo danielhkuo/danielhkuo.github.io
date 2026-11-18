@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cloudAt, LOW_ALT, BANK_ALT, makeField, type Cloud, type SkyField } from "./field.ts";
+import { ALT, cloudAt, makeField, type Cloud, type SkyField } from "./field.ts";
 import { makeShapes, SHAPE_COUNTS, type CloudShape } from "./shapes.ts";
 
 const N = 6400, KY = 0.8, W = 400, H = 225;
-interface Fix { shapes: CloudShape[]; field: SkyField; withHigh: SkyField }
+/** A start like the shipped world's: offshore, the town to the north-east. */
+const START = { x: 5726.1, y: 3784.3 };
+/** The page's first view: the flier at its centre, 18 over the sea. */
+const OPEN = { x: Math.floor(START.x) - W / 2, y: Math.floor(KY * START.y) - 18 - (H >> 1) };
+interface Fix { shapes: CloudShape[]; field: SkyField; opened: SkyField }
 let memo: Fix | null = null;
 /** Built on first use, so the test runner can list these tests before the field exists. */
 function fix(): Fix {
   if (!memo) {
     const shapes = makeShapes(3, SHAPE_COUNTS);
-    memo = { shapes, field: makeField(3, N, shapes, false), withHigh: makeField(3, N, shapes, true) };
+    memo = { shapes, field: makeField(3, N, shapes), opened: makeField(3, N, shapes, START) };
   }
   return memo;
 }
@@ -27,71 +31,82 @@ function sampler(seed: number) {
 /** Offset of `v` from `origin` on a ring of `period`, taking the image of v nearest the window [origin, origin + span). */
 function near(v: number, origin: number, period: number, span: number): number {
   let d = (((v - origin) % period) + period) % period;
-  if (d > span + 300) d -= period;
+  if (d > span + 400) d -= period;
   return d;
 }
 
 /** Screen boxes of a field's clouds of one layer in a view at t = 0. */
 function boxes(f: SkyField, layer: Cloud["layer"], rx: number, ry: number) {
-  const alt = layer === "bank" ? BANK_ALT : LOW_ALT;
   const out: { sx: number; sy: number; c: Cloud }[] = [];
   for (const c of f.clouds) {
     if (c.layer !== layer) continue;
     const s = fix().shapes[c.shape];
     const p = cloudAt(f, c, 0);
     const sx = near(Math.round(p.x), rx, N, W);
-    const sy = near(Math.round(KY * p.y) - alt, ry, KY * N, H);
+    const sy = near(Math.round(KY * p.y) - ALT[layer], ry, KY * N, H);
     if (sx + s.w > 0 && sx < W && sy + s.h > 0 && sy < H) out.push({ sx, sy, c });
   }
   return out;
 }
 
-/** Share of a view's pixels under low cloud (cover > 0.5). */
-function lowCover(rx: number, ry: number): number {
+/** The view's pixels under low cloud: a mask, and the share covered. */
+function lowCover(f: SkyField, rx: number, ry: number): { mask: Uint8Array; share: number } {
   const mask = new Uint8Array(W * H);
-  for (const { sx, sy, c } of boxes(fix().field, "low", rx, ry)) {
+  for (const { sx, sy, c } of boxes(f, "low", rx, ry)) {
     const s = fix().shapes[c.shape];
     for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
-      const px = sx + (c.flip ? s.w - 1 - x : x), py = sy + y;
-      if (px >= 0 && px < W && py >= 0 && py < H && s.cover[y * s.w + x] > 0.5) mask[py * W + px] = 1;
+      const px = sx + x, py = sy + y;
+      if (px >= 0 && px < W && py >= 0 && py < H && s.cover[y * s.w + x]) mask[py * W + px] = 1;
     }
   }
   let k = 0;
   for (const m of mask) k += m;
-  return k / mask.length;
+  return { mask, share: k / mask.length };
 }
 
 test("the same seed gives the same field", () => {
-  assert.deepEqual(makeField(3, N, fix().shapes, false), fix().field);
-  assert.notDeepEqual(makeField(4, N, fix().shapes, false).clouds.slice(0, 20), fix().field.clouds.slice(0, 20));
+  assert.deepEqual(makeField(3, N, fix().shapes), fix().field);
+  assert.deepEqual(makeField(3, N, fix().shapes, START), fix().opened);
+  assert.notDeepEqual(makeField(4, N, fix().shapes).clouds.slice(0, 20), fix().field.clouds.slice(0, 20));
 });
 
-test("the wind is gentle and the high streaks run faster", () => {
+test("the wind is gentle", () => {
   const speed = Math.hypot(fix().field.wind.x, fix().field.wind.y);
   assert.ok(speed >= 2 && speed <= 4, `wind ${speed}`);
-  assert.ok(Math.hypot(fix().withHigh.highWind.x, fix().withHigh.highWind.y) >= 1.5 * Math.hypot(fix().withHigh.wind.x, fix().withHigh.wind.y));
 });
 
-test("each layer uses its own kinds of shape, and the high layer only when asked", () => {
-  for (const c of fix().withHigh.clouds) {
+test("each layer uses its own kinds of shape, and low clouds run north to south", () => {
+  let lastY = -1;
+  for (const c of fix().opened.clouds) {
     const kind = fix().shapes[c.shape].kind;
-    if (c.layer === "low") assert.ok(kind === "heap" || kind === "wisp", kind);
-    if (c.layer === "bank") assert.equal(kind, "bank");
-    if (c.layer === "high") assert.equal(kind, "streak");
+    if (c.layer === "low") {
+      assert.ok(kind === "heap" || kind === "puff" || kind === "wisp", kind);
+      assert.ok(c.y >= lastY, "a nearer cloud is drawn after a farther one");
+      lastY = c.y;
+    } else assert.equal(kind, "bank");
+    assert.ok(c.x >= 0 && c.x < N && c.y >= 0 && c.y < N);
   }
-  assert.ok(fix().field.clouds.every((c) => c.layer !== "high"));
-  assert.ok(fix().withHigh.clouds.some((c) => c.layer === "high"));
-  for (const c of fix().field.clouds) assert.ok(c.x >= 0 && c.x < N && c.y >= 0 && c.y < N);
 });
 
-test("low cloud covers 15–35 % of a view on average, with clear and overcast regions", () => {
+test("fewer, bigger clouds: the land stays the star, with clear skies in places and great heaps in others", () => {
   const rand = sampler(99);
   const covers: number[] = [];
-  for (let k = 0; k < 200; k++) covers.push(lowCover(Math.floor(rand() * N), Math.floor(rand() * KY * N)));
+  let withHeap = 0, clouds = 0;
+  for (let k = 0; k < 300; k++) {
+    const rx = Math.floor(rand() * N), ry = Math.floor(rand() * KY * N);
+    covers.push(lowCover(fix().field, rx, ry).share);
+    const seen = boxes(fix().field, "low", rx, ry);
+    clouds += seen.length;
+    if (seen.some((b) => fix().shapes[b.c.shape].kind === "heap")) withHeap++;
+  }
   const mean = covers.reduce((a, b) => a + b, 0) / covers.length;
-  assert.ok(mean >= 0.15 && mean <= 0.35, `mean cover ${mean}`);
-  assert.ok(covers.filter((c) => c < 0.05).length >= 20, `${covers.filter((c) => c < 0.05).length} clear views`);
-  assert.ok(covers.filter((c) => c > 0.4).length >= 20, `${covers.filter((c) => c > 0.4).length} overcast views`);
+  assert.ok(mean >= 0.05 && mean <= 0.16, `mean cover ${mean.toFixed(3)}`);
+  assert.ok(covers.filter((c) => c < 0.02).length >= 60, `${covers.filter((c) => c < 0.02).length} clear views of 300`);
+  assert.ok(covers.filter((c) => c > 0.2).length >= 20, `${covers.filter((c) => c > 0.2).length} heavy views of 300`);
+  assert.ok(Math.max(...covers) <= 0.6, `the heaviest view is ${Math.max(...covers).toFixed(2)} covered`);
+  assert.ok(withHeap >= 60 && withHeap <= 200, `${withHeap} views of 300 hold a heap`);
+  // Not a scatter of small puffs: a view holds about three clouds, not a dozen.
+  assert.ok(clouds / 300 <= 5, `${(clouds / 300).toFixed(1)} low clouds a view`);
 });
 
 test("never two banks on one screen", () => {
@@ -131,7 +146,38 @@ test("drift moves with the wind and wraps cleanly after a million seconds", () =
   assert.ok(far.x >= 0 && far.x < N && far.y >= 0 && far.y < N, `${far.x}, ${far.y}`);
   assert.ok(Math.abs(ring(far.x - (c.x + fix().field.wind.x * t))) < 1e-6);
   assert.ok(Math.abs(ring(far.y - (c.y + fix().field.wind.y * t))) < 1e-6);
-  const s = fix().withHigh.clouds.find((q) => q.layer === "high")!;
-  const h0 = cloudAt(fix().withHigh, s, 0), h1 = cloudAt(fix().withHigh, s, 1);
-  assert.ok(Math.abs(ring(h1.x - h0.x) - fix().withHigh.highWind.x) < 1e-6, "high streaks ride the high wind");
+});
+
+test("the first view has cloud in it: a great heap to seaward, puffs and a streamer, and no bank", () => {
+  const { mask, share } = lowCover(fix().opened, OPEN.x, OPEN.y);
+  assert.ok(share >= 0.08 && share <= 0.25, `the opening view is ${(100 * share).toFixed(1)} % cloud`);
+  const seen = boxes(fix().opened, "low", OPEN.x, OPEN.y);
+  const kinds = seen.map((b) => fix().shapes[b.c.shape].kind);
+  assert.ok(kinds.includes("heap") && kinds.includes("puff") && kinds.includes("wisp"), kinds.join(" "));
+  assert.ok(seen.length >= 4 && seen.length <= 7, `${seen.length} clouds`);
+  const heap = seen.find((b) => fix().shapes[b.c.shape].kind === "heap")!;
+  const hs = fix().shapes[heap.c.shape];
+  assert.ok(hs.w >= 134, `the heap is ${hs.w} wide`);
+  // Whole, bar a sliver: it is on the frame, low and to the left, the flier's side of the sea.
+  assert.ok(heap.sx >= -30 && heap.sx + hs.w <= W / 2 && heap.sy >= H / 3 && heap.sy + hs.h <= H, `heap at ${heap.sx},${heap.sy}`);
+  // The flier, at the centre, and the town to the north-east of it stay clear.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const flier = Math.abs(x - W / 2) <= 30 && Math.abs(y - H / 2) <= 30;
+    const town = x >= 170 && x <= 340 && y <= 100;
+    if (flier || town) assert.equal(mask[y * W + x], 0, `cloud at ${x},${y}`);
+  }
+  assert.equal(boxes(fix().opened, "bank", OPEN.x, OPEN.y).length, 0);
+  // Without a start the field is the plain one.
+  assert.notDeepEqual(fix().opened.clouds, fix().field.clouds);
+});
+
+test("the opening changes the sky only round the start", () => {
+  const key = (c: Cloud) => `${c.shape}:${c.x}:${c.y}:${c.layer}`;
+  const plain = new Set(fix().field.clouds.map(key));
+  const far = (c: Cloud) => {
+    const dx = Math.abs(((c.x - START.x + 1.5 * N) % N) - N / 2), dy = Math.abs(((c.y - START.y + 1.5 * N) % N) - N / 2);
+    return dx > 900 || dy > 900;
+  };
+  for (const c of fix().opened.clouds) if (far(c)) assert.ok(plain.has(key(c)), "a far cloud is as it was");
+  assert.equal(fix().opened.clouds.filter(far).length, fix().field.clouds.filter(far).length);
 });
