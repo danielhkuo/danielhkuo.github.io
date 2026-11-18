@@ -332,7 +332,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
   const forceSights = readFlag(argv, "--sights") === "all";
-  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, forceSights });
+  const land = await decodeFlightData(bin);
+  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, land, forceSights });
 
   const dir = join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });

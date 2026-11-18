@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isCanopy, isGrass, MATERIAL as M } from "../look/materials.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
-import { differing, drawn, frameOf, manifest, seaFrame, shot } from "../testing/liveShot.ts";
+import { differing, drawn, frameOf, land, manifest, seaFrame, shot } from "../testing/liveShot.ts";
 import { isBeach, isPasture, isRoof, isSea, lifeLayer, LOW, REACH, startledFor, UPLAND, type Placed } from "./life.ts";
 import type { Flier, LiveLayer } from "./live.ts";
 import { lightOf, matOf } from "./pixel.ts";
@@ -11,7 +11,7 @@ import { KITE_EVERY, NET_EVERY, RAINBOW_EVERY, sightsLayer, type Sight } from ".
 import { worldRowAt } from "./sprites.ts";
 import { GUST_SPEED, windLayer } from "./wind.ts";
 
-const ctx = { seed: manifest.seed, n: manifest.n, sites: manifest.sites };
+const ctx = { seed: manifest.seed, n: manifest.n, sites: manifest.sites, land };
 const palette = buildPalette(MIDDAY);
 const W = 400, H = 225;
 
@@ -213,7 +213,8 @@ test("the wheeling gulls scatter too", async () => {
 });
 
 test("boats sail on open sea only, leave a wake on the water's own ramp, and come and go", () => {
-  const life = lifeLayer(ctx);
+  // No ground grid: everything is sea, and the boats fan all round the town.
+  const life = lifeLayer({ ...ctx, land: undefined });
   const town = manifest.sites.find((site) => site.type === "town");
   assert.ok(town);
   // A frame of open sea round the town, as if the land were not there: every boat shows.

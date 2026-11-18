@@ -1,5 +1,6 @@
 // Rare sights: a whale breaching offshore, a balloon over the hills, a fox crossing a field, a heron in the river
-// shallows, a ship under full sail, a monk on the abbey road. And the flier's wake on water.
+// shallows, a ship under full sail, a monk on the abbey road. And the flier's wake on water, which alone remembers
+// anything: the last few places the flier has been.
 //
 // Each sight keeps its own clock: one appearance in every stretch of ten to twenty minutes, at a moment the seed
 // picks. While it lasts, the sight shows wherever a candidate point of the world's lattice (also the seed's) lies on
@@ -10,7 +11,7 @@
 import { hash2 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
 import { isBuilt, isCrop, isWater, MATERIAL as M } from "../look/materials.ts";
-import { artSet, blend, frameX, groundRow, modP, smooth01 } from "./art.ts";
+import { artSet, blend, frameX, groundRow, modP, ringDelta, smooth01 } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { worldRowAt, type LiveSprite } from "./sprites.ts";
@@ -66,11 +67,17 @@ export const HERON_LIFT = 34;
 const MONK_X = 72;
 const MONK_Y = 52;
 const MONK_PACE = 3;
-/** The wake: the flier must be within WAKE_LOW units of the water; foam lasts WAKE_LASTS seconds. */
+/**
+ * The wake: the flier must be within WAKE_LOW units of the water; foam lasts WAKE_LASTS seconds and trails no more
+ * than WAKE_LONG cells, a mark every WAKE_STEP, the two arms WAKE_SPREAD apart for each cell behind.
+ */
 export const WAKE_LOW = 26;
 export const WAKE_LASTS = 1.5;
+export const WAKE_LONG = 40;
 const WAKE_STEP = 1.5;
 const WAKE_SPREAD = 0.27;
+/** Places of the flier's track kept: enough to reach WAKE_LONG back at WAKE_STEP apart. */
+const WAKE_KEEP = 32;
 
 const flags = (ids: readonly number[]): Uint8Array => {
   const t = new Uint8Array(256);
@@ -268,43 +275,49 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     "wtrrl.",
   ], 3, 3, fur);
 
-  // A heron: grey, white-necked, a dark crest and a pale bill.
+  // A heron: a slate-grey back, darker than the pale water it stands in, a white neck and breast, a dark crest
+  // trailing from the head, and dark tips to broad wings.
   const plume = {
-    W: [M.whitewash, 14], G: [M.whitewash, 3], d: [M.roofSlate, 6], k: [M.roofSlate, 1], y: [M.plaster, 11], l: [M.stoneDark, 2],
-    g: [M.whitewash, 6],
+    W: [M.whitewash, 15], g: [M.roofSlate, 13], s: [M.roofSlate, 10], k: [M.roofSlate, 1], y: [M.plaster, 11], l: [M.stoneDark, 2],
   } as const;
   const heronStand = art.add([
-    ".kWy",
-    "..W.",
-    ".GW.",
-    "GGG.",
-    "dGd.",
-    ".l..",
-  ], 1, 5, plume);
+    "..kkWy.",
+    "....W..",
+    "....W..",
+    "..gWW..",
+    ".ggsW..",
+    "kgsss..",
+    ".kk.l..",
+    "....l..",
+  ], 4, 7, plume);
   const heronStrike = art.add([
-    "....",
-    "....",
-    ".GWk",
-    "GGGW",
-    "dGdy",
-    ".l..",
-  ], 1, 5, plume);
+    ".......",
+    ".......",
+    ".......",
+    "..gkk..",
+    ".ggsWW.",
+    "kgsss.W",
+    ".kk.l.y",
+    "....l..",
+  ], 4, 7, plume);
   const heronUp = art.add([
-    "g.....g",
-    "Gg...gG",
-    ".GgWgG.",
-    "...l...",
-  ], 3, 2, plume);
+    "k.........k",
+    "gk.......kg",
+    ".gg.....gg.",
+    "..ggsWsgg..",
+    ".....l.....",
+  ], 5, 3, plume);
   const heronLevel = art.add([
-    "ggGWGgg",
-    "ddd.ddd",
-    "...l...",
-  ], 3, 0, plume);
+    "kkggsWsggkk",
+    "..sss.sss..",
+    ".....l.....",
+  ], 5, 0, plume);
   const heronDown = art.add([
-    "..gWg..",
-    ".gG.Gg.",
-    "gG.l.Gg",
-  ], 3, 0, plume);
+    "...gsWsg...",
+    "..gg.l.gg..",
+    ".gk.....kg.",
+    "k.........k",
+  ], 5, 0, plume);
   const heronFlap = [heronUp, heronLevel, heronDown, heronLevel] as const;
 
   // A monk: a dark habit, the hood up, a pale face.
@@ -361,6 +374,9 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     return isSea[v & 255] === 1 && ((v >>> 8) & 15) >= tone;
   }
 
+  /** Whether the heron is asking for broad water: set by `settle`. */
+  let broad = false;
+
   /** Whether sight `k` may stand on frame pixel (px, py), which is at least 14 pixels inside the frame. */
   function suits(f: LiveFrame, k: number, px: number, py: number): boolean {
     const w = f.rect.w, bake = f.bake;
@@ -376,6 +392,11 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     }
     if (k === HERON) {
       if (m !== M.river) return false;
+      // Room to stand and be seen: water to either side and above or below, unless any river will do.
+      if (broad) {
+        if ((bake[py * w + px - 1] & 255) !== M.river || (bake[py * w + px + 1] & 255) !== M.river) return false;
+        if ((bake[(py - 1) * w + px] & 255) !== M.river && (bake[(py + 1) * w + px] & 255) !== M.river) return false;
+      }
       // Shallows: the bank is a step away, on one side or the other.
       for (let d = -2; d <= 2; d += 4) {
         const side = bake[py * w + px + d] & 255, fore = bake[(py + d) * w + px] & 255;
@@ -391,10 +412,14 @@ export function rareLayer(ctx: LayerContext): RareLayer {
   /** The first pixel of `order` round (cx, cy) that suits sight `k`, as an index into the frame; −1 when none does. */
   function settle(f: LiveFrame, k: number, cx: number, cy: number, order: Int16Array): number {
     const w = f.rect.w, h = f.rect.h;
-    for (let o = 0; o < order.length; o += 2) {
-      const px = cx + order[o], py = cy + order[o + 1];
-      if (px < 14 || px >= w - 14 || py < 14 || py >= h - 14) continue;
-      if (suits(f, k, px, py)) return py * w + px;
+    // The heron looks first for a stream broad enough to stand in, and takes a brook only when there is none.
+    for (let pass = k === HERON ? 0 : 1; pass < 2; pass++) {
+      broad = pass === 0;
+      for (let o = 0; o < order.length; o += 2) {
+        const px = cx + order[o], py = cy + order[o + 1];
+        if (px < 14 || px >= w - 14 || py < 14 || py >= h - 14) continue;
+        if (suits(f, k, px, py)) return py * w + px;
+      }
     }
     return -1;
   }
@@ -593,8 +618,8 @@ export function rareLayer(ctx: LayerContext): RareLayer {
       if (beat >= 8.8 && beat < 10.4) {
         const white = f.palette[(M.whitewash << 8) | 15];
         const r = 1 + Math.floor((beat - 8.8) * 2);
-        onWater(f, px + dir * 2 - r, py, white, 150);
-        onWater(f, px + dir * 2 + r, py, white, 150);
+        onWater(f, px + dir * 3 - r, py, white, 170);
+        onWater(f, px + dir * 3 + r, py, white, 170);
       }
       seen(HERON, slot, px, py, a > 200);
       return;
@@ -604,12 +629,12 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     const run = tau < 3 ? 5 * tau * tau : 45 + 30 * (tau - 3);
     const rise = tau < 3 ? 8 * tau : 24;
     const x = px + Math.round(dir * run), y = py - Math.round(rise + 0.2 * run);
-    if (x < -4 || x >= w + 4 || y < -3 || y >= h) return;
+    if (x < -6 || x >= w + 6 || y < -3 || y >= h) return;
     const left = RARE[HERON].lasts - at;
     const a = Math.round(255 * smooth01(left / 2));
     const wings = heronFlap[Math.floor(tau * 3) & 3];
     put(f, wings, x, y, false, a, wings.h);
-    seen(HERON, slot, x, y, a > 200 && x >= 4 && x < w - 4 && y >= 3);
+    seen(HERON, slot, x, y, a > 200 && x >= 6 && x < w - 6 && y >= 3);
   }
 
   /**
@@ -707,16 +732,50 @@ const NEIGH_X = [1, -1, 0, 0, 1, -1, 1, -1];
 const NEIGH_Y = [0, 0, 1, -1, 1, 1, -1, -1];
 
 /**
- * The flier's wake: while it is within WAKE_LOW of water, two lines of foam open behind it on the surface and thin away
- * over WAKE_LASTS seconds. The track is the flier's heading held straight and the foam is fixed to the water, so the
- * wake needs no memory.
+ * The flier's wake: while it is within WAKE_LOW of water, a short V of foam trails behind it along the way it has
+ * come, so it bends through a turn; the marks lie still on the water, spread as they age and are gone within
+ * WAKE_LONG cells or WAKE_LASTS seconds. The layer keeps the flier's last few places for this and nothing else; where
+ * it has none (the first frame, or after a jump) the heading held straight stands in for them.
  */
 export function wakeLayer(): LiveLayer {
+  // The track: places the flier has been, newest last, each WAKE_STEP or more from the one before, with how far it
+  // had come by then. Unwrapped, so the track runs on across the world's seam.
+  const tx = new Float64Array(WAKE_KEEP), ty = new Float64Array(WAKE_KEEP), run = new Float64Array(WAKE_KEEP);
+  let kept = 0, lastT = -Infinity;
+  // The line the foam lies on, from the flier back: its corners, and how far behind the flier each is.
+  const lx = new Float64Array(WAKE_KEEP + 2), ly = new Float64Array(WAKE_KEEP + 2), lb = new Float64Array(WAKE_KEEP + 2);
   return {
     name: "wake",
     draw(f: LiveFrame): void {
       const fl = f.flier;
-      if (!fl || fl.speed < 8) return;
+      if (!fl) return;
+      const hx = pcos(fl.heading), hy = psin(fl.heading);
+      // Where the flier is, on the track's own turn of the world, and how far it has come.
+      let x = fl.x, y = fl.y, come = fl.x * hx + fl.y * hy;
+      if (kept > 0) {
+        const dx = ringDelta(tx[kept - 1], fl.x, f.n), dy = ringDelta(ty[kept - 1], fl.y, f.n);
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (f.t < lastT || f.t - lastT > WAKE_LASTS || d > 0.5 * fl.speed + 12) kept = 0;
+        else {
+          x = tx[kept - 1] + dx;
+          y = ty[kept - 1] + dy;
+          come = run[kept - 1] + d;
+        }
+      }
+      lastT = f.t;
+      if (kept === 0 || come - run[kept - 1] >= WAKE_STEP) {
+        if (kept === WAKE_KEEP) {
+          tx.copyWithin(0, 1);
+          ty.copyWithin(0, 1);
+          run.copyWithin(0, 1);
+          kept--;
+        }
+        tx[kept] = x;
+        ty[kept] = y;
+        run[kept++] = come;
+      }
+      if (fl.speed < 8) return;
+
       const { out, bake, palette } = f;
       const w = f.rect.w, h = f.rect.h;
       const px = frameX(f, fl.x, 0);
@@ -727,24 +786,55 @@ export function wakeLayer(): LiveLayer {
       const over = fl.alt - surface;
       if (over < 0 || over >= WAKE_LOW) return;
       const strength = smooth01((WAKE_LOW - over) / 10);
-      const hx = pcos(fl.heading), hy = psin(fl.heading);
       const white = palette[(M.whitewash << 8) | 15];
-      const along = fl.x * hx + fl.y * hy;
-      const first = Math.floor(along / WAKE_STEP);
-      const reach = fl.speed * WAKE_LASTS;
+      const reach = Math.min(WAKE_LONG, fl.speed * WAKE_LASTS);
+
+      // The line: the flier, the track back from it, then straight on the way the last of it ran.
+      let m = 1;
+      lx[0] = 0;
+      ly[0] = 0;
+      lb[0] = 0;
+      for (let k = kept - 1; k >= 0 && lb[m - 1] < reach; k--) {
+        if (come - run[k] - lb[m - 1] < 0.25) continue;
+        lx[m] = tx[k] - x;
+        ly[m] = ty[k] - y;
+        lb[m++] = come - run[k];
+      }
+      if (lb[m - 1] < reach) {
+        let ux = -hx, uy = -hy;
+        if (m > 1) {
+          const len = Math.hypot(lx[m - 1] - lx[m - 2], ly[m - 1] - ly[m - 2]) || 1;
+          ux = (lx[m - 1] - lx[m - 2]) / len;
+          uy = (ly[m - 1] - ly[m - 2]) / len;
+        }
+        const more = reach - lb[m - 1] + 1;
+        lx[m] = lx[m - 1] + ux * more;
+        ly[m] = ly[m - 1] + uy * more;
+        lb[m] = lb[m - 1] + more;
+        m++;
+      }
+
+      // Marks every WAKE_STEP of the way come, so each lies where it was laid as the flier goes on.
+      const first = Math.floor(come / WAKE_STEP);
+      let seg = 1;
       for (let j = 1; ; j++) {
-        const behind = along - (first - j) * WAKE_STEP;
+        const behind = come - (first - j) * WAKE_STEP;
         if (behind >= reach) break;
+        while (seg < m - 1 && lb[seg] < behind) seg++;
+        const k = (behind - lb[seg - 1]) / (lb[seg] - lb[seg - 1]);
+        const ex = lx[seg] - lx[seg - 1], ey = ly[seg] - ly[seg - 1];
+        const len = Math.sqrt(ex * ex + ey * ey) || 1;
+        const cx = lx[seg - 1] + ex * k, cy = ly[seg - 1] + ey * k;
         const fade = 1 - behind / reach;
         const spread = 1 + behind * WAKE_SPREAD;
-        const a = Math.round(150 * strength * fade);
+        const a = Math.round(170 * strength * fade);
         if (a < 6) continue;
         for (let side = -1; side <= 1; side += 2) {
           // Broken foam from the first, thinning to lace before it goes.
           const g = hash2(first - j, side, 0x3a7e) & 255;
-          if (g > 40 + 130 * fade) continue;
-          const sx = px + Math.round(-behind * hx + side * spread * hy);
-          const sy = gy + Math.round(0.8 * (-behind * hy - side * spread * hx));
+          if (g > 60 + 150 * fade) continue;
+          const sx = px + Math.round(cx - (side * spread * ey) / len);
+          const sy = gy + Math.round(0.8 * (cy + (side * spread * ex) / len));
           if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
           const i = sy * w + sx;
           if (isWater[bake[i] & 255] === 0) continue;
