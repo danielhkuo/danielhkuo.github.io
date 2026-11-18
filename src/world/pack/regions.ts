@@ -396,27 +396,38 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
   const cS = core.regionCells / 8;
   const g2 = gS * gS;
   const c2 = cS * cS;
-  const ground = fromQuantised(await loadHeights(requirePart(parts, GROUND), gS, gS), H_SCALE);
+  // Every section inflates on its own; start them all at once.
+  const heights = (name: string, side: number) => loadHeights(requirePart(parts, name), side, side);
+  const planes = readFramed(requirePart(parts, REGIONS), 6);
+  const [groundQ, rq, conformQ, levelQ, waterKind, handRaw, shore, moistureQ, windQ, exposureQ, debrisQ, rock, decoded] = await Promise.all([
+    heights(GROUND, gS),
+    core.world.base ? heights(BASE, gS) : null,
+    core.world.conform ? heights(CONFORM, gS) : null,
+    heights(WLEVEL, gS),
+    loadBytes(requirePart(parts, WKIND), g2),
+    loadBytes(requirePart(parts, HAND), g2),
+    loadBytes(requirePart(parts, SHORE), g2),
+    heights(MOISTURE, cS),
+    heights(WIND, cS),
+    heights(EXPOSURE, cS),
+    heights(DEBRIS, cS),
+    loadBytes(requirePart(parts, ROCK), c2),
+    Promise.all(planes.map((q) => loadHeights(q, cS, cS))),
+  ]);
+  const ground = fromQuantised(groundQ, H_SCALE);
   let base: Float32Array | undefined;
-  if (core.world.base) {
-    const rq = await loadHeights(requirePart(parts, BASE), gS, gS);
+  if (rq) {
     base = new Float32Array(ground.length);
     for (let i = 0; i < base.length; i++) base[i] = ground[i] + rq[i] / H_SCALE;
   }
-  const conform = core.world.conform ? fromQuantised(await loadHeights(requirePart(parts, CONFORM), gS, gS), H_SCALE) : undefined;
-  const waterLevel = fromQuantised(await loadHeights(requirePart(parts, WLEVEL), gS, gS), H_SCALE);
-  const waterKind = await loadBytes(requirePart(parts, WKIND), g2);
-  const handRaw = await loadBytes(requirePart(parts, HAND), g2);
+  const conform = conformQ ? fromQuantised(conformQ, H_SCALE) : undefined;
+  const waterLevel = fromQuantised(levelQ, H_SCALE);
   const hand = new Float32Array(handRaw.length);
   for (let i = 0; i < hand.length; i++) hand[i] = handRaw[i];
-  const shore = await loadBytes(requirePart(parts, SHORE), g2);
-  const moisture = fromQuantised(await loadHeights(requirePart(parts, MOISTURE), cS, cS), FIELD_SCALE);
-  const wind = fromQuantised(await loadHeights(requirePart(parts, WIND), cS, cS), FIELD_SCALE);
-  const exposure = fromQuantised(await loadHeights(requirePart(parts, EXPOSURE), cS, cS), FIELD_SCALE);
-  const debris = fromQuantised(await loadHeights(requirePart(parts, DEBRIS), cS, cS), FIELD_SCALE);
-  const rock = await loadBytes(requirePart(parts, ROCK), c2);
-  const planes = readFramed(requirePart(parts, REGIONS), 6);
-  const decoded = await Promise.all(planes.map((p) => loadHeights(p, cS, cS)));
+  const moisture = fromQuantised(moistureQ, FIELD_SCALE);
+  const wind = fromQuantised(windQ, FIELD_SCALE);
+  const exposure = fromQuantised(exposureQ, FIELD_SCALE);
+  const debris = fromQuantised(debrisQ, FIELD_SCALE);
   const regions = new Float32Array(6 * c2);
   for (let k = 0; k < 6; k++) {
     const q = decoded[k];
