@@ -39,6 +39,8 @@ interface FlightProbe {
   navStart: number;
   readyAt: number | null;
   frameMs: number[];
+  /** Main-thread ms the sky's two passes took, per frame. */
+  skyMs: number[];
   hazeFrames: number;
   frames: number;
   baked: () => number;
@@ -62,7 +64,7 @@ export default function Flight() {
     const statsOn = new URLSearchParams(window.location.search).has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     const recomputeScale = () => {
@@ -171,6 +173,7 @@ export default function Flight() {
           loaded.manifest.seed,
           loaded.data.n,
           styleFrom(new URLSearchParams(window.location.search).get("clouds")),
+          loaded.manifest.start,
         );
 
         const ctx = canvas.getContext("2d");
@@ -194,9 +197,13 @@ export default function Flight() {
             heading: flight.heading,
             speed: flight.speed,
           });
+          const skyStart = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "below");
+          const skyBelow = performance.now() - skyStart;
           drawFlier(frame, view.rect(), flight, view);
+          const skyAgain = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "above");
+          if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);
 

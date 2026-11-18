@@ -16,9 +16,9 @@ import { buildPalette, MIDDAY } from "../render/palette.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import { drawFlier } from "../runtime/standin.ts";
 import { createView } from "../runtime/view.ts";
-import { cloudAt } from "../sky/field.ts";
+import { ALT, cloudAt } from "../sky/field.ts";
 import { createSky } from "../sky/sky.ts";
-import { STYLES, type CloudStyle } from "../sky/styles.ts";
+import { STYLE_NAMES, STYLES } from "../sky/styles.ts";
 
 const VIEW_W = 400;
 const VIEW_H = 225;
@@ -28,8 +28,9 @@ const CREAM_R = 0xf0;
 const CREAM_G = 0xe8;
 const CREAM_B = 0xd2;
 
-const STYLE_NAMES: readonly CloudStyle["name"][] = ["watercolour", "storybook", "layered"];
 const LAND_VIEWS = ["start", "town", "peak", "sea"] as const;
+/** Further views: the heaviest weather, and a second stretch of coast. */
+const EXTRA_VIEWS = ["heavy", "coast"] as const;
 
 function readT(argv: readonly string[]): number {
   for (let i = 0; i < argv.length; i++) {
@@ -115,7 +116,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   mkdirSync(dir, { recursive: true });
 
   const cols = STYLE_NAMES.length;
-  const rows = LAND_VIEWS.length + 1;
+  const rows = LAND_VIEWS.length + 1 + EXTRA_VIEWS.length;
   const cellW = VIEW_W * SCALE;
   const cellH = VIEW_H * SCALE;
   const sheetW = (cols + 1) * GAP + cols * cellW;
@@ -131,7 +132,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const frames: Uint8Array[][] = [];
   for (let s = 0; s < STYLE_NAMES.length; s++) {
     const style = STYLES[STYLE_NAMES[s]];
-    const sky = createSky(manifest.seed, world.n, style);
+    const sky = createSky(manifest.seed, world.n, style, start);
     const column: Uint8Array[] = [];
     const drawAt = (x: number, y: number): Uint8Array => {
       const view = createView(world, look, mask, { width: VIEW_W, height: VIEW_H });
@@ -156,18 +157,32 @@ export async function main(argv: readonly string[]): Promise<number> {
       const place = places[LAND_VIEWS[v]];
       column.push(drawAt(place.x, place.y));
     }
+    // The bank view: the kite in the middle of the first bank.
     let bx = start.x;
     let by = start.y;
     for (let i = 0; i < sky.field.clouds.length; i++) {
       const c = sky.field.clouds[i];
       if (c.layer === "bank") {
         const p = cloudAt(sky.field, c, t);
-        bx = p.x;
-        by = p.y;
+        const shape = sky.shapes[c.shape];
+        bx = wrap(p.x + shape.w / 2, world.n);
+        by = wrap(p.y + (0.6 * shape.h - ALT.bank + 18) / 0.8, world.n);
         break;
       }
     }
     column.push(drawAt(bx, by));
+    // The heaviest view: the most low cloud among a spread of views. Then the coast north-east of the start.
+    let hx = start.x, hy = start.y, most = -1;
+    for (let k = 0; k < 160; k++) {
+      const x = (k * 977) % world.n, y = (k * 613) % world.n;
+      const probe = new Uint32Array(VIEW_W * VIEW_H);
+      sky.draw(probe, { x: Math.floor(x) - VIEW_W / 2, y: Math.floor(0.8 * y) - (VIEW_H >> 1), w: VIEW_W, h: VIEW_H }, t, "below");
+      let covered = 0;
+      for (let i = 0; i < probe.length; i++) if (probe[i] !== 0) covered++;
+      if (covered > most) { most = covered; hx = x; hy = y; }
+    }
+    column.push(drawAt(hx, hy));
+    column.push(drawAt(wrap(start.x + 520, world.n), wrap(start.y - 420, world.n)));
     frames.push(column);
   }
 
@@ -175,7 +190,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   for (let s = 0; s < STYLE_NAMES.length; s++) {
     const name = STYLE_NAMES[s];
     for (let v = 0; v < rows; v++) {
-      const label = v < LAND_VIEWS.length ? LAND_VIEWS[v] : "bank";
+      const label = v < LAND_VIEWS.length ? LAND_VIEWS[v] : v === LAND_VIEWS.length ? "bank" : EXTRA_VIEWS[v - LAND_VIEWS.length - 1];
       const file = join(dir, `${name}-${label}.png`);
       writeFileSync(file, encodePng(frames[s][v], VIEW_W, VIEW_H));
       written.push(file);

@@ -67,3 +67,24 @@ flier; any change to the world file.
 
 The shape generator's noise recipe, sprite sizes inside the ranges, the exact colours inside the house palette, and
 the blending maths.
+
+## Revision, 2026-11-18: sculpted cumulus
+
+The owner saw the first clouds and rejected them: "these are terrible, look nothing close to ghibli/pixel art type
+clouds." The brief became painted cumulus as pixel art, and the builder was given the look. What changed from the
+design above; the rest stands.
+
+- **Shapes** are sculpted, not masked: round lobes in the camera's space, the nearest surface taking each pixel, lit by
+  one sun (north-west and above) on the lobe and on the cloud's smoothed mass, with cast shade, a shaded base and
+  creases. Edges are crisp: a pixel is cloud or it is not. Kinds: heaps (to 220 px wide), puffs, streamers, and banks
+  (to 300 px wide).
+- **One style, `cumulus`**, replaces the three: the light cut into five flat tones (white, pale blue, blue,
+  blue-violet, lavender) and a warm one-pixel rim on sunlit crowns. No blur, no stipple, no ink line. The high streak
+  layer is gone: thin streaks read as scratches at this scale.
+- **Placement.** Fewer, bigger clouds: about 5–16 % of a view is low cloud on average. The view at the flight's start
+  is composed (a great heap to seaward, puffs, a streamer, and a second heap ahead of the flier), with the flier and
+  the town clear.
+- **Shadows.** Clouds now throw shadows on the land, by the flier's sun slope. They ignore the land's height.
+- **Drawing order.** Land, cloud shadows, low clouds, banks, the flier, then each bank again as a veil. The flier shows
+  faintly inside a bank; the bank stays opaque and the land never ghosts through it.
+- **Clouds are not mirrored**, since one sun lights them all.
