@@ -20,7 +20,7 @@ Last updated 2026-11-18.
 
 - **Terrain**, nine look rounds, critics at 2.8 of 4. Coasts, the town and the sea read as beautiful; peaks are the
   weakest. See the look ledger.
-- **First flight** (`/world`). Seed 3 ships as one 3.1 MB file. Workers paint the land ahead of a stand-in kite at
+- **First flight** (`/world`). Seed 3 ships as one 3.1 MB file. Workers paint the land ahead of the flier at
   60 fps, and the start view is ready in about 1.8 s. Plan: `plans/2026-11-17-dragon-world-flight.md`.
 - **Clouds** (2026-11-18, Fable). Sculpted pixel-art cumulus in a five-tone ramp with warm rims, ground shadows, a
   composed opening view, low clouds under the flier and banks it flies through. Design:
@@ -80,8 +80,8 @@ a hermit monk walking the abbey road; bells ringing at the abbey on the hour.
 
 ## Later
 
-- **The dragon.** An original long, wingless river-dragon as a sprite stack, flight that banks and climbs, its wake.
-  The stand-in kite holds its place until then.
+- **The dragon: what's left.** Boost streaks; landing (coiling onto a site's pad) with the landmarks. The river-dragon
+  itself is built and flying.
 - **Landmarks and projects.** Sprites for the abbey, lighthouse, windmill, bridge, ruined cathedral, churchyard yew
   and the town's bell tower; the six pinned repos assigned to sites; landing opens a project page; the abbey holds
   About Me and the terminal (the Artificer).
@@ -115,17 +115,14 @@ From the round-9 critics (peaks first):
 - Coves and cliff scallops repeat; sea stacks need surf at their base.
 
 From the first-flight review:
-- Over land not painted yet, the kite draws over hills that should hide it, and its shadow vanishes.
+- Over land not painted yet, the dragon draws over hills that should hide it, and its shadow vanishes.
 - Over lakes, the shadow falls on the lake bed and vanishes.
-- The stand-in's colours do not come from the palette (moot once the dragon lands).
 - Small code cleanups: the worker message types are defined twice; the codec branches on the same node kinds in
   three places.
 
 ## Decisions waiting (2026-11-18 morning)
 
-- **The dragon.** Studies A (river-dragon, refined), A-ivory, B (winged) and C (storybook wyrm) fly behind
-  `/world?dragon=…`; options and the build that follows are in `specs/2026-11-18-dragon-options.md`. Both reviewers
-  pick A.
+- ~~**The dragon.**~~ Decided 2026-11-18: A, the river-dragon. It is now the flier (`specs/2026-11-18-dragon-options.md`).
 - **Merge `world/perf`?** The water layer reuses its shore-distance work between frames: 5.0 → 4.4 ms p95 at 4× throttle,
   output within 0.3 % of pixels of a fresh redraw while flying.
 - **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
