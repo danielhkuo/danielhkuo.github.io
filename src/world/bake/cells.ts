@@ -43,17 +43,21 @@ export interface Look {
   /** The shingle and the boulders of the apron at a sea cliff's foot. Optional: cliffs stand in the water when absent. */
   apron?: number;
   apronRock?: number;
+  /** Per material id: 1 for built things, which keep their own tones: no wash is laid on them. Optional: none when absent. */
+  isBuilt?: Uint8Array;
 }
 
 /**
  * Land cells' aux: bits 0–1 the hatch level (1 steep, 2 a cliff), bits 2–3 a crest (1 soft, 2 full, 3 one that
  * runs north–south), bit 4 bare rock, bit 5 a sharp crest on high ground (an arête or a summit). Stream cells' aux: 8 and the
- * shade of the ground they cross, 0–6.
+ * shade of the ground they cross, 0–5 (14 and 15 are a fall's water and its foam).
  */
 export const AUX_STEEP = 3;
 export const AUX_CREST_SHIFT = 2;
 export const AUX_ROCK = 0x10;
 export const AUX_SHARP = 0x20;
+/** Bit 6: a crest that stands CREST_FULL or more over the ground to either side of it. */
+export const AUX_STRONG = 0x40;
 
 /** Cell flags. */
 export const F_SHADOW = 0x03;
@@ -108,6 +112,8 @@ const RIVER_OFFSET = 8;
 export const RIVER_SIGHT = 12;
 /** A 1 px stream on ground steeper than this is not drawn: it would read as a rain streak. */
 export const STREAM_MAX_SLOPE = 0.9;
+/** A wide river's bank is dithered over this many cells to either side of its line. */
+export const BANK_SOFT = 0.5;
 /** Ground from this slope is gullied, up to GULLY_DEPTH units deep. */
 export const GULLY_SLOPE = 0.9;
 export const GULLY_DEPTH = 2.2;
@@ -358,7 +364,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           const k = across ? dCol : row && dRow > dCol ? dRow : 0;
           const need = pass === 1 ? CREST_DROP_WIDE : e <= CREST_LOW ? CREST_DROP : e >= CREST_HIGH ? CREST_DROP_HIGH : CREST_DROP + ((CREST_DROP_HIGH - CREST_DROP) * (e - CREST_LOW)) / (CREST_HIGH - CREST_LOW);
           // 1 and 2: a crest running across the view, soft and full. 3: one running away from the camera.
-          if (k >= need) crest[i] = (!across ? 3 : pass === 0 && k >= CREST_FULL ? 2 : 1) | (pass === 0 && e >= CREST_HIGH_LINE ? 4 : 0);
+          // Bit 4: a high one. Bit 8: a strong one, whichever way it runs.
+          if (k >= need) crest[i] = (!across ? 3 : pass === 0 && k >= CREST_FULL ? 2 : 1) | (pass === 0 && e >= CREST_HIGH_LINE ? 4 : 0) | (pass === 0 && k >= CREST_FULL ? 8 : 0);
         }
       }
     }
@@ -536,13 +543,23 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
       if (sx * sx + sy * sy > STREAM_MAX_SLOPE * STREAM_MAX_SLOPE) return;
     }
-    const reach = Math.ceil(r);
+    // A wide river's bank is cut at sub-cell precision: a cell the bank passes through is water when the share of it
+    // inside the bank beats the blue noise there, so a slanting bank is a soft, broken edge and not a staircase.
+    const soft = width >= 2 ? (r >= 1.5 ? BANK_SOFT : BANK_SOFT / 2) : 0;
+    const reach = Math.ceil(r + soft);
     for (let yy = cy - reach; yy <= cy + reach; yy++) {
       if (yy < 0 || yy >= H) continue;
       for (let xx = cx - reach; xx <= cx + reach; xx++) {
         if (xx < 0 || xx >= W) continue;
         const dx = xx + 0.5 + wx0 - px, dy = yy + 0.5 + wy0 - py;
-        if ((width >= 2 || xx !== cx || yy !== cy) && dx * dx + dy * dy > r2) continue;
+        if (xx !== cx || yy !== cy) {
+          let lim = r2;
+          if (soft > 0) {
+            const t = r + soft * ((mask[((wrap(wy0 + yy, n) + 141) & 255) * 256 + ((wrap(wx0 + xx, n) + 27) & 255)] + 0.5) / 128 - 1);
+            lim = t * t;
+          }
+          if (dx * dx + dy * dy > lim) continue;
+        }
         const i = yy * W + xx;
         if (water[i]) continue;
         // Several curve points land on one cell; the lowest run wins so the phase never depends on their order.
@@ -971,8 +988,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (ph === 8) {
           // A stream is a line of water a little darker than the ground it crosses: it takes that ground's shade.
           const t = shade((ground[i + 1] - ground[i - 1]) * 0.5, (ground[i + W] - ground[i - W]) * 0.5, dry[i] - blur[i], ground[i]);
-          const k = Math.floor((t - 0.2) * 14);
-          ph = 8 + (k < 0 ? 0 : k > 6 ? 6 : k);
+          const k = Math.floor((t - 0.2) * 12);
+          ph = 8 + (k < 0 ? 0 : k > 5 ? 5 : k);
         }
         out.aux[o] = ph;
         out.light[o] = 128;
@@ -1015,7 +1032,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
             ax = fields.steep[i] >= FORM_CLIFF ? 2 : 1;
           }
           // The lip of a tarn's bowl is no crest line: only the headwall behind the water keeps one, so no tarn is ringed.
-          if (crest[i] !== 0 && !(lakes && besideLake(water, W, i))) ax |= ((crest[i] & 3) << AUX_CREST_SHIFT) | ((crest[i] & 4) !== 0 ? AUX_SHARP : 0);
+          if (crest[i] !== 0 && !(lakes && besideLake(water, W, i))) ax |= ((crest[i] & 3) << AUX_CREST_SHIFT) | ((crest[i] & 4) !== 0 ? AUX_SHARP : 0) | ((crest[i] & 8) !== 0 ? AUX_STRONG : 0);
           if (look.isRock !== undefined && look.isRock[m] === 1) ax |= AUX_ROCK;
         }
         out.aux[o] = ax;

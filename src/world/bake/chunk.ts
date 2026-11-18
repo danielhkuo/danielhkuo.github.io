@@ -7,13 +7,15 @@
 // light = tone | shadow << 4 | ink << 6 and depth in eighths of a world row
 // from the window's first row (depthBase).
 
+import { hash2 } from "../core/hash.ts";
 import { wrap } from "../core/torus.ts";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT } from "../look/contract.ts";
 import { AUX_CREST_SHIFT, buildTile, F_CANOPY, F_CLIFF, F_QUIET, F_SHADOW, TILE, type Cells, type Look } from "./cells.ts";
-import { SPAN_CAP, CANOPY_MIN_DROP, evenLines, hatch, inkCliffs, inkCrests, inkOcclusion, landBreaks, newPainted, rockFaces, type Painted } from "./ink.ts";
+import { SPAN_CAP, CANOPY_MIN_DROP, evenLines, evenSnowEdge, hatch, inkCliffs, inkCrests, inkOcclusion, inkSnowEdge, landBreaks, newPainted, rockFaces, type Painted } from "./ink.ts";
 import { BASE_TONE } from "./light.ts";
 import { imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint } from "./lines.ts";
+import { layWashes, pools } from "./wash.ts";
 import type { RiverIndex } from "./world.ts";
 
 /** The tone index flat, unshadowed ground takes (render/palette.ts FLAT_TONE). */
@@ -25,7 +27,7 @@ export const CHUNK = 256;
 export const CHUNK_ROWS = 320;
 
 // Margins painted round a window so that ink and lines inside it never depend on where it was cut.
-const MX = 8;
+const MX = 16;
 const MT = 32;
 // Below: a lip reads the wall LIP_FULL rows under it, is evened over LIP_SEEK rows and joined over as many again, and
 // every cell in reach must be whole to SPAN_CAP.
@@ -108,7 +110,11 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
           }
           breaks = landBreaks(hid, nearH - H, nearH - low, firm);
         }
-        if (breaks) p.hidden[k] = hid > 255 ? 255 : hid;
+        if (breaks) {
+          p.hidden[k] = hid > 255 ? 255 : hid;
+          const j = Math.floor(nearH - H + 0.5);
+          p.jump[k] = j < 1 ? 1 : j > 255 ? 255 : j;
+        }
       }
       const from = t > 0 ? t : 0;
       const m = (tile as Cells).mat[ti], l = (tile as Cells).light[ti], fl = (tile as Cells).flags[ti], a = (tile as Cells).aux[ti];
@@ -187,6 +193,73 @@ export function drawMarks(world: BakeWorld, p: Painted): void {
   }
 }
 
+/** Running water that drops down a wall this many pixels tall or more is drawn as a fall. */
+export const FALL_MIN = 4;
+/** The tones of a fall on the river's ramp: the pale teal of falling water, and cream foam. */
+export const FALL_TONE = 14;
+export const FOAM_TONE = 15;
+/** A fall is three pixels wide from this many pixels below its lip. */
+export const FALL_SPREAD = 5;
+
+/**
+ * Waterfalls. A stream that reaches a cliff is one cell drawn many pixels tall, which alone is a ruled bar. Here each
+ * pixel of such a drop is drawn as falling water instead: a pixel wide at the lip, two a little below it and three
+ * from FALL_SPREAD pixels down, cream at the core and pale teal at the sides, broken where the rock shows through,
+ * with a patch of foam and spray on the water at its foot. Every pixel is decided from its own place in the wall,
+ * so a fall is the same in any window.
+ */
+export function drawFalls(p: Painted, look: Look, mask: Uint8Array): void {
+  const { w, h, x0, r0, mat, aux, flags, wall, span, y, hidden } = p;
+  const still = look.isStill;
+  const flowing = (i: number): boolean => look.isWater[mat[i]] === 1 && (still === undefined || still[mat[i]] === 0);
+  // The falls' own pixels first, so what is drawn beside them never reads a pixel already repainted.
+  const core = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) if (wall[i] >= 1 && span[i] >= FALL_MIN && flowing(i)) core[i] = 1;
+  const set = (k: number, m: number, tone: number): void => {
+    mat[k] = m;
+    aux[k] = tone;
+    flags[k] = (flags[k] & F_SHADOW) | F_QUIET;
+    hidden[k] = 0;
+  };
+  for (let r = 0; r < h; r++) {
+    const R = r0 + r;
+    for (let c = 2; c + 2 < w; c++) {
+      const i = r * w + c;
+      if (core[i] === 0) continue;
+      const X = x0 + c, m = mat[i], cy = y[i];
+      const q = wall[i] - 1;
+      const hs = hash2(X, cy, 0xfa11);
+      // Which way the fall leans as it widens.
+      const side = (hs & 1) !== 0 ? 1 : -1;
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dc !== 0 && (q < 1 || (q < FALL_SPREAD && dc !== side))) continue;
+        const k = i + dc;
+        if (dc !== 0) {
+          // Only over the same face: never over a crown, other water, or ground that stands in front of the wall.
+          const dy = y[k] - cy;
+          if (core[k] === 1 || look.isWater[mat[k]] === 1 || (flags[k] & F_CANOPY) !== 0 || dy > 3 || dy < -3) continue;
+        }
+        const g = mask[((R + 23) & 255) * 256 + ((X + dc + 71) & 255)];
+        const hp = hash2(X + dc, R >> 1, 0xfa12) & 7;
+        if (dc === 0) set(k, m, hp === 0 && q > 0 ? FALL_TONE - 2 : g < 150 ? FOAM_TONE : FALL_TONE);
+        // The sides are thinner water, and broken: one stretch in three is bare rock.
+        else if (hp > 2) set(k, m, g < 60 ? FOAM_TONE : FALL_TONE);
+      }
+      // The foot: foam where the fall meets water, and spray to either side of it.
+      if (r + 2 < h && core[i + w] === 0) {
+        for (let dr = 1; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          if (dr === 2 && (dc === -2 || dc === 2)) continue;
+          const k = i + dr * w + dc;
+          if (look.isWater[mat[k]] === 0 || core[k] === 1) continue;
+          const g = mask[((R + dr + 23) & 255) * 256 + ((X + dc + 71) & 255)];
+          if (g > (dc === 0 ? 235 : dc === -1 || dc === 1 ? 190 : 110)) continue;
+          // Standing water's palest tone is its foam; a river's is the fall's own.
+          aux[k] = still !== undefined && still[mat[k]] === 1 ? 0 : FOAM_TONE;
+        }
+      }
+    }
+  }
+}
 function drawLines(index: RiverIndex, n: number, tiles: TileSource, p: Painted, isWater: Uint8Array, maxWidth: number): void {
   const { w, h, x0, r0 } = p;
   const yFirst = Math.ceil((5 * r0) / 4) - 4;
@@ -259,15 +332,13 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
       let tone: number;
       if (look.isWater[m] === 1) {
         tone = p.aux[i] & 15;
-        // A stream that drops down a wall is a fall: broken white water.
-        if (tone >= 8 && tone < 15 && p.wall[i] >= 2 && (look.isStill === undefined || look.isStill[m] === 0)) {
-          tone = mask[((R + 23) & 255) * 256 + ((p.x0 + mx + c + 71) & 255)] < 190 ? 15 : 14;
-        }
       } else {
         const l = p.light[i];
         // Flat, unshaded ground sits at FLAT_TONE; darks have the longer run of the ramp.
         const d = (l - Math.floor(BASE_TONE * 255 + 0.5)) / 255;
         tone = Math.floor(FLAT_TONE + d * (d < 0 ? 2 * FLAT_TONE : 2 * (15 - FLAT_TONE)) + (mask[(R & 255) * 256 + ((p.x0 + mx + c) & 255)] + 0.5) / 256);
+        // Pigment pools at the crisp edge of a wash: its last pixel is a tone darker.
+        if (p.ink[i] === 0 && pools(p, i)) tone--;
         tone = tone < 0 ? 0 : tone > 15 ? 15 : tone;
         // Paper through a light wash: where the brush skipped the paper's tooth, the wash is a tone or two thinner.
         // The flecks gather in loose patches (the mask read at a quarter scale), so they are grain and not stipple.
@@ -287,16 +358,28 @@ function pack(p: Painted, look: Look, mask: Uint8Array, mx: number, mt: number, 
   return out;
 }
 
+/** Per material id: 1 for rock and snow, the bare ground that shows every break in ink. */
+export function bareFlags(look: Look): Uint8Array {
+  const out = new Uint8Array(256);
+  for (let m = 0; m < 256; m++) if ((look.isRock !== undefined && look.isRock[m] === 1) || (look.isSnow !== undefined && look.isSnow[m] === 1)) out[m] = 1;
+  return out;
+}
+
 /** The finished bake pixels of the window [x0, x0 + w) × [r0, r0 + h) of bake space. */
 export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles: TileSource, x0: number, r0: number, w: number, h: number): Uint32Array {
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
   drawRivers(world, tiles, p, look.isWater);
   drawRoads(world, tiles, p);
   drawMarks(world, p);
-  inkOcclusion(p);
-  inkCrests(p);
+  drawFalls(p, look, mask);
+  if (look.isSnow !== undefined) evenSnowEdge(p, look.isSnow);
+  layWashes(p, look);
+  const bare = bareFlags(look);
+  inkOcclusion(p, bare);
+  inkCrests(p, bare);
+  if (look.isSnow !== undefined) inkSnowEdge(p, look.isSnow);
   evenLines(p);
-  inkCliffs(p, look.isStill ?? look.isWater);
+  inkCliffs(p, look.isStill ?? look.isWater, bare);
   rockFaces(p);
   hatch(p, mask);
   return pack(p, look, mask, MX, MT, w, h);

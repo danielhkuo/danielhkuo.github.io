@@ -1,6 +1,7 @@
 // The compositor: copies baked chunks through the palette into the frame,
 // out = PAL[(material << 8) | light], in row segments per chunk.
 
+import { hash2 } from "../core/hash.ts";
 import type { Palette } from "../look/contract.ts";
 
 export const CHUNK = 256;
@@ -27,20 +28,73 @@ export interface LiveWater {
 /** Packed RGBA drawn where no chunk is baked yet: bare paper. */
 export const PAPER = 0xffd2e8f0;
 
+/** The paper's own colour (the palette's PAPER at noon), as r, g, b. */
+const CREAM: readonly [number, number, number] = [0xf0, 0xe8, 0xd2];
+/** Of 256: how far the tooth of the paper shows through the paint at its highest, and how far pigment darkens its hollows. */
+export const GRAIN_SHOW = 30;
+export const GRAIN_SETTLE = 24;
+
+/** Value noise 0–255 on a lattice of `cell` × `cellY` pixels that repeats every 256. */
+function cloud(x: number, y: number, cell: number, cellY: number, seed: number): number {
+  const lx = Math.floor(x / cell), ly = Math.floor(y / cellY);
+  const fx = x / cell - lx, fy = y / cellY - ly;
+  const px = 256 / cell, py = 256 / cellY;
+  const at = (i: number, j: number): number => hash2(((i % px) + px) % px, ((j % py) + py) % py, seed) & 255;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const top = at(lx, ly) + (at(lx + 1, ly) - at(lx, ly)) * sx, bottom = at(lx, ly + 1) + (at(lx + 1, ly + 1) - at(lx, ly + 1)) * sx;
+  return top + (bottom - top) * sy;
+}
+
+const GRAINS = new WeakMap<Uint8Array, Int8Array>();
+
 /**
- * Paper grain: darkens each pixel by 0–3 levels from the blue-noise mask,
- * indexed by bake pixel so the grain is fixed in the world and does not swim.
+ * The sheet's grain, −127…127 per pixel of a 256² tile: broad unevenness in the sizing, fibres that lie along the
+ * sheet, and the fine tooth (the blue-noise mask). Above zero the paper stands proud and shows through the paint.
+ */
+export function grainTile(mask: Uint8Array): Int8Array {
+  const hit = GRAINS.get(mask);
+  if (hit) return hit;
+  const out = new Int8Array(65536);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const broad = cloud(x, y, 32, 32, 0x9a11) - 127.5;
+    const fibre = cloud(x, y, 16, 4, 0x9a12) - 127.5;
+    const mottle = cloud(x, y, 4, 4, 0x9a13) - 127.5;
+    const tooth = mask[((y + 61) & 255) * 256 + ((x + 113) & 255)] - 127.5;
+    const g = 0.5 * broad + 0.55 * fibre + 0.45 * mottle + 0.4 * tooth;
+    out[y * 256 + x] = g < -127 ? -127 : g > 127 ? 127 : Math.round(g);
+  }
+  GRAINS.set(mask, out);
+  return out;
+}
+
+/**
+ * Paper grain over the whole frame, land and sea alike: where the sheet's tooth stands proud the cream of the paper
+ * shows through the paint, and in its hollows the pigment settles a little darker. Indexed by bake pixel, so the
+ * grain is fixed in the world and does not swim.
  */
 export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array): void {
   const { x: vx, y: vy, w, h } = view;
+  const grain = grainTile(mask);
   for (let r = 0; r < h; r++) {
-    const mrow = ((vy + r + 61) & 255) * 256;
+    const grow = ((vy + r) & 255) * 256;
     for (let c = 0; c < w; c++) {
-      const g = mask[mrow + ((vx + c + 113) & 255)] >> 6;
+      const g = grain[grow + ((vx + c) & 255)];
       if (g === 0) continue;
       const v = out[r * w + c];
-      const R = (v & 255) - g, G = ((v >>> 8) & 255) - g, B = ((v >>> 16) & 255) - g - 1;
-      out[r * w + c] = ((v & 0xff000000) | ((B < 0 ? 0 : B) << 16) | ((G < 0 ? 0 : G) << 8) | (R < 0 ? 0 : R)) >>> 0;
+      let R = v & 255, G = (v >>> 8) & 255, B = (v >>> 16) & 255;
+      if (g > 0) {
+        const k = (g * GRAIN_SHOW) >> 7;
+        R += ((CREAM[0] - R) * k) >> 8;
+        G += ((CREAM[1] - G) * k) >> 8;
+        B += ((CREAM[2] - B) * k) >> 8;
+      } else {
+        // Settled pigment: darker, and a touch warmer than a plain multiply.
+        const k = 256 + ((g * GRAIN_SETTLE) >> 7);
+        R = (R * (k + 2)) >> 8;
+        G = (G * k) >> 8;
+        B = (B * (k - 2)) >> 8;
+      }
+      out[r * w + c] = ((v & 0xff000000) | (B << 16) | (G << 8) | R) >>> 0;
     }
   }
 }

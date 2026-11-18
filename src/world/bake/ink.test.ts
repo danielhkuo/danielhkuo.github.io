@@ -71,6 +71,8 @@ test("crowns ink against the ground behind them, never against each other or on 
   p.flags[2] = 0; p.flags[6] = F_QUIET; // a river, field or beach
   p.flags[3] = 0; p.flags[7] = 0; // open ground
   p.hidden[7] = 12;
+  // The ground seen over each lies 20 units below it: a deep break, full ink even under turf.
+  p.jump.fill(20, 4, 8);
   inkOcclusion(p);
   assert.deepEqual([...p.ink.subarray(4, 8)], [0, 0, 0, INK_FULL]);
 });
@@ -120,7 +122,7 @@ test("a crest is inked only where the land breaks behind it", () => {
   // A crest across the view on row 4: the left half hides a row behind it, the right half hides nothing.
   for (let c = 4; c < 28; c++) {
     p.aux[4 * 32 + c] = 1 << AUX_CREST_SHIFT;
-    if (c < 16) p.hidden[4 * 32 + c] = 1;
+    if (c < 16) { p.hidden[4 * 32 + c] = 1; p.jump[4 * 32 + c] = 6; }
   }
   inkCrests(p);
   for (let c = 4; c < 28; c++) assert.equal(p.ink[4 * 32 + c], c < 16 ? INK_SOFT : 0, `column ${c}`);

@@ -56,7 +56,7 @@ test("rivers are at least 15 L* lighter than any vegetation they cross, in every
   let tightest = Infinity;
   everyPalette((pal, o, label) => {
     for (let shadow = 0; shadow < 4; shadow++) {
-      // The flow tones and the foam; a 1 px stream (tones 8–14) is a dark line and has its own test.
+      // The flow tones and the foam; a 1 px stream (tones 8–13) is a dark line and has its own test.
       let river = Infinity;
       for (let tone = 0; tone < 16; tone++) {
         if (tone < STREAM_TONE || tone >= STREAM_TONE + STREAM_TONES) river = Math.min(river, lstar(at(pal, M.river, tone, shadow)));
@@ -92,9 +92,9 @@ test("a stream is a dark line of water: under the river, never near white, light
   const pal = buildPalette(NOON);
   const dark = lch(at(pal, M.river, STREAM_TONE)), light = lch(at(pal, M.river, STREAM_TONE + STREAM_TONES - 1));
   assert.ok(dark[0] > 0.4 && light[0] < 0.76 && light[0] - dark[0] > 0.15, `stream runs ${dark[0]} to ${light[0]}`);
-  // Under the flat tone of every open ground a stream crosses when both are in the same light: tone 8 + k is drawn on ground of about tone 2k + 3.
+  // Under the flat tone of every open ground a stream crosses when both are in the same light: tone 8 + k is drawn on ground of about tone 2.4k + 3.
   for (const mat of [M.meadowMid, M.pastureMid, M.moorMid, M.alpineMid, M.scree]) {
-    assert.ok(lch(at(pal, M.river, STREAM_TONE + 3))[0] < lch(at(pal, mat, FLAT_TONE))[0] - 0.05, `stream on ${MATERIAL_NAMES[mat]}`);
+    assert.ok(lch(at(pal, M.river, STREAM_TONE + 2))[0] < lch(at(pal, mat, FLAT_TONE))[0] - 0.05, `stream on ${MATERIAL_NAMES[mat]}`);
   }
 });
 

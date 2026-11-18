@@ -24,9 +24,9 @@ export const RIVER_GUARD_TONE = FLAT_TONE - 3;
 export const RIVER_MARGIN = 15;
 /** The first and the last of the river's tones that belong to 1 px streams, and the lightness they run between. */
 export const STREAM_TONE = 8;
-export const STREAM_TONES = 7;
+export const STREAM_TONES = 6;
 export const STREAM_DARK = 0.49;
-export const STREAM_LIGHT = 0.73;
+export const STREAM_LIGHT = 0.723;
 
 /** Share of ink mixed in for each value of the ink bits: none, soft, full, solid. */
 export const INK_MIX: readonly number[] = [0, 0.5, 0.85, 1];
@@ -154,6 +154,8 @@ interface Spec {
   coolHue?: number;
   /** Chroma of the yellow added in light; 0.034 when absent. Rock warms to buff where lit. */
   warm?: number;
+  /** 0–1: how thin the wash runs in full light, where the cream of the paper shows through it; 0 when absent. */
+  thin?: number;
   /** "land" ramps run shade → light; "depth" ramps run shore → deep; "flow" ramps cycle. */
   ramp: "land" | "depth" | "flow";
   /** Depth ramps: mid and deep anchors, as offsets applied to the season colour. */
@@ -181,11 +183,12 @@ function evergreen(c: Lch): Seasons {
 }
 
 // Vegetation shades toward teal and lights toward gold; stone and snow shade toward violet.
-const LAND = { drop: 0.5, rise: 0.58, cool: 0.055, coolHue: 238, warm: 0.046, ramp: "land" } as const;
+// In full light their wash runs thin and the paper's cream shows through: a lit slope is pale, never a yellow-green.
+const LAND = { drop: 0.5, rise: 0.58, cool: 0.046, coolHue: 240, warm: 0.03, thin: 0.5, ramp: "land" } as const;
 // Upland turf, heather and moor: a deeper, bluer shade and a light that stays a colour, so a lit crest is gold-green
 // and not a mint rim, and lit and shaded faces part in value.
-const UPLAND = { drop: 0.55, rise: 0.42, cool: 0.06, coolHue: 246, warm: 0.064, ramp: "land" } as const;
-const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, ramp: "land" } as const;
+const UPLAND = { drop: 0.55, rise: 0.5, cool: 0.04, coolHue: 252, warm: 0.03, thin: 0.6, ramp: "land" } as const;
+const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, thin: 0.15, ramp: "land" } as const;
 const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, coolHue: 278, warm: 0.075, ramp: "land" } as const;
 const TALUS = { drop: 0.26, rise: 0.6, cool: 0.012, coolHue: 278, warm: 0.06, ramp: "land" } as const;
 const PALE = { drop: 0.36, rise: 0.6, cool: 0.085, ramp: "land" } as const;
@@ -475,17 +478,20 @@ function ramp(spec: Spec, season: number): Lab[] {
   }
   if (spec.ramp === "flow") {
     // One soft streak per cycle of the flow phase; the ends meet.
-    // Tones 0–7: the flow phase of a river. Tones 8–14: a 1 px stream, from deep shade to full light. Tone 15: the foam of a fall.
+    // Tones 0–7: the flow phase of a river. Tones 8–13: a 1 px stream, from deep shade to full light. Tone 14: falling water. Tone 15: foam.
     for (let t = 0; t < 8; t++) {
       const wave = Math.cos((t / 8) * 2 * Math.PI);
       out[t] = [base[0] - 0.011 + 0.011 * wave, base[1] * (1.15 - 0.15 * wave), base[2] * (1.15 - 0.15 * wave)];
     }
     // A stream is a line of water darker than the ground it crosses, never a white scratch: its tone follows that ground's shade.
-    for (let t = 8; t < 15; t++) {
-      const k = (t - 8) / 6;
+    for (let t = STREAM_TONE; t < STREAM_TONE + STREAM_TONES; t++) {
+      const k = (t - STREAM_TONE) / (STREAM_TONES - 1);
       out[t] = [STREAM_DARK + (STREAM_LIGHT - STREAM_DARK) * k, base[1] * (1.4 - 0.3 * k), base[2] * (1.4 - 0.3 * k)];
     }
-    out[15] = [0.975, base[1] * 0.22, base[2] * 0.22];
+    // Falling water is a pale teal; its foam is the paper left bare, a cream and never a hard white.
+    out[14] = [0.875, base[1] * 0.8, base[2] * 0.8];
+    const foam = lab(PAPER);
+    out[15] = [0.965, foam[1] * 0.8 + base[1] * 0.1, foam[2] * 0.8 + base[2] * 0.1];
     return out;
   }
   const blue = lab([1, 1, spec.coolHue ?? 265]);
@@ -494,10 +500,13 @@ function ramp(spec: Spec, season: number): Lab[] {
     base[1] * 0.9 + spec.cool * blue[1],
     base[2] * 0.9 + spec.cool * blue[2],
   ];
+  // A thin wash: the colour gives way to the paper's own cream.
+  const thin = spec.thin ?? 0;
+  const cream = lab(PAPER);
   const light: Lab = [
     Math.min(0.99, base[0] + (1 - base[0]) * spec.rise + 0.02),
-    base[1] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[1],
-    base[2] * 0.9 + (spec.warm ?? 0.034) * LIGHT_YELLOW[2],
+    base[1] * 0.9 * (1 - thin) + thin * cream[1] + (spec.warm ?? 0.034) * LIGHT_YELLOW[1],
+    base[2] * 0.9 * (1 - thin) + thin * cream[2] + (spec.warm ?? 0.034) * LIGHT_YELLOW[2],
   ];
   // The gold of the light never pushes a strong green to a game green.
   const lc = Math.sqrt(light[1] * light[1] + light[2] * light[2]);
@@ -549,12 +558,16 @@ export function buildPalette(o: PaletteOptions): Palette {
     }
     // One lift for the whole flow ramp, so the streak keeps its shape. Streams are left as they are: they are dark lines.
     const river = tones[M.river][depth];
-    const flows = (t: number): boolean => t < STREAM_TONE || t >= STREAM_TONE + STREAM_TONES;
+    const flows = (t: number): boolean => t < STREAM_TONE;
     for (let i = 0; i < 120; i++) {
       let lowest = Infinity;
       for (let t = 0; t < 16; t++) if (flows(t)) lowest = Math.min(lowest, lstar(pack(river[t])));
       if (lowest >= vegMax + RIVER_MARGIN + 0.5) break;
       for (let t = 0; t < 16; t++) if (flows(t)) river[t][0] = Math.min(1, river[t][0] + 0.004);
+    }
+    // A fall's water and its foam are pale already: each is lifted only as far as it needs, or by day it would be a hard white.
+    for (let t = STREAM_TONE + STREAM_TONES; t < 16; t++) {
+      for (let i = 0; i < 120 && lstar(pack(river[t])) < vegMax + RIVER_MARGIN + 0.5; i++) river[t][0] = Math.min(1, river[t][0] + 0.004);
     }
   }
 

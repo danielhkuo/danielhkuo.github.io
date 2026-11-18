@@ -3,7 +3,7 @@
 
 import { cover } from "../cover.ts";
 import type { Palette } from "../look/contract.ts";
-import { isCanopy, isCrop, isLine, isWater, MATERIAL as M } from "../look/materials.ts";
+import { isBuilt, isCanopy, isCrop, isLine, isWater, MATERIAL as M } from "../look/materials.ts";
 import { scatterAt } from "../scatter.ts";
 import type { Look } from "./cells.ts";
 
@@ -65,5 +65,6 @@ export function worldLook(n: number, palette: Palette): Look {
     isRock: rockFlags(),
     apron: M.shingle,
     apronRock: M.boulder,
+    isBuilt,
   };
 }
