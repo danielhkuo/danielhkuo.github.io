@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { ViewRect } from "../render/compose.ts";
 import { drawStack, drawStackShadow, STACK_SHADOW_SLOPE, type Stack } from "./stack.ts";
 
-const W = 400, H = 225, N = 1280, GREY = 0xff808080, RED = 0xff0000ff, BLUE = 0xffff0000, WHITE = 0xffffffff;
+const W = 400, H = 225, N = 1280, GREY = 0xff808080, RED = 0xff0000ff, BLUE = 0xffff0000;
 const rect = (x = 0, y = 0): ViewRect => ({ x, y, w: W, h: H });
 const frame = () => new Uint32Array(W * H).fill(GREY);
 /** Flat sea-level land: the land drawn at a pixel lies at its bake row over 0.8. */

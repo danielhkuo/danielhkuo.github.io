@@ -121,8 +121,19 @@ From the first-flight review:
 - Small code cleanups: the worker message types are defined twice; the codec branches on the same node kinds in
   three places.
 
+## Decisions waiting (2026-11-18 morning)
+
+- **The dragon.** Studies A (river-dragon, refined), A-ivory, B (winged) and C (storybook wyrm) fly behind
+  `/world?dragon=…`; options and the build that follows are in `specs/2026-11-18-dragon-options.md`. Both reviewers
+  pick A.
+- **Merge `world/perf`?** The water layer reuses its shore-distance work between frames: 5.0 → 4.4 ms p95 at 4× throttle,
+  output within 0.3 % of pixels of a fresh redraw while flying.
+- **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
+- **Title menu wording** (rose-window look kept).
+
 ## Open checks
 
 - Owner: open `/world` in Safari (Chrome is measured; Safari is not).
+- `npm run a11y` points at `scripts/run-axe.mjs`, which was never committed: restore or remove the script.
 - Housekeeping: about twenty old agent worktrees under `.claude/worktrees/` and their branches can be removed (every
   `fable-*` branch is merged).
