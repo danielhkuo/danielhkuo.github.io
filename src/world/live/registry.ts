@@ -2,6 +2,7 @@
 
 import type { Manifest } from "../pack/manifest.ts";
 import type { LiveLayer } from "./live.ts";
+import { waterLayer } from "./water.ts";
 
 export interface LayerContext {
   seed: number;
@@ -11,6 +12,5 @@ export interface LayerContext {
 
 /** Every live layer, in drawing order. Add new layers here; the page and `npm run world:live` both use this list. */
 export function makeLayers(ctx: LayerContext): LiveLayer[] {
-  void ctx;
-  return [];
+  return [waterLayer(ctx.seed)];
 }
