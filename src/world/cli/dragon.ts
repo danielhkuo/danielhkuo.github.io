@@ -8,6 +8,8 @@
 //   <id>-close.png     three headings at 6×
 //   frames.png         the whole frames side by side
 //   a-motion.png       the river-dragon turning and undulating, twelve moments
+//   a-head.png         the river-dragon's head in eight headings, at 4× and at 1×
+//   a-turn.png         the river-dragon held in a right turn and in a left, at 4×
 //   b-beat.png, c-beat.png   the wingbeat
 //   sheet.png          everything on one contact sheet
 
@@ -272,6 +274,44 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
     written.push(save(dir, "a-motion.png", motion));
     bands.push(motion);
+  }
+
+  // The river-dragon's face: its head in eight headings at 4×, and the same crops at 1×.
+  if (ids.includes("a")) {
+    const FW = 48, FH = 40;
+    const head = sheet(8 * (FW * 4 + GAP) - GAP, LINE + FH * 4 + GAP + FH);
+    label(head, 0, 2, `A: THE HEAD AT 4× AND AT 1×  ${HEADINGS.join(" ")}`);
+    for (let h = 0; h < 8; h++) {
+      const { dragon, s } = posed(st, "a", forest.x, forest.y, (h * Math.PI) / 4, 1 + h * 0.37);
+      const f = frameOf(st, dragon, s, s.x, s.y, 1 + h * 0.37, false);
+      blit(head, h * (FW * 4 + GAP), LINE, f, FW, FH, 4);
+      blit(head, h * (FW * 4 + GAP), LINE + FH * 4 + GAP, f, FW, FH, 1);
+    }
+    written.push(save(dir, "a-head.png", head));
+    bands.push(head);
+
+    // Banking: held in a right turn (top row) and in a left (bottom row), through the real flight model.
+    const TW = 116, TH = 96, SHOTS = 4;
+    const turns = sheet(SHOTS * (TW * 4 + GAP) - GAP, LINE + 2 * (TH * 4 + GAP));
+    label(turns, 0, 2, "A BANKING AT 4×: HELD RIGHT (TOP) AND HELD LEFT (BOTTOM), EVERY 0.7 S");
+    ([1, -1] as const).forEach((turn, row) => {
+      const dragon = createDragon("a", st.n);
+      let s = startState(manifest.start, view);
+      for (let k = 0; k < 150; k++) {
+        s = stepFlight(s, { turn: 0, boost: false, brake: false }, DT, view, st.n);
+        dragon.step(s, DT);
+      }
+      for (let k = 1, shot = 0; shot < SHOTS; k++) {
+        s = stepFlight(s, { turn, boost: false, brake: false }, DT, view, st.n);
+        dragon.step(s, DT);
+        if (k % 42 !== 0) continue;
+        const cx = s.x - Math.cos(s.heading) * 24, cy = s.y - Math.sin(s.heading) * 24;
+        blit(turns, shot * (TW * 4 + GAP), LINE + row * (TH * 4 + GAP), frameOf(st, dragon, s, cx, cy, k * DT, false), TW, TH, 4);
+        shot++;
+      }
+    });
+    written.push(save(dir, "a-turn.png", turns));
+    bands.push(turns);
   }
 
   // The wingbeats of B and C.

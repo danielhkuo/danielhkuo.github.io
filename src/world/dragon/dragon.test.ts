@@ -4,15 +4,17 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ViewRect } from "../render/compose.ts";
-import { CRUISE, type FlightState } from "../runtime/flight.ts";
+import { CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
 import { createDragon, dragonFrom, DRAGON_IDS, type DragonId } from "./index.ts";
 import type { Land } from "./parts.ts";
+import { LACQUER } from "./look.ts";
 import { RIVER_REACH } from "./river.ts";
+import { RIVER2_REACH } from "./river2.ts";
 import { WINGED_REACH } from "./winged.ts";
 import { WYRM_REACH } from "./wyrm.ts";
 
 const W = 400, H = 225, N = 1280, GREY = 0xff808080, SHADE = 0xff535353;
-const REACH: Record<DragonId, number> = { a: RIVER_REACH, "a-ivory": RIVER_REACH, b: WINGED_REACH, c: WYRM_REACH };
+const REACH: Record<DragonId, number> = { a: RIVER2_REACH, "a-ivory": RIVER_REACH, b: WINGED_REACH, c: WYRM_REACH };
 /** Length along the heading, pixels: least and most. */
 const LENGTH: Record<DragonId, [number, number]> = { a: [60, 90], "a-ivory": [60, 90], b: [30, 50], c: [20, 34] };
 
@@ -21,9 +23,9 @@ const rect: ViewRect = { x: 500 - 200, y: Math.floor(0.8 * 500 - 30) - 112, w: W
 const flat: Land = { depthAt: (_px, py) => (rect.y + py) / 0.8, groundHeight: () => 0 };
 
 /** The study after flying straight along `heading` for 240 frames, drawn over `land`; `turn` bends the path. */
-function flown(id: DragonId, heading: number, land: Land, turn = 0): Uint32Array {
+function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0): Uint32Array {
   const dragon = createDragon(id, N);
-  let s: FlightState = { x: 0, y: 0, heading, speed: CRUISE, alt: 30, bank: 0 };
+  let s: FlightState = { x: 0, y: 0, heading, speed: CRUISE, alt: 30, bank };
   for (let k = 240; k >= 0; k--) {
     const h = heading - turn * k;
     s = { ...s, heading: h, x: 500 - Math.cos(heading) * k + turn * k * k * 0.3, y: 500 - Math.sin(heading) * k };
@@ -148,4 +150,53 @@ test("each study draws in under 0.3 ms a frame", () => {
     console.log(`dragon ${id}: ${best.toFixed(3)} ms a frame`);
     assert.ok(best < 0.3, `${id}: ${best.toFixed(3)} ms`);
   }
+});
+
+test("A has a face from every heading: bright eyes with ink beside them", () => {
+  for (let h = 0; h < 16; h++) {
+    const out = flown("a", (h * Math.PI) / 8, flat);
+    let eyes = 0;
+    // The crown is two rows above the flier's own row.
+    for (let y = 104; y <= 116; y++) for (let x = 194; x <= 206; x++) {
+      if (out[y * W + x] !== LACQUER.tip || Math.hypot(x - 200, y - 110) > 4.5) continue;
+      const i = y * W + x;
+      if (out[i - 1] === LACQUER.ink || out[i + 1] === LACQUER.ink || out[i - W] === LACQUER.ink || out[i + W] === LACQUER.ink) eyes++;
+    }
+    assert.ok(eyes >= 2, `heading ${h}: ${eyes} eye pixels`);
+  }
+});
+
+test("A rolls into its turns: the gold belly shows on the outside", () => {
+  // A full-bank turn at cruising speed, ending heading east at the middle of the frame. A right turn's outside is
+  // then the north, so the belly's gold lies up the frame from the body's middle; for a left turn, down it.
+  const side = (bank: number): number => {
+    const dragon = createDragon("a", N), rate = (bank * TURN) / 60, path: [number, number, number][] = [];
+    let x = 0, y = 0;
+    for (let k = 0; k <= 240; k++) {
+      const heading = rate * (k - 240);
+      x += Math.cos(heading);
+      y += Math.sin(heading);
+      path.push([x, y, heading]);
+    }
+    let s: FlightState = { x: 0, y: 0, heading: 0, speed: CRUISE, alt: 30, bank };
+    for (const [px, py, heading] of path) {
+      s = { ...s, x: 500 + px - x, y: 500 + py - y, heading };
+      dragon.step(s, 1 / 60);
+    }
+    const out = new Uint32Array(W * H).fill(GREY);
+    dragon.draw(out, rect, s, flat);
+    // Along the body behind the mane and ahead of the fin: gold above the column's middle, less gold below it.
+    let above = 0;
+    for (let px = 135; px < 180; px++) {
+      let top = H, bottom = -1;
+      for (let py = 0; py < H; py++) if (isBody(out[py * W + px])) {
+        if (py < top) top = py;
+        bottom = py;
+      }
+      for (let py = top; py <= bottom; py++) if (out[py * W + px] === LACQUER.belly) above += py * 2 < top + bottom ? 1 : -1;
+    }
+    return above;
+  };
+  const right = side(1), left = side(-1);
+  assert.ok(right > 10 && left < -10, `right ${right}, left ${left}`);
 });
