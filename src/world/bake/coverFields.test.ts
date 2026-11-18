@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CLIFF_FULL, COVER_FIELDS_MARGIN, coverFields, FAN_REACH } from "./coverFields.ts";
+import { CLIFF_FEED, CLIFF_FULL, COVER_FIELDS_MARGIN, coverFields, FAN_REACH } from "./coverFields.ts";
 
 /** Ground heights of a W × H window from a height function of world cells; the window starts at (ox, oy). */
 function window(W: number, H: number, ox: number, oy: number, height: (x: number, y: number) => number): Float32Array {
@@ -119,8 +119,8 @@ test("steep is the slope of the form: a plane reads its own slope, a gullied fac
 
 test("a gully's wall on a moderate slope is no cliff: it feeds no scree", () => {
   const W = 90, H = 90;
-  // Slope 0.8 with a deep notch: the notch's walls are far steeper than CLIFF_FEED, the form is not.
-  const f = coverFields(window(W, H, 0, 0, (x, y) => 200 - 0.8 * y - (Math.abs(x - 45) < 2 ? 5 : 0)), W, H, M, M, W - 2 * M, H - 2 * M);
+  // Slope 0.65 with a deep notch: the notch's walls are far steeper than CLIFF_FEED, the form is not.
+  const f = coverFields(window(W, H, 0, 0, (x, y) => 200 - 0.65 * y - (Math.abs(x - 45) < 2 ? 5 : 0)), W, H, M, M, W - 2 * M, H - 2 * M);
   for (const v of f.cliffAbove) assert.equal(v, 0);
 });
 
@@ -130,7 +130,7 @@ test("sea cells neither feed nor hold scree, and a window without margin is refu
   const f = coverFields(g, W, H, M, M, W - 2 * M, H - 2 * M);
   for (let y = 51; y < H; y++) for (let x = 0; x < W; x++) assert.equal(f.cliffAbove[y * W + x], 0);
   assert.throws(() => coverFields(g, W, H, 2, 2, W - 4, H - 4));
-  assert.ok(CLIFF_FULL > 1.3);
+  assert.ok(CLIFF_FULL > CLIFF_FEED);
 });
 
 test("a whole tile of cliffs stays cheap", () => {

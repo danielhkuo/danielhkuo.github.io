@@ -62,6 +62,14 @@ const HEDGE_SEED = 0x4ed6e;
 const UPLAND_LONE = 0.45;
 /** Sparse scatter outside a clump is this share of its peak density. */
 const CLUMP_FLOOR = 0.03;
+/** Lone trees stand in spinneys some SPINNEY_CELLS apart; in one they are this many times their mean density, crown to crown. */
+const SPINNEY_CELLS = 30;
+const SPINNEY_PEAK = 9;
+/** Between spinneys the home lowland keeps the odd field tree: this share of the mean. */
+const SPINNEY_FLOOR = 0.12;
+/** Karst bushes grow in thickets, solid at the heart, some THICKET_CELLS apart, and not at all between. */
+const THICKET_CELLS = 22;
+const THICKET_PEAK = 6.5;
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -134,6 +142,19 @@ function clump(x: number, y: number, n: number, salt: number, floor: number = CL
   return floor + (1 - floor) * t * t * (3 - 2 * t);
 }
 
+/**
+ * How many times its mean density a sparse tree or bush stands at here.
+ * Evenly spaced dots on open grass read as an orchard, or as savanna: the
+ * trees of pasture are gathered into spinneys of a few crowns touching, and
+ * the bushes of dry ground into thickets, with open sward between.
+ */
+function gathered(x: number, y: number, n: number, cells: number, from: number, peak: number, floor: number, salt: number): number {
+  const p = Math.max(1, Math.round(n / cells));
+  const g = gradNoise(((x + 0.5) * p) / n + salt, ((y + 0.5) * p) / n + 0.5 * salt, p, CLUMP_SEED + 1);
+  const t = clamp01((g - from) * 7);
+  return floor + (peak - floor) * t * t * (3 - 2 * t);
+}
+
 function farmed(c: CoverInput, groundMat: number): boolean {
   if (isCrop[groundMat] === 1 || groundMat === M.hedge) return true;
   return c.region[0] > 0.5 && (inTriple(groundMat, M.meadowCool) || inTriple(groundMat, M.pastureCool));
@@ -188,8 +209,16 @@ export function scatterAt(
     return { x: cx, y: cy, r, h, mat: tree ? M.broadleafMid : M.hedgeCrown, shape: 0 };
   }
 
-  const density = treeDensity(c, groundMat);
-  if (treeRoll < density && (density > SPARSE || treeRoll < density * clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0))) {
+  let density = treeDensity(c, groundMat);
+  // Sparse trees and bushes are gathered: a spinney's or a thicket's cells are dense, the sward between has next to none.
+  if (density > 0 && density <= SPARSE) {
+    density *= groundMat === M.marsh
+      ? clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0)
+      : inTriple(groundMat, M.scrubCool)
+        ? gathered(x, y, n, THICKET_CELLS, 0.14, THICKET_PEAK, 0, 0.41)
+        : gathered(x, y, n, SPINNEY_CELLS, 0.3, SPINNEY_PEAK, c.region[0] > 0.5 ? SPINNEY_FLOOR : 0, 0.17);
+  }
+  if (treeRoll < density) {
     let r: number;
     let h: number;
     let mat: number;

@@ -8,7 +8,7 @@ import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
 import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
 import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
-import { coverFields } from "./coverFields.ts";
+import { COVER_FIELDS_MARGIN, coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
@@ -143,7 +143,7 @@ const COVER_N = TREE_REACH + STAMP_REACH;
 const COVER_S = 1 + STAMP_REACH;
 /** Heights are needed this far out. */
 const PAD_N = SHADOW_REACH + 1;
-const PAD_S = RIVER_SIGHT + COVER_S + 1;
+const PAD_S = Math.max(RIVER_SIGHT + 1, COVER_FIELDS_MARGIN) + COVER_S;
 
 const WEIGHTS: Float64Array = (() => {
   const out = new Float64Array(16);
