@@ -12,6 +12,8 @@ import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { drawFlier } from "../../world/runtime/standin";
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
+import { createSky } from "../../world/sky/sky";
+import { styleFrom } from "../../world/sky/styles";
 
 const fell = IM_Fell_English({ weight: "400", subsets: ["latin"] });
 
@@ -142,6 +144,11 @@ export default function Flight() {
         });
         flight = startState(loaded.manifest.start, view);
         worldN = loaded.data.n;
+        const sky = createSky(
+          loaded.manifest.seed,
+          loaded.data.n,
+          styleFrom(new URLSearchParams(window.location.search).get("clouds")),
+        );
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("2d");
@@ -158,7 +165,9 @@ export default function Flight() {
           view.setCamera(flight.x, flight.y - flight.alt / 0.8);
           view.update(Math.cos(flight.heading) * flight.speed, Math.sin(flight.heading) * flight.speed);
           view.frame(frame, t / 1000);
+          sky.draw(frame, view.rect(), t / 1000, "below");
           drawFlier(frame, view.rect(), flight, view);
+          sky.draw(frame, view.rect(), t / 1000, "above");
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);
 
