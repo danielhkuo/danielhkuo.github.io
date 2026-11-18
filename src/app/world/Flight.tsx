@@ -10,6 +10,7 @@ import { fitScale } from "../../world/runtime/fit";
 import { makeLayers } from "../../world/live/registry";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
+import { createRegionLand } from "../../world/runtime/regionLand";
 import { createDragon } from "../../world/dragon/index";
 import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
@@ -137,13 +138,18 @@ export default function Flight() {
         const mask = new Uint8Array(await maskRes.arrayBuffer());
         if (!alive) return;
 
+        const land = createRegionLand(loaded.core, (rx, ry) => loaded.fetchRegion(rx, ry));
+        // Boats plan on the overview: sea is 0 there, and a route treats anything under 0 as water.
+        const coast = new Float32Array(loaded.core.overview.length);
+        for (let i = 0; i < coast.length; i++) coast[i] = loaded.core.overview[i] === 0 ? -1 : loaded.core.overview[i];
+
         const size = clamp((navigator.hardwareConcurrency ?? 2) - 1, 1, 4);
         pool = createPool(
           () =>
             new Worker(new URL("../../world/runtime/bake.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike,
           size,
           // Workers load from blob: URLs, where a root-relative path does not resolve.
-          { url: new URL(loaded.binUrl, window.location.href).href, mask },
+          { url: new URL(loaded.coreUrl, window.location.href).href, mask },
         );
         pool.onError = (message) => {
           if (probe) probe.workerErrors.push(message);
@@ -153,15 +159,15 @@ export default function Flight() {
         };
 
         const palette = buildPalette(MIDDAY);
-        view = createStreamView(loaded.data, pool, palette, mask, {
+        view = createStreamView(land, pool, palette, mask, {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
           layers: makeLayers({
             seed: loaded.manifest.seed,
-            n: loaded.data.n,
+            n: land.n,
             sites: loaded.manifest.sites,
-            land: loaded.data,
+            land: { gN: land.n / 8, ground: coast },
             discover: (id, label) => {
               discoveries.discover(id, label);
             },
@@ -171,10 +177,10 @@ export default function Flight() {
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
-        worldN = loaded.data.n;
+        worldN = land.n;
         const sky = createSky(
           loaded.manifest.seed,
-          loaded.data.n,
+          land.n,
           styleFrom(new URLSearchParams(window.location.search).get("clouds")),
           loaded.manifest.start,
         );

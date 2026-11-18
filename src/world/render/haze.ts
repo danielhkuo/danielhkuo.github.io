@@ -31,22 +31,17 @@ function fade(c: number): [number, number, number] {
   return [r + (((CREAM[0] - r) * HAZE_FADE) >> 8), g + (((CREAM[1] - g) * HAZE_FADE) >> 8), b + (((CREAM[2] - b) * HAZE_FADE) >> 8)];
 }
 
-/** Returns packed RGBA for bake pixel (bx, by), anywhere on the torus. */
-export function hazeOf(data: FlightData, palette: Palette): (bx: number, by: number) => number {
-  const { n, gN, ground } = data;
-  const per = HAZE_CELLS / (n / gN);
+/**
+ * Packed RGBA for bake pixel (bx, by), from one height sample per HAZE_CELLS cell (row-major, (n / HAZE_CELLS)²).
+ * The north-west sample shades the slope. The flight data's means and the core's overview both feed this.
+ */
+export function hazeFromSamples(samples: ArrayLike<number>, n: number, palette: Palette): (bx: number, by: number) => number {
   const oN = n / HAZE_CELLS;
   const rgb = new Uint8Array(oN * oN * 3);
   for (let oy = 0; oy < oN; oy++) for (let ox = 0; ox < oN; ox++) {
-    // The mean of the G nodes under this pixel, and of the block one pixel north-west.
-    let h = 0, nw = 0;
-    const x0 = ox * per, y0 = oy * per, xw = ((ox - 1 + oN) % oN) * per, yw = ((oy - 1 + oN) % oN) * per;
-    for (let j = 0; j < per; j++) for (let i = 0; i < per; i++) {
-      h += ground[(y0 + j) * gN + x0 + i];
-      nw += ground[(yw + j) * gN + xw + i];
-    }
-    h /= per * per;
-    nw /= per * per;
+    const xw = (ox - 1 + oN) % oN, yw = (oy - 1 + oN) % oN;
+    const h = samples[oy * oN + ox];
+    const nw = samples[yw * oN + xw];
     const [r, g, b] = fade(wash(palette, h, nw));
     const o = (oy * oN + ox) * 3;
     rgb[o] = r;
@@ -69,4 +64,21 @@ export function hazeOf(data: FlightData, palette: Palette): (bx: number, by: num
     }
     return out >>> 0;
   };
+}
+
+/** Returns packed RGBA for bake pixel (bx, by), anywhere on the torus. */
+export function hazeOf(data: FlightData, palette: Palette): (bx: number, by: number) => number {
+  const { n, gN, ground } = data;
+  const per = HAZE_CELLS / (n / gN);
+  const oN = n / HAZE_CELLS;
+  const samples = new Float64Array(oN * oN);
+  const area = per * per;
+  for (let oy = 0; oy < oN; oy++) for (let ox = 0; ox < oN; ox++) {
+    // The mean of the G nodes under this pixel.
+    let h = 0;
+    const x0 = ox * per, y0 = oy * per;
+    for (let j = 0; j < per; j++) for (let i = 0; i < per; i++) h += ground[(y0 + j) * gN + x0 + i];
+    samples[oy * oN + ox] = h / area;
+  }
+  return hazeFromSamples(samples, n, palette);
 }

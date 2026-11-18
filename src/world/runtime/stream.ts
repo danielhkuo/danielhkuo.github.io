@@ -13,6 +13,7 @@ import { compose, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
 import { runLayers, type Flier, type LiveLayer } from "../live/live.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
+import type { RegionLand } from "./regionLand.ts";
 import type { Site, WorldView } from "./view.ts";
 
 /** Chunks kept by default (8.4 MB). */
@@ -52,8 +53,12 @@ export interface StreamView extends WorldView {
   frame(out: Uint32Array, time?: number, flier?: Flier): void;
 }
 
+function isRegionLand(data: FlightData | RegionLand): data is RegionLand {
+  return "want" in data;
+}
+
 /** n must be a multiple of 320, so the bake wraps on whole chunks both ways. */
-export function createStreamView(data: FlightData, pool: BakePool, palette: Palette, mask: Uint8Array, opts: StreamOptions): StreamView {
+export function createStreamView(data: FlightData | RegionLand, pool: BakePool, palette: Palette, mask: Uint8Array, opts: StreamOptions): StreamView {
   const n = data.n;
   if (n % 320 !== 0) throw new Error("n must be a multiple of 320");
   const width = opts.width, height = opts.height;
@@ -65,7 +70,7 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
   const cache = new Map<string, Uint32Array>();
   let received = 0;
   const rect: ViewRect = { x: -(width >> 1), y: -(height >> 1), w: width, h: height };
-  const haze = hazeOf(data, palette);
+  const haze = isRegionLand(data) ? data.haze(palette) : hazeOf(data, palette);
   const groundSample = new Float32Array(1);
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
   const bakeBuffer = new Uint32Array(width * height);
@@ -141,11 +146,13 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
       return cy * CHUNK_ROWS + (v >>> 16) / 8;
     },
     groundHeight(x, y) {
+      if (isRegionLand(data)) return data.groundHeight(x, y);
       upsampleGround(data.ground, data.gN, Math.floor(x), Math.floor(y), 1, 1, groundSample);
       const e = groundSample[0];
       return e < 0 ? 0 : e;
     },
     occlusionFloor(x, y) {
+      if (isRegionLand(data)) return data.occlusionFloor(x, y);
       const block = data.block;
       if (block === 0) return 0;
       const bN = n / block;
@@ -202,6 +209,15 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
       const around = 2 + lookahead;
       for (let cy = cy0 - 1; cy <= cy1 + 1; cy++) for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) consider(cx, cy, around);
       pool.want(list);
+      if (isRegionLand(data)) {
+        const worldX = rect.x + width / 2;
+        const worldY = (rect.y + height / 2) / 0.8;
+        // The view, the spline past its edge, and where the flier will be within `lookahead` seconds.
+        const reach = Math.hypot(width / 2, (height / 2) / 0.8) + Math.hypot(vx, vy) * lookahead + 16;
+        void data.want(worldX, worldY, reach).catch(() => {
+          // Asked again next update; the haze stands in until the regions arrive.
+        });
+      }
     },
     ready() {
       let ok = true;

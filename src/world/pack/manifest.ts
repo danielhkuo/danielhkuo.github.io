@@ -1,8 +1,7 @@
-// The manifest beside world.bin: what the page reads first.
+// The manifest the page reads first: a format-2 world is a core plus one file per region.
 
 import { torusDelta, wrap } from "../core/torus.ts";
 import type { PlacedSite } from "../gen/sites.ts";
-import type { WorldSection } from "./world.ts";
 
 /** Where the flight begins: a point and the unit vector it heads along. */
 export interface Start {
@@ -12,14 +11,23 @@ export interface Start {
   dy: number;
 }
 
+/** One region file. The manifest lists them row-major (ry, then rx). */
+export interface RegionFile {
+  rx: number;
+  ry: number;
+  bytes: number;
+  sha256: string;
+}
+
 export interface Manifest {
-  format: 1;
+  format: 2;
   worldId: string;
   n: number;
   seed: number;
-  /** Length of world.bin. */
-  bytes: number;
-  sections: WorldSection[];
+  /** Cells a side of one region. */
+  regionCells: number;
+  core: { bytes: number; sha256: string };
+  regions: RegionFile[];
   /** Cells per occlusion block. */
   block: number;
   sites: { id: string; type: string; x: number; y: number }[];
