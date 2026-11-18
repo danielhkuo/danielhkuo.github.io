@@ -70,6 +70,9 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
   const bakeBuffer = new Uint32Array(width * height);
   const disabled = new Set<string>();
+  /** depthAt's last chunk found (unwrapped coordinates). */
+  let depthCx = NaN, depthCy = NaN;
+  let depthHit: Uint32Array | null = null;
 
   const keyOf = (cx: number, cy: number): string => `${wrap(cx, periodX)},${wrap(cy, periodY)}`;
 
@@ -121,7 +124,18 @@ export function createStreamView(data: FlightData, pool: BakePool, palette: Pale
     depthAt(px, py) {
       const bx = rect.x + Math.floor(px), by = rect.y + Math.floor(py);
       const cx = Math.floor(bx / CHUNK), cy = Math.floor(by / CHUNK);
-      const hit = read(cx, cy);
+      // Sprites ask for thousands of pixels a frame, mostly in one chunk. Reuse the last chunk found rather than build a
+      // key and reorder the cache each time. A baked chunk never changes, so the memo stays right even once evicted.
+      let hit: Uint32Array | null;
+      if (cx === depthCx && cy === depthCy) hit = depthHit;
+      else {
+        hit = read(cx, cy);
+        if (hit) {
+          depthCx = cx;
+          depthCy = cy;
+          depthHit = hit;
+        }
+      }
       if (!hit) return by / 0.8;
       const v = hit[(by - cy * CHUNK) * CHUNK + (bx - cx * CHUNK)];
       return cy * CHUNK_ROWS + (v >>> 16) / 8;
