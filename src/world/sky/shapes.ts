@@ -3,8 +3,9 @@
 // into a sprite; the field places it.
 //
 // A cumulus has an outline of swells, one tall and one or two lesser, over a low
-// shelf. Body lobes are packed under it in columns, from a level rank along the
-// base up to the crest; the lobes at the crest bud smaller billows, and those bud
+// shelf. It is built largest first: each swell is one great lobe with a lesser
+// one leaning on it; lobes sized to the gaps fill the rest of the outline down to
+// the shelf; then each form buds billows on its sunward crown, and those bud
 // bumps; flattened lobes skirt the base. The frontmost surface wins each pixel, so
 // the edge is crisp: a pixel is cloud or it is not.
 //
@@ -92,21 +93,29 @@ function lobeAt(x: number, d: number, z: number, r: number, flat = 1): Lobe {
 const range = (rng: Rng, lo: number, hi: number): number => lo + rng.float() * (hi - lo);
 const intIn = (rng: Rng, lo: number, hi: number): number => lo + rng.int(hi - lo + 1);
 
+/** Where on a parent's outline buds sit, in half-turns: 0 its right shoulder, 0.5 its top, 1 its left. */
+const CROWN: readonly [number, number] = [0.08, 1.02];
+const FACE: readonly [number, number] = [0.3, 0.95];
+const LEE: readonly [number, number] = [-0.3, 0.12];
+
 /**
- * Buds `count` smaller lobes on the sunward and upper faces of `parent`: spread round its outline from just under the
- * right shoulder, over the top, to under the left, each pushed out toward the viewer by a random share.
+ * Buds `count` smaller lobes on `parent`: spread along `arc` of its outline, each pushed out toward the viewer by a
+ * share drawn from `toward`.
  */
-function bud(rng: Rng, parent: Lobe, count: number, size: readonly [number, number], reach: readonly [number, number]): Lobe[] {
+function bud(
+  rng: Rng, parent: Lobe, count: number, size: readonly [number, number], reach: readonly [number, number],
+  arc: readonly [number, number], toward: readonly [number, number],
+): Lobe[] {
   const out: Lobe[] = [];
   for (let i = 0; i < count; i++) {
-    const a = Math.PI * (-0.12 + 1.24 * ((i + range(rng, 0.15, 0.85)) / count));
-    const toward = range(rng, -0.1, 0.75);
-    const flatPart = Math.sqrt(1 - toward * toward);
+    const a = Math.PI * (arc[0] + (arc[1] - arc[0]) * ((i + range(rng, 0.15, 0.85)) / count));
+    const near = range(rng, toward[0], toward[1]);
+    const flatPart = Math.sqrt(1 - near * near);
     const rho = parent.r * range(rng, reach[0], reach[1]);
     out.push({
       x: parent.x + Math.cos(a) * flatPart * rho,
       y: parent.y - Math.sin(a) * flatPart * rho * parent.flat,
-      f: parent.f + toward * rho * parent.flat,
+      f: parent.f + near * rho * parent.flat,
       r: parent.r * range(rng, size[0], size[1]),
       flat: 1,
     });
@@ -129,7 +138,7 @@ interface CumulusPlan {
   humps: readonly Hump[];
   /** Height of the low shelf that runs the whole width, under the swells. */
   shelf: number;
-  /** Spacing of the body's lobes, pixels: the size of a billow. */
+  /** The size of the least billow, pixels: gaps under the outline smaller than this are left to the crowns. */
   grain: number;
 }
 
@@ -145,50 +154,94 @@ function crest(plan: CumulusPlan, x: number): number {
 }
 
 /**
- * The lobes of one cumulus on its base (height 0), its footprint running from x = 0 to `width`. Body lobes are packed
- * under the outline in columns, base to crest, so the cloud is solid; those at the top bud smaller billows, so the
- * outline is a cauliflower's; a few flattened lobes skirt the front of the base.
+ * The lobes of one cumulus on its base (height 0), its footprint running from x = 0 to `width`. Largest first: each
+ * swell is one great lobe with a lesser one leaning on it; then whatever of the outline still stands empty is filled,
+ * the widest gap first, with lobes sized to the gap, so the forms run from the body down through shoulders to the
+ * shelf. Only then do the crowns bud: billows on each form's sunward top, bumps on those, a few on the great faces.
  */
 function cumulus(rng: Rng, plan: CumulusPlan): Lobe[] {
   const { width, grain } = plan;
   const lobes: Lobe[] = [];
-  const tops: Lobe[] = [];
-  const under: Lobe[] = [];
-  const tallest = plan.humps[0].h;
+  const forms: Lobe[] = [];
   const halfAt = (x: number): number => 0.5 * plan.depth * width * Math.sqrt(Math.max(0, 1 - Math.pow((2 * x) / width - 1, 2)));
-  const cols = Math.max(2, Math.round(width / grain));
-  for (let i = 0; i < cols; i++) {
-    const x = width * ((i + range(rng, 0.2, 0.8)) / cols);
-    const top = crest(plan, x) * range(rng, 0.9, 1.05);
-    if (top < 4) continue;
-    let z = grain * range(rng, 0.3, 0.5);
-    for (let level = 0; level < 12; level++) {
-      const room = top - z;
-      const r = Math.max(2.5, Math.min(grain * range(rng, 0.74, 1.22), room + 0.2 * grain));
-      // The lowest lobes stand in a rank along the front of the footprint, so the base runs level; those above
-      // spread north and south, less the higher they are, and the crest stands over the middle.
-      const d = halfAt(x) * (level === 0 ? range(rng, 0.4, 0.62) : 0.7 * range(rng, -1, 0.7) * (1 - 0.7 * (z / tallest)));
-      const lobe = lobeAt(x + range(rng, -0.25, 0.25) * grain, d, Math.max(z, 0.45 * r), r);
-      lobes.push(lobe);
-      if (room < 1.1 * grain) {
-        tops.push(lobe);
-        break;
-      }
-      under.push(lobe);
-      z += grain * range(rng, 0.7, 0.95);
+  // How high what has been placed stands at each column, in screen rows over the base's middle.
+  const cols = Math.ceil(width) + 1;
+  const have = new Float32Array(cols);
+  /**
+   * A form whose top stands `top` rows high at `x`, as near `d` cells south as lets it end behind the front of the
+   * base: a great lobe is deeper than the footprint, and one that came forward of it would hang below the level base.
+   */
+  const place = (x: number, top: number, r: number, flat: number, d: number): Lobe => {
+    const rho = r * flat, front = 0.7 * halfAt(x);
+    let z = 0;
+    for (; ; d -= 2) {
+      z = Math.max(top + 0.8 * d - rho, 0.35 * rho);
+      if (z >= rho || d + Math.sqrt(rho * rho - z * z) <= front || z <= 0.35 * rho) break;
+    }
+    const lobe = lobeAt(x, d, z, r, flat);
+    for (let px = Math.max(0, Math.ceil(x - r)); px <= Math.min(cols - 1, Math.floor(x + r)); px++) {
+      const t = z - 0.8 * d + flat * Math.sqrt(r * r - (px - x) * (px - x));
+      if (t > have[px]) have[px] = t;
+    }
+    lobes.push(lobe);
+    forms.push(lobe);
+    return lobe;
+  };
+
+  // The bodies: to each swell one great lobe, wider than tall, and lesser ones leaning on its shoulders, each
+  // smaller than the last.
+  for (let k = 0; k < plan.humps.length; k++) {
+    const m = plan.humps[k];
+    const flat = range(rng, 0.84, 0.98);
+    const r = Math.min((m.h * range(rng, 0.42, 0.5)) / flat, 0.95 * m.s);
+    place(m.x, m.h, r, flat, halfAt(m.x) * range(rng, -0.15, 0.15));
+    if (r < 9) continue;
+    // Toward the middle of the cloud for a side swell, so it joins the body; both ways for the main one.
+    let side = k === 0 ? (rng.float() < 0.5 ? -1 : 1) : m.x < plan.humps[0].x ? 1 : -1;
+    let share = range(rng, 0.68, 0.84);
+    for (let j = 0; j < (k === 0 ? 3 : 1); j++) {
+      const x = m.x + side * r * range(rng, 0.6, 0.95);
+      place(x, Math.min(0.9 * m.h, crest(plan, x) * range(rng, 0.86, 1)), r * share, range(rng, 0.82, 1), halfAt(x) * range(rng, 0, 0.5));
+      side = -side;
+      share *= range(rng, 0.7, 0.84);
     }
   }
-  // Billows on the faces of the bigger lobes below the crest, toward the viewer, so no face is one smooth ball.
-  for (const b of under) {
-    if (b.r < 11) continue;
-    for (const c of bud(rng, b, 2, [0.4, 0.62], [0.55, 0.8])) lobes.push({ ...c, f: Math.max(c.f, b.f + 0.45 * b.r) });
+  // The rest of the outline: the column that lacks most gets a lobe sized to what it lacks.
+  for (let n = 0; n < 48; n++) {
+    let at = -1, lack = Math.max(3, 0.55 * grain);
+    for (let px = 0; px < cols; px++) {
+      const l = crest(plan, px) - have[px];
+      if (l > lack) { lack = l; at = px; }
+    }
+    if (at < 0) break;
+    const c = crest(plan, at);
+    const r = Math.max(2.5, Math.min(0.45 * c, Math.max(0.85 * lack, 0.5 * grain)) * range(rng, 0.8, 1.15));
+    place(at + range(rng, -1, 1), c * range(rng, 0.94, 1.04), r, range(rng, 0.86, 1), halfAt(at) * range(rng, -0.3, 0.3));
   }
-  for (const b of tops) {
-    if (b.r < 5) continue;
-    for (const c of bud(rng, b, b.r > 14 ? intIn(rng, 3, 5) : intIn(rng, 2, 3), [0.38, 0.62], [0.7, 0.95])) {
+  // The crowns: billows on each form's sunward top, a size or two down from it, and bumps on those.
+  for (const b of forms) {
+    if (b.r < 4.5) continue;
+    const great = b.r >= 16;
+    const count = great ? Math.round(b.r / 9) + intIn(rng, 3, 4) : b.r >= 9 ? intIn(rng, 3, 4) : 2;
+    for (const c of bud(rng, b, count, great ? [0.22, 0.55] : [0.3, 0.58], [0.82, 1], CROWN, [-0.1, 0.6])) {
       lobes.push(c);
-      if (c.r >= 7) for (const g of bud(rng, c, 2, [0.4, 0.6], [0.7, 0.95])) lobes.push(g);
+      if (c.r >= 5) for (const g of bud(rng, c, intIn(rng, 2, 3), [0.32, 0.6], [0.75, 0.98], CROWN, [-0.1, 0.6])) lobes.push(g);
     }
+    if (!great) continue;
+    // A great face is not one smooth ball: billows swell out of its sunlit side, and a few lesser ones out of
+    // the shoulder turned from the sun.
+    for (const c of bud(rng, b, intIn(rng, 3, 5), [0.24, 0.46], [0.74, 0.94], FACE, [0.3, 0.65])) {
+      lobes.push(c);
+      if (c.r >= 6) for (const g of bud(rng, c, 2, [0.35, 0.55], [0.75, 0.95], FACE, [0.2, 0.6])) lobes.push(g);
+    }
+    for (const c of bud(rng, b, intIn(rng, 2, 3), [0.26, 0.44], [0.7, 0.9], LEE, [0.3, 0.7])) lobes.push(c);
+  }
+  // The base: a level rank of flattened lobes along the front of the footprint, under and before the forms.
+  for (let x = 0.04 * width; x < 0.97 * width;) {
+    const r = Math.max(2.5, Math.min(grain * range(rng, 0.55, 1.15), 0.5 * crest(plan, x) + 3));
+    const flat = range(rng, 0.7, 0.85);
+    lobes.push(lobeAt(x + 0.6 * r, halfAt(x + 0.6 * r) * range(rng, 0.4, 0.62), 0.45 * r * flat, r, flat));
+    x += r * range(rng, 1, 1.4);
   }
   // The skirt: low, flattened lobes along the front of the base, so the cloud ends in soft scallops, not in a ruled line.
   const skirt = Math.max(2, Math.round(width / 20));
