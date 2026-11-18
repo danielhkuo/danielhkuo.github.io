@@ -78,6 +78,12 @@ the film's building, name or spirits. A structure is a place, hidden somewhere r
 rarity comes from a moment at that place (a train crossing, a seaplane landing, a dome opening), timed by the clock and
 a seeded roll. Candidates, not yet picked:
 
+**Built, round one (2026-11-18, Fable; design in `specs/2026-11-18-wonders-and-larger-map-design.md`):** the thermal
+baths, the tide railway, the drowned church and the hotel in the cove are baked and sited (`gen/wonders.ts`,
+`gen/wonderworks.ts`), listed in the manifest as `wonders`, and rendered by `npm run world:wonders`. Their moments
+(steam, train, ripples, seaplane) are not built. On seed 3 the hotel's rock stands off a headland 150 cells from its
+cove, not inside one: no sheltered south-facing cove on this land has a rock in it.
+
 - **The thermal baths:** a domed bathhouse stepped down a sea cliff in steaming terraced pools, with its own quay and a
   funicular. Every window lights at dusk; a ferry calls now and then.
 - **The tide railway:** a single track running out across the shallows to a lone halt (lamp, bench, name board) far
