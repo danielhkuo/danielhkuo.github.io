@@ -7,6 +7,7 @@ import { buildPalette, MIDDAY } from "../../world/render/palette";
 import type { FlightInput, FlightState } from "../../world/runtime/flight";
 import { startState, stepFlight } from "../../world/runtime/flight";
 import { fitScale } from "../../world/runtime/fit";
+import { makeLayers } from "../../world/live/registry";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { drawFlier } from "../../world/runtime/standin";
@@ -141,7 +142,7 @@ export default function Flight() {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
-          layers: [],
+          layers: makeLayers({ seed: loaded.manifest.seed, n: loaded.data.n, sites: loaded.manifest.sites }),
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
