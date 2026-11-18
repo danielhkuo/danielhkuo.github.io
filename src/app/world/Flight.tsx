@@ -142,7 +142,13 @@ export default function Flight() {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
-          layers: makeLayers({ seed: loaded.manifest.seed, n: loaded.data.n, sites: loaded.manifest.sites }),
+          layers: makeLayers({
+            seed: loaded.manifest.seed,
+            n: loaded.data.n,
+            sites: loaded.manifest.sites,
+            // ?sights=all shows every rare sight at once, to look them over without waiting for them.
+            forceSights: new URLSearchParams(window.location.search).get("sights") === "all",
+          }),
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
