@@ -2,7 +2,6 @@
 
 import { IM_Fell_English } from "next/font/google";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { buildPalette } from "../../world/render/palette";
 import type { FlightInput, FlightState } from "../../world/runtime/flight";
@@ -32,16 +31,31 @@ function inputFromKeys(keys: Set<string>): FlightInput {
   return { turn, boost, brake };
 }
 
-export default function Flight() {
-  const searchParams = useSearchParams();
-  const showStats = searchParams.has("stats");
+interface FlightProbe {
+  navStart: number;
+  readyAt: number | null;
+  frameMs: number[];
+  hazeFrames: number;
+  frames: number;
+  baked: () => number;
+  error: string | null;
+  workerErrors: string[];
+}
 
+export default function Flight() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1);
   const [failed, setFailed] = useState(false);
-  const [stats, setStats] = useState({ fps: 0, pool: "", view: "" });
+  // Filled from the frame loop when the page is opened with ?stats.
+  const [stats, setStats] = useState<{ fps: number; pool: string; view: string } | null>(null);
 
   useEffect(() => {
+    const stats = new URLSearchParams(window.location.search).has("stats");
+    // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
+    const probe: FlightProbe | null = stats
+      ? { navStart: 0, readyAt: null, frameMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      : null;
+    if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     const recomputeScale = () => {
       setScale(fitScale(window.innerWidth, window.innerHeight, FRAME_W, FRAME_H));
     };
@@ -90,6 +104,7 @@ export default function Flight() {
     let fpsLast = 0;
 
     const fail = () => {
+      if (probe) probe.error = LOAD_FAILED;
       if (alive) setFailed(true);
     };
 
@@ -108,9 +123,11 @@ export default function Flight() {
           () =>
             new Worker(new URL("../../world/runtime/bake.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike,
           size,
-          { url: loaded.binUrl, mask },
+          // Workers load from blob: URLs, where a root-relative path does not resolve.
+          { url: new URL(loaded.binUrl, window.location.href).href, mask },
         );
-        pool.onError = () => {
+        pool.onError = (message) => {
+          if (probe) probe.workerErrors.push(message);
           if (!readyFrame) fail();
         };
 
@@ -130,6 +147,7 @@ export default function Flight() {
 
         const tick = (t: number) => {
           if (!alive || !view || !flight || !pool || !imageData) return;
+          const work = performance.now();
           const dt = lastT ? (t - lastT) / 1000 : 0;
           lastT = t;
 
@@ -141,9 +159,16 @@ export default function Flight() {
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);
 
-          if (view.ready()) readyFrame = true;
+          const ready = view.ready();
+          if (ready) readyFrame = true;
+          if (probe) {
+            probe.frameMs.push(performance.now() - work);
+            probe.frames++;
+            if (!ready) probe.hazeFrames++;
+            else if (probe.readyAt === null) probe.readyAt = performance.now();
+          }
 
-          if (showStats) {
+          if (stats) {
             fpsFrames++;
             if (t - fpsLast >= 500) {
               const ps = pool.stats();
@@ -175,7 +200,7 @@ export default function Flight() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [showStats]);
+  }, []);
 
   if (failed) {
     return (
@@ -229,14 +254,18 @@ export default function Flight() {
           transform: "translateX(-50%)",
           margin: 0,
           fontFamily: fell.style.fontFamily,
-          color: "rgba(46, 42, 36, 0.7)",
+          color: "rgba(46, 42, 36, 0.8)",
           fontSize: "0.95rem",
           pointerEvents: "none",
+          // A strip of paper behind the line, so it reads over the land.
+          background: "rgba(240, 232, 210, 0.82)",
+          padding: "0.15rem 0.7rem",
+          borderRadius: "2px",
         }}
       >
         Arrow keys steer · Up to speed up · Down to slow · Esc to leave
       </p>
-      {showStats ? (
+      {stats ? (
         <div
           style={{
             position: "fixed",
