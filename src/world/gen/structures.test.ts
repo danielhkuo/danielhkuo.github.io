@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isBuilt, isCanopy, isWater, MATERIAL as M, MATERIAL_COUNT } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
-import { bridge, harbourWorks } from "./settle.ts";
+import { bridge, harbourWorks, inBasin } from "./settle.ts";
 import * as S from "./structures.ts";
 
 /** Columns and rows that hold something standing, and the greatest height of tops and marks. */
@@ -87,12 +87,12 @@ test("the churchyard: a yew no wider than 13 and no taller than 18, a chapel wit
   assert.ok(s.marks.some((_, k) => k % 5 === 3 && s.marks[k] === M.gilt));
 });
 
-test("houses: no wider or deeper than 8, no taller than 14; a wall row to the south with a door and windows on it", () => {
+test("houses: no wider than 8 (a merchant's town house 11) or deeper than 8, no taller than 14; a wall row to the south with a door and windows on it", () => {
   for (let seed = 0; seed < 400; seed++) {
     for (const [name, s] of [["town house", S.townHouse(seed * 2654435761 >>> 0)], ["country house", S.countryHouse(seed * 40503, (seed & 1) === 0)], ["cottage", S.cottage(seed)]] as const) {
       wellFormed(s, name);
       const e = extent(s);
-      assert.ok(e.w <= 8 && e.d <= 8 && e.h <= 14, `${name} ${e.w} × ${e.d} × ${e.h}`);
+      assert.ok(e.w <= (name === "town house" ? 11 : 8) && e.d <= 8 && e.h <= 14, `${name} ${e.w} × ${e.d} × ${e.h}`);
       const south = s.h - 1;
       for (let x = 0; x < s.w; x++) {
         const m = s.mat[south * s.w + x];
@@ -208,22 +208,39 @@ test("no two ruins or churchyards are the same: the kind changes the plan, the s
   assert.deepEqual(S.mirrored(m), S.townHouse(77));
 });
 
-test("the harbour: a quay wall, a mole that turns across the basin's mouth with a light on its head, a pier on the river's side", () => {
+test("the harbour: a quay wall round a basin with no square corner, a slipway, a curved mole with a light on its head, a pier on the river's side", () => {
   for (const river of [-1, 1]) {
     const h = harbourWorks(river);
     wellFormed(h, "harbour");
     const at = (x: number, y: number): number => h.top[y * h.w + x];
-    // The quay wall runs the length of the quay, but for the stair.
+    const X = 49, Y = 3;
+    // The quay wall follows the basin's round: stone along the town's front, further south towards either end.
+    const front = (lx: number): number => { for (let y = 0; y < h.h; y++) if (at(X + lx, y) >= 2.4 && inBasin(lx + 0.5, y + 1.5 - Y, river, 0)) return y; return -1; };
     let wall = 0;
-    for (let x = 6; x < 78; x++) if (at(x, 2) >= 2.4) wall++;
-    assert.ok(wall >= 66, `quay wall ${wall}`);
-    // The mole leaves the quay at the end away from the river and comes back across the basin.
-    const far = 42 - river * 34;
-    assert.ok(at(far, 8) > 2, "the mole's first leg");
-    assert.ok(at(42 - river * 10, 24) > 2, "the mole's long arm");
-    assert.equal(at(42, 12), 0, "open water in the basin");
-    assert.equal(at(42 + river * 20, 24), 0, "the mouth is open");
-    assert.ok(at(42 + river * 34, 8) > 2, "the pier");
+    for (let lx = -28; lx <= 28; lx++) if (front(lx) >= 0) wall++;
+    assert.ok(wall >= 50, `quay wall ${wall}`);
+    assert.ok(front(-26) > front(0) + 2 && front(26) > front(0) + 2, "the quay bends round the basin");
+    // The basin has no square corner: its north edge is an arc, never a ruled line the length of the quay.
+    for (let y = 0; y < h.h; y++) {
+      let run = 0;
+      for (let x = 1; x < h.w; x++) {
+        const edge = inBasin(x + 0.5 - X, y + 0.5 - Y, river, 0) && !inBasin(x + 0.5 - X, y - 0.5 - Y, river, 0);
+        run = edge ? run + 1 : 0;
+        assert.ok(run <= 26, `a straight edge of ${run} cells in row ${y}`);
+      }
+    }
+    // The slipway runs down from the quay into the water.
+    const slip = X + river * 13;
+    assert.ok(at(slip, Y + 4) > at(slip, Y + 8) && at(slip, Y + 8) > 0, "the slipway slopes into the basin");
+    // The mole springs from the end away from the river and curves round the basin's south side.
+    assert.ok(at(X - river * 39, Y + 14) > 2, "the mole's root");
+    assert.ok(at(X - river * 20, Y + 30) > 2, "the mole's arm, south of the basin");
+    assert.equal(at(X - river * 6, Y + 12), 0, "open water in the basin");
+    assert.equal(at(X + river * 29, Y + 28), 0, "the mouth is open");
+    assert.ok(at(X + river * 39, Y + 16) > 2, "the pier");
+    // Where the shore already stands, there is no mole.
+    const bare = harbourWorks(river, (_i, j) => j > Y + 8);
+    assert.equal(bare.top[(Y + 30) * bare.w + X - river * 20], 0);
     // The seaward edge carries a parapet, a step above the walk.
     let parapet = 0;
     for (let i = 0; i < h.top.length; i++) if (h.top[i] > 3.5 && h.top[i] < 4) parapet++;

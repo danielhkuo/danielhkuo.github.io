@@ -576,36 +576,151 @@ export function countryHouse(seed: number, slate: boolean): Structure {
   return s;
 }
 
-/** A town house: tall and narrow, plastered, under terracotta tile. */
-export function townHouse(seed: number): Structure {
-  const w = 5 + (seed % 4), d = 5 + ((seed >>> 3) & 1);
-  const gable = ((seed >>> 4) & 3) === 0 ? 1 : 0;
-  const s = sculpt(gable ? Math.min(w, 7) : w, d);
-  const pick = (seed >>> 6) & 7;
-  const wallMat = pick < 3 ? M.whitewash : pick < 6 ? M.plaster : M.stone;
-  house(s, 0, 0, s.w, d, 6 + ((seed >>> 9) % 3), 3 + ((seed >>> 12) & 1), { gable, wallMat, roofMat: M.roofTile, openings: 1, chimney: ((seed >>> 13) & 3) === 0 });
+/** Lightens or darkens every roof cell of a structure by `by` light units: old tile and new, wet slate and dry. */
+function weather(s: Structure, by: number): void {
+  for (let i = 0; i < s.top.length; i++) {
+    if (s.mat[i] !== M.roofTile && s.mat[i] !== M.roofSlate) continue;
+    const t = s.tone[i] + by;
+    s.tone[i] = t < 70 ? 70 : t > 200 ? 200 : t;
+  }
+}
+
+/**
+ * A town house. No two streets are alike: a cottage (low, small, often under slate), an ordinary plastered
+ * house, a tall narrow one with its gable to the street, or a broad merchant's house with two chimneys.
+ * `rank` runs from 0 on the quay and at the middle to about 1.5 at the top and the edges of the town: the
+ * lower it is, the likelier the larger kinds. Most roofs are terracotta, new or weathered; about one in five is slate.
+ */
+export function townHouse(seed: number, rank = 0.7): Structure {
+  const pick = ((seed >>> 16) & 255) / 256 + 0.35 * (rank - 0.7);
+  const wall = (seed >>> 6) & 7;
+  const slate = ((seed >>> 22) & 15) < 3;
+  const tint = (((seed >>> 26) & 7) - 3) * 6;
+  let s: Structure;
+  if (pick > 0.72) {
+    // A cottage.
+    const w = 5 + (seed % 2), d = 4 + ((seed >>> 3) & 1);
+    s = sculpt(w, d);
+    house(s, 0, 0, w, d, 3 + ((seed >>> 9) & 1), 2.5, { gable: 0, wallMat: wall < 4 ? M.whitewash : wall < 6 ? M.stone : M.plaster, roofMat: slate || (seed >>> 12) % 3 === 0 ? M.roofSlate : M.roofTile, openings: 1, chimney: ((seed >>> 13) & 1) === 0 });
+  } else if (pick > 0.3) {
+    // An ordinary house.
+    const w = 5 + (seed % 4), d = 5 + ((seed >>> 3) & 1);
+    const gable = ((seed >>> 4) & 3) === 0 ? 1 : 0;
+    s = sculpt(gable ? Math.min(w, 7) : w, d);
+    house(s, 0, 0, s.w, d, 6 + ((seed >>> 9) % 3), 3 + ((seed >>> 12) & 1), { gable, wallMat: wall < 3 ? M.whitewash : wall < 6 ? M.plaster : M.stone, roofMat: slate ? M.roofSlate : M.roofTile, openings: 1, chimney: ((seed >>> 13) & 3) === 0 });
+  } else if (pick > 0.12) {
+    // Tall and narrow, gable to the street.
+    const w = 4 + (seed & 1), d = 5 + ((seed >>> 3) & 1);
+    s = sculpt(w, d);
+    house(s, 0, 0, w, d, 9 + ((seed >>> 9) % 3), 3, { gable: 1, wallMat: wall < 4 ? M.plaster : M.whitewash, roofMat: slate ? M.roofSlate : M.roofTile, openings: 1, chimney: false });
+  } else {
+    // A merchant's house: broad, three floors, a chimney at either end.
+    const w = 9 + (seed % 3), d = 6;
+    s = sculpt(w, d);
+    house(s, 0, 0, w, d, 8, 3.5, { gable: 0, wallMat: wall < 5 ? M.plaster : M.stone, roofMat: M.roofTile, openings: 1, chimney: true });
+    put(s, 1, 2, s.top[2 * w + 1] + 2, M.stoneDark, T_WALL);
+    for (let x = 3; x < w - 2; x += 2) { mark(s, x, d - 1, 4, M.opening); mark(s, x, d - 1, 6, M.opening); }
+  }
+  weather(s, tint);
+  return s;
+}
+
+/**
+ * The palazzo (15 × 8, 16 tall): the town's great house, on the square. Three floors of plaster over a stone
+ * arcade, a string course between them, rows of tall windows, and a hipped tile roof with a little lantern.
+ */
+export function palazzo(seed: number): Structure {
+  const s = sculpt(15, 8), W = 15;
+  // The hipped roof: four planes rising from the eaves to a short ridge.
+  for (let j = 0; j < 7; j++) for (let i = 0; i < W; i++) {
+    const ex = Math.min(i, W - 1 - i), ey = Math.min(j, 6 - j), e = Math.min(ex, ey, 3);
+    const tone = e >= 3 ? T_RIDGE : ex <= ey ? (i < W / 2 ? T_WEST : T_EAST) : j > 3 ? T_SOUTH : T_NORTH;
+    put(s, i, j, 11 + 1.3 * e, M.roofTile, tone);
+  }
+  for (let i = 0; i < W; i++) put(s, i, 7, 11, i === 0 || i === W - 1 ? M.stone : M.plaster, T_WALL);
+  put(s, 7, 3, 17, M.stone, T_WALL);
+  mark(s, 7, 3, 16, M.opening);
+  // The south front: an arcade of five arches, a string course, and two floors of windows.
+  for (let i = 0; i < W; i++) {
+    for (let z = 1; z <= 3; z++) mark(s, i, 7, z, i % 3 === 1 ? M.opening : M.stone, i % 3 === 1 ? (z === 3 ? 118 : 104) : 126);
+    mark(s, i, 7, 4, M.stoneDark, 112);
+    mark(s, i, 7, 11, M.stoneDark, 108);
+    if (i % 2 === 1) { mark(s, i, 7, 6, M.opening); mark(s, i, 7, 7, M.opening); mark(s, i, 7, 9, M.opening); }
+  }
+  mark(s, 7, 7, 1, M.timber, 92);
+  mark(s, 7, 7, 2, M.timber, 92);
+  weather(s, ((seed & 3) - 1) * 5);
+  return s;
+}
+
+/** A quay warehouse (13 × 5, 8 tall): a long stone shed under slate or old tile, with two cart doors and a row of small high windows. */
+export function warehouse(seed: number): Structure {
+  const s = sculpt(13, 5);
+  house(s, 0, 0, 13, 5, 5, 3, { gable: 0, wallMat: (seed & 1) === 0 ? M.stone : M.stoneDark, roofMat: (seed & 6) === 0 ? M.roofTile : M.roofSlate, openings: 0, chimney: false });
+  for (const x of [2, 3, 8, 9]) for (let z = 1; z <= 3; z++) mark(s, x, 4, z, M.timber, z === 3 ? 100 : 88);
+  for (const x of [0, 5, 6, 11, 12]) mark(s, x, 4, 4, M.opening);
+  weather(s, -8);
   return s;
 }
 
 // ---------------------------------------------------------------------------
 // Staging: what people planted round a landmark.
 
-/** Small round crowns in rows on sown grass: an orchard w × h. */
-export function orchard(w: number, h: number, seed: number): Structure {
+/** Small round crowns in rows on sown grass: an orchard w × h. `crown` is the trees. material, `step` their spacing. */
+export function orchard(w: number, h: number, seed: number, crown: number = M.alder, step = 4): Structure {
   const s = sculpt(w, h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     // A ragged edge.
     const edge = Math.min(x, y, w - 1 - x, h - 1 - y);
     if (edge >= 1 + (hash2(x >> 1, y >> 1, seed) & 1)) s.paint[y * w + x] = M.ley;
   }
-  for (let ty = 2; ty < h - 2; ty += 4) for (let tx = 2 + ((ty >> 2) & 1) * 2; tx < w - 2; tx += 4) {
+  for (let ty = 2; ty < h - 2; ty += step) for (let tx = 2 + (Math.floor(ty / step) & 1) * 2; tx < w - 2; tx += step) {
     const hsh = hash2(tx, ty, seed);
     if ((hsh & 15) === 0) continue;
     const cx = tx + ((hsh >>> 4) & 1) * 0.5, cy = ty + ((hsh >>> 5) & 1) * 0.5, r = 1.35 + ((hsh >>> 6) & 3) * 0.1;
     for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
       const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-      if (d2 <= r * r) put(s, x, y, 1.2 + 1.8 * Math.sqrt(1 - d2 / (r * r)), M.alder, 0);
+      if (d2 <= r * r) put(s, x, y, 1.2 + 1.8 * Math.sqrt(1 - d2 / (r * r)), crown, 0);
     }
+  }
+  s.onGround = true;
+  return s;
+}
+
+/**
+ * An olive grove w × h: grey-green crowns, broader and lower than an orchard's, standing where they were
+ * planted long ago and not in rows, on dry pale ground with a ragged edge.
+ */
+export function oliveGrove(w: number, h: number, seed: number): Structure {
+  const s = sculpt(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const edge = Math.min(x, y, w - 1 - x, h - 1 - y);
+    if (edge >= 1 + (hash2(x >> 1, y >> 1, seed) & 1)) s.paint[y * w + x] = M.vine;
+  }
+  for (let ty = 2; ty < h - 2; ty += 3) for (let tx = 2; tx < w - 2; tx += 4) {
+    const hsh = hash2(tx, ty, seed ^ 0x01e5);
+    if ((hsh & 7) < 2) continue;
+    const cx = tx + ((hsh >>> 4) & 3) * 0.6 + ((ty / 3) & 1) * 1.5, cy = ty + ((hsh >>> 6) & 3) * 0.4, r = 1.5 + ((hsh >>> 8) & 3) * 0.2;
+    const mat = ((hsh >>> 10) & 3) === 0 ? M.alder : M.shrub;
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+      if (d2 > r * r || x < 0 || y < 0 || x >= w || y >= h) continue;
+      const t = 1 + 1.5 * Math.sqrt(1 - d2 / (r * r));
+      if (t > s.top[y * w + x]) put(s, x, y, t, mat, 0);
+    }
+  }
+  s.onGround = true;
+  return s;
+}
+
+/** A garden plot w × h on the edge of a town: vines in rows, or beds of vegetables between dug paths, as the seed has it. */
+export function gardenPlot(w: number, h: number, seed: number): Structure {
+  const s = sculpt(w, h);
+  const vines = (seed & 1) === 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const edge = Math.min(x, y, w - 1 - x, h - 1 - y);
+    if (edge < (hash2(x >> 1, y >> 1, seed) & 1)) continue;
+    s.paint[y * w + x] = vines ? (y % 2 === 0 ? M.vineRow : M.vine) : y % 3 === 2 ? M.ploughRow : (y / 3 & 1) === 0 ? M.ley : M.barley;
   }
   s.onGround = true;
   return s;

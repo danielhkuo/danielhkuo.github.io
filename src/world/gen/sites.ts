@@ -641,7 +641,13 @@ function lighthouseCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[
   for (const s of c.stacks) {
     if (0.6 * s.r < r.lighthouse.stackTop || s.top < 8 || s.top + BOX.lighthouse.h > r.heightCap) continue;
     const gx = Math.floor(s.x / 4), gy = Math.floor(s.y / 4);
-    out.push({ gx, gy, x: s.x, y: s.y, level: s.top, score: 1.2, extra: { stack: true } });
+    // A stack within sight of a real shore comes before one alone in open water, where a view shows the tower and nothing else.
+    let shore = false;
+    for (let d = 8; d <= 32 && !shore; d += 8) for (let k = 0; k < 16; k++) {
+      const j = idx(c, Math.floor(gx + 0.5 + RX[k] * d), Math.floor(gy + 0.5 + RY[k] * d));
+      if (!c.isSea[j] && c.islandSize[c.island[j]] >= 400) { shore = true; break; }
+    }
+    out.push({ gx, gy, x: s.x, y: s.y, level: s.top, score: shore ? 1.2 : 0.2, extra: { stack: true } });
   }
   return out;
 }
@@ -878,7 +884,8 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
     for (let k = 8; k + 12 <= v.length; k += 4) {
       run += Math.sqrt((v[k] - v[k - 4]) * (v[k] - v[k - 4]) + (v[k + 1] - v[k - 3]) * (v[k + 1] - v[k - 3]));
       const w = Math.floor(v[k + 2] + 0.5);
-      if (w < r.bridge.width || run - lastPick < 12) continue;
+      // A river one class narrower will do where the land offers too few of the full width: it scores well below them.
+      if (w < r.bridge.width - 1 || w < 2 || run - lastPick < 12) continue;
       const px = v[k], py = v[k + 1];
       const node = idx(c, Math.floor(px / 4), Math.floor(py / 4));
       if (c.isSea[node] || c.lakeId[node] >= 0 || c.toSea[node] < 120) continue;
@@ -922,7 +929,8 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       const ha = heightAt(c, ax, ay), hb = heightAt(c, bx, by), water = v[k + 3];
       if (Math.abs(ha - hb) > r.bridge.level) continue;
       tally.pass(L.level);
-      const deck = Math.max(ha, hb) + 1 - water;
+      // Low banks are no bar: the deck is humped clear of the water whatever they stand at.
+      const deck = Math.max(r.bridge.deck[0], Math.max(ha, hb) + 1 - water);
       // Banks a road can come down: gentle ones first, a gorge's sides only when the land offers nothing else.
       const bank = Math.max(c.slope[fa], c.slope[fb]);
       if (deck < r.bridge.deck[0] || deck > r.bridge.deck[1] || bank > 0.6) continue;
@@ -932,10 +940,22 @@ function bridgeCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
       if (seen.box < r.visible) continue;
       tally.pass(L.seen);
       lastPick = run;
+      // A bridge is a small thing: it reads in open country and is lost in a wooded gorge. The share of open
+      // cover round it and to its south, and the relief the camera looks across, go into its score.
+      let open = 0, looked = 0, lo = Infinity, hi = -Infinity;
+      for (let dy = -6; dy <= 12; dy += 3) for (let dx = -12; dx <= 12; dx += 3) {
+        const j = idx(c, gx + dx, gy + dy);
+        if (c.isSea[j] || c.lakeId[j] >= 0 || c.rw[j] > 0) continue;
+        looked++;
+        if (isOpenCover(coverAtNode(c, gx + dx, gy + dy))) open++;
+        if (c.h[j] < lo) lo = c.h[j];
+        if (c.h[j] > hi) hi = c.h[j];
+      }
+      const openShare = looked > 0 ? open / looked : 0, relief = looked > 0 ? hi - lo : 0;
       out.push({
         gx, gy, x: px, y: py, level: water + deck,
         // Best side-on to the camera: a deck running east–west shows its arches.
-        score: w / 3 + 2 * nx * nx + 1 - Math.abs(ha - hb) / r.bridge.level + seen.box - (deck > 8 ? (deck - 8) / 6 : 0) + 3 * Math.min(1, apart / (4 * r.bridge.clear)) - (bank > 0.35 ? 1 + 4 * (bank - 0.35) : 0) - 1.5 * Math.max(0, channelsRound(c, gx, gy, 11) - 2),
+        score: w / 3 + 2 * nx * nx + 1 - Math.abs(ha - hb) / r.bridge.level + seen.box - (deck > 8 ? (deck - 8) / 6 : 0) + 3 * Math.min(1, apart / (4 * r.bridge.clear)) - (bank > 0.35 ? 1 + 4 * (bank - 0.35) : 0) - 1.5 * Math.max(0, channelsRound(c, gx, gy, 11) - 2) + 3 * openShare - (relief > 25 ? Math.min(3, (relief - 25) / 15) : 0) - (w < r.bridge.width ? 3 : 0),
         extra: { span: { ax, ay, bx, by, water, width: w } },
       });
     }

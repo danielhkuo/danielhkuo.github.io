@@ -170,7 +170,7 @@ test("cathedral: a valley floor with a river near and hills on both sides", () =
   assert.match(failure(() => placeSites(fields({ height: () => 6, hand: () => 0, reaches: river }), only({ cathedral: 1 }))).message, /cathedral: hills ≥ 25/);
 });
 
-test("bridge: a river of w ≥ 3 between level banks, its deck across the flow", () => {
+test("bridge: a river of w ≥ 3 between level banks (one class narrower at a pinch), its deck across the flow", () => {
   const ok = placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 900, 3, 5)] }), only({ bridge: 1 }));
   const s = ok.sites[0];
   assert.equal(s.type, "bridge");
@@ -178,7 +178,10 @@ test("bridge: a river of w ≥ 3 between level banks, its deck across the flow",
   assert.ok(s.span.ax < 500 && s.span.bx > 500 && Math.abs(s.span.ay - s.span.by) < 1e-6);
   assert.equal(s.span.width, 3);
   assert.deepEqual([s.approach.x, s.approach.y], [s.span.ax, s.span.ay]);
-  assert.match(failure(() => placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 900, 2, 5)] }), only({ bridge: 1 }))).message, /bridge: river of w ≥ 3/);
+  // A river one class narrower stands in where there is no other; a stream does not.
+  const narrow = placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 900, 2, 5)] }), only({ bridge: 1 }));
+  assert.equal(narrow.sites[0].span?.width, 2);
+  assert.match(failure(() => placeSites(fields({ height: valley, hand: valleyHand, reaches: [reachDown(0, 500, 100, 900, 1, 5)] }), only({ bridge: 1 }))).message, /bridge: river of w ≥ 3/);
 });
 
 test("bridge: never at a confluence — a tributary joining near every crossing rejects the river, one far off does not", () => {
