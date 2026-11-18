@@ -117,7 +117,7 @@ function pyramid(ox = 0, oy = 0): Float64Array {
 }
 let pyr: CoastResult | null = null;
 const pp = fullScale(PYR.n);
-const pyrRun = () => (pyr ??= coast(pyramid(), PYR.n, { rock: new Uint8Array(PYR.n * PYR.n), regions: null }, pp, 7));
+const pyrRun = () => (pyr ??= coast(pyramid(), PYR.n, { rock: new Uint8Array(PYR.n * PYR.n), regions: null, plain: true }, pp, 7));
 
 test("south shores keep full cliffs, capped at 45", () => {
   const r = pyrRun(), { n, cx, cy } = PYR, c = pp.coast, tol = c.capSlope[1] * 1.5 * 4;
@@ -183,7 +183,7 @@ test("caps change gradually along the shore: no two neighbouring cuts differ by 
       assert.ok(Math.abs(a.slope - b.slope) <= 0.06, `slopes ${a.slope} and ${b.slope} side by side`);
     }
   }
-  assert.ok(low < c.gateCap + 1e-9 && high > c.cliffCap - 3, `caps run ${low}–${high}`);
+  assert.ok(low < c.gateCap + 1e-9 && high > c.gateCap + 15, `caps run ${low}–${high}`);
   assert.ok(between >= 10, "the caps step from one to the other with nothing between");
 });
 
@@ -209,10 +209,10 @@ test("the returned heights are the base with the stamps applied, and stamping ag
 });
 
 test("an island straddling the wrap gets the same coast as one in the middle", () => {
-  // The slope behind a cap follows a noise fixed to the world; here it is held to one value, so the land can be compared to the node.
+  // The slope behind a cap follows a noise fixed to the world; here it is held to one value, and the cliffs to one retreat and one cap, so the land can be compared to the node.
   const n = PYR.n, one: WorldParams = { ...pp, coast: { ...pp.coast, capSlope: [0.6, 0.6] } };
-  const mid = coast(pyramid(), n, { rock: new Uint8Array(n * n), regions: null }, one, 7);
-  const moved = coast(pyramid(128, 128), n, { rock: new Uint8Array(n * n), regions: null }, one, 7);
+  const mid = coast(pyramid(), n, { rock: new Uint8Array(n * n), regions: null, plain: true }, one, 7);
+  const moved = coast(pyramid(128, 128), n, { rock: new Uint8Array(n * n), regions: null, plain: true }, one, 7);
   let land = 0, same = 0, shoreNodes = 0, sameClass = 0;
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     const i = y * n + x, j = wrapIndex(x + 128, y + 128, n);
@@ -511,12 +511,12 @@ test("rock, cliff and cove sit only on shore nodes, the bands stay near the sea,
   assert.ok(bare > 0.15 * shoreNodes, `${bare} of ${shoreNodes} shore nodes are bare`);
 });
 
-test("the coast is varied: no class takes more than four fifths of the classed shore", () => {
+test("the coast is varied: no class takes more than 85 % of the classed shore", () => {
   const { out } = world();
   const seen = [0, 0, 0, 0, 0, 0, 0];
   for (let i = 0; i < nn; i++) if (isShore(out.isSea, n, i)) seen[out.shoreClass[i]]++;
   const classed = seen[1] + seen[2] + seen[3] + seen[4] + seen[5] + seen[6];
-  for (let k = 1; k <= 6; k++) assert.ok(seen[k] <= 0.8 * classed, `class ${k} is ${seen[k]} of ${classed}`);
+  for (let k = 1; k <= 6; k++) assert.ok(seen[k] <= 0.85 * classed, `class ${k} is ${seen[k]} of ${classed}`);
 });
 
 test("beaches come in many widths, and most beach stamps carry a berm", () => {
@@ -566,9 +566,9 @@ test("stamps are well formed: sizes in range, unit directions, positions inside 
       assert.ok(s.sand === 0 || (s.sand >= 0.25 && s.sand <= 0.42));
       assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
     } else if (s.kind === "cut") {
-      assert.ok(s.r > 0 && s.r <= c.retreat * (1 - c.cliffE));
+      assert.ok(s.r > 0 && s.r <= 2.1 * c.retreat * (1 - c.cliffE));
       assert.ok(s.level <= -c.platform[0] && s.level >= -c.platform[1]);
-      assert.ok(s.cap >= c.gateCap - 1e-9 && s.cap <= c.cliffCap + 1e-9);
+      assert.ok(s.cap >= c.gateCap - 1e-9 && s.cap <= 1.35 * c.cliffCap + 1e-9);
       assert.ok(s.slope >= c.capSlope[0] && s.slope <= c.capSlope[1] && Math.abs(s.slope * (p.n / 6400) - 0.8) > 0.05, "a cap slope at the camera's row factor");
     } else if (s.kind === "mouth") {
       assert.ok(Math.abs(s.dx * s.dx + s.dy * s.dy - 1) < 1e-9);

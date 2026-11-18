@@ -19,6 +19,8 @@ export interface CoastContext {
   rock: Uint8Array;
   /** Six planes of region weights on the same grid, archetype-major; without them every shore is treated alike. */
   regions: Float32Array | null;
+  /** Hold the cliffs to one retreat and one cap along the shore (for tests that compare a coast node for node). */
+  plain?: boolean;
 }
 
 /**
@@ -216,6 +218,28 @@ const CAP_RAMP = 0.35;
 const CAP_SMOOTH = 12;
 /** Feature size, in cells of the 6400 world, of the noise that varies the slope behind a cap along the shore. */
 const CAP_CELLS = 240;
+/**
+ * A cliff is as tall as the sea has cut it back, and that wanders along the shore: a broad noise of BLUFF_CELLS (of the 6400
+ * world) makes the long bluffs and the low stretches, a finer one of CRAG_CELLS notches them, a headland is cut BLUFF_HEAD
+ * deeper and a bay's head as much less. The retreat is never under BLUFF_MIN of the plain one nor over BLUFF_MAX.
+ */
+const BLUFF_CELLS = 130;
+const CRAG_CELLS = 56;
+const BLUFF_HEAD = 0.5;
+const BLUFF_MIN = 0.2;
+const BLUFF_MAX = 2.1;
+/** The cap wanders too, between these shares of cliffCap, over CAP_VARY_CELLS; a headland's stands CAP_HEAD of cliffCap higher, a bay's as much lower. */
+const CAP_VARY: readonly [number, number] = [0.32, 1.3];
+const CAP_VARY_CELLS = 105;
+const CAP_HEAD = 0.2;
+const CAP_MAX = 1.35;
+/**
+ * A stream too small for a cove still wears the cliff down where it meets the sea: one draining NOTCH_AREA of a channel's
+ * least drainage or more. The retreat beside its mouth is at most NOTCH_SLOPE times the distance along the shore, so the
+ * cliff line comes down to the water there in a V and no neighbour's cut overruns it.
+ */
+const NOTCH_AREA = 0.3;
+const NOTCH_SLOPE = 0.6;
 /** Block size, in nodes, of the coarse height maxima used to bound a cap's reach. */
 const BLOCK = 8;
 /** The waterline is the half-land contour of the land mask blurred over this many nodes, twice. */
@@ -475,9 +499,15 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     south[s] = fy[s] > 0 && Math.abs(fx[s]) <= c.gateCos ? 1 : 0;
     // The cap eases down to the gate's as the shore turns edge-on, so two caps never meet in a crease.
     const turn = Math.min(1, Math.max(0, (c.gateCos - Math.abs(fx[s])) / CAP_RAMP));
-    cap[s] = south[s] ? c.gateCap + (c.cliffCap - c.gateCap) * turn * turn * (3 - 2 * turn) : c.gateCap;
+    const lift = Math.max(-1, Math.min(1, -bay[s] / BAY_FULL));
+    const high = ctx.plain ? c.cliffCap : c.cliffCap * Math.min(CAP_MAX, CAP_VARY[0] + (CAP_VARY[1] - CAP_VARY[0]) * (0.5 + 0.5 * noiseAt(px[s], py[s], CAP_VARY_CELLS * scale, 0x5d)) + CAP_HEAD * lift);
+    cap[s] = south[s] && high > c.gateCap ? c.gateCap + (high - c.gateCap) * turn * turn * (3 - 2 * turn) : c.gateCap;
     if (e > c.cliffE && k > 0) {
-      wear[s] = c.retreat * (e - c.cliffE) * k;
+      // Bluffs and low stretches: the squared noise keeps most of the shore modest and lets a few runs stand tall.
+      const broad = 0.5 + 0.5 * noiseAt(px[s], py[s], BLUFF_CELLS * scale, 0x5b);
+      const crag = noiseAt(px[s], py[s], CRAG_CELLS * scale, 0x5c);
+      const vary = ctx.plain ? 1 : 0.45 + 1.55 * broad * broad + 0.22 * crag + BLUFF_HEAD * lift;
+      wear[s] = c.retreat * (e - c.cliffE) * k * Math.min(BLUFF_MAX, Math.max(BLUFF_MIN, vary));
       cls[s] = SHORE.rocky;
       continue;
     }
@@ -505,6 +535,37 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   // The retreat is evened out along the shore, so a band of hard rock ends in
   // a taper and not in a bite the shape of one stamp. Beaches are never cut.
   wear = along(wear, RETREAT_SMOOTH, (s) => cls[s] === SHORE.beach);
+  // Stream mouths too small to cut a cove: the cliff comes down to a low rocky shore on either side of each.
+  if (!ctx.plain) {
+    const coveCells = Math.max(c.coveArea, COVE_NODES * cpn * cpn);
+    const least = Math.max(NOTCH_AREA * channel, 12);
+    const depth = new Int32Array(count).fill(-1);
+    let ring: number[] = [];
+    for (let s = 0; s < count; s++) {
+      const i = shore.nodes[s];
+      if (wear[s] <= 0 || flow.area[i] < least || !isSea0[flow.rcv[i]] || flow.area[i] * cpn * cpn >= coveCells) continue;
+      depth[s] = 0;
+      ring.push(s);
+    }
+    for (let d = 1; ring.length > 0; d++) {
+      const next: number[] = [];
+      for (const s of ring) {
+        const i = shore.nodes[s];
+        const x = i % n;
+        const y = (i - x) / n;
+        for (let q = 0; q < 8; q++) {
+          const t = shore.slot[wrapIndex(x + NB8_DX[q], y + NB8_DY[q], n)];
+          // Only as far along the shore as the limit still bites.
+          if (t >= 0 && depth[t] < 0 && wear[t] > NOTCH_SLOPE * d * cpn) {
+            depth[t] = d;
+            next.push(t);
+          }
+        }
+      }
+      ring = next;
+    }
+    for (let s = 0; s < count; s++) if (depth[s] >= 0) wear[s] = Math.min(wear[s], NOTCH_SLOPE * depth[s] * cpn);
+  }
   const retreat = new Float64Array(count);
   for (let s = 0; s < count; s++) {
     if (cls[s] === SHORE.beach || wear[s] < MIN_CUT * scale) continue;

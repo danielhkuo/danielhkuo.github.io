@@ -104,12 +104,41 @@ export function autoViewpoints(world: BakeWorld, plan: Plan, seed: number): View
   return out;
 }
 
+/** A site's frame should hold at least this share of land; with less, it is moved toward the coast. */
+const SEA_FRAME = 0.3;
+
 /**
  * One viewpoint per reserved site, and one per hamlet up to `hamlets`: the site in the upper third of
  * the frame, with the land to its south, where its approach comes from, below it.
  */
 export function siteViewpoints(s: Settlement, hamlets = 0): Viewpoint[] {
-  const out: Viewpoint[] = s.sites.map((site) => ({ name: `site-${site.id}`, x: Math.floor(site.x), y: Math.floor(site.y) + (site.type === "town" ? 10 : 55), e: site.level }));
+  const gN = Math.floor(Math.sqrt(s.ground.length) + 0.5), n = 4 * gN;
+  // Share of land in the frame centred on (cx, cy): the view is VIEW_W cells wide and VIEW_H / 0.8 deep.
+  const landShare = (cx: number, cy: number): number => {
+    let land = 0, all = 0;
+    for (let dy = -136; dy <= 136; dy += 16) for (let dx = -192; dx <= 192; dx += 16) {
+      all++;
+      if (s.ground[wrapIndex(Math.floor((cx + dx) / 4), Math.floor((cy + dy) / 4), gN)] > 0) land++;
+    }
+    return land / all;
+  };
+  const out: Viewpoint[] = s.sites.map((site) => {
+    const x = Math.floor(site.x), y = Math.floor(site.y) + (site.type === "town" ? 10 : 55);
+    // A site out at sea (a stack's lighthouse, a headland's tip) with little but water round it: the frame is
+    // shifted toward the nearest coast, as far as keeps the site well inside it, so the land it stands off is in view.
+    if (site.type !== "town" && landShare(x, y) < SEA_FRAME) {
+      let best = landShare(x, y), bx = x, by = y;
+      // The site stays at least 50 px from the sides, 40 from the top and 60 from the bottom of the frame.
+      for (let oy = -75; oy <= 85; oy += 10) for (let ox = -150; ox <= 150; ox += 10) {
+        const cx = Math.floor(site.x) + ox, cy = Math.floor(site.y) + oy;
+        // Enough coast is enough: past that the nearer frame wins, and one that keeps the site in the upper third.
+        const score = Math.min(SEA_FRAME, landShare(cx, cy)) - 0.0002 * (Math.abs(ox) + Math.abs(oy - 55));
+        if (score > best) { best = score; bx = cx; by = cy; }
+      }
+      return { name: `site-${site.id}`, x: wrap(bx, n), y: wrap(by, n), e: site.level };
+    }
+    return { name: `site-${site.id}`, x, y, e: site.level };
+  });
   s.hamlets.slice(0, hamlets).forEach((h, k) => out.push({ name: `hamlet-${k}${h.quarry ? "-quarry" : ""}`, x: Math.floor(h.x), y: Math.floor(h.y) + 40, e: 0 }));
   return out;
 }

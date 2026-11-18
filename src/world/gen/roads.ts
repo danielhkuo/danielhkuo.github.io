@@ -17,6 +17,11 @@ export interface RoadInput {
   lake: Uint8Array;
   /** River width class per node: 0 none, 1–6. */
   riverWidth: Uint8Array;
+  /**
+   * Multiplier on the cost of stepping onto each node (1 leaves it as it is): under 1 on valley floors and
+   * in saddles, over 1 along crests and through woods. Absent, every node costs the same.
+   */
+  bias?: Float32Array;
 }
 
 export interface RoadParams {
@@ -57,6 +62,8 @@ const DLEN = new Float64Array(DIR_N);
 const TURN = new Float64Array(DIR_N * DIR_N);
 
 const SENTINEL = 0xffffffff;
+/** No node's bias counts for less than this. */
+const BIAS_MIN = 0.7;
 /** Above this many sites on one island, pathfind a k-nearest subset plus a distance spanning tree. */
 const ALL_PAIRS_LIMIT = 12;
 const K_NEAREST = 8;
@@ -270,8 +277,11 @@ function search(inp: RoadInput, p: RoadParams, from: number, to: number): Found 
   const bridgeCost = p.bridgeCost;
   const maxBridge = p.maxBridgeWidth;
   const turnCost = p.turnCost;
+  const bias = inp.bias;
   let hScale = southMul < 1 ? southMul : 1;
   if (hScale < 0) hScale = 0;
+  // The heuristic stays admissible under the cheapest bias a node may carry.
+  if (bias) hScale *= BIAS_MIN;
 
   prepare(n);
   const gx = to % n;
@@ -317,6 +327,7 @@ function search(inp: RoadInput, p: RoadParams, from: number, to: number): Found 
       const facing = h[wrapIndex(destX, destY + 1, n)] - h[wrapIndex(destX, destY - 1, n)] < 0;
       const mul = facing ? southMul : 1;
       let cost = DLEN[d] * (1 + slopeCost * grade * grade) * mul;
+      if (bias) cost *= bias[dest] < BIAS_MIN ? BIAS_MIN : bias[dest];
       if (cross >= 2) cost += bridgeCost;
       // Square of the turning angle: a hairpin costs more than a fan of equal total
       // angle, which is what pushes a grade-limited climb into long switchbacks.

@@ -6,6 +6,7 @@
 
 import { hash2 } from "../core/hash.ts";
 import { MinHeap, sortIndicesBy } from "../core/heap.ts";
+import { boxBlur } from "./field.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import type { CoverInput } from "../look/contract.ts";
 import { MATERIAL as M } from "../look/materials.ts";
@@ -78,6 +79,8 @@ interface Work {
   laid: Map<number, [number, number]>;
   /** Short ways laid with the buildings: from where a lane arrives to a door or a gate. */
   spurs: RoadLine[];
+  /** The town, once it stands: its quay's middle on the shore line, and the boxes its buildings and square take up (x0, y0, x1, y1). */
+  town: { hx: number; shore: number; taken: [number, number, number, number][] } | null;
 }
 
 function node(c: SiteContext, x: number, y: number): number {
@@ -113,7 +116,7 @@ function spur(w: Work, ax: number, ay: number, bx: number, by: number, width = 1
   const dx = torusDelta(ax, bx, w.c.n), dy = torusDelta(ay, by, w.c.n), len = Math.sqrt(dx * dx + dy * dy);
   if (len < 1.5) return;
   const bow = ((hash2(Math.floor(ax), Math.floor(ay), w.seed) & 7) - 3.5) * 0.04 * len;
-  w.spurs.push(subdivide([ax, ay, ax + dx / 2 - (dy / len) * bow, ay + dy / 2 + (dx / len) * bow, ax + dx, ay + dy], width));
+  w.spurs.push(curve([ax, ay, ax + dx / 2 - (dy / len) * bow, ay + dy / 2 + (dx / len) * bow, ax + dx, ay + dy], width));
 }
 
 /** The lowest ground under a footprint of half-sizes (rx, ry): what stands on it has no air under any wall. */
@@ -395,61 +398,82 @@ function standFeature(w: Work, site: PlacedSite, x: number, y: number): void {
   w.structures.push(S.standAt(kind === "sheepfold" ? S.sheepfold() : S.waysideCross(), x, y, groundAt(w, x, y)));
 }
 
-/** Distance from (px, py) to the segment a–b. */
-function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
-  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  const qx = ax + t * dx - px, qy = ay + t * dy - py;
-  return Math.sqrt(qx * qx + qy * qy);
+/** The harbour's raster: its size, the column of the quay's middle and the row of the shore line. */
+const HB = { w: 98, h: 44, x: 49, y: 3 };
+/**
+ * The basin: a round cove with a lobe on its sheltered side, as ellipses (centre x, centre y, rx, ry) in cells
+ * from the quay's middle on the shore line, y to the south. The lobe's x is given for the river on the east.
+ */
+const BASIN: readonly (readonly [number, number, number, number])[] = [[0, 14, 32, 12], [-13, 17, 20, 10]];
+/** The mole follows an ellipse round the basin, centred on the first ellipse's centre. */
+const MOLE = { y: 14, rx: 40, ry: 19 };
+
+/** True inside the basin, its ellipses grown by `grow` cells. (lx, ly) are cells from the quay's middle on the shore line. */
+export function inBasin(lx: number, ly: number, river: number, grow: number): boolean {
+  for (let k = 0; k < BASIN.length; k++) {
+    const b = BASIN[k], dx = (lx - (k === 0 ? b[0] : river * b[0])) / (b[2] + grow), dy = (ly - b[1]) / (b[3] + grow);
+    if (dx * dx + dy * dy < 1) return true;
+  }
+  return false;
 }
 
 /**
- * The harbour's stonework (84 × 34, its north edge on the shore line, the quay's middle at local x 42):
- * the quay wall with its bollards and a landing stair, the mole running out from the sheltered end and
- * bending round the basin to a head with a light, a parapet on its seaward side, and a short pier from
- * the river's end, so the basin's mouth lies between the two. `river` is −1 or 1: the side the river is on.
+ * The harbour's stonework (98 × 44; the quay's middle at local x 49, the shore line at local y 3): a quay wall
+ * that follows the round of the basin along the town's front, with bollards and a cobbled slipway running down
+ * into the water; a mole that springs from the sheltered end and curves round the basin to a head with a light,
+ * a parapet on its seaward side; and a short pier from the river's end, so the mouth lies between the two.
+ * `river` is −1 or 1: the side the river is on. Mole and pier are left out wherever `land` says the ground
+ * already stands (local raster cells): there the shore itself closes the basin.
  */
-export function harbourWorks(river: number): Structure {
-  const s = S.sculpt(84, 34), HX = 42;
-  // The mole's line: out from the quay, round a quarter turn, then along.
-  const ex = HX - river * 34, turn: [number, number][] = [[0, 0], [0.6, 3.4], [2.6, 6.4], [5.6, 8.4], [9, 9]];
-  const line: [number, number][] = [[ex, 2]];
-  for (const [u, v] of turn) line.push([ex + river * u, 14 + v]);
-  const headX = ex + river * 40, headY = 24.5;
-  line.push([headX, headY]);
-  const pier: [number, number][] = [[HX + river * 34, 2], [HX + river * 33, 15]];
-  for (let j = 0; j < 34; j++) for (let i = 0; i < 84; i++) {
-    const px = i + 0.5, py = j + 0.5;
-    let d = Infinity;
-    for (let k = 1; k < line.length; k++) d = Math.min(d, segDist(px, py, line[k - 1][0], line[k - 1][1], line[k][0], line[k][1]));
-    const head = Math.sqrt((px - headX) * (px - headX) + (py - headY) * (py - headY));
-    const dp = segDist(px, py, pier[0][0], pier[0][1], pier[1][0], pier[1][1]);
-    if (d <= 2.5) {
-      // Seaward of the line: further from the basin's middle than the line is.
-      const u = (px - ex) * river, v = py - 14;
-      const sea = u < 0 || (u >= 9 ? py > 22.6 + 0.048 * u : v > 0 && (u - 9) * (u - 9) + v * v > 81);
-      S.put(s, i, j, sea && d > 1.3 ? 3.6 : 2.6, M.stone, sea && d > 1.3 ? 156 : S.T_FLAT);
-    } else if (head <= 3.3) S.put(s, i, j, 2.6, M.stone, S.T_FLAT);
-    else if (dp <= 2) S.put(s, i, j, 2.6, M.stone, S.T_FLAT);
+export function harbourWorks(river: number, land?: (i: number, j: number) => boolean): Structure {
+  const W = HB.w, H = HB.h, s = S.sculpt(W, H);
+  // The mole's head: where the ellipse is met by a ray most of the way round to the river's side.
+  const hu = -0.55, hv = 0.45, hk = 1 / Math.sqrt((hu * hu) / (MOLE.rx * MOLE.rx) + (hv * hv) / (MOLE.ry * MOLE.ry));
+  const headX = -river * hu * hk, headY = MOLE.y + hv * hk;
+  const slip = river * 13;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const lx = i + 0.5 - HB.x, ly = j + 0.5 - HB.y;
+    if (inBasin(lx, ly, river, 0)) {
+      // The slipway: cobbles sloping from the quay into the water.
+      if (Math.abs(lx - slip) > 2.5 || ly > MOLE.y) continue;
+      const edge = BASIN[0][1] - BASIN[0][3] * Math.sqrt(1 - (lx * lx) / (BASIN[0][2] * BASIN[0][2]));
+      const top = 2.3 - 0.26 * (ly - edge);
+      if (top >= 0.3) S.put(s, i, j, top, (j & 1) === 0 ? M.cobble : M.stone, 136);
+      continue;
+    }
+    // The quay wall: the ring of stone round the basin's northern half.
+    if (ly < MOLE.y - 1 && Math.abs(lx) < 35 && inBasin(lx, ly, river, 2.2)) {
+      const front = inBasin(lx, ly + 1.2, river, 0);
+      if (front && i % 7 === 3 && Math.abs(lx - slip) > 4) S.put(s, i, j, 3.3, M.stoneDark, S.T_WALL);
+      else S.put(s, i, j, 2.4, M.stone, S.T_FLAT);
+      continue;
+    }
+    // Round the mole's ellipse: `a` runs from 0 at the sheltered end through 1 due south to 2 at the river's end.
+    const u = -river * lx, v = ly - MOLE.y, len = Math.sqrt(u * u + v * v);
+    const q = Math.sqrt((u * u) / (MOLE.rx * MOLE.rx) + (v * v) / (MOLE.ry * MOLE.ry));
+    if (q < 0.5) continue;
+    const d = len * (1 - 1 / q);
+    const a = v >= 0 ? 1 - u / (Math.abs(u) + v) : u > 0 ? u / (u - v) - 1 : -3;
+    const head = Math.sqrt((lx - headX) * (lx - headX) + (ly - headY) * (ly - headY));
+    const mole = (Math.abs(d) <= 2.3 && a >= -0.25 && a <= 1.55) || head <= 3.3;
+    const pier = Math.abs(d) <= 1.9 && ((v >= 0 && a >= 1.8) || (v < 0 && u < 0 && v > -5));
+    if (!mole && !pier) continue;
+    if (land && land(i, j)) continue;
+    const sea = mole && head > 3.3 && d > 0.9;
+    S.put(s, i, j, sea ? 3.6 : 2.6, M.stone, sea ? 156 : S.T_FLAT);
   }
-  // The quay wall, two cells of dressed stone along the shore, with a stair down to the water.
-  const stair = HX + river * 12;
-  for (let x = -36; x < 36; x++) for (let j = 1; j <= 2; j++) {
-    const i = HX + x, step = i >= stair && i < stair + 3;
-    S.put(s, i, j, step ? (j === 1 ? 1.6 : 0.8) : 2.4, step ? M.cobble : M.stone, S.T_FLAT);
-  }
-  for (let x = -32; x <= 32; x += 8) if (HX + x < stair - 1 || HX + x > stair + 3) S.put(s, HX + x, 1, 3.3, M.stoneDark, S.T_WALL);
   // The light on the mole's head.
-  const li = Math.floor(headX), lj = Math.floor(headY);
-  S.put(s, li, lj, 6.5, M.stone, S.T_WALL);
-  S.mark(s, li, lj, 7, M.lantern, 170);
-  S.mark(s, li, lj, 8, M.roofSlate, 110);
+  const li = Math.floor(headX + HB.x), lj = Math.floor(headY + HB.y);
+  if (s.top[lj * W + li] > 0) {
+    S.put(s, li, lj, 6.5, M.stone, S.T_WALL);
+    S.mark(s, li, lj, 7, M.lantern, 170);
+    S.mark(s, li, lj, 8, M.roofSlate, 110);
+  }
   // Every face that looks south is wall, with a dark course where it meets the water.
-  for (let j = 0; j < 34; j++) for (let i = 0; i < 84; i++) {
-    const k = j * 84 + i, t = s.top[k];
-    if (t <= 0) continue;
-    const south = j + 1 < 34 ? s.top[k + 84] : 0;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, t = s.top[k];
+    if (t <= 0 || s.mat[k] === M.cobble) continue;
+    const south = j + 1 < H ? s.top[k + W] : 0;
     if (t - south < 0.7) continue;
     s.tone[k] = S.T_WALL;
     if (south === 0 && t >= 2) S.mark(s, i, j, 1, M.stoneDark, 96);
@@ -458,10 +482,11 @@ export function harbourWorks(river: number): Structure {
 }
 
 /**
- * The town: a stone quay and a mole round a dredged basin, the church and its bell tower on a square a
- * little up from the quay, and houses in rows along street terraces up the hillside. Each row runs as far
- * as its houses and no further, so the terraces end raggedly; stepped lanes climb between the houses from
- * the quay to the top rows, jogging at the streets; garden plots and vines fill the gaps.
+ * The town: a quay round a cove deepened into a basin, closed by a curved mole; warehouses on the quay; the
+ * church, its bell tower and a palazzo on a square a little up from it; and houses of many sizes in rows along
+ * street terraces up the hillside. Each row runs as far as its houses and no further, so the terraces end
+ * raggedly; stepped lanes climb between the houses from the quay to the top rows, jogging at the streets;
+ * garden plots and vines fill the gaps. (The orchards round it are planted once the roads are laid: greenBelt.)
  */
 function standTown(w: Work, site: PlacedSite): void {
   const hb = site.harbour;
@@ -471,14 +496,20 @@ function standTown(w: Work, site: PlacedSite): void {
   const rnd = (a: number, b: number): number => (hash2(a, b, w.seed ^ 0x70a1) & 1023) / 1024;
   // The river's side; the mole shelters the other.
   const river = torusDelta(hx, hb.mouthX, n) < 0 ? -1 : 1;
-  addConform(w, { kind: "dredge", x: hx, y: shore + 14, rx: 33, ry: 12, round: false, level: -3, skirt: 3, limit: 0 });
-  // The quay and the low ground behind it, built up clear of the tide as far as the first street.
-  addConform(w, { kind: "raise", x: hx, y: shore - 9, rx: 40, ry: 10, round: false, level: 1.8, skirt: 2, limit: 0 });
+  // What stood here before anything was built: where the shore itself already closes the basin, no mole is needed.
+  const natural = Float64Array.from(w.g);
+  // The quay and the low ground behind it, built up clear of the tide as far as the first street; then the
+  // basin, cut out of it.
+  addConform(w, { kind: "raise", x: hx, y: shore - 4, rx: 50, ry: 18, round: true, level: 1.8, skirt: 3, limit: 0 });
+  BASIN.forEach((b, k) => addConform(w, { kind: "dredge", x: hx + (k === 0 ? b[0] : river * b[0]), y: shore + b[1], rx: b[2], ry: b[3], round: true, level: -3, skirt: 2, limit: 0 }));
   block(w, hx, shore - 40, 60, 44);
+  const taken: [number, number, number, number][] = [];
+  w.town = { hx, shore, taken };
 
   // The church square, levelled before the terraces are cut round it.
   const tx = hx - river * 6, sqY = shore - 28;
   addConform(w, flat(tx, sqY, 13, 8, false, groundAt(w, tx, sqY), 3, 2.5));
+  taken.push([tx - 14, sqY - 9, tx + 14, sqY + 9]);
 
   // The ground as a street terrace leaves it: stepped every 2.5 units. Terraces are cut only where houses
   // stand (below), and a house's floor is the step its doorway lies on.
@@ -508,33 +539,65 @@ function standTown(w: Work, site: PlacedSite): void {
   }
 
   // One raster for the town's paving, lanes and gardens.
-  const pw = 184, ph = 132, px0 = hx - 92, py0 = shore - 122;
+  const pw = 184, ph = 140, px0 = hx - 92, py0 = shore - 122;
   const pave = S.sculpt(pw, ph);
   pave.x = px0;
   pave.y = py0;
   pave.base = 0;
   const paveAt = (x: number, y: number, ww: number, hh: number, mat: number = M.cobble): void => S.paint(pave, Math.floor(x) - px0, Math.floor(y) - py0, ww, hh, mat);
-  paveAt(hx - 36, shore - 9, 72, 10);
+  // The quay: cobbles from the first street down to the wall, round the basin's head.
+  for (let y = shore - 9; y < shore + 15; y++) for (let x = hx - 42; x < hx + 42; x++) {
+    const lx = x + 0.5 - hx, ly = y + 0.5 - shore;
+    if (inBasin(lx, ly, river, 0) || (lx * lx) / (46 * 46) + ((ly + 4) * (ly + 4)) / (17 * 17) >= 1) continue;
+    paveAt(x, y, 1, 1);
+  }
 
-  // The harbour: quay wall, mole and pier, and boats in the basin.
-  const works = harbourWorks(river);
-  works.x = hx - 42;
-  works.y = shore;
+  // The harbour: quay wall, slipway, mole and pier, and boats in the basin.
+  const worksX = hx - HB.x, worksY = shore - HB.y;
+  const works = harbourWorks(river, (i, j) => heightAt({ h: natural, gN: w.c.gN }, worksX + i + 0.5, worksY + j + 0.5) > 0.6);
+  works.x = worksX;
+  works.y = worksY;
   works.base = 0;
   w.structures.push(works);
-  for (let k = 0; k < 9; k++) {
+  let afloat = 0;
+  for (let k = 0; k < 24 && afloat < 9; k++) {
     const hsh = hash2(k, 77, w.seed);
-    const bx = hx - 27 + (hsh % 54), by = shore + 5 + ((hsh >>> 8) % 13);
-    let clear = true;
+    const bx = hx - 30 + (hsh % 60), by = shore + 4 + ((hsh >>> 8) % 23);
+    let clear = inBasin(bx - hx - 3, by - shore, river, -2.5) && inBasin(bx - hx + 3, by - shore, river, -2.5) && inBasin(bx - hx, by - shore - 2, river, -2.5) && inBasin(bx - hx, by - shore + 2, river, -2.5);
     for (let j = -2; j <= 2 && clear; j++) for (let i = -4; i <= 4; i++) {
       const lx = bx + i - works.x, ly = by + j - works.y;
       if (lx >= 0 && ly >= 0 && lx < works.w && ly < works.h && works.top[ly * works.w + lx] > 0) { clear = false; break; }
     }
-    if (clear) w.structures.push(S.standAt(S.boat(hsh >>> 12), bx, by, 0));
+    if (!clear) continue;
+    w.structures.push(S.standAt(S.boat(hsh >>> 12), bx, by, 0));
+    afloat++;
+  }
+  // A boat hauled out on the slipway.
+  w.structures.push(S.standAt(S.boat(5), hx + river * 13, shore + 4, 1.4));
+
+  // Warehouses on the quay, one towards either end, clear of the street down from the square.
+  for (const side of [-1, 1]) {
+    const cx = hx + side * 27, cy = shore - 4;
+    const base = groundAt(w, cx, cy);
+    if (base > 4 || base < 1.2 || !firm(cx - 6, cy) || !firm(cx + 6, cy) || Math.abs(groundAt(w, cx - 6, cy) - groundAt(w, cx + 6, cy)) > 1.5) continue;
+    w.structures.push(S.standAt(S.warehouse(hash2(side, 5, w.seed)), cx, cy, base));
+    taken.push([cx - 7, cy - 3, cx + 7, cy + 3]);
   }
 
-  const onSquare = (x0: number, x1: number, south: number, depth: number): boolean =>
-    x1 > tx - 15 && x0 < tx + 15 && south > sqY - 10 && south - depth < sqY + 9;
+  // The palazzo, beside the square on the river's side.
+  const pzX = tx + river * 23, pzY = sqY + 2;
+  const palazzo = firm(pzX - 8, pzY) && firm(pzX + 8, pzY) && firm(pzX, pzY - 5) && Math.abs(tg(pzX - 7, pzY) - tg(pzX + 7, pzY)) < 5 && tg(pzX, pzY) > 1.3;
+  if (palazzo) {
+    addConform(w, flat(pzX, pzY, 9, 5, false, groundAt(w, pzX, pzY), 3, 2.5));
+    taken.push([pzX - 9, pzY - 5, pzX + 9, pzY + 5]);
+  }
+
+  // The boxes houses and lanes keep clear of: the square, the warehouses and the palazzo.
+  const fixedBoxes = taken.length;
+  const reserved = (x0: number, x1: number, south: number, depth: number): boolean => {
+    for (let k = 0; k < fixedBoxes; k++) { const [ax, ay, bx, by] = taken[k]; if (x1 > ax && x0 < bx && south > ay && south - depth < by) return true; }
+    return false;
+  };
 
   // Stepped lanes: four ways up the hill, each jogging a little every second street.
   const LANES = 4;
@@ -548,7 +611,8 @@ function standTown(w: Work, site: PlacedSite): void {
     let x = xl + (hash2(r, 3, w.seed) % 4), first = Infinity, last = -Infinity, runFrom = Infinity, runTo = -Infinity;
     while (x < xr) {
       const hsh = hash2(x, south, w.seed);
-      const hs = S.townHouse(hsh);
+      // The better houses stand low down and near the middle; cottages at the top and the edges.
+      const hs = S.townHouse(hsh, r / (ROWS - 1) + Math.abs(x - mid) / (2 * halfW));
       // No house stands in a lane.
       let lane = -Infinity;
       for (let j = 0; j < LANES; j++) { const lx = laneX(j, r); if (x < lx + 3 && x + hs.w > lx - 1) lane = lx; }
@@ -556,7 +620,7 @@ function standTown(w: Work, site: PlacedSite): void {
       const cx = x + hs.w / 2, q = Math.abs(cx - mid) / halfW;
       const gap = (hsh >>> 20) % 8 === 0 ? 3 : (hsh >>> 23) % 3 === 0 ? 1 : 0;
       // The street from the quay to the square is kept open through the first row.
-      const open = onSquare(x, x + hs.w, south, hs.h) || (r === 0 && x < tx + 3 && x + hs.w > tx - 3);
+      const open = reserved(x, x + hs.w, south + 1, hs.h + 1) || (r === 0 && x < tx + 3 && x + hs.w > tx - 3);
       const base = tg(cx, south);
       const back = tg(cx, south - hs.h);
       const fits = !open && base > 1.3 && back - base < 6 &&
@@ -567,6 +631,7 @@ function standTown(w: Work, site: PlacedSite): void {
         hs.y = south - hs.h + 1;
         hs.base = base;
         w.structures.push(hs);
+        taken.push([x - 1, hs.y - 1, x + hs.w + 1, south + 2]);
         if (x < first) first = x;
         if (x + hs.w > last) last = x + hs.w;
         // A run of houses shares one terrace; a gap of more than a house's width ends it.
@@ -582,6 +647,7 @@ function standTown(w: Work, site: PlacedSite): void {
           const mat = kind === 0 ? (Math.floor((4 * gy) / 5) & 1 ? M.vineRow : M.vine) : (gx - x) % 3 === 2 ? M.plough : gy === south - 2 ? M.plough : M.ley;
           paveAt(gx, gy, 1, 1, mat);
         }
+        taken.push([x - 1, south - 6, x + gw + 2, south + 1]);
         x += gw + 1;
       } else x += 3 + (hsh & 3);
     }
@@ -593,7 +659,7 @@ function standTown(w: Work, site: PlacedSite): void {
       const lx = laneX(j, r);
       if (lx < xl + 2 || lx > xr - 3) continue;
       for (let y = south - 10; y <= south + 2; y++) {
-        if (onSquare(lx, lx + 2, y + 1, 1) || !dry(w, lx, y)) continue;
+        if (reserved(lx, lx + 2, y + 1, 1) || !dry(w, lx, y)) continue;
         paveAt(lx, y, 2, 1, Math.floor((4 * y) / 5) % 3 === 0 ? M.stoneDark : M.cobble);
       }
     }
@@ -605,6 +671,7 @@ function standTown(w: Work, site: PlacedSite): void {
   }
   // The terraces: one under each run of houses and one under the square, ending where the houses end.
   addConform(w, { kind: "terrace", x: tx, y: sqY, rx: 13, ry: 8, round: false, level: 1.8, skirt: 2, limit: 2.5 });
+  if (palazzo) addConform(w, { kind: "terrace", x: pzX, y: pzY, rx: 9, ry: 5, round: false, level: 1.8, skirt: 2, limit: 2.5 });
   for (const [x0, x1, south] of runs) {
     addConform(w, { kind: "terrace", x: (x0 + x1) / 2, y: south - 5, rx: (x1 - x0) / 2 + 3, ry: 6.5, round: false, level: 1.8, skirt: 4, limit: 2.5 });
   }
@@ -615,7 +682,87 @@ function standTown(w: Work, site: PlacedSite): void {
   w.structures.push(S.standAt(S.bellTower(), tx - 8, sqY - 1, footing(w, tx - 8, sqY - 1, 3, 3)));
   w.structures.push(S.standAt(S.parishChurch(), tx + 4, sqY - 3, footing(w, tx + 4, sqY - 3, 7, 3.5)));
   w.structures.push(S.standAt(S.waysideCross(), tx + 3, sqY + 5, groundAt(w, tx + 3, sqY + 5)));
+  if (palazzo) {
+    paveAt(pzX - 9, pzY + 4, 19, 3);
+    w.structures.push(S.standAt(S.palazzo(hash2(7, 7, w.seed)), pzX, pzY, footing(w, pzX, pzY, 7, 3.5)));
+  }
   w.structures.push(pave);
+}
+
+/**
+ * The green belt: orchards, olive groves, vines and kitchen gardens in a ring between the town's houses and the
+ * woods, and in the larger gaps among the houses. Planted after the roads are laid, so no plot lies across one.
+ */
+function greenBelt(w: Work, roads: readonly RoadLine[]): void {
+  const t = w.town;
+  if (!t) return;
+  const c = w.c, n = c.n;
+  const cx = t.hx, cy = t.shore - 54, ra = 122, rb = 86;
+  // Road cells near the town, in buckets of three cells.
+  const way = new Set<number>();
+  for (const r of roads) for (let k = 0; k < r.vertices.length; k += 2) {
+    const dx = torusDelta(cx, r.vertices[k], n), dy = torusDelta(cy, r.vertices[k + 1], n);
+    if (Math.abs(dx) > ra + 12 || Math.abs(dy) > rb + 12) continue;
+    way.add(Math.floor((dy + 512) / 3) * 4096 + Math.floor((dx + 512) / 3));
+  }
+  const free = (x0: number, y0: number, x1: number, y1: number): boolean => {
+    for (const [ax, ay, bx, by] of t.taken) if (x1 > ax - 1 && x0 < bx + 1 && y1 > ay - 1 && y0 < by + 1) return false;
+    for (let by = Math.floor((y0 - cy + 510) / 3); by <= Math.floor((y1 - cy + 514) / 3); by++) for (let bx = Math.floor((x0 - cx + 510) / 3); bx <= Math.floor((x1 - cx + 514) / 3); bx++) {
+      if (way.has(by * 4096 + bx)) return false;
+    }
+    return true;
+  };
+  // First the woods are cleared back from the town: a clearing in tall trees shows only if it is one open sweep
+  // from the houses outward, so wherever wood would stand inside the ring there is pasture instead. Its edge wanders.
+  const bw = 2 * ra + 1, bh = 2 * rb + 1;
+  const lawn = S.sculpt(bw, bh);
+  lawn.x = cx - ra;
+  lawn.y = cy - rb;
+  lawn.onGround = true;
+  const wood = new Map<number, boolean>();
+  for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
+    const dx = i - ra, dy = j - rb, x = cx + dx + 0.5, y = cy + dy + 0.5;
+    if ((dx * dx) / (ra * ra) + (dy * dy) / (rb * rb) + 0.2 * drift(x, y, 28 * (n / 6400), n, w.seed ^ 0x77b1) > 0.94) continue;
+    const ni = node(c, x, y);
+    if (c.isSea[ni] || c.lakeId[ni] >= 0 || c.rw[ni] > 0) continue;
+    let f = wood.get(ni);
+    if (f === undefined) {
+      const m = coverAtNode(c, ni % c.gN, Math.floor(ni / c.gN));
+      f = m >= M.floorBroadleaf && m <= M.shrub;
+      wood.set(ni, f);
+    }
+    if (!f || way.has(Math.floor((dy + 512) / 3) * 4096 + Math.floor((dx + 512) / 3))) continue;
+    let inside = false;
+    for (const [ax, ay, bx, by] of t.taken) if (x > ax - 1 && x < bx + 1 && y > ay - 1 && y < by + 1) { inside = true; break; }
+    if (inside) continue;
+    lawn.paint[j * bw + i] = (hash2(Math.floor(x / 9), Math.floor(y / 7), w.seed ^ 0x1a9) & 3) === 0 ? M.ley : M.hay;
+  }
+  w.structures.push(lawn);
+  for (let gy = -rb; gy < rb; gy += 11) for (let gx = -ra; gx < ra; gx += 16) {
+    const hsh = hash2(gx, gy, w.seed ^ 0x6b17);
+    const pw = 11 + (hsh & 3), pd = 8 + ((hsh >>> 2) & 1);
+    const x = cx + gx + ((hsh >>> 4) & 3), y = cy + gy + ((hsh >>> 6) & 3);
+    const q = (gx * gx) / (ra * ra) + (gy * gy) / (rb * rb);
+    // The ring thins out at its outer edge.
+    if (q > 1 || (q > 0.7 && ((hsh >>> 8) & 3) === 0) || y + pd / 2 > t.shore - 11) continue;
+    if (!free(x - pw / 2, y - pd / 2, x + pw / 2, y + pd / 2)) continue;
+    let ok = true, lo = Infinity, hi = -Infinity;
+    for (const [ox, oy] of [[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+      const px = x + ox * pw, py = y + oy * pd;
+      const ni = node(c, px, py);
+      // A rill may run through an orchard; a river, a lake or the sea may not.
+      if (c.isSea[ni] || c.lakeId[ni] >= 0 || c.rw[ni] > 1 || c.slope[ni] > 0.7) { ok = false; break; }
+      const v = groundAt(w, px, py);
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    if (!ok || lo < 1.6 || hi - lo > 14) continue;
+    const kind = (hsh >>> 10) % 8;
+    if (kind < 3) w.structures.push(S.standAt(S.orchard(pw, pd, hsh, M.broadleafWarm, 3), x, y, 0));
+    else if (kind < 6) w.structures.push(S.standAt(S.oliveGrove(pw + 1, pd, hsh), x, y, 0));
+    else w.structures.push(S.standAt(S.gardenPlot(pw - 2, pd - 2, hsh), x, y, 0));
+    t.taken.push([x - pw / 2, y - pd / 2, x + pw / 2, y + pd / 2]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -860,6 +1007,58 @@ function subdivide(pts: number[], width: number): RoadLine {
   return { width, vertices: v };
 }
 
+/** A smooth line through the points (a Catmull–Rom spline), in pieces of about three cells. */
+function curve(pts: number[], width: number): RoadLine {
+  const m = pts.length / 2;
+  if (m < 3) return subdivide(pts, width);
+  const v: number[] = [pts[0], pts[1]];
+  for (let k = 0; k + 1 < m; k++) {
+    const a = 2 * Math.max(0, k - 1), b = 2 * k, cc = 2 * (k + 1), d = 2 * Math.min(m - 1, k + 2);
+    const dx = pts[cc] - pts[b], dy = pts[cc + 1] - pts[b + 1];
+    const steps = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 3));
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps, t2 = t * t, t3 = t2 * t;
+      const w0 = -0.5 * t3 + t2 - 0.5 * t, w1 = 1.5 * t3 - 2.5 * t2 + 1, w2 = -1.5 * t3 + 2 * t2 + 0.5 * t, w3 = 0.5 * t3 - 0.5 * t2;
+      v.push(w0 * pts[a] + w1 * pts[b] + w2 * pts[cc] + w3 * pts[d], w0 * pts[a + 1] + w1 * pts[b + 1] + w2 * pts[cc + 1] + w3 * pts[d + 1]);
+    }
+  }
+  return { width, vertices: v };
+}
+
+/** The darker verge of a main road: the same line a cell to one side, so the road draws two pixels wide with a lighter crown. */
+function verge(r: RoadLine): RoadLine {
+  const v = r.vertices, m = v.length / 2, out: number[] = [];
+  for (let k = 0; k < m; k++) {
+    const a = 2 * Math.max(0, k - 1), b = 2 * Math.min(m - 1, k + 1);
+    const tx = v[b] - v[a], ty = v[b + 1] - v[a + 1], tl = Math.sqrt(tx * tx + ty * ty) || 1;
+    // To the south or east of the crown; a row of cells is 0.8 of a pixel deep, so the offset is longer north–south.
+    let ux = -ty / tl, uy = tx / tl;
+    if (uy < 0 || (uy === 0 && ux < 0)) { ux = -ux; uy = -uy; }
+    const d = 1 + 0.35 * uy;
+    out.push(v[2 * k] + ux * d, v[2 * k + 1] + uy * d);
+  }
+  return { width: 1, vertices: out };
+}
+
+/** Smooth noise in [−1, 1] on a lattice of `cells`, wrapped with the world: the slow drift that bends a ruled road. */
+function drift(x: number, y: number, cells: number, n: number, seed: number): number {
+  const period = Math.max(1, Math.floor(n / cells + 0.5)), size = n / period;
+  const u = x / size, v = y / size, i = Math.floor(u), j = Math.floor(v), fx = u - i, fy = v - j;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const at = (a: number, b: number): number => hash2(wrap(a, period), wrap(b, period), seed) / 2147483648 - 1;
+  const top = at(i, j) + (at(i + 1, j) - at(i, j)) * sx, bot = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * sx;
+  return top + (bot - top) * sy;
+}
+
+/** Crest and valley, for the road network: nodes standing more than CREST[0] over the mean ground within CREST_R nodes cost more, up to 1 + CREST[2] at CREST[1]; ones as far under it cost VALLEY. Woods cost WOOD. */
+const CREST_R = 4;
+const CREST: readonly [number, number, number] = [2, 12, 1.4];
+const VALLEY = 0.8;
+const WOOD = 1.3;
+/** A road's free points are carried up to WANDER cells (of the 6400 world) by a drift of WANDER_CELLS, less on steep ground. */
+const WANDER = 9;
+const WANDER_CELLS = 110;
+
 /** gen/roads.ts parameters (design S10). */
 export const ROAD_PARAMS: RoadParams = { gradeMax: 0.12, slopeCost: 40, southBonus: 0.15, bridgeCost: 50, maxBridgeWidth: 4, turnCost: 2, extraEdges: 0 };
 
@@ -897,7 +1096,22 @@ function layLanes(w: Work, stops: Stop[]): RoadLine[] {
     }
     return sy * cN + sx;
   });
-  const net = roadNetwork({ n: cN, cellsPerNode: 8, h, isSea, lake, riverWidth }, ROAD_PARAMS, points);
+  // Where a road would rather run: valley floors and saddles are cheap, crests dear, woods a little dearer than open ground.
+  const land = new Float32Array(cN * cN), hl = new Float32Array(cN * cN);
+  for (let k = 0; k < cN * cN; k++) if (!isSea[k]) { land[k] = 1; hl[k] = h[k]; }
+  const near = boxBlur(hl, cN, CREST_R, 1), share = boxBlur(land, cN, CREST_R, 1);
+  const bias = new Float32Array(cN * cN).fill(1);
+  for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) {
+    const k = y * cN + x;
+    if (isSea[k] || share[k] <= 0) continue;
+    // How far the node stands over the ground round it.
+    const over = h[k] - near[k] / share[k];
+    let b = over > CREST[0] ? 1 + CREST[2] * Math.min(1, (over - CREST[0]) / (CREST[1] - CREST[0])) : over < -CREST[0] ? VALLEY : 1;
+    const m = coverAtNode(c, 2 * x + 1, 2 * y + 1);
+    if (m >= M.floorBroadleaf && m <= M.coniferWarm) b *= WOOD;
+    bias[k] = b;
+  }
+  const net = roadNetwork({ n: cN, cellsPerNode: 8, h, isSea, lake, riverWidth, bias }, ROAD_PARAMS, points);
   // Union-find over the stops, to see which the network left out.
   const parent = stops.map((_, k) => k);
   const find = (k: number): number => { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
@@ -1021,13 +1235,37 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
       Math.max(groundAt(w, px[i0], py[i0]), water + 1.6) + 0.3, Math.max(groundAt(w, px[i1], py[i1]), water + 1.6) + 0.3, Math.max(2, span - 8)));
     k = e + 1;
   }
-  // Smooth the grid's stairs out of the rest.
-  for (let pass = 0; pass < 4; pass++) {
-    let lx = px[0], ly = py[0];
+  // A point may move only onto dry ground that nothing stands on.
+  const open = (x: number, y: number): boolean => dry(w, x, y) && !w.blocked[node(c, x, y)];
+  // The grid's path is ruled between its turns. First the whole map drifts a little under it, so a long straight
+  // bends; the drift is a function of the place, so two lanes through one node still agree.
+  const amp = WANDER * (n / 6400);
+  for (let k = 1; k < m - 1; k++) {
+    if (fixed[k]) continue;
+    const ease = c.slope[node(c, px[k], py[k])] > 0.25 ? 0.4 : 1;
+    const dx = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a71), dy = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a72);
+    for (const f of [1, 0.5]) if (open(px[k] + f * dx, py[k] + f * dy)) { px[k] += f * dx; py[k] += f * dy; break; }
+  }
+  // Then the stairs are smoothed out, and on a slope each point slides along it to the height halfway between
+  // its neighbours': the road keeps an even grade and so follows the contours round every spur and hollow.
+  for (let pass = 0; pass < 6; pass++) {
     for (let k = 1; k < m - 1; k++) {
-      const nx = 0.25 * lx + 0.5 * px[k] + 0.25 * px[k + 1], ny = 0.25 * ly + 0.5 * py[k] + 0.25 * py[k + 1];
-      lx = px[k]; ly = py[k];
-      if (!fixed[k]) { px[k] = nx; py[k] = ny; }
+      if (fixed[k]) continue;
+      const sx = 0.25 * px[k - 1] + 0.5 * px[k] + 0.25 * px[k + 1], sy = 0.25 * py[k - 1] + 0.5 * py[k] + 0.25 * py[k + 1];
+      let nx = sx, ny = sy;
+      const tx = px[k + 1] - px[k - 1], ty = py[k + 1] - py[k - 1], tl = Math.sqrt(tx * tx + ty * ty);
+      if (tl > 1e-6) {
+        const ux = -ty / tl, uy = tx / tl;
+        const across = (groundAt(w, sx + 3 * ux, sy + 3 * uy) - groundAt(w, sx - 3 * ux, sy - 3 * uy)) / 6;
+        if (Math.abs(across) > 0.04) {
+          const want = 0.5 * (groundAt(w, px[k - 1], py[k - 1]) + groundAt(w, px[k + 1], py[k + 1])) - groundAt(w, sx, sy);
+          const d = 0.6 * Math.max(-2.5, Math.min(2.5, want / across));
+          nx += ux * d;
+          ny += uy * d;
+        }
+      }
+      if (open(nx, ny)) { px[k] = nx; py[k] = ny; }
+      else if (open(sx, sy)) { px[k] = sx; py[k] = sy; }
     }
   }
   for (let k = 1; k < m - 1; k++) if (fixed[k] !== 2) w.laid.set(keyOf(k), [px[k], py[k]]);
@@ -1038,12 +1276,12 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
     for (let k = from; k <= to; k++) {
       const shared = k > from && fixed[k] === 2 && fixed[k - 1] === 2;
       if (shared) {
-        if (pts.length >= 4) roads.push(subdivide(pts, width));
+        if (pts.length >= 4) roads.push(curve(pts, width));
         pts = [];
       }
       pts.push(px[k], py[k]);
     }
-    if (pts.length >= 4) roads.push(subdivide(pts, width));
+    if (pts.length >= 4) roads.push(curve(pts, width));
   };
   for (const [i0, i1] of cuts) {
     flush(i0);
@@ -1064,7 +1302,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   const placed = placeSitesOn(c, rules, opts);
   const w: Work = {
     c, g: Float64Array.from(fields.h), seed: t.land.seed, structures: [], conforms: [], terraces: [],
-    blocked: new Uint8Array(c.gN * c.gN), laid: new Map(), spurs: [],
+    blocked: new Uint8Array(c.gN * c.gN), laid: new Map(), spurs: [], town: null,
   };
   for (const site of placed.sites) standLandmark(w, site, !opts.occupied || opts.occupied.has(site.id) || site.type === "abbey");
 
@@ -1117,7 +1355,10 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   for (const hm of hamlets) if (hm.houses > 0) stops.push({ x: hm.x, y: hm.y, island: hm.island, width: 2, pair: -1 });
   if (nearBank) stops.push(nearBank);
   if (farBank) stops.push(farBank);
-  const roads = (opts.lanes === false ? [] : layLanes(w, stops)).concat(w.spurs);
+  const lanes = (opts.lanes === false ? [] : layLanes(w, stops)).concat(w.spurs);
+  greenBelt(w, lanes);
+  // A main road is two pixels wide: its crown, and a darker verge beside it.
+  const roads = lanes.concat(lanes.filter((r) => r.width >= 2).map(verge));
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
