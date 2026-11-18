@@ -99,7 +99,10 @@ export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array): 
   }
 }
 
-export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, out: Uint32Array, live?: LiveWater): void {
+/** Packed RGBA for bake pixel (bx, by) where no chunk is baked yet (the haze). */
+export type Fallback = (bx: number, by: number) => number;
+
+export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, out: Uint32Array, live?: LiveWater, fallback?: Fallback): void {
   const { x: vx, y: vy, w, h } = view;
   const cx0 = Math.floor(vx / CHUNK), cx1 = Math.floor((vx + w - 1) / CHUNK);
   const cy0 = Math.floor(vy / CHUNK), cy1 = Math.floor((vy + h - 1) / CHUNK);
@@ -112,7 +115,8 @@ export function compose(chunks: ChunkSource, palette: Palette, view: ViewRect, o
       for (let r = r0; r < r1; r++) {
         let o = (r - vy) * w + (c0 - vx);
         if (!px) {
-          for (let c = c0; c < c1; c++) out[o++] = PAPER;
+          if (fallback) for (let c = c0; c < c1; c++) out[o++] = fallback(c, r);
+          else for (let c = c0; c < c1; c++) out[o++] = PAPER;
           continue;
         }
         let i = (r - cy * CHUNK) * CHUNK + (c0 - cx * CHUNK);
