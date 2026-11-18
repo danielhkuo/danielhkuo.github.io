@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { namedViews, renderStrip } from "../cli/live.ts";
 import type { Flier, LiveFrame, LiveLayer } from "../live/live.ts";
 import type { Manifest } from "../pack/manifest.ts";
+import { decodeFlightData } from "../pack/world.ts";
 
 const root = process.cwd();
 const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
@@ -13,6 +14,8 @@ const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "wor
 const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
 
 export const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8")) as Manifest;
+/** The shipped world's ground grid, as the flight page hands it to the layers. */
+export const land = await decodeFlightData(bin);
 
 /** The composed land of one view, its bake pixels and the rect. */
 export interface Shot {

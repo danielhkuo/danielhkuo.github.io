@@ -162,6 +162,7 @@ export default function Flight() {
             seed: loaded.manifest.seed,
             n: loaded.data.n,
             sites: loaded.manifest.sites,
+            land: loaded.data,
             discover: (id, label) => {
               discoveries.discover(id, label);
             },

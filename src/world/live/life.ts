@@ -1,10 +1,11 @@
 // Small life: sheep on the pastures, gulls resting on the beaches and wheeling over the harbour and the lighthouses,
-// boats working out of the town, and smoke from a few chimneys.
+// boats working out of the town's harbour, and smoke from a few chimneys.
 //
 // Everything is a function of the seed, the place and the clock. Things that stand on the land are placed on a lattice
 // in bake space (which is fixed to the world) and drawn only where the bake pixel under them is the right material;
-// things in the air and on the sea are placed in world space round the sites. Birds near the flier's track lift and
-// scatter, then settle: how far into that flight a bird is depends only on where the flier is and how it is heading.
+// things in the air are placed in world space round the sites. Birds near the flier's track lift and scatter, then
+// settle: how far into that flight a bird is depends only on where the flier is and how it is heading. Boats keep to
+// routes planned round the land (routes.ts), out from the roads off the harbour and home to them.
 
 import { hash2, mix32 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
@@ -12,6 +13,7 @@ import { MATERIAL as M } from "../look/materials.ts";
 import { artSet, blend, frameX, frameY, modP, ringDelta, smooth01 } from "./art.ts";
 import type { Flier, LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
+import { planHarbour, ROUTE_STEP } from "./routes.ts";
 import { drawSprite, worldRowAt } from "./sprites.ts";
 
 // ── Tuning ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -23,12 +25,11 @@ export const REACH = 46;
 export const LOW = 60;
 /** Seconds a startled bird stays up. */
 const ALOFT = 4.4;
-/** Boats turn for home this far from the town, and for sea again this near it. */
-const BOAT_NEAR = 100;
+/** Boats turn for home at least this far from the roads off the harbour, by water. */
 const BOAT_FAR = 190;
 /** Smoke rises only from roofs within this many cells of a town. */
 const SMOKE_REACH = 190;
-/** Boats to a town, one to each bearing; those whose bearing lies inland are never seen. */
+/** Boats to a town, fanned over the sea its harbour opens on. */
 const BOATS = 12;
 
 const TAU = 2 * Math.PI;
@@ -106,13 +107,29 @@ interface Wheeler {
 }
 
 interface Boat {
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  far: number;
+  /** From the roads out to sea: x, y pairs every ROUTE_STEP cells, and its length in cells. */
+  route: Float32Array;
+  length: number;
+  /** How far out along its route it lies when it is home, in cells: each boat a little apart from the others. */
+  berth: number;
   period: number;
   phase: number;
+}
+
+/** Where a boat is `d` cells along `route` (x, y pairs every ROUTE_STEP), and the way the route runs there: filled by `routeAt`. */
+const where = { x: 0, y: 0, dx: 0, dy: 0 };
+function routeAt(route: Float32Array, d: number): void {
+  const last = route.length / 2 - 1;
+  const at = d <= 0 ? 0 : d / ROUTE_STEP;
+  const i = at >= last ? last - 1 : Math.floor(at), k = at >= last ? 1 : at - i;
+  where.x = route[2 * i] + (route[2 * i + 2] - route[2 * i]) * k;
+  where.y = route[2 * i + 1] + (route[2 * i + 3] - route[2 * i + 1]) * k;
+  // The heading over a few points, so a boat does not twitch at each one.
+  const a = i >= 2 ? i - 2 : 0, b = i + 3 <= last ? i + 3 : last;
+  const dx = route[2 * b] - route[2 * a], dy = route[2 * b + 1] - route[2 * a + 1];
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  where.dx = dx / len;
+  where.dy = dy / len;
 }
 
 /** The small life. `ctx` is the world's seed, size and sites. */
@@ -166,12 +183,20 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
     if (!town) continue;
     towns.push({ x: site.x, y: site.y });
+    const hashes: number[] = [], fars: number[] = [];
     for (let k = 0; k < BOATS; k++) {
-      const h = hash2(s * 31 + k, 11, seed ^ 0x0b0a);
-      const ang = ((k + (h & 255) / 256) / BOATS) * TAU;
+      hashes.push(hash2(s * 31 + k, 11, seed ^ 0x0b0a));
+      fars.push(BOAT_FAR + ((hashes[k] >>> 8) & 127));
+    }
+    const plan = planHarbour(ctx.land, ctx.n, site.x, site.y, fars);
+    if (!plan) continue;
+    for (let k = 0; k < BOATS; k++) {
+      const route = plan.routes[k], h = hashes[k];
+      if (!route || route.length < 8) continue;
       boats.push({
-        x: site.x, y: site.y, dx: pcos(ang), dy: psin(ang),
-        far: BOAT_FAR + ((h >>> 8) & 127),
+        route,
+        length: (route.length / 2 - 1) * ROUTE_STEP,
+        berth: 3 + (h & 15),
         period: 150 + ((h >>> 16) & 63),
         phase: ((h >>> 22) & 1023) / 1024,
       });
@@ -297,30 +322,33 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
   }
 
-  /** Boats: each sails out from the town along its own bearing, turns, and comes home. Drawn on open sea only. */
+  /**
+   * Boats: each lies off the harbour in the roads, sails out along its own route to sea, turns, and comes home the
+   * same way. The routes keep to the water, so a boat is in sight the whole way round.
+   */
   function sail(f: LiveFrame): void {
     const { out, bake, palette, t } = f;
     const w = f.rect.w, h = f.rect.h;
     for (let k = 0; k < boats.length; k++) {
       const b = boats[k];
       const u = (t / b.period + b.phase) % 1;
-      const r = BOAT_NEAR + (b.far - BOAT_NEAR) * (0.5 - 0.5 * pcos(TAU * u));
       const outward = u < 0.5;
-      const x = b.x + r * b.dx, y = b.y + r * b.dy;
+      routeAt(b.route, b.berth + (b.length - b.berth) * (0.5 - 0.5 * pcos(TAU * u)));
+      const x = where.x, y = where.y;
+      const sign = outward ? 1 : -1;
+      const dx = sign * where.dx, dy = sign * where.dy;
       const px = frameX(f, x, 8), py = frameY(f, 0.8 * y, 8);
       if (px < 5 || px >= w - 5 || py < 6 || py >= h - 1) continue;
-      // Clear water under the whole hull, and not hard against a shore.
+      // Clear water under the whole hull: the routes are planned on a coarse grid, and a rock or a quay may lie on one.
       const i = py * w + px;
-      let deep = 0, clear = true;
-      for (let d = -4; d <= 4; d += 2) {
-        const v = bake[i + d];
+      let clear = true;
+      for (let q = -4; q <= 4; q += 2) {
+        const v = bake[i + q];
         if (isSea[v & 255] === 0) { clear = false; break; }
-        deep += (v >>> 8) & 15;
       }
-      if (!clear || deep < 14) continue;
+      if (!clear) continue;
       // The wake: a few pale pixels astern, on the water's own ramp, breaking up as they fall behind.
-      const sign = outward ? 1 : -1;
-      const wx = -sign * b.dx, wy = -sign * b.dy * 0.8;
+      const wx = -dx, wy = -dy * 0.8;
       const crawl = Math.floor(t * 2.5);
       for (let j = 3; j <= 9; j++) {
         if (j > 5 && ((j + crawl) % 3) === 0) continue;
@@ -332,7 +360,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         const tone = j <= 5 ? 0 : 2;
         if (((v >>> 8) & 15) > tone) out[q] = palette[((v & 255) << 8) | tone];
       }
-      drawSprite(f, boatSprite, x, y, 0, sign * b.dx < 0);
+      drawSprite(f, boatSprite, x, y, 0, dx < 0);
       note("boat", px, py);
     }
   }

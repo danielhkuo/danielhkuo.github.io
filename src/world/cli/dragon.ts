@@ -178,7 +178,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     width: W,
     height: H,
     sites: manifest.sites,
-    layers: makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites }),
+    layers: makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, land: data }),
   });
   const st: Stage = { view, sky: createSky(manifest.seed, manifest.n, styleFrom(null), manifest.start), n: manifest.n, out: new Uint32Array(W * H) };
 
