@@ -17,13 +17,21 @@ import { sortIndicesBy } from "../core/heap.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Conform, Structure } from "./built.ts";
-import type { SiteContext } from "./sites.ts";
+import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext } from "./sites.ts";
 import * as W from "./wonderworks.ts";
 
-export type WonderType = "baths" | "railway" | "drowned-church" | "cove-hotel";
+export type WonderType =
+  | "baths" | "railway" | "drowned-church" | "cove-hotel"
+  | "marsh-house" | "airship-mast" | "bridge-town" | "great-oak" | "observatory";
 
-/** The order wonders are sited in: the one with the fewest places it could go first. */
-export const WONDER_ORDER: readonly WonderType[] = ["cove-hotel", "drowned-church", "railway", "baths"];
+/**
+ * The order wonders are sited in: the one with the fewest places it could go first. Each round's wonders come
+ * after the last round's, so a new wonder never moves one that has already been judged.
+ */
+export const WONDER_ORDER: readonly WonderType[] = [
+  "cove-hotel", "drowned-church", "railway", "baths",
+  "observatory", "bridge-town", "marsh-house", "airship-mast", "great-oak",
+];
 
 /** Lengths scale with the world up to 6400 cells a side, and no further. */
 export function wonderScale(n: number): number {
@@ -51,12 +59,34 @@ export interface WonderRules {
   church: { across: number; shore: number; depth: number };
   /** `rock`: the rock lies within this of the cove's mouth. `exposure`: the cove's greatest exposure. `top`: the rock's greatest height. */
   hotel: { rock: number; exposure: number; top: number };
+  /** `around`: marsh or tidal water this far round the house. `causeway`: its least and greatest length. */
+  marsh: { around: number; causeway: readonly [number, number] };
+  /**
+   * `ground`: the headland's least and greatest height. `rays`: of sixteen compass rays, how many meet the sea
+   * within `reach`. `exposure`: the shore's least exposure. `relief`: the most the pad's ground may vary.
+   */
+  mast: { ground: readonly [number, number]; rays: number; reach: number; exposure: number; relief: number };
+  /**
+   * `width`: the river's least and greatest width. `level`: the most the two bridgeheads may differ. `deck`: the
+   * deck's least and greatest height over the water. `farm`: the least share of farmland within `within`.
+   */
+  bridgeTown: { width: readonly [number, number]; level: number; deck: readonly [number, number]; farm: number; within: number };
+  /**
+   * `village`: the knoll lies this far from a village, and `above` higher than it. `prominence`: over the land round it.
+   * `open`: the least share of open ground within 40 cells.
+   */
+  oak: { village: readonly [number, number]; above: number; prominence: number; open: number };
+  /** `least`: the lowest summit considered. `relief`: the most the terrace's ground may vary. */
+  observatory: { least: number; relief: number };
 }
 
 export function wonderRules(n: number): WonderRules {
   const k = wonderScale(n);
   return {
-    counts: { baths: 1, railway: 1, "drowned-church": 1, "cove-hotel": 1 },
+    counts: {
+      baths: 1, railway: 1, "drowned-church": 1, "cove-hotel": 1,
+      "marsh-house": 1, "airship-mast": 1, "bridge-town": 1, "great-oak": 1, observatory: 1,
+    },
     spacing: 600 * k,
     visible: 0.8,
     heightCap: 152,
@@ -64,6 +94,11 @@ export function wonderRules(n: number): WonderRules {
     railway: { flat: 220 * k, depth: 5, track: [150 * k, 300 * k], between: 1600 * k, lone: 40 * k },
     church: { across: 120 * k, shore: 20 * k, depth: 2 },
     hotel: { rock: 160 * k, exposure: 0.66, top: 14 },
+    marsh: { around: 40, causeway: [40 * k, 160 * k] },
+    mast: { ground: [8, 80], rays: 10, reach: 160 * k, exposure: 0.45, relief: 5 },
+    bridgeTown: { width: [3, 12], level: 3, deck: [6.5, 10], farm: 0.25, within: 120 * k },
+    oak: { village: [50 * k, 200 * k], above: 5, prominence: 2.5, open: 0.6 },
+    observatory: { least: 30, relief: 30 },
   };
 }
 
@@ -101,6 +136,8 @@ export interface WonderLand {
   coves: readonly { x: number; y: number; ax: number; ay: number; len: number; width: number }[];
   /** 1 on G nodes where something is built or a road runs. */
   busy: Uint8Array;
+  /** The villages and the town, cells. */
+  villages: readonly { x: number; y: number }[];
 }
 
 interface Cand {
@@ -182,6 +219,16 @@ function seaDistance(c: SiteContext): Uint8Array {
   seaDistMemo.set(c.isSea, dist);
   return dist;
 }
+
+/** Ground at a cell as it stands now, bilinear on G. */
+function groundAt(land: WonderLand, x: number, y: number): number {
+  return heightAt({ h: land.g, gN: land.c.gN }, x, y);
+}
+
+// Sixteen compass rays, clockwise from east (y runs south): 0 E, 4 S, 8 W, 12 N.
+const C1 = 0.9238795325112867, S1 = 0.3826834323650898, D1 = 0.7071067811865476;
+const RX = [1, C1, D1, S1, 0, -S1, -D1, -C1, -1, -C1, -D1, -S1, 0, S1, D1, C1];
+const RY = [0, S1, D1, C1, 1, C1, D1, S1, 0, -S1, -D1, -C1, -1, -C1, -D1, -S1];
 
 /** The rock a thing built on (x, y) is made of: the material of its top and of its faces. */
 function rockAt(c: SiteContext, x: number, y: number): [number, number] {
@@ -469,7 +516,390 @@ const HOTEL: Kind = {
   },
 };
 
-const KINDS: Record<WonderType, Kind> = { baths: BATHS, railway: RAILWAY, "drowned-church": CHURCH, "cove-hotel": HOTEL };
+// ---------------------------------------------------------------------------
+// The marsh house: a rise in a saltmarsh, with a causeway to firm ground.
+
+/** The middle of the marsh house's yard in its raster. */
+const YARD = [16.5, 11.5] as const;
+
+const MARSH: Kind = {
+  rules: (r) => [
+    "a saltmarsh",
+    `marsh and tidal water all round for ${r.marsh.around} cells`,
+    `firm ground ${Math.round(r.marsh.causeway[0])}–${Math.round(r.marsh.causeway[1])} cells off across the marsh`,
+  ],
+  candidates(land, r, tally) {
+    const { c } = land, gN = c.gN, [L0, L1, L2] = this.rules(r);
+    const R = Math.ceil(r.marsh.around / 4);
+    const marsh = (j: number): boolean => !c.isSea[j] && c.shoreClass[j] === 6 && c.lakeId[j] < 0 && c.rw[j] === 0;
+    const tidal = (j: number): boolean => c.isSea[j] === 1 && c.h[j] > -1.5;
+    const firm = (j: number): boolean => isDry(c, j) && c.shoreClass[j] !== 6 && c.h[j] >= 0.5;
+    const out: Cand[] = [];
+    for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
+      const i = gy * gN + gx;
+      if (!marsh(i)) continue;
+      tally.pass(L0);
+      // The yard is marsh and creeks, mostly marsh; round it, marsh and the shallow water of its creeks, with some open water.
+      let yard = 0, yardOk = true;
+      for (let dy = -3; dy <= 3 && yardOk; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const j = at(c, gx + dx, gy + dy);
+        if (marsh(j)) yard++;
+        else if (!tidal(j)) { yardOk = false; break; }
+      }
+      if (!yardOk || yard < 50) continue;
+      let flat = 0, water = 0, count = 0;
+      for (let dy = -R; dy <= R; dy += 2) for (let dx = -R; dx <= R; dx += 2) {
+        if (dx * dx + dy * dy > R * R) continue;
+        const j = at(c, gx + dx, gy + dy);
+        count++;
+        if (marsh(j)) flat++;
+        else if (tidal(j)) water++;
+      }
+      if ((flat + water) / count < 0.6 || water / count < 0.08) continue;
+      tally.pass(L1);
+      // The causeway leaves the yard on its south side, or east or west, and crosses only marsh and creeks.
+      const x = 4 * gx + 2, y = 4 * gy + 2, sx = x - 16, sy = y - 11;
+      let best: { k: number; len: number; score: number } | null = null;
+      for (let k = 0; k < 16; k++) {
+        if (RY[k] < -0.4) continue;
+        const [gx0, gy0] = W.marshGate(RX[k], RY[k]);
+        const ax = sx + gx0, ay = sy + gy0;
+        let len = -1;
+        for (let q = 2; q <= r.marsh.causeway[1]; q += 2) {
+          const j = nodeOf(c, ax + RX[k] * q, ay + RY[k] * q);
+          if (firm(j)) { len = q; break; }
+          if (!marsh(j) && !tidal(j)) break;
+        }
+        if (len < r.marsh.causeway[0]) continue;
+        const mid = (r.marsh.causeway[0] + r.marsh.causeway[1]) / 2;
+        const score = RY[k] * 0.6 - Math.abs(len - mid) / mid;
+        if (!best || score > best.score) best = { k, len, score };
+      }
+      if (!best) continue;
+      tally.pass(L2);
+      const [gx0, gy0] = W.marshGate(RX[best.k], RY[best.k]);
+      const ax = sx + gx0, ay = sy + gy0, bx = ax + RX[best.k] * best.len, by = ay + RY[best.k] * best.len;
+      const lamp = W.marshLamp(hash2(x, y, land.seed));
+      out.push({
+        x, y, level: W.MARSH_RISE, height: 19, score: (flat + 2 * Math.min(water, 0.3 * count)) / count + best.score,
+        box: [Math.min(sx, bx) - 2, Math.min(sy, by) - 2, Math.max(sx + W.MARSH_W, bx) + 3, Math.max(sy + W.MARSH_H, by) + 3],
+        anchors: { lamp: [sx + lamp, sy + 13], gate: [ax, ay], firm: [bx, by] },
+        probes: [[x, y + 2, W.MARSH_RISE, 15], [(ax + bx) / 2, (ay + by) / 2, 0.5, 2]],
+      });
+    }
+    return out;
+  },
+  stand(land, w) {
+    const seed = hash2(Math.floor(w.x), Math.floor(w.y), land.seed);
+    const [ax, ay] = w.anchors.gate, [bx, by] = w.anchors.firm;
+    const s = W.marshHouse(seed, bx - ax, by - ay);
+    s.x = Math.floor(w.x) - 16;
+    s.y = Math.floor(w.y) - 11;
+    s.base = W.MARSH_RISE;
+    const len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+    const bow = ((hash2(Math.floor(ax), Math.floor(ay), land.seed) & 1) === 0 ? 1 : -1) * 0.04 * len;
+    // The rise is built up out of the marsh; it is never cut.
+    const conforms: Conform[] = [{ kind: "raise", x: s.x + YARD[0], y: s.y + YARD[1], rx: 15.5, ry: 10.5, round: true, level: W.MARSH_RISE, skirt: 6, limit: 0 }];
+    return { structures: [s, ...W.marshCauseway(ax, ay, bx, by, bow)], conforms };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// The airship mast: an exposed headland.
+
+const MAST: Kind = {
+  rules: (r) => [
+    `a headland ${r.mast.ground[0]}–${r.mast.ground[1]} high`,
+    `an exposed shore (exposure ≥ ${r.mast.exposure})`,
+    `the sea on ${r.mast.rays} of 16 sides within ${Math.round(r.mast.reach)} cells`,
+    `a pad that varies by ${r.mast.relief} or less`,
+  ],
+  candidates(land, r, tally) {
+    const { c } = land, gN = c.gN, [L0, L1, L2, L3] = this.rules(r);
+    const reach = Math.max(4, Math.ceil(r.mast.reach / 4));
+    const out: Cand[] = [];
+    for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
+      const i = gy * gN + gx, h = c.h[i];
+      if (!isDry(c, i) || h < r.mast.ground[0] || h > r.mast.ground[1]) continue;
+      tally.pass(L0);
+      if (c.exposure[i] < r.mast.exposure) continue;
+      tally.pass(L1);
+      let rays = 0;
+      for (let k = 0; k < 16 && rays + 16 - k >= r.mast.rays; k++) {
+        for (let q = 1; q <= reach; q++) if (c.isSea[at(c, Math.floor(gx + 0.5 + RX[k] * q), Math.floor(gy + 0.5 + RY[k] * q))]) { rays++; break; }
+      }
+      if (rays < r.mast.rays) continue;
+      tally.pass(L2);
+      let lo = Infinity, hi = -Infinity, sum = 0, dry = true;
+      for (let dy = -2; dy <= 2 && dry; dy++) for (let dx = -5; dx <= 5; dx++) {
+        const j = at(c, gx + dx, gy + dy);
+        if (!isDry(c, j)) { dry = false; break; }
+        const v = land.g[j];
+        sum += v;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      if (!dry || hi - lo > r.mast.relief) continue;
+      tally.pass(L3);
+      const x = 4 * gx + 2, y = 4 * gy + 2, level = sum / 55;
+      const fx = x - 19 + W.MAST_FOOT[0], fy = y - 9 + W.MAST_FOOT[1];
+      out.push({
+        x, y, level, height: W.MAST_TALL,
+        score: rays / 16 + c.exposure[i] + Math.min(level, 40) / 40 - (hi - lo) / (2 * r.mast.relief),
+        box: [x - 20, y - 10, x + 24, y + 10],
+        anchors: { mast: [fx, fy] },
+        probes: [[fx, fy, level, W.MAST_TALL], [x + 10, y + 1, level, 6]],
+      });
+    }
+    return out;
+  },
+  stand(land, w) {
+    const s = W.airshipMast(hash2(Math.floor(w.x), Math.floor(w.y), land.seed));
+    s.x = Math.floor(w.x) - 19;
+    s.y = Math.floor(w.y) - 9;
+    s.base = w.level;
+    return { structures: [s], conforms: [{ kind: "flat", x: w.x, y: w.y, rx: 20, ry: 8.6, round: true, level: w.level, skirt: 5, limit: 3 }] };
+  },
+};
+
+/** Rows of water meadow south of the bridge town, kept clear of wood so the arches are seen. */
+const MEADOW = 22;
+
+// ---------------------------------------------------------------------------
+// The bridge town: a river 3–12 wide among farmland, running north–south so the bridge is seen side-on.
+
+const BRIDGE_TOWN: Kind = {
+  rules: (r) => [
+    `a river ${r.bridgeTown.width[0]}–${r.bridgeTown.width[1]} wide running north–south`,
+    `dry bridgeheads level within ${r.bridgeTown.level}`,
+    "one channel under the deck",
+    `a deck ${r.bridgeTown.deck[0]}–${r.bridgeTown.deck[1]} over the water`,
+    `farmland round it (${Math.round(r.bridgeTown.farm * 100)}% within ${Math.round(r.bridgeTown.within)} cells)`,
+  ],
+  candidates(land, r, tally) {
+    const { c } = land, [L0, L1, L2, L3, L4] = this.rules(r);
+    const ring = Math.max(3, Math.ceil(r.bridgeTown.within / 4));
+    // Where streams meet: the head of each reach that two or more flow into, and the narrowest of them.
+    const into = new Map<number, number>(), count = new Map<number, number>();
+    for (const q of c.reaches) {
+      if (q.endsIn !== "reach") continue;
+      const w = q.vertices[q.vertices.length - 2];
+      into.set(q.downstream, Math.min(into.get(q.downstream) ?? Infinity, w));
+      count.set(q.downstream, (count.get(q.downstream) ?? 0) + 1);
+    }
+    const joins: { x: number; y: number; w: number }[] = [];
+    for (const q of c.reaches) if ((count.get(q.id) ?? 0) >= 2) joins.push({ x: q.vertices[0], y: q.vertices[1], w: into.get(q.id) as number });
+    const out: Cand[] = [];
+    for (const reach of c.reaches) {
+      const v = reach.vertices;
+      let run = 0, last = -Infinity;
+      for (let k = 8; k + 12 <= v.length; k += 4) {
+        run += Math.sqrt((v[k] - v[k - 4]) * (v[k] - v[k - 4]) + (v[k + 1] - v[k - 3]) * (v[k + 1] - v[k - 3]));
+        const wide = v[k + 2];
+        if (wide < r.bridgeTown.width[0] - 0.5 || wide > r.bridgeTown.width[1] + 0.5 || run - last < 16) continue;
+        const px = v[k], py = v[k + 1];
+        const i = nodeOf(c, px, py);
+        if (c.isSea[i] || c.lakeId[i] >= 0) continue;
+        const tx = v[k + 8] - v[k - 8], ty = v[k + 9] - v[k - 7], tl = Math.sqrt(tx * tx + ty * ty);
+        if (tl < 1e-6 || (ty * ty) / (tl * tl) < 0.85) continue;
+        tally.pass(L0);
+        const water = v[k + 3];
+        const len = Math.max(40, Math.min(52, 2 * Math.ceil((wide + 36) / 2)));
+        const xa = Math.floor(px) - len / 2, xb = xa + len - 1, row = Math.floor(py);
+        const ha = groundAt(land, xa - 3, row), hb = groundAt(land, xb + 3, row);
+        if (!isDry(c, nodeOf(c, xa - 3, row)) || !isDry(c, nodeOf(c, xb + 3, row)) || Math.abs(ha - hb) > r.bridgeTown.level) continue;
+        tally.pass(L1);
+        // One river in sight of the town: no lake or sea, no stream joining it behind or under the houses (which hide
+        // some 20 cells of the land behind them), and no second river joining it anywhere near. A rill is a thin line.
+        let one = true;
+        for (let y = row - 48; y <= row + 24 && one; y += 4) for (let x = xa - 12; x <= xb + 12; x += 4) {
+          const j = nodeOf(c, x, y);
+          if (c.isSea[j] || c.lakeId[j] >= 0) { one = false; break; }
+        }
+        for (const m of joins) {
+          if (!one) break;
+          const dx = torusDelta(px, m.x, c.n), dy = torusDelta(row, m.y, c.n);
+          if (dx < xa - px - 12 || dx > xb - px + 12 || dy < -48 || dy > 24) continue;
+          if (m.w >= 2 || (dx >= xa - px - 6 && dx <= xb - px + 6 && dy >= -32 && dy <= 8)) one = false;
+        }
+        if (!one) continue;
+        tally.pass(L2);
+        const deck = Math.max(r.bridgeTown.deck[0], Math.max(ha, hb) + 0.6 - water);
+        if (deck > r.bridgeTown.deck[1]) continue;
+        tally.pass(L3);
+        let farm = 0, looked = 0;
+        const gx = Math.floor(px / 4), gy = Math.floor(py / 4);
+        for (let q = 0; q < 16; q++) for (const d of [ring / 3, (2 * ring) / 3, ring]) {
+          const nx = Math.floor(gx + 0.5 + RX[q] * d), ny = Math.floor(gy + 0.5 + RY[q] * d), j = at(c, nx, ny);
+          looked++;
+          if (isDry(c, j) && c.slope[j] < 0.15 && isFarmable(coverAtNode(c, nx, ny))) farm++;
+        }
+        if (farm / looked < r.bridgeTown.farm) continue;
+        tally.pass(L4);
+        last = run;
+        const sx = xa - W.BRIDGE_END, sy = row - W.BRIDGE_ROW - 4;
+        const up = Math.max(0, k - 48), down = Math.min(v.length - 4, k + 48);
+        out.push({
+          x: px, y: py, level: water, height: deck + W.BRIDGE_TALL,
+          score: (3 * farm) / looked + (ty * ty) / (tl * tl) + Math.min(wide, 8) / 6 - (0.5 * Math.abs(ha - hb)) / r.bridgeTown.level - (deck > 6 ? (deck - 6) / 3 : 0),
+          box: [sx - 2, sy - 2, sx + len + 2 * W.BRIDGE_END + 2, sy + W.BRIDGE_H + MEADOW],
+          anchors: { west: [xa, row], east: [xb, row], upstream: [v[up], v[up + 1]], downstream: [v[down], v[down + 1]] },
+          probes: [[px, py + 4, water, deck + 14], [xa, py + 4, water, deck + 10], [xb, py + 4, water, deck + 10]],
+        });
+      }
+    }
+    return out;
+  },
+  stand(land, w) {
+    const { c } = land;
+    const [xa, row] = w.anchors.west, [xb] = w.anchors.east;
+    const len = xb - xa + 1, deck = w.height - W.BRIDGE_TALL, top = w.level + deck;
+    const wet = Math.max(3, c.rw[nodeOf(c, w.x, w.y)]);
+    const s = W.bridgeTown(len, wet, deck, hash2(Math.floor(w.x), Math.floor(w.y), land.seed));
+    s.x = xa - W.BRIDGE_END;
+    s.y = row - W.BRIDGE_ROW - 4;
+    s.base = w.level;
+    const mid = s.y + W.BRIDGE_ROW + W.BRIDGE_DEPTH / 2;
+    // No bank stands through the town, and the road comes up to the deck at either end.
+    const conforms: Conform[] = [
+      { kind: "dredge", x: xa + len / 2, y: mid, rx: len / 2 + 2, ry: W.BRIDGE_DEPTH / 2 + 1, round: false, level: top - 0.4, skirt: 3, limit: 0 },
+      { kind: "flat", x: xa - 4, y: mid, rx: 4, ry: 3, round: false, level: top, skirt: 8, limit: 2.5 },
+      { kind: "flat", x: xb + 5, y: mid, rx: 4, ry: 3, round: false, level: top, skirt: 8, limit: 2.5 },
+    ];
+    const meadow = W.waterMeadow(len + 2 * W.BRIDGE_END + 4, MEADOW, s.x ^ s.y);
+    meadow.x = s.x - 2;
+    meadow.y = s.y + W.BRIDGE_ROW + W.BRIDGE_DEPTH;
+    meadow.base = w.level;
+    return { structures: [s, meadow], conforms };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// The great oak: a knoll above a village.
+
+const OAK: Kind = {
+  rules: (r) => [
+    "a village",
+    `a knoll ${Math.round(r.oak.village[0])}–${Math.round(r.oak.village[1])} cells from a village, ${r.oak.above} above it and ${r.oak.prominence} over the land round it`,
+    `open ground on its top and ${Math.round(r.oak.open * 100)}% of the ground round it`,
+  ],
+  candidates(land, r, tally) {
+    const { c } = land, gN = c.gN, [L0, L1, L2] = this.rules(r);
+    const near = Math.ceil(r.oak.village[1] / 4);
+    const done = new Uint8Array(gN * gN);
+    const out: Cand[] = [];
+    for (const v of land.villages) {
+      tally.pass(L0);
+      const vx = Math.floor(v.x / 4), vy = Math.floor(v.y / 4), below = groundAt(land, v.x, v.y);
+      for (let dy = -near; dy <= near; dy++) for (let dx = -near; dx <= near; dx++) {
+        const d = 4 * Math.sqrt(dx * dx + dy * dy);
+        if (d < r.oak.village[0] || d > r.oak.village[1]) continue;
+        const gx = vx + dx, gy = vy + dy, i = at(c, gx, gy);
+        if (done[i]) continue;
+        done[i] = 1;
+        const level = land.g[i];
+        if (!isDry(c, i) || c.slope[i] > 0.2 || level < below + r.oak.above) continue;
+        // Nothing higher within 20 cells, and standing over the ring 24–40 cells out.
+        let higher = false, sum = 0, count = 0;
+        for (let ey = -10; ey <= 10 && !higher; ey++) for (let ex = -10; ex <= 10; ex++) {
+          const d2 = ex * ex + ey * ey;
+          if (d2 > 100) continue;
+          const h = land.g[at(c, gx + ex, gy + ey)];
+          if (d2 <= 25 && h > level + 0.3) { higher = true; break; }
+          if (d2 >= 36) { sum += h > 0 ? h : 0; count++; }
+        }
+        if (higher || level - sum / count < r.oak.prominence) continue;
+        tally.pass(L1);
+        if (!isOpenCover(coverAtNode(c, gx, gy))) continue;
+        // A lone tree in open country: the crown must stand clear of woods for the camera to see its shape.
+        let open = 0;
+        for (let q = 0; q < 16; q++) for (const e of [4, 7, 10]) {
+          const nx = Math.floor(gx + 0.5 + RX[q] * e), ny = Math.floor(gy + 0.5 + RY[q] * e);
+          if (isOpenCover(coverAtNode(c, nx, ny))) open++;
+        }
+        if (open / 48 < r.oak.open) continue;
+        tally.pass(L2);
+        const x = 4 * gx + 2, y = 4 * gy + 2, prom = level - sum / count;
+        const ox = x - W.OAK_TRUNK[0], oy = y - W.OAK_TRUNK[1];
+        out.push({
+          x, y, level, height: W.OAK_TALL,
+          // Best a little way up from the village, and behind it as the camera looks, so the village lies at its feet.
+          score: Math.min(prom, 10) / 5 + Math.min(level - below, 20) / 12 + (v.y > y + 20 ? 1 : 0) - (1.5 * d) / r.oak.village[1] + (2 * open) / 48,
+          box: [ox - 1, oy - 1, ox + W.OAK_W + 1, oy + W.OAK_H + 1],
+          anchors: { crown: [x, y], swing: [ox + W.OAK_SWING[0], oy + W.OAK_SWING[1]], treehouse: [ox + W.OAK_HOUSE[0], oy + W.OAK_HOUSE[1]], village: [v.x, v.y] },
+          probes: [[x, y, level, W.OAK_TALL]],
+        });
+      }
+    }
+    return out;
+  },
+  stand(land, w) {
+    const s = W.greatOak(hash2(Math.floor(w.x), Math.floor(w.y), land.seed));
+    s.x = Math.floor(w.x) - W.OAK_TRUNK[0];
+    s.y = Math.floor(w.y) - W.OAK_TRUNK[1];
+    s.base = w.level;
+    return { structures: [s], conforms: [{ kind: "flat", x: w.x, y: w.y, rx: 8, ry: 4, round: true, level: w.level, skirt: 4, limit: 1.5 }] };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// The observatory: the highest summit under the height cap.
+
+/** The terrace's middle in the observatory's raster. */
+const OBS_MID = [22.5, 11] as const;
+
+const OBSERVATORY: Kind = {
+  rules: (r) => [
+    `a summit ${r.observatory.least} high or more, with nothing higher within 32 cells`,
+    `ground under the terrace that varies by ${r.observatory.relief} or less`,
+  ],
+  candidates(land, r, tally) {
+    const { c } = land, gN = c.gN, [L0, L1] = this.rules(r);
+    const out: Cand[] = [];
+    for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
+      const i = gy * gN + gx, h = c.h[i];
+      if (h < r.observatory.least || !isDry(c, i)) continue;
+      let top = true;
+      for (let dy = -8; dy <= 8 && top; dy++) for (let dx = -8; dx <= 8; dx++) if ((dx !== 0 || dy !== 0) && c.h[at(c, gx + dx, gy + dy)] > h) { top = false; break; }
+      if (!top) continue;
+      tally.pass(L0);
+      let lo = Infinity, hi = -Infinity, dry = true;
+      for (let dy = -3; dy <= 3 && dry; dy++) for (let dx = -6; dx <= 6; dx++) {
+        const j = at(c, gx + dx, gy + dy);
+        if (!isDry(c, j)) { dry = false; break; }
+        const v = land.g[j];
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      if (!dry || hi - lo > r.observatory.relief) continue;
+      tally.pass(L1);
+      // The terrace stands under the summit, the top cut away under it, and its wall stands on the slope below.
+      const x = 4 * gx + 2, y = 4 * gy + 2, level = Math.max(hi - 8, lo + 0.6 * (hi - lo));
+      const ox = Math.floor(x - OBS_MID[0]), oy = Math.floor(y - OBS_MID[1]);
+      const domeX = ox + W.OBS_DOME[0], domeY = oy + W.OBS_DOME[1];
+      out.push({
+        x, y, level, height: W.OBS_TALL, score: level / 10 - (hi - lo) / (4 * r.observatory.relief),
+        box: [ox - 1, oy - 1, ox + W.OBS_W + 1, oy + W.OBS_H + 1],
+        anchors: { dome: [domeX, domeY] },
+        probes: [[domeX, domeY + 7, level, 20], [ox + 40, oy + 14, level, 8]],
+      });
+    }
+    return out;
+  },
+  stand(land, w) {
+    const s = W.observatory(hash2(Math.floor(w.x), Math.floor(w.y), land.seed));
+    s.x = Math.floor(w.x - OBS_MID[0]);
+    s.y = Math.floor(w.y - OBS_MID[1]);
+    s.base = w.level;
+    // The summit is cut down under the terrace, so no rock stands through its flags.
+    return { structures: [s], conforms: [{ kind: "dredge", x: s.x + OBS_MID[0], y: s.y + OBS_MID[1], rx: 22, ry: 11, round: false, level: w.level + 0.6, skirt: 3, limit: 0 }] };
+  },
+};
+
+const KINDS: Record<WonderType, Kind> = {
+  baths: BATHS, railway: RAILWAY, "drowned-church": CHURCH, "cove-hotel": HOTEL,
+  "marsh-house": MARSH, "airship-mast": MAST, "bridge-town": BRIDGE_TOWN, "great-oak": OAK, observatory: OBSERVATORY,
+};
 
 // ---------------------------------------------------------------------------
 
