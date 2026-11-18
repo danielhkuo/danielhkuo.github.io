@@ -3,7 +3,7 @@
 // as one error the page can show.
 
 import type { Manifest } from "../pack/manifest.ts";
-import type { FlightData } from "../pack/world.ts";
+import { decodeFlightData, type FlightData } from "../pack/world.ts";
 
 /** What the page shows when the world cannot be loaded. */
 export const LOAD_FAILED = "The realm could not be loaded.";
@@ -29,7 +29,36 @@ export interface LoadedWorld {
  * request, a non-OK status, bad JSON, a length mismatch or a decode error.
  */
 export async function loadWorld(fetchFn: (url: string) => Promise<Response>, base: string): Promise<LoadedWorld> {
-  void fetchFn;
-  void base;
-  throw new Error("not implemented");
+  try {
+    const curRes = await fetchFn(`${base}/current.json`);
+    if (!curRes.ok) throw new Error(`current.json ${curRes.status}`);
+    let current: unknown;
+    try {
+      current = await curRes.json();
+    } catch (e) {
+      throw e;
+    }
+    const worldId = (current as { worldId?: unknown }).worldId;
+    if (typeof worldId !== "string") throw new TypeError("worldId");
+
+    const manifestRes = await fetchFn(`${base}/${worldId}/manifest.json`);
+    if (!manifestRes.ok) throw new Error(`manifest ${manifestRes.status}`);
+    let manifest: Manifest;
+    try {
+      manifest = (await manifestRes.json()) as Manifest;
+    } catch (e) {
+      throw e;
+    }
+
+    const binUrl = `${base}/${worldId}/world.bin`;
+    const binRes = await fetchFn(binUrl);
+    if (!binRes.ok) throw new Error(`world.bin ${binRes.status}`);
+    const buf = new Uint8Array(await binRes.arrayBuffer());
+    if (buf.length !== manifest.bytes) throw new Error("length mismatch");
+
+    const data = await decodeFlightData(buf);
+    return { manifest, binUrl, data };
+  } catch (cause) {
+    throw new WorldLoadError(cause);
+  }
 }
