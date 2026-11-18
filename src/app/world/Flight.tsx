@@ -11,6 +11,7 @@ import { makeLayers } from "../../world/live/registry";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { drawFlier } from "../../world/runtime/standin";
+import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
 import { createSky } from "../../world/sky/sky";
@@ -52,6 +53,8 @@ export default function Flight() {
   const [failed, setFailed] = useState(false);
   // Filled from the frame loop when the page is opened with ?stats.
   const [stats, setStats] = useState<{ fps: number; pool: string; view: string } | null>(null);
+  const [discoveryCaption, setDiscoveryCaption] = useState<string | null>(null);
+  const [discoveryCaptionVisible, setDiscoveryCaptionVisible] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -103,6 +106,16 @@ export default function Flight() {
     let lastT = 0;
     let fpsFrames = 0;
     let fpsLast = 0;
+    let lastCaptionPoll = 0;
+    let lastPolledCaption: string | null | undefined;
+
+    let storageOrNull: KeyValue | null = null;
+    try {
+      storageOrNull = window.localStorage;
+    } catch {
+      storageOrNull = null;
+    }
+    const discoveries = createDiscoveries(storageOrNull, () => performance.now());
 
     // Stops the frame loop and the workers, and shows the message in place of the canvas.
     const fail = () => {
@@ -142,7 +155,14 @@ export default function Flight() {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
-          layers: makeLayers({ seed: loaded.manifest.seed, n: loaded.data.n, sites: loaded.manifest.sites }),
+          layers: makeLayers({
+            seed: loaded.manifest.seed,
+            n: loaded.data.n,
+            sites: loaded.manifest.sites,
+            discover: (id, label) => {
+              discoveries.discover(id, label);
+            },
+          }),
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         flight = startState(loaded.manifest.start, view);
@@ -187,6 +207,20 @@ export default function Flight() {
             probe.frames++;
             if (!ready) probe.hazeFrames++;
             else if (probe.readyAt === null) probe.readyAt = performance.now();
+          }
+
+          if (t - lastCaptionPoll >= 250) {
+            lastCaptionPoll = t;
+            const cap = discoveries.caption();
+            if (cap !== lastPolledCaption) {
+              lastPolledCaption = cap;
+              if (cap !== null) {
+                setDiscoveryCaption(cap);
+                setDiscoveryCaptionVisible(true);
+              } else {
+                setDiscoveryCaptionVisible(false);
+              }
+            }
           }
 
           if (statsOn) {
@@ -267,6 +301,28 @@ export default function Flight() {
           imageRendering: "pixelated",
         }}
       />
+      {discoveryCaption !== null ? (
+        <p
+          style={{
+            position: "fixed",
+            top: "1.25rem",
+            left: "50%",
+            transform: "translateX(-50%)",
+            margin: 0,
+            fontFamily: fell.style.fontFamily,
+            color: "#2e2a24",
+            fontSize: "0.95rem",
+            pointerEvents: "none",
+            background: "rgba(240, 232, 210, 0.85)",
+            padding: "0.25rem 0.9rem",
+            borderRadius: "2px",
+            opacity: discoveryCaptionVisible ? 1 : 0,
+            transition: "opacity 400ms",
+          }}
+        >
+          {discoveryCaption}
+        </p>
+      ) : null}
       <p
         style={{
           position: "fixed",
