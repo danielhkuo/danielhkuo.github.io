@@ -18,6 +18,7 @@
     "world:render": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-render.ts",
     "world:clouds": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-clouds.ts",
     "world:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-live.ts",
+    "world:dragon": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-dragon.ts",
     "world:build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-build.ts",
     "bench:cbonsai": "node scripts/bench-cbonsai.mjs",
     "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs"
