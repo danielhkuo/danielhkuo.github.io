@@ -11,7 +11,7 @@ import type { Manifest } from "../pack/manifest.ts";
 import type { FlightData } from "../pack/world.ts";
 import { compose, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
-import { runLayers, type LiveLayer } from "../live/live.ts";
+import { runLayers, type Flier, type LiveLayer } from "../live/live.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
 import type { Site, WorldView } from "./view.ts";
 
@@ -48,6 +48,8 @@ export interface StreamView extends WorldView {
   cached(): number;
   /** The bake pixel under each pixel of the last frame (width × height; 0 where haze showed). Live layers read it. */
   bakeFrame(): Uint32Array;
+  /** Draws the frame; `flier`, when given, is handed to the live layers. */
+  frame(out: Uint32Array, time?: number, flier?: Flier): void;
 }
 
 /** n must be a multiple of 320, so the bake wraps on whole chunks both ways. */

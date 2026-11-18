@@ -14,6 +14,17 @@ export interface LiveFrame {
   palette: Palette;
   /** World size in cells: positions wrap every n, bake rows every 0.8·n. */
   n: number;
+  /** The flier this frame, when there is one: for layers that react to it (birds scattering, a bell as it passes). */
+  flier?: Flier;
+}
+
+/** Where the flier is: world cells, units up, heading in radians (0 east, π/2 south), cells a second. */
+export interface Flier {
+  x: number;
+  y: number;
+  alt: number;
+  heading: number;
+  speed: number;
 }
 
 export interface LiveLayer {

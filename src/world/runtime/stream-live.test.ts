@@ -99,3 +99,17 @@ test("a failing layer is reported once and the frame still draws", () => {
   assert.deepEqual(errors, ["broken: nope"]);
   assert.ok(out.some((v) => v !== 0));
 });
+
+test("the flier is handed to the layers when the frame is given one", () => {
+  const seen: unknown[] = [];
+  const view = createStreamView(data, new InstantPool(true), palette, mask, {
+    width: W, height: H, paper: false, layers: [{ name: "see", draw: (f: LiveFrame) => { seen.push(f.flier); } }],
+  });
+  view.setCamera(640, 640);
+  view.update(0, 0);
+  const out = new Uint32Array(W * H);
+  const flier = { x: 640, y: 660, alt: 30, heading: 1, speed: 60 };
+  view.frame(out, 0, flier);
+  view.frame(out, 0);
+  assert.deepEqual(seen, [flier, undefined]);
+});
