@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-17.
+Last updated 2026-11-18.
 
 ## Where things are written down
 
@@ -22,26 +22,38 @@ Last updated 2026-11-17.
   weakest. See the look ledger.
 - **First flight** (`/world`). Seed 3 ships as one 3.1 MB file. Workers paint the land ahead of a stand-in kite at
   60 fps, and the start view is ready in about 1.8 s. Plan: `plans/2026-11-17-dragon-world-flight.md`.
+- **Clouds** (2026-11-18, Fable). Sculpted pixel-art cumulus in a five-tone ramp with warm rims, ground shadows, a
+  composed opening view, low clouds under the flier and banks it flies through. Design:
+  `specs/2026-11-17-dragon-world-clouds-design.md`. The owner rejected the first, Cursor-built version.
+- **Moving water** (2026-11-18, Fable). Surf rolls in in sets, white water breaks on rock, a slow swell crosses the open
+  sea, rivers flow on their sloping reaches, and waterfalls pour, with spray.
+- **Wind, small life, occasional and rare sights** (2026-11-18, Fable). Gusts across grass and crops; sheep, gulls
+  that scatter as you pass, sailing boats with wakes, chimney smoke; V-flocks, a kite over the town, a fishing boat, a
+  rainbow; and, very rarely (each about once in 11–16 minutes), a whale, a balloon, a fox, a heron, a tall ship and a
+  monk, each logged as a discovery with a caption. The flier leaves a wake on water. Preview every rare sight with
+  `/world?sights=all`.
+- **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
+  hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
 ## Next: the world comes alive
 
 Everything here is drawn each frame over the baked land (live layers, spec 5.5). Nothing is re-baked and the file
 size is unchanged; it is TypeScript running in the browser. Order is a proposal.
 
-1. **Clouds.** The most important. They drift over the land in the Ink & Glyph style: soft washed masses with inked
+1. ~~**Clouds.**~~ Done (see above). The most important. They drift over the land in the Ink & Glyph style: soft washed masses with inked
    edges, several sizes and heights, slow wind, sometimes parting to frame a landmark. Shadows are optional (the owner
    does not need them), but if added they come cheap from the shadow bits. Clouds must never hide the flier for long.
-2. **Water that moves.**
+2. ~~**Water that moves.**~~ Done.
    - Waves: surf rolling in along beaches by shore distance, foam lines on rocks and cliff feet, a swell on open sea.
    - Rivers: streaks running downstream along the flow phase.
    - Glints on open water (a first version exists).
 3. **Large waterfalls.** Falling water that animates, a spray cloud at the foot, a plunge pool ring. The big falls
    (tall drops on the larger rivers) get the full treatment; small ones a simpler flicker.
-4. **Wind in grass and trees.** Gusts brushing across meadows (a tone shift under a scrolling gust field) and crowns
+4. ~~**Wind in grass and trees.**~~ Done. Gusts brushing across meadows (a tone shift under a scrolling gust field) and crowns
    swaying slightly.
-5. **Small life.** Gulls over the harbour and cliffs, boats leaving and returning to the harbour, sheep on upland
+5. ~~**Small life.**~~ Done. Gulls over the harbour and cliffs, boats leaving and returning to the harbour, sheep on upland
    pasture, smoke from chimneys, windmill sails turning.
-6. **Occasional fun things.** Common enough to be seen on most flights: a flock of birds in a V, a kite flying over
+6. ~~**Occasional fun things.**~~ Done. Common enough to be seen on most flights: a flock of birds in a V, a kite flying over
    the town, a fishing boat with its nets out, a rainbow after a shower.
 
 ## Rare occurrences
@@ -82,6 +94,17 @@ a hermit monk walking the abbey road; bells ringing at the abbey on the hour.
 - **Sound** (wind, sea, bells) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 
 ## Backlog: cosmetic and look
+
+From the clouds and water (2026-11-18):
+- Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
+  50 px from small puffs; a bank can drift over a landmark.
+- Water: flat river reaches have no direction to flow in (the baked phase is water level); spray paints a few rock
+  pixels beside tall falls; surf is missing within 16 px of the frame's edge.
+- **Frame budget (first priority).** With every layer on, the browser check measures 3.4 ms p95 unthrottled but 5.0 ms
+  at 4× CPU throttle, over the 4 ms budget. Node breakdown per frame: water 0.5–1.1 ms, paper grain 0.27, wind
+  0.12–0.18, sky about 0.1, life and sights under 0.1. The fix is to cache the water's shore-distance pass across frames
+  (it depends only on the land, which moves with the camera); Cursor's byte-identical speed pass timed out.
+- The flight page component is large (React Doctor); split it into hooks.
 
 From the round-9 critics (peaks first):
 - Peaks: snow and rock lit from true normals so each arête shows a bright side and a cool far side; horizontal strata

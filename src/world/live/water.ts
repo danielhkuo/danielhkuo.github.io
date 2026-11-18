@@ -222,6 +222,10 @@ export function waterLayer(seed: number): LiveLayer {
     draw(f: LiveFrame): void {
       const { out, bake, palette, t } = f;
       const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
+      // Nothing to do over dry land: every mark this layer makes is on or beside water in view.
+      let wet = false;
+      for (let i = 0, end = w * h; i < end; i++) if (CLASS[bake[i] & 255] !== C_LAND) { wet = true; break; }
+      if (!wet) return;
       const pw = w + 2;
       if (sized !== w * 65536 + h) {
         dist = new Uint8Array(pw * (h + 2));

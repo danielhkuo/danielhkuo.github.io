@@ -2,7 +2,9 @@
 // stand-in kite, to judge motion.
 //
 //   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--frames 6] [--dt 0.25]
-//                         [--t 0] [--clouds <style>|none]
+//                         [--t 0] [--clouds <style>|none] [--sights all]
+//
+// --sights all shows every rare sight at once, near the view's centre where the land allows.
 //
 // Writes .cache/world-live/<view>.png (the frames side by side at 2×) and <view>-<k>.png for each frame.
 
@@ -329,7 +331,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
   const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
-  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites });
+  const forceSights = readFlag(argv, "--sights") === "all";
+  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, forceSights });
 
   const dir = join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });

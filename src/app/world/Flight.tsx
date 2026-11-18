@@ -164,6 +164,8 @@ export default function Flight() {
             discover: (id, label) => {
               discoveries.discover(id, label);
             },
+            // ?sights=all shows every rare sight at once, to look them over without waiting for them.
+            forceSights: new URLSearchParams(window.location.search).get("sights") === "all",
           }),
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
