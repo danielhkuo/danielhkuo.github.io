@@ -71,9 +71,11 @@ export function renderWonders(opts: WondersBenchOptions): string[] {
 
   const shots: Shot[] = s.wonders.map((w) => {
     const cx = (w.box[0] + w.box[2]) / 2, cy = (w.box[1] + w.box[3]) / 2;
-    // The railway is far wider than a close-up: its close-up is the halt.
-    const close: readonly [number, number, number] = w.type === "railway" ? [w.x, w.y, w.level + 4] : [cx, cy, w.level * 0.5 + w.height * 0.3];
-    return { name: w.id, wide: [cx, cy + 20, w.level * 0.5], close };
+    // The railway is far wider than a close-up: its close-up is the halt. The baths come down a cliff, so they
+    // are framed halfway down it; the rest stand on their level.
+    const ground = w.type === "baths" ? w.level * 0.5 : w.level;
+    const close: readonly [number, number, number] = w.type === "railway" ? [w.x, w.y, w.level + 4] : [cx, cy, ground + w.height * 0.3];
+    return { name: w.id, wide: [cx, cy + 20, ground], close };
   });
   // For scale and style: the abbey and the first lighthouse, framed the same way.
   const shown = new Set<string>();

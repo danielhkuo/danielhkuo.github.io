@@ -7,7 +7,10 @@ import { makeTerrain, settleWorld, type Terrain } from "./pipeline.ts";
 import { siteFieldsOf } from "./settle.ts";
 import { siteContext } from "./sites.ts";
 import { placeWonders, WONDER_ORDER, type WonderLand, wonderRules, wonderScale } from "./wonders.ts";
-import { bathLevels, coveHotel, drownedChurch, thermalBaths, tideHalt, tideTrack } from "./wonderworks.ts";
+import {
+  airshipMast, BRIDGE_TALL, bathLevels, bridgeTown, coveHotel, drownedChurch, greatOak, MAST_TALL, marshCauseway, marshHouse,
+  OAK_TALL, OBS_TALL, observatory, thermalBaths, tideHalt, tideTrack,
+} from "./wonderworks.ts";
 
 const N = 1280, SEED = 7;
 let land: Terrain | null = null;
@@ -18,7 +21,7 @@ function bare(t: Terrain): WonderLand {
   const c = siteContext(siteFieldsOf(t));
   const coves: WonderLand["coves"][number][] = [];
   for (const s of t.land.stamps) if (s.kind === "cove") coves.push({ x: s.x, y: s.y, ax: s.ax, ay: s.ay, len: s.len, width: s.width });
-  return { c, g: c.h, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy: new Uint8Array(c.gN * c.gN) };
+  return { c, g: c.h, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy: new Uint8Array(c.gN * c.gN), villages: [] };
 }
 
 test("lengths scale with the world up to 6400 and no further", () => {
@@ -147,4 +150,36 @@ test("the builders are pure and stay under their stated heights; the track is un
     for (let j = 0; j < p.h; j++) for (let i = 0; i < p.w; i++) if (p.top[j * p.w + i] > 0) cols.add(p.x + i);
   }
   for (let x = 101; x < 299; x++) assert.ok(cols.has(x), `gap at ${x}`);
+});
+
+test("the second round's builders are pure and stay under their stated heights", () => {
+  const tallest = (s: { top: Float32Array; marks: number[] }): number => {
+    let hi = 0;
+    for (const t of s.top) if (t > hi) hi = t;
+    for (let k = 2; k < s.marks.length; k += 5) if (s.marks[k] > hi) hi = s.marks[k];
+    return hi;
+  };
+  assert.deepEqual(marshHouse(5, 1, 0.4), marshHouse(5, 1, 0.4));
+  assert.deepEqual(airshipMast(5), airshipMast(5));
+  assert.deepEqual(bridgeTown(44, 5, 7, 5), bridgeTown(44, 5, 7, 5));
+  assert.deepEqual(greatOak(5), greatOak(5));
+  assert.deepEqual(observatory(5), observatory(5));
+  for (let seed = 1; seed <= 12; seed++) {
+    assert.ok(tallest(marshHouse(seed, seed - 6, 3)) <= 19);
+    assert.ok(tallest(airshipMast(seed)) <= MAST_TALL);
+    assert.ok(tallest(greatOak(seed)) <= OAK_TALL);
+    assert.ok(tallest(observatory(seed)) <= OBS_TALL);
+    for (const len of [40, 46, 52]) assert.ok(tallest(bridgeTown(len, 4, 6.5 + seed / 4, seed)) <= 6.5 + seed / 4 + BRIDGE_TALL, `bridge ${len}, ${seed}`);
+  }
+  // The garden wall opens where the causeway leaves, whichever way that is.
+  for (const [ux, uy] of [[1, 0], [1, 1], [0, 1], [-1, 0.3]]) {
+    const s = marshHouse(3, ux, uy), l = Math.sqrt(ux * ux + uy * uy);
+    const wall = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < s.w && y < s.h && s.top[y * s.w + x] > 0 && s.top[y * s.w + x] < 2;
+    const ex = ux / l / 15, ey = uy / l / 10, el = Math.sqrt(ex * ex + ey * ey);
+    assert.ok(!wall(Math.floor(16.5 + (15 * ex) / el), Math.floor(11.5 + (10 * ey) / el)), `wall across the gate at ${ux}, ${uy}`);
+  }
+  // The causeway comes in pieces with no gap between them.
+  const cols = new Set<number>();
+  for (const p of marshCauseway(40, 20, 160, 44, 4)) for (let j = 0; j < p.h; j++) for (let i = 0; i < p.w; i++) if (p.top[j * p.w + i] > 0) cols.add(p.x + i);
+  for (let x = 41; x < 159; x++) assert.ok(cols.has(x), `gap at ${x}`);
 });

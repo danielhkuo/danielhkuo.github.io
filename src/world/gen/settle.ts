@@ -1370,7 +1370,9 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   // The wonders come last and only add to what is built: a world without them is the same world.
   let wonders: PlacedWonder[] = [], wonderSkips: string[] = [];
   if (opts.wonders !== false) {
-    const land = wonderLandOf(t, w, roads);
+    const villages = hamlets.filter((h) => h.houses > 0).map((h) => ({ x: h.x, y: h.y }));
+    for (const s of placed.sites) if (s.type === "town") villages.push({ x: s.x, y: s.y });
+    const land = wonderLandOf(t, w, roads, villages);
     const found = placeWonders(land, placed.sites, opts.wonderRules, { only: Array.isArray(opts.wonders) ? opts.wonders : undefined });
     wonders = found.wonders;
     wonderSkips = found.skipped;
@@ -1388,7 +1390,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
 }
 
 /** What wonder siting reads: the settled land, its lakes and coves, and the nodes that are already built on. */
-function wonderLandOf(t: Terrain, w: Work, roads: readonly RoadLine[]): WonderLand {
+function wonderLandOf(t: Terrain, w: Work, roads: readonly RoadLine[], villages: WonderLand["villages"]): WonderLand {
   const c = w.c, gN = c.gN;
   const busy = Uint8Array.from(w.blocked);
   const mark = (x0: number, y0: number, x1: number, y1: number): void => {
@@ -1399,5 +1401,5 @@ function wonderLandOf(t: Terrain, w: Work, roads: readonly RoadLine[]): WonderLa
   for (const r of roads) for (let k = 0; k + 1 < r.vertices.length; k += 2) mark(r.vertices[k], r.vertices[k + 1], r.vertices[k], r.vertices[k + 1]);
   const coves: WonderLand["coves"][number][] = [];
   for (const s of t.land.stamps) if (s.kind === "cove") coves.push({ x: s.x, y: s.y, ax: s.ax, ay: s.ay, len: s.len, width: s.width });
-  return { c, g: w.g, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy };
+  return { c, g: w.g, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy, villages };
 }
