@@ -56,7 +56,7 @@ export function place(f: Figure, piece: Piece, x: number, y: number, alt: number
 }
 
 /** Screen position of the periodic image nearest the view, or the previous one when its box overhangs the view. */
-function imageOn(world: number, origin: number, period: number, view: number, sprite: number): number {
+export function imageOn(world: number, origin: number, period: number, view: number, sprite: number): number {
   let s = (world - origin) % period;
   if (s < 0) s += period;
   if (s >= view && s - period + sprite > 0) s -= period;

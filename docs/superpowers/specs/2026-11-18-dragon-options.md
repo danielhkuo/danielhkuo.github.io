@@ -1,7 +1,24 @@
-# The dragon: options for the owner
+# The dragon: design
 
-Status: **draft for the owner's decisions**, prepared overnight on 2026-11-18. Nothing here is approved, and nothing is
-built from it until the owner chooses. Once the choices below are made, this becomes the dragon's design.
+Status: **decided by the owner on 2026-11-18: A, the river-dragon, in vermilion lacquer with a gold belly and mane.**
+It is drawn as sprite stacks strung along the head's path, and it is the flier on `/world` (the stand-in kite and the
+other studies are removed; they remain in git history). Controls are unchanged. The options as they were laid out
+follow, for the record.
+
+**Built:**
+- the body chain;
+- the face, readable at 1×;
+- the S-undulation, which quickens with speed;
+- banking into turns, with the gold belly showing on the outside;
+- the mane and whiskers streaming;
+- the feathered tail fin;
+- the shadow and the depth test;
+- the wake on water and startled birds, through the live layers;
+- boost streaks: above cruise, pale streaks peel off the flanks and slip back along the path, with a faint bow of air at
+  the snout (`wind.ts`, Fable, 2026-11-18);
+- the bench, `npm run world:dragon`.
+
+**Next**, with the landmarks: coiling down onto a site's pad to land.
 
 ## What is already settled
 

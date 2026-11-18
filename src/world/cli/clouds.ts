@@ -14,7 +14,7 @@ import type { Manifest } from "../pack/manifest.ts";
 import { decodeWorld } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import type { FlightState } from "../runtime/flight.ts";
-import { drawFlier } from "../runtime/standin.ts";
+import { flownDragon } from "../dragon/index.ts";
 import { createView } from "../runtime/view.ts";
 import { ALT, cloudAt } from "../sky/field.ts";
 import { createSky } from "../sky/sky.ts";
@@ -149,7 +149,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         alt: view.groundHeight(x, y) + 18,
         bank: 0,
       };
-      drawFlier(frame, rect, state, view);
+      flownDragon(world.n, state, t).draw(frame, rect, state, view);
       sky.draw(frame, rect, t, "above");
       return rgbaOf(frame);
     };

@@ -45,20 +45,3 @@ export const LACQUER: Look = {
   wingDark: rgb(176, 70, 40),
   ink: INK,
 };
-
-/** Ivory with a vermilion mane, a gold belly and gold scale edges. */
-export const IVORY: Look = {
-  bodyLight: rgb(252, 246, 228),
-  body: rgb(238, 226, 198),
-  bodyDark: rgb(204, 186, 152),
-  scale: rgb(196, 142, 52),
-  belly: rgb(232, 180, 64),
-  bellyDark: rgb(184, 128, 40),
-  mane: rgb(207, 63, 43),
-  maneLight: rgb(233, 96, 60),
-  maneDark: rgb(160, 40, 36),
-  tip: rgb(238, 190, 70),
-  wing: rgb(226, 120, 52),
-  wingDark: rgb(176, 70, 40),
-  ink: INK,
-};
