@@ -114,7 +114,7 @@ test("the manifest lists each wonder with its anchors inside the world, and read
     assert.ok(w.x >= 0 && w.x < N && w.y >= 0 && w.y < N);
     for (const [x, y] of Object.values(w.anchors)) assert.ok(x >= 0 && x < N && y >= 0 && y < N, `${w.id}: ${x}, ${y}`);
   }
-  assert.deepEqual(wondersOf(JSON.parse(JSON.stringify({ wonders: list }))), list);
+  assert.deepEqual(wondersOf({ wonders: structuredClone(list) }), list);
   assert.deepEqual(wondersOf({}), []);
 });
 

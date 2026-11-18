@@ -76,9 +76,11 @@ export function renderWonders(opts: WondersBenchOptions): string[] {
     return { name: w.id, wide: [cx, cy + 20, w.level * 0.5], close };
   });
   // For scale and style: the abbey and the first lighthouse, framed the same way.
-  for (const type of ["abbey", "lighthouse"] as const) {
-    const site = s.sites.find((q) => q.type === type);
-    if (site) shots.push({ name: `ref-${site.id}`, wide: [site.x, site.y + 20, site.level], close: [site.x, site.y, site.level + 12] });
+  const shown = new Set<string>();
+  for (const site of s.sites) {
+    if ((site.type !== "abbey" && site.type !== "lighthouse") || shown.has(site.type)) continue;
+    shown.add(site.type);
+    shots.push({ name: `ref-${site.id}`, wide: [site.x, site.y + 20, site.level], close: [site.x, site.y, site.level + 12] });
   }
 
   const world = buildBakeWorld({ params, seed, world: made });
