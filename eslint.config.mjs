@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored third-party code, kept as close to upstream as possible.
     "src/lib/fish/fishdraw.mjs",
+    // Agent worktrees and local caches (renders, debug scripts) live inside the repo but are not its source.
+    ".claude/**",
+    ".cache/**",
   ]),
 ]);
 
