@@ -1,6 +1,7 @@
 // The dragon's pose and the shading of its rounded body.
 
 import type { Chain } from "../runtime/chain.ts";
+import { CRUISE } from "../runtime/flight.ts";
 import type { Look } from "./look.ts";
 import type { Shade } from "./vox.ts";
 
@@ -29,3 +30,11 @@ export function smooth(u: number): number {
 
 /** Radii are built in quarter-pixel steps. */
 export const RING_STEP = 0.25;
+
+/** Seconds for one wave to pass down the body at cruising speed. */
+export const WAVE_PERIOD = 2.4;
+
+/** The wave's speed at flying speed `speed`, radians a second: it quickens with speed, so a boost tightens the undulation. */
+export function waveRate(speed: number): number {
+  return ((2 * Math.PI) / WAVE_PERIOD) * (0.5 + (0.5 * speed) / CRUISE);
+}

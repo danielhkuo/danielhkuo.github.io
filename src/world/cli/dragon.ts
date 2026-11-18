@@ -10,6 +10,8 @@
 //   a-motion.png       turning and undulating, twelve moments
 //   a-head.png         the head in eight headings, at 4× and at 1×
 //   a-turn.png         held in a right turn and in a left, at 4×
+//   a-boost.png        a boost held for 2 s and let go, at 4×: the wind of it growing in and fading out
+//   a-boost-1x.png     the same moments at 1×
 //   sheet.png          everything on one contact sheet
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -309,6 +311,43 @@ export async function main(argv: readonly string[]): Promise<number> {
     });
     written.push(save(dir, "a-turn.png", turns));
     bands.push(turns);
+  }
+
+  // The boost: cruising, then Up held for 2 s and let go, through the real flight model.
+  {
+    const BW = 168, BH = 112;
+    // Seconds after the boost begins.
+    const moments = [-0.1, 0.3, 0.7, 1.9, 2.4, 3.2];
+    const captions = ["CRUISE", "BOOST 0.3 S", "0.7 S", "1.9 S", "LET GO 0.4 S", "LET GO 1.2 S"];
+    const big = sheet(3 * (BW * 4 + GAP) - GAP, LINE + 2 * (BH * 4 + LINE));
+    const small = sheet(moments.length * (BW + GAP) - GAP, LINE + BH);
+    label(big, 0, 2, "A BOOSTING AT 4×: UP HELD FOR 2 S, THEN LET GO");
+    label(small, 0, 2, "A BOOSTING AT 1×: CRUISE, UP HELD FOR 2 S, THEN LET GO");
+    const dragon = createDragon(st.n);
+    let s = startState(manifest.start, view);
+    s = { ...s, heading: s.heading + 0.5 };
+    const steps = (from: number, to: number): void => {
+      for (let k = from; k < to; k++) {
+        const t = k * DT - 2.5;
+        s = stepFlight(s, { turn: t > 0.9 && t < 1.5 ? 1 : 0, boost: t >= 0 && t < 2, brake: false }, DT, view, st.n);
+        dragon.step(s, DT);
+      }
+    };
+    let done = 0;
+    moments.forEach((m, i) => {
+      const upTo = Math.round((m + 2.5) / DT);
+      steps(done, upTo);
+      done = upTo;
+      const cx = s.x - Math.cos(s.heading) * 30, cy = s.y - Math.sin(s.heading) * 30;
+      const f = frameOf(st, dragon, s, cx, cy, upTo * DT, false);
+      const bx = (i % 3) * (BW * 4 + GAP), by = LINE + Math.floor(i / 3) * (BH * 4 + LINE);
+      blit(big, bx, by, f, BW, BH, 4);
+      label(big, bx, by + BH * 4 + 4, `${captions[i]}  ×${(s.speed / CRUISE).toFixed(2)}`);
+      blit(small, i * (BW + GAP), LINE, f, BW, BH, 1);
+    });
+    written.push(save(dir, "a-boost.png", big));
+    written.push(save(dir, "a-boost-1x.png", small));
+    bands.push(big, small);
   }
 
   let total = PAD;
