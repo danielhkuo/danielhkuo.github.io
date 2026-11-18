@@ -18,6 +18,7 @@ import { torusDelta, wrap } from "../core/torus.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Conform, Structure } from "./built.ts";
 import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext } from "./sites.ts";
+import { boat, put, sculpt } from "./structures.ts";
 import * as W from "./wonderworks.ts";
 
 export type WonderType =
@@ -270,12 +271,15 @@ const BATHS: Kind = {
         if (v < lo) lo = v;
         if (v > hi) hi = v;
       }
-      if (!dry || hi - lo > r.baths.relief) continue;
+      // The west bridge stands on the cliff, which the stand then cuts for its arch.
+      let west = true;
+      for (let dy = -1; dy <= 2 && west; dy++) for (let dx = -7; dx <= -5; dx++) if (!isDry(c, at(c, gx + dx, gy + dy))) west = false;
+      if (!dry || !west || hi - lo > r.baths.relief) continue;
       tally.pass(L3);
       const x = 4 * gx + 2, y = 4 * gy + 2;
       out.push({
         x, y, level, height: 22, score: 3 - Math.abs(level - 27) / 5 - (hi - lo) / r.baths.relief,
-        box: [x - 20, y - 10, x + 26, y + 38],
+        box: [x - 29, y - 10, x + 26, y + 38],
         anchors: { quay: [x, y + 29], funicularTop: [x + 20, y + 6], funicularFoot: [x + 20, y + 26] },
         probes: [[x, y, level, 22], [x, y + 20, level * 0.4, 6], [x, y + 33, 0, 3]],
       });
@@ -285,7 +289,7 @@ const BATHS: Kind = {
   stand(land, w) {
     const seed = hash2(Math.floor(w.x), Math.floor(w.y), land.seed);
     const s = W.thermalBaths(w.level, seed);
-    s.x = w.x - 18;
+    s.x = w.x - 27;
     s.y = w.y - 8;
     s.base = 0;
     // The cliff is cut back under the court and under each terrace, so no crag stands through the paving.
@@ -294,9 +298,13 @@ const BATHS: Kind = {
       kind: "dredge", x: s.x + (x0 + x1) / 2, y: s.y + (rows[0] + rows[1]) / 2, rx: (x1 - x0) / 2, ry: (rows[1] - rows[0]) / 2,
       round: false, level: level - 0.5, skirt: 1.5, limit: 0,
     });
-    const conforms: Conform[] = [cut(W.BATH_ROWS.court, lv.court, 1, 41)];
-    for (let k = 0; k < 3; k++) conforms.push(cut(W.BATH_ROWS.pools[k], lv.pools[k], 1, 40));
-    conforms.push(cut(W.BATH_ROWS.quay, lv.quay, 0, W.BATH_W));
+    const conforms: Conform[] = [cut(W.BATH_ROWS.court, lv.court, 10, 49)];
+    for (let k = 0; k < 3; k++) conforms.push(cut(W.BATH_ROWS.pools[k], lv.pools[k], 10, 49));
+    conforms.push(cut(W.BATH_ROWS.quay, lv.quay, 9, W.BATH_W - 1));
+    // The west bridge's arch: the cliff under columns 1–6, rows 6–17, down to just under the upper pool.
+    conforms.push({
+      kind: "dredge", x: s.x + 3.5, y: s.y + 11.5, rx: 2.5, ry: 5.5, round: false, level: lv.pools[0] - 1, skirt: 1, limit: 0,
+    });
     return { structures: [s], conforms };
   },
 };
@@ -351,15 +359,28 @@ const RAILWAY: Kind = {
         const ax = 4 * gx + 2, ay = 4 * gy + 2, len = 4 * end;
         const bx = ax + ux * len, by = ay + uy * len;
         const east = ux > 0;
+        // The far shore is the land node the ray lands on, unwrapped so the track runs straight to it.
+        const landed = step(far);
+        let fx = 4 * (landed % gN) + 2, fy = 4 * Math.floor(landed / gN) + 2;
+        const n = c.n;
+        while (fx - ax > n / 2) fx -= n;
+        while (ax - fx > n / 2) fx += n;
+        while (fy - ay > n / 2) fy -= n;
+        while (ay - fy > n / 2) fy += n;
         // The line's whole length must be seen: it stands only a few units over the water.
         const probes: [number, number, number, number][] = [];
         for (let q = 2; q <= end; q += 4) probes.push([ax + ux * 4 * q, ay + uy * 4 * q, 0, 4]);
         probes.push([bx, by + 4, 0, 10]);
+        const span = Math.sqrt((fx - bx) * (fx - bx) + (fy - by) * (fy - by));
+        for (let d = 12; d < span - 6; d += 16) {
+          const t = d / span;
+          probes.push([bx + (fx - bx) * t, by + (fy - by) * t, 0, 4]);
+        }
         out.push({
           x: bx + (east ? 8 : -8), y: by + 3, level: 0, height: 13,
           score: Math.min(run, 2 * flat) / flat + Math.min(dist[step(end)], 3 * lone) / lone + (far - run <= 2 ? 0.5 : 0) + (uy === 0 ? 0.3 : 0) - c.exposure[i] * 0.5,
-          box: [Math.min(ax, bx) - 6, Math.min(ay, by) - 14, Math.max(ax, bx) + 22, Math.max(ay, by) + 14],
-          anchors: { shore: [ax, ay], halt: [bx, by] },
+          box: [Math.min(ax, bx, fx) - 8, Math.min(ay, by, fy) - 16, Math.max(ax, bx, fx) + 28, Math.max(ay, by, fy) + 16],
+          anchors: { shore: [ax, ay], halt: [bx, by], far: [fx, fy] },
           probes,
         });
       }
@@ -367,25 +388,24 @@ const RAILWAY: Kind = {
     return out;
   },
   stand(land, w) {
-    const { c } = land;
-    const [ax, ay] = w.anchors.shore, [bx, by] = w.anchors.halt;
-    const east = bx > ax, len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
-    // Bowed to one side, whichever keeps it over water; ruled only if neither does.
-    const side = (hash2(Math.floor(ax), Math.floor(ay), land.seed) & 1) === 0 ? 1 : -1;
-    let bow = 0;
-    for (const b of [side * 0.035 * len, -side * 0.035 * len]) {
-      let wet = true;
-      for (let a = 12; a <= len && wet; a += 4) {
-        const o = W.trackBow(b, a / len);
-        if (!c.isSea[nodeOf(c, ax + ((bx - ax) * a - (by - ay) * o) / len, ay + ((by - ay) * a + (bx - ax) * o) / len)]) wet = false;
-      }
-      if (wet) { bow = b; break; }
-    }
+    const [ax, ay] = w.anchors.shore, [bx, by] = w.anchors.halt, [fx, fy] = w.anchors.far;
+    const east = bx > ax;
+    // The sag was the plan bow, seen from the south. The rails stay ruled; their height does not change.
+    const bow = 0;
     const halt = W.tideHalt(east);
     halt.x = Math.floor(east ? bx : bx - halt.w);
     halt.y = Math.floor(by) - W.HALT_TRACK_ROW;
     halt.base = 0;
-    return { structures: [...W.tideTrack(ax, ay, bx, Math.floor(by) + 0.5, bow), halt], conforms: [] };
+    const yLine = halt.y + W.HALT_TRACK_ROW + 0.5;
+    const xEnd = halt.x + (east ? W.HALT_RAIL_END : halt.w - 1 - W.HALT_RAIL_END);
+    const n = land.c.n;
+    let farX = fx, farY = fy;
+    while (farX - xEnd > n / 2) farX -= n;
+    while (xEnd - farX > n / 2) farX += n;
+    while (farY - yLine > n / 2) farY -= n;
+    while (yLine - farY > n / 2) farY += n;
+    const onward = (farX - xEnd) * (east ? 1 : -1) > 4 ? W.tideTrack(xEnd, yLine, farX, farY, 0) : [];
+    return { structures: [...W.tideTrack(ax, ay, bx, Math.floor(by) + 0.5, bow), ...onward, halt], conforms: [] };
   },
 };
 
@@ -454,7 +474,27 @@ const CHURCH: Kind = {
     s.x = Math.floor(w.x) - W.CHURCH_TOWER[0];
     s.y = Math.floor(w.y) - W.CHURCH_TOWER[1];
     s.base = w.level;
-    return { structures: [s], conforms: [] };
+    // Pale shoals: lake nodes near the church, shallow, and surrounded by the lake, cut deeper so the water darkens.
+    const conforms: Conform[] = [];
+    const { c } = land, id = c.lakeId[nodeOf(c, w.x, w.y)];
+    if (id >= 0) {
+      const gx0 = Math.floor(w.x / 4), gy0 = Math.floor(w.y / 4);
+      for (let dy = -10; dy <= 10; dy++) for (let dx = -10; dx <= 10; dx++) {
+        if (dx * dx + dy * dy > 100) continue;
+        const j = at(c, gx0 + dx, gy0 + dy);
+        if (c.lakeId[j] !== id || w.level - c.h[j] >= 1.5) continue;
+        let neighbours = 0;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+          if (ox === 0 && oy === 0) continue;
+          if (c.lakeId[at(c, gx0 + dx + ox, gy0 + dy + oy)] === id) neighbours++;
+        }
+        if (neighbours < 8) continue;
+        conforms.push({
+          kind: "dredge", x: w.x + 4 * dx, y: w.y + 4 * dy, rx: 4, ry: 4, round: true, level: w.level - 2.5, skirt: 1, limit: 0,
+        });
+      }
+    }
+    return { structures: [s], conforms };
   },
 };
 
@@ -514,13 +554,13 @@ const HOTEL: Kind = {
     // dredged down, so the hotel leads.
     const conforms: Conform[] = [
       { kind: "dredge", x: w.x, y: w.y, rx: 18, ry: 9, round: true, level: 5, skirt: 2, limit: 0 },
-      { kind: "raise", x: w.x, y: w.y, rx: 17, ry: 9, round: true, level: 5.5, skirt: 1.5, limit: 0 },
+      { kind: "raise", x: w.x, y: w.y, rx: 15, ry: 8, round: true, level: 5.5, skirt: 1.5, limit: 0 },
     ];
     for (const rock of land.c.stacks) {
       const dx = torusDelta(w.x, rock.x, land.c.n), dy = torusDelta(w.y, rock.y, land.c.n);
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d < 4 || d > 25) continue;
-      conforms.push({ kind: "dredge", x: rock.x, y: rock.y, rx: rock.r + 1, ry: rock.r + 1, round: true, level: 12, skirt: 1, limit: 0 });
+      conforms.push({ kind: "dredge", x: rock.x, y: rock.y, rx: rock.r + 1, ry: rock.r + 1, round: true, level: d < 16 ? -1 : 12, skirt: 1, limit: 0 });
     }
     return { structures: [s], conforms };
   },
@@ -610,10 +650,39 @@ const MARSH: Kind = {
     const bow = ((hash2(Math.floor(ax), Math.floor(ay), land.seed) & 1) === 0 ? 1 : -1) * 0.04 * len;
     // The rise is built up out of the marsh; it is never cut.
     const conforms: Conform[] = [
-      { kind: "raise", x: s.x + YARD[0], y: s.y + YARD[1], rx: 15.5, ry: 10.5, round: true, level: W.MARSH_RISE, skirt: 6, limit: 0 },
+      { kind: "raise", x: s.x + YARD[0], y: s.y + YARD[1], rx: 15.5, ry: 10.5, round: true, level: W.MARSH_RISE, skirt: 9, limit: 0 },
       { kind: "raise", x: s.x + YARD[0] + 6, y: s.y + YARD[1] - 4, rx: 8, ry: 6.5, round: true, level: W.MARSH_RISE, skirt: 5, limit: 0 },
     ];
-    return { structures: [s, ...W.marshCauseway(ax, ay, bx, by, bow)], conforms };
+    for (let y = 18; y <= 23; y++) for (let x = 0; x < s.w; x++) s.paint[y * s.w + x] = M.pastureCool;
+    // A mooring south of the wall, eight cells toward the side the causeway does not leave by.
+    const [glx] = W.marshGate(bx - ax, by - ay);
+    const away = glx >= 16.5 ? -1 : 1;
+    const poolX = s.x + 16.5 + away * 8, poolY = s.y + 11.5 + 10.6 + 3;
+    conforms.push({ kind: "dredge", x: poolX, y: poolY, rx: 5, ry: 3, round: true, level: -0.6, skirt: 2, limit: 0 });
+    let gapX = 16, gapY = 22, gapD = Infinity;
+    for (let y = 1; y <= 22; y++) for (let x = 1; x <= 32; x++) {
+      const qdx = (x - 16.5) / 15, qdy = (y - 11.5) / 10, q = Math.sqrt(qdx * qdx + qdy * qdy);
+      if (q < 0.93 || q > 1.04 || s.top[y * s.w + x] > 0) continue;
+      const ox = x - (poolX - s.x), oy = y - (poolY - s.y), d = ox * ox + oy * oy;
+      if (d < gapD) { gapD = d; gapX = x; gapY = y; }
+    }
+    const boatX = poolX, boatY = poolY;
+    const stepDx = boatX - (s.x + gapX), stepDy = boatY - (s.y + gapY);
+    const stepLen = Math.sqrt(stepDx * stepDx + stepDy * stepDy) || 1;
+    const su = stepDx / stepLen, sv = stepDy / stepLen;
+    const steps = sculpt(9, 9);
+    steps.base = 0;
+    steps.x = Math.floor(s.x + gapX - 4);
+    steps.y = Math.floor(s.y + gapY - 4);
+    for (let k = 0; k < 3; k++) {
+      const x = 4 + Math.round(su * (k + 1)), y = 4 + Math.round(sv * (k + 1));
+      for (let dx = -1; dx <= 1; dx++) put(steps, x + dx, y, [1.6, 1.0, 0.5][k], M.stone, 160 - k * 16);
+    }
+    const hull = boat(seed);
+    hull.x = Math.floor(boatX - 2);
+    hull.y = Math.floor(boatY - 1);
+    hull.base = 0;
+    return { structures: [s, steps, hull, ...W.marshCauseway(ax, ay, bx, by, bow)], conforms };
   },
 };
 
@@ -717,7 +786,8 @@ const BRIDGE_TOWN: Kind = {
         if (tl < 1e-6 || (ty * ty) / (tl * tl) < 0.85) continue;
         tally.pass(L0);
         const water = v[k + 3];
-        const len = Math.max(32, Math.min(52, Math.round(wide + 28)));
+        const wideLen = Math.round(wide + 40);
+        const len = wideLen < 44 ? 44 : wideLen > 56 ? 56 : wideLen;
         const xa = Math.floor(px) - len / 2, xb = xa + len - 1, row = Math.floor(py);
         const ha = groundAt(land, xa - 3, row), hb = groundAt(land, xb + 3, row);
         if (!isDry(c, nodeOf(c, xa - 3, row)) || !isDry(c, nodeOf(c, xb + 3, row)) || Math.abs(ha - hb) > r.bridgeTown.level) continue;
@@ -754,7 +824,7 @@ const BRIDGE_TOWN: Kind = {
         const up = Math.max(0, k - 48), down = Math.min(v.length - 4, k + 48);
         out.push({
           x: px, y: py, level: water, height: deck + W.BRIDGE_TALL,
-          score: (3 * farm) / looked + (ty * ty) / (tl * tl) + Math.min(wide, 12) / 6 - (0.5 * Math.abs(ha - hb)) / r.bridgeTown.level - (deck > 6 ? (deck - 6) / 3 : 0),
+          score: (3 * farm) / looked + (ty * ty) / (tl * tl) + Math.min(wide, 12) / 2 - (0.5 * Math.abs(ha - hb)) / r.bridgeTown.level - (deck > 6 ? (deck - 6) / 3 : 0),
           box: [sx - 2, sy - 2, sx + len + 2 * W.BRIDGE_END + 2, sy + W.BRIDGE_H + MEADOW],
           anchors: { west: [xa, row], east: [xb, row], upstream: [v[up], v[up + 1]], downstream: [v[down], v[down + 1]] },
           probes: [[px, py + 4, water, deck + 14], [xa, py + 4, water, deck + 10], [xb, py + 4, water, deck + 10]],
