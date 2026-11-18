@@ -142,10 +142,11 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
   const sheepGraze = art.add(["www.", "sswk"], 1, 1, wool);
   const sheepLook = art.add(["wwwk", "ssw."], 1, 1, wool);
   const feather: Readonly<Record<string, readonly [number, number, number?]>> = {
-    W: [M.whitewash, 15], g: [M.roofSlate, 6], d: [M.roofSlate, 4, 150],
+    W: [M.whitewash, 15], g: [M.roofSlate, 6], d: [M.roofSlate, 4, 150], k: [M.stoneDark, 1], s: [M.stoneDark, 2, 105],
   };
   // White strokes with a slate stroke under them, as a pen would draw a bird: they read over pale ground and dark.
-  const gullRest = art.add([".W", "gW", "dd"], 0, 1, feather);
+  // At rest: a dark eye and wingtip, a slate back, and a little shadow on the sand.
+  const gullRest = art.add(["..k", "kgW", ".ss"], 1, 1, feather);
   const gullUp = art.add(["W...W", "dWWWd", ".ddd."], 2, 1, feather);
   const gullLevel = art.add(["WWWWW", "ddddd"], 2, 0, feather);
   const gullDown = art.add([".WWW.", "WdddW", "d...d"], 2, 0, feather);
@@ -365,7 +366,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
   }
 
-  /** Chimney smoke: a thin thread of puffs from the top of one roof in three, leaning downwind as it rises. */
+  /** Chimney smoke: wisps rising from the top of one roof in three, pale with a cool shade under them, leaning downwind. */
   function smoke(f: LiveFrame): void {
     const { out, bake, palette, t, n } = f;
     if (towns.length === 0) return;
@@ -378,7 +379,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       if (dx * dx + dy * dy < 520 * 520) near = true;
     }
     if (!near) return;
-    const rgb = palette[(M.whitewash << 8) | 7];
+    const pale = palette[(M.whitewash << 8) | 15], shade = palette[(M.roofSlate << 8) | 7];
     const perX = n / 20, perY = (n * 0.8) / 16;
     const cx1 = Math.floor((rx + w) / 20), cy1 = Math.floor((ry + h) / 16);
     for (let cy = Math.floor(ry / 16); cy <= cy1; cy++) for (let cx = Math.floor(rx / 20); cx <= cx1; cx++) {
@@ -407,18 +408,21 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       }
       if (!inTown) continue;
       note("smoke", px, py);
-      // The thread: one pixel a row, its bends travelling up it, thinning as it climbs and leans downwind.
+      // The thread: a pale pixel a row with its shade on the lee side, so it shows on limewash and on trees alike.
+      // Its bends travel up it, breaks rise through it to part it into wisps, and it thins as it climbs and leans.
       const bend = t * 1.5 + ((hc >>> 16) & 255) / 40;
-      const tall = 11 + ((hc >>> 24) & 3);
+      const tall = 12 + ((hc >>> 24) & 3);
+      const gap = 7 + ((hc >>> 12) & 7) - (Math.floor(t * 3) % 7);
       for (let j = 1; j <= tall; j++) {
         const qy = py - j;
         if (qy < 0) break;
+        if (j > 2 && (j + gap) % 7 === 0) continue;
         const u = j / tall;
-        const qx = px + Math.round(5 * u * u + (0.5 + u) * psin(j * 0.7 - bend));
+        const qx = px + Math.round(6 * u * u + (0.5 + u) * psin(j * 0.7 - bend));
         if (qx < 0 || qx >= w - 1) continue;
-        const a = Math.round(235 * (1 - u * 0.65));
-        blend(out, qy * w + qx, rgb, a);
-        blend(out, qy * w + qx + 1, rgb, u > 0.35 ? a : a >> 1);
+        const a = Math.round(245 * (1 - u * 0.6));
+        blend(out, qy * w + qx, pale, a);
+        blend(out, qy * w + qx + 1, shade, (a * 5) >> 3);
       }
     }
   }
