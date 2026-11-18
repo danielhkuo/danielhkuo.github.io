@@ -4,7 +4,7 @@
 import type { ViewRect } from "../render/compose.ts";
 import { createChain } from "../runtime/chain.ts";
 import { CRUISE, type FlightState } from "../runtime/flight.ts";
-import { WAVE_PERIOD, waveRate, type Pose } from "./body.ts";
+import { REST_SWING, SWING_EASE, WAVE_PERIOD, waveRate, type Pose } from "./body.ts";
 import { LACQUER } from "./look.ts";
 import type { Land } from "./parts.ts";
 import { drawRiver } from "./river.ts";
@@ -14,8 +14,11 @@ export { WAVE_PERIOD };
 const PATH = 640;
 
 export interface Dragon {
-  /** Call once a frame, after the flight step: remembers the path and moves the body's clocks on by dt seconds. */
-  step(s: FlightState, dt: number): void;
+  /**
+   * Call once a frame, after the flight step: remembers the path and moves the body's clocks on by dt seconds. `rest`
+   * (0 flying … 1 resting) settles the undulation's swing toward REST_SWING.
+   */
+  step(s: FlightState, dt: number, rest?: number): void;
   /** Draws the dragon at the flier, with its shadow, depth-tested against the land. */
   draw(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land): void;
   pose: Pose;
@@ -23,14 +26,16 @@ export interface Dragon {
 
 /** The dragon on a world n cells across. Its motion depends only on the states and times it is stepped with. */
 export function createDragon(n: number): Dragon {
-  const pose: Pose = { chain: createChain(n, PATH), n, time: 0, wave: 0 };
+  const pose: Pose = { chain: createChain(n, PATH), n, time: 0, wave: 0, swing: 1 };
   return {
     pose,
-    step(s, dt) {
+    step(s, dt, rest = 0) {
       pose.chain.push(s.x, s.y, s.alt);
       pose.time += dt;
       // The wave quickens with speed, so a boost tightens the undulation.
       pose.wave += waveRate(s.speed) * dt;
+      const swing = 1 - (1 - REST_SWING) * rest;
+      pose.swing += (swing - pose.swing) * Math.min(1, SWING_EASE * dt);
     },
     draw(out, rect, s, view) {
       drawRiver(out, rect, s, view, pose, LACQUER);

@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ViewRect } from "../render/compose.ts";
 import { BOOST, BRAKE, CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
+import { REST_SWING } from "./body.ts";
 import { createDragon } from "./index.ts";
 import type { Land } from "./parts.ts";
 import { LACQUER } from "./look.ts";
@@ -233,4 +234,33 @@ test("A rolls into its turns: the gold belly shows on the outside", () => {
   };
   const right = side(1), left = side(-1);
   assert.ok(right > 10 && left < -10, `right ${right}, left ${left}`);
+});
+
+test("at rest the coil breathes: the wave's swing settles to a fifth, and widens again in flight", () => {
+  const dragon = createDragon(N);
+  const s: FlightState = { x: 500, y: 500, heading: 0, speed: 0, alt: 30, bank: 0 };
+  assert.equal(dragon.pose.swing, 1);
+  for (let i = 0; i < 240; i++) dragon.step(s, 1 / 60, 1);
+  assert.ok(Math.abs(dragon.pose.swing - REST_SWING) < 0.01, `swing ${dragon.pose.swing}`);
+  for (let i = 0; i < 240; i++) dragon.step({ ...s, speed: CRUISE }, 1 / 60, 0);
+  assert.ok(Math.abs(dragon.pose.swing - 1) < 0.01, `swing ${dragon.pose.swing}`);
+});
+
+test("a resting dragon stirs less from moment to moment than one that swings at its full width", () => {
+  const moved = (rest: number): number => {
+    const dragon = createDragon(N);
+    for (let k = 240; k >= 0; k--) dragon.step({ x: 500 - k, y: 500, heading: 0, speed: CRUISE, alt: 30, bank: 0 }, 1 / 60, rest);
+    const s: FlightState = { x: 500, y: 500, heading: 0, speed: 0, alt: 30, bank: 0 };
+    for (let i = 0; i < 120; i++) dragon.step(s, 1 / 60, rest);
+    const a = new Uint32Array(W * H).fill(GREY);
+    dragon.draw(a, rect, s, flat);
+    for (let i = 0; i < 70; i++) dragon.step(s, 1 / 60, rest);
+    const b = new Uint32Array(W * H).fill(GREY);
+    dragon.draw(b, rect, s, flat);
+    let differ = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differ++;
+    return differ;
+  };
+  const resting = moved(1), swinging = moved(0);
+  assert.ok(resting < swinging * 0.5, `resting ${resting} px, swinging ${swinging} px`);
 });

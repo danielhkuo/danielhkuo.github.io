@@ -15,7 +15,14 @@ export interface Pose {
   time: number;
   /** The undulation's phase, radians: it runs faster at speed. */
   wave: number;
+  /** Width of the undulation's swing: 1 in flight, settling to REST_SWING while the dragon rests. */
+  swing: number;
 }
+
+/** The swing at rest: the coil only breathes. */
+export const REST_SWING = 0.2;
+/** Rate (per second) at which the swing settles or widens. */
+export const SWING_EASE = 2;
 
 /** A rounded body: shaded underside, lit top. */
 export function skinOf(look: Look): Shade {
