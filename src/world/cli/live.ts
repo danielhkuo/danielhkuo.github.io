@@ -3,6 +3,12 @@
 //
 //   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--frames 6] [--dt 0.25]
 //                         [--t 0] [--clouds <style>|none] [--sights all]
+//   npm run world:live -- --view moments
+//   npm run world:live -- --view baths
+//
+// `--view moments` (or one wonder: baths, railway, drowned-church, cove-hotel, marsh-house, airship-mast,
+// bridge-town, great-oak, observatory, clock, floating-garden, land-ship) settles the seed-3 world and draws
+// each moment through its appearance. `--view all` stays on the shipped world and its seven named views.
 //
 // --sights all shows every rare sight at once, near the view's centre where the land allows.
 //
@@ -14,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { torusDist2, wrap } from "../core/torus.ts";
 import type { LiveLayer } from "../live/live.ts";
 import { makeLayers } from "../live/registry.ts";
-import type { Manifest } from "../pack/manifest.ts";
+import { wondersOf, type Manifest } from "../pack/manifest.ts";
 import { decodeFlightData, decodeWorld } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { createBakeHost } from "../runtime/bakeHost.ts";
@@ -52,6 +58,12 @@ const CREAM_G = 0xe8;
 const CREAM_B = 0xd2;
 
 const VIEW_NAMES = ["start", "town", "abbey", "falls", "river", "peak", "sea"] as const;
+
+/** Settled-world strips, one appearance each. Not part of `--view all`. */
+const MOMENT_VIEWS = new Set([
+  "baths", "railway", "drowned-church", "cove-hotel", "marsh-house", "airship-mast",
+  "bridge-town", "great-oak", "observatory", "clock", "floating-garden", "land-ship",
+]);
 
 function rgbaOf(px: Uint32Array): Uint8Array {
   return new Uint8Array(px.buffer, px.byteOffset, px.byteLength);
@@ -325,15 +337,29 @@ export async function main(argv: readonly string[]): Promise<number> {
   const times: number[] = [];
   for (let i = 0; i < framesN; i++) times.push(t0 + i * dt);
 
+  const forceSights = readFlag(argv, "--sights") === "all";
+  if (viewArg === "moments" || MOMENT_VIEWS.has(viewArg)) {
+    const { renderMomentViews } = await import("./momentstrip.ts");
+    const names = viewArg === "moments" ? [...MOMENT_VIEWS] : [viewArg];
+    const written = renderMomentViews(names);
+    for (let i = 0; i < written.length; i++) console.log(written[i]);
+    return 0;
+  }
   const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
   const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
   const id = current.worldId;
   const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
   const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
-  const forceSights = readFlag(argv, "--sights") === "all";
   const land = await decodeFlightData(bin);
-  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, land, forceSights });
+  const layers = makeLayers({
+    seed: manifest.seed,
+    n: manifest.n,
+    sites: manifest.sites,
+    land,
+    wonders: wondersOf(manifest),
+    forceSights,
+  });
 
   const dir = join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });

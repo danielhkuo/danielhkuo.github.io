@@ -8,6 +8,7 @@ import type { FlightInput, FlightState } from "../../world/runtime/flight";
 import { startState, stepFlight } from "../../world/runtime/flight";
 import { fitScale } from "../../world/runtime/fit";
 import { makeLayers } from "../../world/live/registry";
+import { wondersOf } from "../../world/pack/manifest";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createDragon } from "../../world/dragon/index";
@@ -162,6 +163,7 @@ export default function Flight() {
             n: loaded.data.n,
             sites: loaded.manifest.sites,
             land: loaded.data,
+            wonders: wondersOf(loaded.manifest),
             discover: (id, label) => {
               discoveries.discover(id, label);
             },
