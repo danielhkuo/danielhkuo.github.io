@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-17.
+Last updated 2026-11-18.
 
 ## Where things are written down
 
@@ -22,13 +22,20 @@ Last updated 2026-11-17.
   weakest. See the look ledger.
 - **First flight** (`/world`). Seed 3 ships as one 3.1 MB file. Workers paint the land ahead of a stand-in kite at
   60 fps, and the start view is ready in about 1.8 s. Plan: `plans/2026-11-17-dragon-world-flight.md`.
+- **Clouds** (2026-11-18, Fable). Sculpted pixel-art cumulus in a five-tone ramp with warm rims, ground shadows, a
+  composed opening view, low clouds under the flier and banks it flies through. Design:
+  `specs/2026-11-17-dragon-world-clouds-design.md`. The owner rejected the first, Cursor-built version.
+- **Moving water** (2026-11-18, Fable). Surf rolls in in sets, white water breaks on rock, a slow swell crosses the open
+  sea, rivers flow on their sloping reaches, and waterfalls pour, with spray.
+- **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
+  hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
 ## Next: the world comes alive
 
 Everything here is drawn each frame over the baked land (live layers, spec 5.5). Nothing is re-baked and the file
 size is unchanged; it is TypeScript running in the browser. Order is a proposal.
 
-1. **Clouds.** The most important. They drift over the land in the Ink & Glyph style: soft washed masses with inked
+1. ~~**Clouds.**~~ Done (see above). The most important. They drift over the land in the Ink & Glyph style: soft washed masses with inked
    edges, several sizes and heights, slow wind, sometimes parting to frame a landmark. Shadows are optional (the owner
    does not need them), but if added they come cheap from the shadow bits. Clouds must never hide the flier for long.
 2. **Water that moves.**
@@ -82,6 +89,15 @@ a hermit monk walking the abbey road; bells ringing at the abbey on the hour.
 - **Sound** (wind, sea, bells) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 
 ## Backlog: cosmetic and look
+
+From the clouds and water (2026-11-18):
+- Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
+  50 px from small puffs; a bank can drift over a landmark.
+- Water: flat river reaches have no direction to flow in (the baked phase is water level); spray paints a few rock
+  pixels beside tall falls; surf is missing within 16 px of the frame's edge.
+- Frame cost at 4× throttle is 4.0 ms with clouds and water, right at the budget: the water layer's speed pass is
+  running; check again once small life lands.
+- The flight page component is large (React Doctor); split it into hooks.
 
 From the round-9 critics (peaks first):
 - Peaks: snow and rock lit from true normals so each arête shows a bright side and a cool far side; horizontal strata
