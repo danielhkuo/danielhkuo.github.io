@@ -231,10 +231,29 @@ export interface WorldParams {
   };
 }
 
+/**
+ * Lengths are tuned on the 6400 world. A smaller world (the tests' mini-worlds) shrinks them with it; a larger world
+ * keeps them and holds more land instead, so it is more of the same world, not the same world magnified.
+ */
+export function lengthScale(n: number): number {
+  return n <= 6400 ? n / 6400 : 1;
+}
+
+/** How many 6400 worlds of area a world of n cells holds: 1 at 6400 and below. */
+export function areaScale(n: number): number {
+  return n <= 6400 ? 1 : (n / 6400) * (n / 6400);
+}
+
+/** A count of things per 6400 world, for a world of n cells: more of them in a larger world, never fewer. */
+export function countFor(n: number, c: number): number {
+  return Math.round(c * areaScale(n));
+}
+
 export function paramsFor(n: number): WorldParams {
   if (!Number.isInteger(n) || n % 64 !== 0 || n < 256) throw new Error(`world size ${n} must be a multiple of 64, at least 256`);
-  const s = n / 6400;
+  const s = lengthScale(n);
   const A = ARCHETYPE;
+  const many = (lo: number, hi: number): [number, number] => [countFor(n, lo), countFor(n, hi)];
   return {
     n,
     gN: n / 4,
@@ -242,12 +261,12 @@ export function paramsFor(n: number): WorldParams {
     cores: {
       poissonR: 900 * s,
       archetypes: [
-        { id: A.highland, count: [1, 1], diameter: [3400 * s, 3800 * s], aspect: 0.45, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [4, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.highland, count: many(1, 1), diameter: [3400 * s, 3800 * s], aspect: 0.45, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [4, 5], stripeWidth: [300 * s, 600 * s] },
         { id: A.home, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: 0.5, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.lakes, count: [1, 1], diameter: [2700 * s, 3100 * s], aspect: 0.48, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
-        { id: A.slate, count: [1, 1], diameter: [2400 * s, 2800 * s], aspect: 0.45, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [4, 5], stripeWidth: [150 * s, 300 * s] },
-        { id: A.karst, count: [2, 2], diameter: [2000 * s, 2400 * s], aspect: 0.5, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.skerry, count: [5, 7], diameter: [320 * s, 720 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
+        { id: A.lakes, count: many(1, 1), diameter: [2700 * s, 3100 * s], aspect: 0.48, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.slate, count: many(1, 1), diameter: [2400 * s, 2800 * s], aspect: 0.45, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [4, 5], stripeWidth: [150 * s, 300 * s] },
+        { id: A.karst, count: many(2, 2), diameter: [2000 * s, 2400 * s], aspect: 0.5, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.skerry, count: many(5, 7), diameter: [320 * s, 720 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
       ],
     },
     strike: { maxSlope: 0.4663076581549986 },

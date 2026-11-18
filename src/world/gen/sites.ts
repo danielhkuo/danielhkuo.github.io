@@ -12,7 +12,7 @@ import { torusDelta, wrap } from "../core/torus.ts";
 import type { CoverInput } from "../look/contract.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { LandmarkType } from "../sites/assign.ts";
-import { ARCHETYPE } from "./params.ts";
+import { ARCHETYPE, countFor, lengthScale } from "./params.ts";
 import { visibility } from "./visibility.ts";
 
 /** What siting reads. Everything is on G unless it says C. */
@@ -88,11 +88,14 @@ export const BOX: Record<LandmarkType, { w: number; d: number; h: number; round:
   yew: { w: 20, d: 20, h: 18, round: true },
 };
 
-/** The rules of design 5.6 for a world of n cells. Distances that pace the flight scale with the world. */
+/**
+ * The rules of design 5.6 for a world of n cells. Distances that pace the flight scale with a smaller world; a larger
+ * world keeps them and holds more landmarks (one abbey and one town in any world).
+ */
 export function siteRules(n: number): SiteRules {
-  const k = n / 6400;
+  const k = lengthScale(n), two = countFor(n, 2);
   return {
-    counts: { abbey: 1, town: 1, lighthouse: 2, bridge: 2, cathedral: 2, windmill: 2, yew: 2 },
+    counts: { abbey: 1, town: 1, lighthouse: two, bridge: two, cathedral: two, windmill: two, yew: two },
     spacing: 1500 * k,
     homeRiver: [1200 * k, 2000 * k],
     visible: 0.8,
@@ -115,7 +118,7 @@ export function siteRules(n: number): SiteRules {
  * values score highest, so a seed that offers them gets them.
  */
 export function builtRules(n: number): SiteRules {
-  const k = n / 6400, r = siteRules(n);
+  const k = lengthScale(n), r = siteRules(n);
   return {
     ...r,
     homeRiver: [600 * k, 2000 * k],

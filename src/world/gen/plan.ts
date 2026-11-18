@@ -4,7 +4,7 @@
 import { fbm, gradNoise, octaveMatrixPower, ridgedFbm } from "../core/noise.ts";
 import { rngFor, type Rng } from "../core/rng.ts";
 import { torusDelta } from "../core/torus.ts";
-import { ARCHETYPE, ARCHETYPE_COUNT, type Archetype, type ArchetypeSpec, type WorldParams } from "./params.ts";
+import { ARCHETYPE, ARCHETYPE_COUNT, lengthScale, type Archetype, type ArchetypeSpec, type WorldParams } from "./params.ts";
 
 export interface Core {
   /** Centre in cells. */
@@ -439,7 +439,7 @@ function buildCluster(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: num
 
 /** An island's shape about a core at the origin; placeIslands gives the core its place. */
 function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: number, slope: number): Island {
-  const s = p.n / 6400;
+  const s = lengthScale(p.n);
   const [ux, uy] = ownStrike(p, rng, slope);
   const skerry = spec.id === ARCHETYPE.skerry;
   const built = skerry ? buildCluster(p, rng, spec, length, ux, uy) : buildBelts(p, rng, spec, length, ux, uy);
@@ -600,7 +600,7 @@ function reliefAt(isl: Island, px: number, py: number, bite: number, cut: number
 
 /** Draws the quota of islands, largest first, and gives each core its place by Poisson disk. */
 function placeIslands(p: WorldParams, rng: Rng, slope: number): Island[] {
-  const s = p.n / 6400;
+  const s = lengthScale(p.n);
   const cell = p.n / p.cN;
   const wanted: { spec: ArchetypeSpec; length: number }[] = [];
   for (const spec of p.cores.archetypes) {
@@ -684,14 +684,17 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   // Drawn from a stream of their own, so the islands stand where they did before the massifs were added.
   const massifRng = rngFor(seed, "massif");
   const massifSeed = massifRng.next(), massifWarpSeed = massifRng.next(), axisSeed = massifRng.next();
-  const massifPeriod = Math.round(6400 / MASSIF_CELLS), massifWarpPeriod = Math.round(6400 / MASSIF_WARP_CELLS), axisPeriod = Math.round(6400 / AXIS_CELLS);
-  const massifWarp = (MASSIF_WARP * n) / 6400;
+  // Feature sizes are in cells of the 6400 world: a smaller world has the same number of periods round it, a larger
+  // world more of them.
+  const span = n <= 6400 ? 6400 : n;
+  const massifPeriod = Math.round(span / MASSIF_CELLS), massifWarpPeriod = Math.round(span / MASSIF_WARP_CELLS), axisPeriod = Math.round(span / AXIS_CELLS);
+  const massifWarp = MASSIF_WARP * lengthScale(n);
 
   // Feature sizes are rounded so each noise has a whole number of periods round the world.
   const featurePeriod = Math.max(1, Math.round(n / p.uplift.featureCells));
   const grain = strikeNoise(n, featurePeriod, UPLIFT_OCTAVES, UPLIFT_GAIN, p.uplift.stretch, ux, uy, upliftSeed);
-  const fibre = strikeNoise(n, Math.round(6400 / FIBRE_CELLS), FIBRE_OCTAVES, 0.55, FIBRE_STRETCH, ux, uy, fibreSeed);
-  const bayPeriod = Math.round(6400 / BAY_CELLS), covePeriod = Math.round(6400 / COVE_CELLS), lowPeriod = Math.round(6400 / LOWLAND_CELLS), summitPeriod = Math.round(6400 / SUMMIT_CELLS);
+  const fibre = strikeNoise(n, Math.round(span / FIBRE_CELLS), FIBRE_OCTAVES, 0.55, FIBRE_STRETCH, ux, uy, fibreSeed);
+  const bayPeriod = Math.round(span / BAY_CELLS), covePeriod = Math.round(span / COVE_CELLS), lowPeriod = Math.round(span / LOWLAND_CELLS), summitPeriod = Math.round(span / SUMMIT_CELLS);
   const warpPeriod = Math.max(1, Math.round(n / p.rock.warpCells));
   const warpAmp = STRIPE_WARP * p.rock.warpCells;
 

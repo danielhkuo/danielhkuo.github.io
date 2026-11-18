@@ -10,7 +10,7 @@ import { fbm, GRADIENTS } from "../core/noise.ts";
 import { rngFor } from "../core/rng.ts";
 import { NB8_DX, NB8_DY, torusDelta, wrapIndex } from "../core/torus.ts";
 import { boxBlur, drainage, nearestSource, nodeAt, regionsOn, rockOn } from "./field.ts";
-import { ARCHETYPE_COUNT, type WorldParams } from "./params.ts";
+import { ARCHETYPE_COUNT, lengthScale, type WorldParams } from "./params.ts";
 import type { Plan } from "./plan.ts";
 import { applyStamps, type CoveStamp, deltaAt, inCove, spitCentre, type SpitStamp, type Stamp, stampReach } from "./stamps.ts";
 
@@ -316,7 +316,7 @@ function evenShore(h: Float64Array, n: number, ctx: CoastContext, p: WorldParams
 export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldParams, seed: number): CoastResult {
   const nn = n * n;
   const cpn = p.n / n;
-  const scale = p.n / 6400;
+  const scale = lengthScale(p.n);
   const c = p.coast;
   const rng = rngFor(seed, "coast");
   const noiseSeed = rng.next();

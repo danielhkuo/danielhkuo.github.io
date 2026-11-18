@@ -13,7 +13,7 @@ import { MATERIAL as M } from "../look/materials.ts";
 import { furrowAt, newParcel, parcelAt } from "../parcels.ts";
 import { featureFor, type LandmarkType } from "../sites/assign.ts";
 import { type Built, type Conform, conformed, conformGrid, ROAD_PIECE, type RoadLine, type Structure } from "./built.ts";
-import { ARCHETYPE } from "./params.ts";
+import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
 import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules } from "./sites.ts";
@@ -722,7 +722,7 @@ function greenBelt(w: Work, roads: readonly RoadLine[]): void {
   const wood = new Map<number, boolean>();
   for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
     const dx = i - ra, dy = j - rb, x = cx + dx + 0.5, y = cy + dy + 0.5;
-    if ((dx * dx) / (ra * ra) + (dy * dy) / (rb * rb) + 0.2 * drift(x, y, 28 * (n / 6400), n, w.seed ^ 0x77b1) > 0.94) continue;
+    if ((dx * dx) / (ra * ra) + (dy * dy) / (rb * rb) + 0.2 * drift(x, y, 28 * lengthScale(n), n, w.seed ^ 0x77b1) > 0.94) continue;
     const ni = node(c, x, y);
     if (c.isSea[ni] || c.lakeId[ni] >= 0 || c.rw[ni] > 0) continue;
     let f = wood.get(ni);
@@ -774,7 +774,7 @@ function isSlate(c: SiteContext, i: number): boolean {
 }
 
 function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
-  const c = w.c, gN = c.gN, k = c.n / 6400;
+  const c = w.c, gN = c.gN, k = lengthScale(c.n);
   const xs: number[] = [], ys: number[] = [], score: number[] = [];
   for (let gy = 0; gy < gN; gy += 2) for (let gx = 0; gx < gN; gx += 2) {
     const i = gy * gN + gx;
@@ -1239,11 +1239,11 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
   const open = (x: number, y: number): boolean => dry(w, x, y) && !w.blocked[node(c, x, y)];
   // The grid's path is ruled between its turns. First the whole map drifts a little under it, so a long straight
   // bends; the drift is a function of the place, so two lanes through one node still agree.
-  const amp = WANDER * (n / 6400);
+  const amp = WANDER * lengthScale(n);
   for (let k = 1; k < m - 1; k++) {
     if (fixed[k]) continue;
     const ease = c.slope[node(c, px[k], py[k])] > 0.25 ? 0.4 : 1;
-    const dx = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a71), dy = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a72);
+    const dx = amp * ease * drift(px[k], py[k], WANDER_CELLS * lengthScale(n), n, w.seed ^ 0x3a71), dy = amp * ease * drift(px[k], py[k], WANDER_CELLS * lengthScale(n), n, w.seed ^ 0x3a72);
     for (const f of [1, 0.5]) if (open(px[k] + f * dx, py[k] + f * dy)) { px[k] += f * dx; py[k] += f * dy; break; }
   }
   // Then the stairs are smoothed out, and on a slope each point slides along it to the height halfway between
