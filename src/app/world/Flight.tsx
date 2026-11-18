@@ -10,8 +10,7 @@ import { fitScale } from "../../world/runtime/fit";
 import { makeLayers } from "../../world/live/registry";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
-import { drawFlier } from "../../world/runtime/standin";
-import { createDragon, dragonFrom } from "../../world/dragon/index";
+import { createDragon } from "../../world/dragon/index";
 import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
@@ -180,9 +179,7 @@ export default function Flight() {
           loaded.manifest.start,
         );
 
-        // ?dragon=a|a-ivory|b|c flies one of the dragon studies in place of the kite.
-        const dragonId = dragonFrom(new URLSearchParams(window.location.search).get("dragon"));
-        const dragon = dragonId ? createDragon(dragonId, worldN) : null;
+        const dragon = createDragon(worldN);
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("2d");
@@ -208,10 +205,8 @@ export default function Flight() {
           const skyStart = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "below");
           const skyBelow = performance.now() - skyStart;
-          if (dragon) {
-            dragon.step(flight, Math.min(dt, 0.1));
-            dragon.draw(frame, view.rect(), flight, view);
-          } else drawFlier(frame, view.rect(), flight, view);
+          dragon.step(flight, Math.min(dt, 0.1));
+          dragon.draw(frame, view.rect(), flight, view);
           const skyAgain = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "above");
           if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);

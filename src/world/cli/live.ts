@@ -20,7 +20,7 @@ import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { createBakeHost } from "../runtime/bakeHost.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
-import { drawFlier } from "../runtime/standin.ts";
+import { flownDragon } from "../dragon/index.ts";
 import { createStreamView } from "../runtime/stream.ts";
 import { createSky } from "../sky/sky.ts";
 import type { CloudStyle } from "../sky/styles.ts";
@@ -146,7 +146,7 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
     view.frame(out, time, { x: kite.x, y: kite.y, alt: kite.alt, heading: kite.heading, speed: kite.speed });
     const rect = view.rect();
     if (sky) sky.draw(out, rect, time, "below");
-    drawFlier(out, rect, kite, view);
+    flownDragon(o.manifest.n, kite, time).draw(out, rect, kite, view);
     if (sky) sky.draw(out, rect, time, "above");
     frames.push(new Uint32Array(out));
   }

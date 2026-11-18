@@ -1,25 +1,22 @@
-// Dragon studies: each study drawn over the shipped world, for the owner to choose between.
+// The dragon bench: the river-dragon drawn over the shipped world, to judge its look.
 //
-//   npm run world:dragon -- [--forest x,y] [--only a|a-ivory|b|c]
+//   npm run world:dragon -- [--forest x,y]
 //
 // Writes to .cache/dragon-studies/:
-//   <id>-<place>.png   eight headings over the start bay, the town and a forest, at 4×
-//   <id>-frame.png     one whole 400×225 frame at 1×, with the clouds
-//   <id>-close.png     three headings at 6×
-//   frames.png         the whole frames side by side
-//   a-motion.png       the river-dragon turning and undulating, twelve moments
-//   a-head.png         the river-dragon's head in eight headings, at 4× and at 1×
-//   a-turn.png         the river-dragon held in a right turn and in a left, at 4×
-//   b-beat.png, c-beat.png   the wingbeat
+//   a-<place>.png      eight headings over the start bay, the town and a forest, at 4×
+//   a-frame.png        one whole 400×225 frame at 1×, with the clouds
+//   a-close.png        three headings at 6×
+//   frames.png         the whole frame at 1×
+//   a-motion.png       turning and undulating, twelve moments
+//   a-head.png         the head in eight headings, at 4× and at 1×
+//   a-turn.png         held in a right turn and in a left, at 4×
 //   sheet.png          everything on one contact sheet
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { wrap } from "../core/torus.ts";
-import { createDragon, DRAGON_IDS, DRAGON_NAMES, type Dragon, type DragonId } from "../dragon/index.ts";
-import { WINGED_CYCLE } from "../dragon/winged.ts";
-import { WYRM_BEAT } from "../dragon/wyrm.ts";
+import { createDragon, type Dragon } from "../dragon/index.ts";
 import { makeLayers } from "../live/registry.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { decodeFlightData } from "../pack/world.ts";
@@ -37,8 +34,9 @@ const W = 400, H = 225;
 const CREAM = 0xffd2e8f0, INK = 0xff1d2228;
 /** A forest on the shipped world (seed 3), found by eye. */
 const FOREST = { x: 5960, y: 3770 };
-/** How far ahead of the picture's centre each study's flier sits, so the whole body is in the crop. */
-const AHEAD: Record<DragonId, number> = { a: 34, "a-ivory": 34, b: 4, c: 3 };
+/** How far ahead of the picture's centre the head sits, so the whole body is in the crop. */
+const AHEAD = 34;
+const NAME = "THE RIVER-DRAGON";
 const HEADINGS = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"];
 const DT = 1 / 60;
 
@@ -144,10 +142,10 @@ function frameOf(st: Stage, dragon: Dragon, s: FlightState, cx: number, cy: numb
 }
 
 /** The study flown straight along `heading` so that the middle of its body is over (cx, cy), 18 units up, at `time`. */
-function posed(st: Stage, id: DragonId, cx: number, cy: number, heading: number, time: number): { dragon: Dragon; s: FlightState } {
-  const dragon = createDragon(id, st.n);
+function posed(st: Stage, cx: number, cy: number, heading: number, time: number): { dragon: Dragon; s: FlightState } {
+  const dragon = createDragon(st.n);
   const dx = Math.cos(heading), dy = Math.sin(heading);
-  const hx = cx + dx * AHEAD[id], hy = cy + dy * AHEAD[id];
+  const hx = cx + dx * AHEAD, hy = cy + dy * AHEAD;
   const alt = st.view.groundHeight(wrap(hx, st.n), wrap(hy, st.n)) + 18;
   let s: FlightState = { x: 0, y: 0, heading, speed: CRUISE, alt, bank: 0 };
   for (let k = 160; k >= 0; k--) {
@@ -187,8 +185,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const forestArg = readFlag(argv, "--forest")?.split(",").map(Number);
   const forest = forestArg && forestArg.length === 2 && forestArg.every(Number.isFinite) ? { x: forestArg[0], y: forestArg[1] } : FOREST;
   const places: [string, { x: number; y: number }][] = [["bay", named.start], ["town", named.town], ["forest", forest]];
-  const only = readFlag(argv, "--only");
-  const ids = DRAGON_IDS.filter((d) => !only || d === only);
+  const ids = ["a"] as const;
 
   const dir = join(process.cwd(), ".cache", "dragon-studies");
   mkdirSync(dir, { recursive: true });
@@ -201,13 +198,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   for (const d of ids) {
     // Eight headings over each place: a 4× strip of its own, and a 2× row on the sheet.
     const band = sheet(rowW, LINE + places.length * (CH * 2 + LINE));
-    label(band, 0, 2, DRAGON_NAMES[d], 3);
+    label(band, 0, 2, NAME, 3);
     places.forEach(([name, at], p) => {
       const big = sheet(4 * (CW * 4 + GAP) - GAP, 2 * (CH * 4 + GAP) - GAP);
       const y = LINE + p * (CH * 2 + LINE);
       label(band, 0, y + 4, `${name}  ${HEADINGS.join(" ")}`);
       for (let h = 0; h < 8; h++) {
-        const { dragon, s } = posed(st, d, at.x, at.y, (h * Math.PI) / 4, 1 + h * 0.37);
+        const { dragon, s } = posed(st, at.x, at.y, (h * Math.PI) / 4, 1 + h * 0.37);
         const f = frameOf(st, dragon, s, at.x, at.y, 1 + h * 0.37, false);
         blit(big, (h % 4) * (CW * 4 + GAP), (h >> 2) * (CH * 4 + GAP), f, CW, CH, 4);
         blit(band, h * (CW * 2 + GAP), y + LINE - 2, f, CW, CH, 2);
@@ -218,7 +215,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
     // One whole frame at 1×, with the clouds: how it reads in play.
     const at = named.start;
-    const { dragon, s } = posed(st, d, at.x, at.y, -0.5, 2);
+    const { dragon, s } = posed(st, at.x, at.y, -0.5, 2);
     const whole = sheet(W, H);
     blit(whole, 0, 0, frameOf(st, dragon, s, at.x, at.y, 2, true), W, H, 1);
     written.push(save(dir, `${d}-frame.png`, whole));
@@ -226,11 +223,11 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   // Close-ups at 6×: east, south-east and north.
   for (const d of ids) {
-    const KW = d === "c" ? 56 : d === "b" ? 72 : 104, KH = d === "a" || d === "a-ivory" ? 100 : 64;
+    const KW = 104, KH = 100;
     const close = sheet(3 * (KW * 6 + GAP) - GAP, LINE + KH * 6);
-    label(close, 0, 2, `${DRAGON_NAMES[d]} AT 6×`);
+    label(close, 0, 2, `${NAME} AT 6×`);
     [0, 1, 6].forEach((h, i) => {
-      const { dragon, s } = posed(st, d, forest.x, forest.y, (h * Math.PI) / 4, 1.3 + i);
+      const { dragon, s } = posed(st, forest.x, forest.y, (h * Math.PI) / 4, 1.3 + i);
       blit(close, i * (KW * 6 + GAP), LINE, frameOf(st, dragon, s, forest.x, forest.y, 1.3 + i, false), KW, KH, 6);
     });
     written.push(save(dir, `${d}-close.png`, close));
@@ -242,7 +239,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   label(wholes, 0, 2, "AT 1× IN THE WHOLE FRAME, WITH CLOUDS");
   ids.forEach((d, i) => {
     const at = named.start;
-    const { dragon, s } = posed(st, d, at.x, at.y, -0.5, 2);
+    const { dragon, s } = posed(st, at.x, at.y, -0.5, 2);
     blit(wholes, i * (W + GAP), LINE, frameOf(st, dragon, s, at.x, at.y, 2, true), W, H, 1);
   });
   written.push(save(dir, "frames.png", wholes));
@@ -253,7 +250,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const MW = 168, MH = 120, COUNT = 12;
     const motion = sheet(6 * (MW * 2 + GAP) - GAP, LINE + 2 * (MH * 2 + GAP));
     label(motion, 0, 2, "A IN MOTION: A RIGHT TURN, THEN A LEFT, EVERY 0.4 S");
-    const dragon = createDragon("a", st.n);
+    const dragon = createDragon(st.n);
     let s = startState(manifest.start, view);
     const idle: FlightInput = { turn: 0, boost: false, brake: false };
     for (let k = 0; k < 150; k++) {
@@ -282,7 +279,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const head = sheet(8 * (FW * 4 + GAP) - GAP, LINE + FH * 4 + GAP + FH);
     label(head, 0, 2, `A: THE HEAD AT 4× AND AT 1×  ${HEADINGS.join(" ")}`);
     for (let h = 0; h < 8; h++) {
-      const { dragon, s } = posed(st, "a", forest.x, forest.y, (h * Math.PI) / 4, 1 + h * 0.37);
+      const { dragon, s } = posed(st, forest.x, forest.y, (h * Math.PI) / 4, 1 + h * 0.37);
       const f = frameOf(st, dragon, s, s.x, s.y, 1 + h * 0.37, false);
       blit(head, h * (FW * 4 + GAP), LINE, f, FW, FH, 4);
       blit(head, h * (FW * 4 + GAP), LINE + FH * 4 + GAP, f, FW, FH, 1);
@@ -295,7 +292,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const turns = sheet(SHOTS * (TW * 4 + GAP) - GAP, LINE + 2 * (TH * 4 + GAP));
     label(turns, 0, 2, "A BANKING AT 4×: HELD RIGHT (TOP) AND HELD LEFT (BOTTOM), EVERY 0.7 S");
     ([1, -1] as const).forEach((turn, row) => {
-      const dragon = createDragon("a", st.n);
+      const dragon = createDragon(st.n);
       let s = startState(manifest.start, view);
       for (let k = 0; k < 150; k++) {
         s = stepFlight(s, { turn: 0, boost: false, brake: false }, DT, view, st.n);
@@ -312,22 +309,6 @@ export async function main(argv: readonly string[]): Promise<number> {
     });
     written.push(save(dir, "a-turn.png", turns));
     bands.push(turns);
-  }
-
-  // The wingbeats of B and C.
-  for (const [d, span, title] of [["b", WINGED_CYCLE, "B: TWO BEATS AND A GLIDE"], ["c", WYRM_BEAT * 2, "C: THE FLUTTER"]] as const) {
-    if (!ids.includes(d)) continue;
-    const BW = d === "b" ? 104 : 80, BH = d === "b" ? 88 : 64, COUNT = d === "b" ? 9 : 12;
-    const beat = sheet(COUNT * (BW * 2 + GAP) - GAP, LINE + BH * 2);
-    label(beat, 0, 2, title);
-    const at = named.start;
-    for (let i = 0; i < COUNT; i++) {
-      const time = (i * span) / COUNT;
-      const { dragon, s } = posed(st, d, at.x, at.y, -0.5, time);
-      blit(beat, i * (BW * 2 + GAP), LINE, frameOf(st, dragon, s, at.x, at.y, time, false), BW, BH, 2);
-    }
-    written.push(save(dir, `${d}-beat.png`, beat));
-    bands.push(beat);
   }
 
   let total = PAD;

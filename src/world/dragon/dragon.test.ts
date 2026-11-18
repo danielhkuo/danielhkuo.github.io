@@ -5,26 +5,26 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ViewRect } from "../render/compose.ts";
 import { CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
-import { createDragon, dragonFrom, DRAGON_IDS, type DragonId } from "./index.ts";
+import { createDragon } from "./index.ts";
 import type { Land } from "./parts.ts";
 import { LACQUER } from "./look.ts";
 import { RIVER_REACH } from "./river.ts";
-import { RIVER2_REACH } from "./river2.ts";
-import { WINGED_REACH } from "./winged.ts";
-import { WYRM_REACH } from "./wyrm.ts";
 
 const W = 400, H = 225, N = 1280, GREY = 0xff808080, SHADE = 0xff535353;
-const REACH: Record<DragonId, number> = { a: RIVER2_REACH, "a-ivory": RIVER_REACH, b: WINGED_REACH, c: WYRM_REACH };
+/** One dragon now (the owner chose A); the loops below keep their shape so another could be added. */
+const DRAGON_IDS = ["a"] as const;
+type DragonId = (typeof DRAGON_IDS)[number];
+const REACH: Record<DragonId, number> = { a: RIVER_REACH };
 /** Length along the heading, pixels: least and most. */
-const LENGTH: Record<DragonId, [number, number]> = { a: [60, 90], "a-ivory": [60, 90], b: [30, 50], c: [20, 34] };
+const LENGTH: Record<DragonId, [number, number]> = { a: [60, 90] };
 
 /** The flier at (500, 500), 30 up, at the middle of the frame. */
 const rect: ViewRect = { x: 500 - 200, y: Math.floor(0.8 * 500 - 30) - 112, w: W, h: H };
 const flat: Land = { depthAt: (_px, py) => (rect.y + py) / 0.8, groundHeight: () => 0 };
 
-/** The study after flying straight along `heading` for 240 frames, drawn over `land`; `turn` bends the path. */
+/** The dragon after flying straight along `heading` for 240 frames, drawn over `land`; `turn` bends the path. */
 function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0): Uint32Array {
-  const dragon = createDragon(id, N);
+  const dragon = createDragon(N);
   let s: FlightState = { x: 0, y: 0, heading, speed: CRUISE, alt: 30, bank };
   for (let k = 240; k >= 0; k--) {
     const h = heading - turn * k;
@@ -38,12 +38,7 @@ function flown(id: DragonId, heading: number, land: Land, turn = 0, bank = 0): U
 
 const isBody = (v: number) => v !== GREY && v !== SHADE;
 
-test("?dragon= names a study, and anything else leaves the kite", () => {
-  for (const id of DRAGON_IDS) assert.equal(dragonFrom(id), id);
-  for (const v of [null, undefined, "", "d", "A", "ivory"]) assert.equal(dragonFrom(v), null);
-});
-
-test("each study is drawn, with a shadow, in its reserved colours", () => {
+test("the dragon is drawn, with a shadow, in its reserved colours", () => {
   for (const id of DRAGON_IDS) {
     const out = flown(id, 0, flat);
     let body = 0, shade = 0, red = 0;
@@ -60,7 +55,7 @@ test("each study is drawn, with a shadow, in its reserved colours", () => {
   }
 });
 
-test("each study is deterministic: the same flight draws the same pixels", () => {
+test("the dragon is deterministic: the same flight draws the same pixels", () => {
   for (const id of DRAGON_IDS) {
     for (const heading of [0, 0.7, Math.PI / 2, 4]) {
       assert.deepEqual(flown(id, heading, flat, 0.002), flown(id, heading, flat, 0.002), `${id} at ${heading}`);
@@ -100,7 +95,7 @@ test("a ridge across the frame hides only what is behind it", () => {
   }
 });
 
-test("each study stays within its reach of the flier, and is its stated length", () => {
+test("the dragon stays within its reach of the flier, and is its stated length", () => {
   for (const id of DRAGON_IDS) {
     for (const heading of [0, 1, Math.PI / 2, 2.5, Math.PI, 4, 5.2]) {
       const out = flown(id, heading, flat);
@@ -124,9 +119,9 @@ test("each study stays within its reach of the flier, and is its stated length",
   }
 });
 
-test("each study draws in under 0.3 ms a frame", () => {
+test("the dragon draws in under 0.3 ms a frame", () => {
   for (const id of DRAGON_IDS) {
-    const dragon = createDragon(id, N);
+    const dragon = createDragon(N);
     let s: FlightState = { x: 0, y: 500, heading: 0.6, speed: CRUISE, alt: 30, bank: 0 };
     for (let k = 240; k >= 0; k--) {
       s = { ...s, x: 500 - Math.cos(0.6) * k, y: 500 - Math.sin(0.6) * k };
@@ -170,7 +165,7 @@ test("A rolls into its turns: the gold belly shows on the outside", () => {
   // A full-bank turn at cruising speed, ending heading east at the middle of the frame. A right turn's outside is
   // then the north, so the belly's gold lies up the frame from the body's middle; for a left turn, down it.
   const side = (bank: number): number => {
-    const dragon = createDragon("a", N), rate = (bank * TURN) / 60, path: [number, number, number][] = [];
+    const dragon = createDragon(N), rate = (bank * TURN) / 60, path: [number, number, number][] = [];
     let x = 0, y = 0;
     for (let k = 0; k <= 240; k++) {
       const heading = rate * (k - 240);
