@@ -2,13 +2,17 @@
 // lobes in the camera's own space, then lit by one sun. A painter turns the result
 // into a sprite; the field places it.
 //
-// A cumulus is a few big trunk lobes standing on a level base, some with towers
-// stacked on them, each budding smaller billows and those budding bumps, with a
-// skirt of small lobes along the front of the base. The frontmost surface wins each
-// pixel, so the edge is crisp: a pixel is cloud or it is not. Light is the sun on
-// that surface (north-west and above), dimmed where a nearer lobe stands in the way,
-// low in the cloud, and in the creases between lobes. Streamers are long, low
-// shelves of the same billows. Nothing here is noise per pixel.
+// A cumulus has an outline of swells, one tall and one or two lesser, over a low
+// shelf. Body lobes are packed under it in columns, from a level rank along the
+// base up to the crest; the lobes at the crest bud smaller billows, and those bud
+// bumps; flattened lobes skirt the base. The frontmost surface wins each pixel, so
+// the edge is crisp: a pixel is cloud or it is not.
+//
+// Light is the sun (north-west and above) on that surface and on the cloud's
+// smoothed mass, so a whole flank turns to shade together; it is dimmed where a
+// nearer lobe stands in the way, by the base, and in the creases between lobes.
+// Streamers are chains of flattened lobes on a level base. Nothing here is noise
+// per pixel.
 
 import { rngFor, type Rng } from "../core/rng.ts";
 
@@ -42,7 +46,7 @@ export interface CloudShape {
 export const SHAPE_SIZES: Readonly<Record<CloudKind, { w: readonly [number, number]; h: readonly [number, number] }>> = {
   heap: { w: [110, 250], h: [45, 130] },
   puff: { w: [18, 84], h: [10, 48] },
-  wisp: { w: [50, 170], h: [8, 30] },
+  wisp: { w: [66, 170], h: [8, 22] },
   bank: { w: [190, 320], h: [100, 190] },
 };
 
@@ -445,26 +449,32 @@ function sculpt(kind: CloudKind, lobes: readonly Lobe[]): CloudShape {
   return { kind, w, h, cover, light, rim, shadow: { w: sw, h: sh, dx, dy, mask } };
 }
 
-function make(kind: CloudKind, rng: Rng): CloudShape {
+/**
+ * Shape `index` of `count` of its kind. Widths are spread over the kind's range, one stratum to a shape, so every
+ * sky has small and great clouds of each kind, whatever the seed.
+ */
+function make(kind: CloudKind, rng: Rng, index: number, count: number): CloudShape {
   const size = SHAPE_SIZES[kind];
   // Draw again in the rare case a shape falls outside its kind's box.
   for (let tries = 0; ; tries++) {
+    const share = (index + rng.float()) / count;
+    const span = (lo: number, hi: number): number => lo + (hi - lo) * share;
     let lobes: Lobe[];
     if (kind === "heap") {
-      const width = range(rng, 105, 210);
+      const width = span(105, 210);
       lobes = cumulus(rng, planOf(rng, width, [0.3, 0.46], [0.26, 0.4], width < 140 ? 1 : intIn(rng, 1, 2), range(rng, 13, 17)));
     } else if (kind === "bank") {
-      const width = range(rng, 190, 270);
+      const width = span(190, 270);
       lobes = cumulus(rng, planOf(rng, width, [0.46, 0.6], [0.24, 0.32], 2, range(rng, 19, 24)));
     } else if (kind === "puff") {
-      const width = range(rng, 16, 62);
+      const width = span(16, 62);
       lobes = cumulus(rng, planOf(rng, width, [0.36, 0.52], [0.4, 0.55], width > 44 ? 1 : 0, Math.max(5, width / range(rng, 3.6, 5))));
     } else {
-      lobes = streamer(rng, range(rng, 56, 150), range(rng, 8, 12));
+      lobes = streamer(rng, span(70, 150), range(rng, 8, 12));
     }
     const s = sculpt(kind, lobes);
     const fits = s.w >= size.w[0] && s.w <= size.w[1] && s.h >= size.h[0] && s.h <= size.h[1];
-    if (fits || tries >= 20) return s;
+    if (fits || tries >= 80) return s;
   }
 }
 
@@ -472,7 +482,7 @@ function make(kind: CloudKind, rng: Rng): CloudShape {
 export function makeShapes(seed: number, counts: Readonly<Record<CloudKind, number>>): CloudShape[] {
   const out: CloudShape[] = [];
   for (const kind of KINDS) {
-    for (let i = 0; i < counts[kind]; i++) out.push(make(kind, rngFor(seed, `sky-shape-${kind}-${i}`)));
+    for (let i = 0; i < counts[kind]; i++) out.push(make(kind, rngFor(seed, `sky-shape-${kind}-${i}`), i, counts[kind]));
   }
   return out;
 }

@@ -41,7 +41,7 @@ const BANK_GAP_Y = 540;
 const BANKS_AT_6400 = 38;
 /** Height of the flier over the sea at the start: the page's camera is lifted by it. */
 const START_LIFT = 18;
-/** The second opening heap: its middle this far along the flier's line on screen, and this far to the right of it, pixels. */
+/** The second opening heap: its middle this far along the flier's line on screen, and at least this far to the right of it, pixels. */
 const AHEAD = 285;
 const ABEAM = 80;
 
@@ -190,7 +190,8 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
         if (shapes[i].w < 140 && first >= 0) continue;
         if (first < 0 || shapes[first].w < 140 || shapes[i].h / shapes[i].w > shapes[first].h / shapes[first].w) first = i;
       }
-      set(first, 88 - (shapes[first].w >> 1), 214 - shapes[first].h);
+      // Its right edge stays left of the flier; a very wide heap runs off the frame's left edge instead.
+      set(first, Math.min(88 - (shapes[first].w >> 1), 160 - shapes[first].w), 214 - shapes[first].h);
     }
     if (puffs.length > 0) {
       const a = nearest(puffs, 58), b = nearest(puffs, 36, a), c = nearest(puffs, 46, a);
@@ -205,11 +206,13 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
       let h = -1;
       for (const i of heaps) if (i !== first && (h < 0 || shapes[i].w > shapes[h].w)) h = i;
       const hx = opening.dx, hy = 0.8 * opening.dy, len = Math.hypot(hx, hy) || 1;
+      // Far enough to the right that its crown stays clear of the flier's line.
+      const abeam = Math.max(ABEAM, shapes[h].h / 2 + 28);
       // AHEAD along the line, or as much farther as takes its box clear of the first frame.
       let sx = 0, sy = 0;
       for (let ahead = AHEAD; ahead < AHEAD + VIEW_W; ahead += 4) {
-        sx = Math.round(VIEW_W / 2 + (ahead * hx - ABEAM * hy) / len - shapes[h].w / 2);
-        sy = Math.round(VIEW_H / 2 + (ahead * hy + ABEAM * hx) / len - shapes[h].h / 2);
+        sx = Math.round(VIEW_W / 2 + (ahead * hx - abeam * hy) / len - shapes[h].w / 2);
+        sy = Math.round(VIEW_H / 2 + (ahead * hy + abeam * hx) / len - shapes[h].h / 2);
         if (sx >= VIEW_W || sy >= VIEW_H || sx + shapes[h].w <= 0 || sy + shapes[h].h <= 0) break;
       }
       // Clear its place of other low cloud, then set it.

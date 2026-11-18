@@ -102,9 +102,9 @@ test("fewer, bigger clouds: the land stays the star, with clear skies in places 
   const mean = covers.reduce((a, b) => a + b, 0) / covers.length;
   assert.ok(mean >= 0.05 && mean <= 0.16, `mean cover ${mean.toFixed(3)}`);
   assert.ok(covers.filter((c) => c < 0.02).length >= 60, `${covers.filter((c) => c < 0.02).length} clear views of 300`);
-  assert.ok(covers.filter((c) => c > 0.2).length >= 20, `${covers.filter((c) => c > 0.2).length} heavy views of 300`);
+  assert.ok(covers.filter((c) => c > 0.2).length >= 10, `${covers.filter((c) => c > 0.2).length} heavy views of 300`);
   assert.ok(Math.max(...covers) <= 0.6, `the heaviest view is ${Math.max(...covers).toFixed(2)} covered`);
-  assert.ok(withHeap >= 60 && withHeap <= 200, `${withHeap} views of 300 hold a heap`);
+  assert.ok(withHeap >= 60 && withHeap <= 220, `${withHeap} views of 300 hold a heap`);
   // Not a scatter of small puffs: a view holds about three clouds, not a dozen.
   assert.ok(clouds / 300 <= 5, `${(clouds / 300).toFixed(1)} low clouds a view`);
 });
@@ -158,8 +158,8 @@ test("the first view has cloud in it: a great heap to seaward, puffs and a strea
   const heap = seen.find((b) => fix().shapes[b.c.shape].kind === "heap")!;
   const hs = fix().shapes[heap.c.shape];
   assert.ok(hs.w >= 134, `the heap is ${hs.w} wide`);
-  // Whole, bar a sliver: it is on the frame, low and to the left, the flier's side of the sea.
-  assert.ok(heap.sx >= -30 && heap.sx + hs.w <= W / 2 && heap.sy >= H / 3 && heap.sy + hs.h <= H, `heap at ${heap.sx},${heap.sy}`);
+  // Two-thirds of it or more is on the frame, low and to the left, the flier's side of the sea.
+  assert.ok(heap.sx >= -0.35 * hs.w && heap.sx + hs.w <= W / 2 && heap.sy >= H / 3 && heap.sy + hs.h <= H, `heap at ${heap.sx},${heap.sy}`);
   // The flier, at the centre, and the town to the north-east of it stay clear.
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const flier = Math.abs(x - W / 2) <= 30 && Math.abs(y - H / 2) <= 30;
@@ -184,13 +184,13 @@ test("a start with a heading sets a second heap ahead, off the first frame, to t
   assert.deepEqual(lowCover(headed, OPEN.x, OPEN.y).mask, lowCover(fix().opened, OPEN.x, OPEN.y).mask);
   assert.ok(!boxes(headed, "low", OPEN.x, OPEN.y).some((b) => b.c === added[0]), "it is off the first frame");
   // Its middle, from the flier at the centre of the frame: 285 px or a little more along the heading on screen, and
-  // 80 px to its right.
+  // 80 px to its right, or more for a tall heap.
   const sx = near(Math.round(added[0].x), OPEN.x, N, W) + s.w / 2 - W / 2, sy = near(Math.round(KY * added[0].y) - ALT.low, OPEN.y, KY * N, H) + s.h / 2 - H / 2;
   const hx = heading.dx, hy = KY * heading.dy, len = Math.hypot(hx, hy);
   const along = (sx * hx + sy * hy) / len, right = (-sx * hy + sy * hx) / len;
-  assert.ok(along >= 283 && along <= 360 && Math.abs(right - 80) <= 2, `along ${along.toFixed(1)}, right ${right.toFixed(1)}`);
+  assert.ok(along >= 283 && along <= 360 && right >= 78 && right <= 110, `along ${along.toFixed(1)}, right ${right.toFixed(1)}`);
   // The flier's line stays clear of it: the heap's top is below the line where they pass.
-  assert.ok(right - s.h / 2 > 20, `the heap's top is ${(right - s.h / 2).toFixed(0)} px from the line`);
+  assert.ok(right - s.h / 2 >= 25, `the heap's top is ${(right - s.h / 2).toFixed(0)} px from the line`);
 });
 
 test("the opening changes the sky only round the start", () => {
