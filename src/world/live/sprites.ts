@@ -43,9 +43,11 @@ export function worldRowAt(f: LiveFrame, px: number, py: number): number {
  * the torus image nearest the view (x every n, bake rows every 0.8·n, with y moved by the same whole number of n for the
  * depth test). A pixel draws where its alpha > 0 and worldRowAt(px, py) ≤ y′ + 1 (land nearer the viewer hides it), as
  * out += (rgba − out) · alpha / 255 per channel, keeping out opaque; mirrored left to right when `flip`. Clipped at the
- * frame's edges, never wrapped across them.
+ * frame's edges, never wrapped across them. `cover` (0–255) scales every pixel's alpha; 255 leaves it unchanged.
  */
-export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, alt: number, flip: boolean): void {
+export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, alt: number, flip: boolean, cover = 255): void {
+  if (cover <= 0) return;
+  const fade = cover >= 255 ? 255 : cover;
   const { out, rect, n } = f;
   const fw = rect.w;
   const fh = rect.h;
@@ -74,8 +76,12 @@ export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, al
       const screenX = sx0 + (flip ? sw - 1 - px : px);
       if (screenX < 0 || screenX >= fw) continue;
       const sp = siRow + px;
-      const a8 = alpha[sp];
+      let a8 = alpha[sp];
       if (a8 === 0) continue;
+      if (fade < 255) {
+        a8 = (a8 * fade) / 255 | 0;
+        if (a8 === 0) continue;
+      }
       if (worldRowAt(f, screenX, screenY) > depthCut) continue;
       const di = diRow + screenX;
       const src = rgba[sp];
