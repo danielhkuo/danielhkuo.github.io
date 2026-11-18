@@ -2,9 +2,6 @@
 
 /** The largest whole scale, at least 1, at which a w × h frame fits a vw × vh viewport. */
 export function fitScale(vw: number, vh: number, w: number, h: number): number {
-  void vw;
-  void vh;
-  void w;
-  void h;
-  throw new Error("not implemented");
+  if (vw <= 0 || vh <= 0) return 1;
+  return Math.max(1, Math.floor(Math.min(vw / w, vh / h)));
 }

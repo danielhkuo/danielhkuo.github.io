@@ -1,6 +1,7 @@
 // The flight model: a pure step from one state to the next. The camera follows
 // whatever this says; the dragon will replace the numbers, not the shape.
 
+import { wrap } from "../core/torus.ts";
 import type { Start } from "../pack/manifest.ts";
 
 /** Cruising speed, cells a second: a lap of the 6400 world in about 107 s. */
@@ -52,9 +53,19 @@ export interface Terrain {
 
 /** At the start, cruising, level, at the height it will hold there. */
 export function startState(start: Start, terrain: Terrain): FlightState {
-  void start;
-  void terrain;
-  throw new Error("not implemented");
+  const x = start.x;
+  const y = start.y;
+  const ground = terrain.groundHeight(x, y);
+  const floor = terrain.occlusionFloor(x, y);
+  const alt = Math.max(ground + CLEARANCE, floor + FLOOR_MARGIN);
+  return {
+    x,
+    y,
+    heading: Math.atan2(start.dy, start.dx),
+    speed: CRUISE,
+    alt,
+    bank: 0,
+  };
 }
 
 /**
@@ -64,10 +75,22 @@ export function startState(start: Start, terrain: Terrain): FlightState {
  * ground + MIN_GAP. Pure: the input state is not changed.
  */
 export function stepFlight(s: FlightState, input: FlightInput, dt: number, terrain: Terrain, n: number): FlightState {
-  void s;
-  void input;
-  void dt;
-  void terrain;
-  void n;
-  throw new Error("not implemented");
+  const step = Math.min(DT_MAX, Math.max(0, dt));
+  const bank = s.bank + (input.turn - s.bank) * Math.min(1, BANK_EASE * step);
+  const heading = s.heading + TURN * bank * step;
+  const targetSpeed = CRUISE * (input.boost ? BOOST : input.brake ? BRAKE : 1);
+  const speed = s.speed + (targetSpeed - s.speed) * Math.min(1, SPEED_EASE * step);
+  let x = s.x + Math.cos(heading) * speed * step;
+  let y = s.y + Math.sin(heading) * speed * step;
+  x = wrap(x, n);
+  y = wrap(y, n);
+  const ground = terrain.groundHeight(x, y);
+  const floor = terrain.occlusionFloor(x, y);
+  const targetAlt = Math.max(ground + CLEARANCE, floor + FLOOR_MARGIN);
+  let alt = s.alt;
+  const delta = targetAlt - alt;
+  if (delta > 0) alt += Math.min(delta, CLIMB * step);
+  else if (delta < 0) alt += Math.max(delta, -CLIMB * step);
+  alt = Math.max(alt, ground + MIN_GAP);
+  return { x, y, heading, speed, alt, bank };
 }
