@@ -4,9 +4,10 @@
 // sheltered and shallow, a fjord deep to its walls.
 
 import { fbm } from "../core/noise.ts";
+import { pcos, psin } from "../core/psin.ts";
 import { rngFor, type Rng } from "../core/rng.ts";
 import { NB8_DX, NB8_DY, torusDelta, wrapIndex } from "../core/torus.ts";
-import { nearestSource } from "./field.ts";
+import { type Nearest, nearestSource } from "./field.ts";
 import { FORM, lengthScale, type WorldParams } from "./params.ts";
 import type { Core, Plan } from "./plan.ts";
 
@@ -42,39 +43,39 @@ const TABLE_RIM = 12;
  */
 const FEN_TOP = 2.8;
 const MERE_CELLS = 150;
-const MERE_AT = 0.28;
+const MERE_AT = 0.2;
 const MERE_DEPTH = 2.4;
 const MERE_BED = 0.35;
 /**
- * Lodes: LODES slow rivers wind across a fen from near its middle to the sea, bending by up to LODE_SWING (radians)
- * every LODE_WAVE cells. The ground within LODE_BAND cells of one falls to it, its bed sinking from LODE_BED[0] at
- * the head to LODE_BED[1] at the mouth, so the fen's water gathers into a few wide rivers that meander.
+ * Lodes: LODES slow rivers wind across a fen to the sea, each at least LODE_MIN of its radius long, bending by up
+ * to LODE_SWING (radians) every LODE_WAVE cells. The ground within LODE_BAND cells of one falls to it, its bed sinking
+ * from LODE_BED[0] at the head to LODE_BED[1] at the mouth, so the fen's water gathers into a few wide rivers that
+ * meander.
  */
 const LODES: readonly [number, number] = [2, 3];
-const LODE_SWING = 0.85;
-const LODE_WAVE: readonly [number, number] = [170, 260];
+const LODE_SWING = 1.05;
+const LODE_WAVE: readonly [number, number] = [140, 220];
 const LODE_BAND = 240;
 const LODE_BED: readonly [number, number] = [1.1, 0.12];
+const LODE_MIN = 0.45;
 
 /**
- * A caldera's walls: land within CALDERA_WALL cells of its lagoon is raised to WALL_SHARE of the ring's crest in that
- * direction, climbing over WALL_RIM cells from the water, and eases back down to the ground it stood on over a
- * second CALDERA_WALL. The ring's crest is read in WALL_BINS directions round the core.
+ * A caldera's walls. The ring's inner slope is pulled in towards its lagoon: ground d cells from the water takes the
+ * height the ring had WALL_PULL · (1 − d / WALL_REACH) cells farther out (never less than its own), so the crest comes
+ * to the water's edge and the wall stands sheer, while every valley keeps falling the way it fell and spills over the
+ * wall instead of being dammed. WALL_REACH is kept over WALL_PULL so the pull never folds the ground over itself.
  */
-const CALDERA_WALL = 44;
-const WALL_RIM = 14;
-const WALL_SHARE = 0.92;
-const WALL_BINS = 72;
+const WALL_PULL = 48;
+const WALL_REACH = 2.2 * WALL_PULL;
 
-/** Exposure kept on a fen's shores and a lagoon's (the rest is calmed away). */
+/** The share of a shore's exposure taken away on a fen (its flats break the waves) and round a lagoon. */
 const FEN_CALM = 0.85;
 const LAGOON_CALM = 0.95;
 /** Tidal flats round a fen reach FLATS cells out, from FLATS_DEPTH[0] at the shore to FLATS_DEPTH[1] at their edge. */
 const FLATS = 260;
 const FLATS_DEPTH: readonly [number, number] = [0.3, 3];
-/** Past the flats the bed falls FLATS_FALL a cell until it meets the open sea's. */
+/** Past the flats the bed falls FLATS_FALL a cell until it is as deep as the open sea gets (coast.bathy.max). */
 const FLATS_FALL = 0.06;
-const SEA_MAX = 24;
 /** A lagoon is the sea within LAGOON_REACH of a caldera's radius from its core that its islet stands in; its bed lies no deeper than LAGOON_DEPTH. */
 const LAGOON_REACH = 0.72;
 const LAGOON_DEPTH = 3.2;
@@ -82,9 +83,16 @@ const LAGOON_DEPTH = 3.2;
 const FJORD_DEEP = 22;
 const FJORD_SHELF = 7;
 
-/** The land nodes of the island a core stands on, no farther than `reach` cells from it. */
-function islandNodes(h: Float64Array, gN: number, isSea: Uint8Array, core: Core, cpn: number, reach: number, seen: Uint8Array): Int32Array {
-  const n = gN * cpn;
+/**
+ * The land nodes of the island core `k` stands on that are its own (the plan's `owner`), no farther than `reach` cells
+ * from it: where two islands have grown together, each keeps its side of the join.
+ */
+function islandNodes(h: Float64Array, gN: number, isSea: Uint8Array, plan: Plan, k: number, cpn: number, reach: number, seen: Uint8Array): Int32Array {
+  const core = plan.cores[k], n = gN * cpn, cN = plan.n;
+  const own = (j: number): boolean => {
+    const x = j % gN, y = (j - x) / gN;
+    return plan.owner[(y >> 1) * cN + (x >> 1)] === k;
+  };
   const cx = Math.floor(core.x / cpn), cy = Math.floor(core.y / cpn);
   // Start on the land nearest the core.
   let start = -1;
@@ -93,17 +101,17 @@ function islandNodes(h: Float64Array, gN: number, isSea: Uint8Array, core: Core,
     for (let dy = -r; dy <= r && start < 0; dy++) for (let dx = -r; dx <= r; dx++) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
       const i = wrapIndex(cx + dx, cy + dy, gN);
-      if (!isSea[i]) { start = i; break; }
+      if (!isSea[i] && own(i)) { start = i; break; }
     }
   }
   if (start < 0) return new Int32Array(0);
   const out: number[] = [start];
   seen[start] = 1;
-  for (let k = 0; k < out.length; k++) {
-    const i = out[k], x = i % gN, y = (i - x) / gN;
-    for (let q = 0; q < 4; q++) {
-      const j = wrapIndex(x + (q === 0 ? 1 : q === 1 ? -1 : 0), y + (q === 2 ? 1 : q === 3 ? -1 : 0), gN);
-      if (seen[j] || isSea[j]) continue;
+  for (let q = 0; q < out.length; q++) {
+    const i = out[q], x = i % gN, y = (i - x) / gN;
+    for (let e = 0; e < 4; e++) {
+      const j = wrapIndex(x + (e === 0 ? 1 : e === 1 ? -1 : 0), y + (e === 2 ? 1 : e === 3 ? -1 : 0), gN);
+      if (seen[j] || isSea[j] || !own(j)) continue;
       const jx = j % gN, jy = (j - jx) / gN;
       const dx = torusDelta(core.x, (jx + 0.5) * cpn, n), dy = torusDelta(core.y, (jy + 0.5) * cpn, n);
       if (dx * dx + dy * dy > reach * reach) continue;
@@ -128,7 +136,7 @@ function crater(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Arra
     if (dx * dx + dy * dy <= near * near && (top < 0 || h[i] > h[top])) top = i;
   }
   if (top < 0) return;
-  const tx = top % gN, ty = (top - tx) / gN;
+  const tx = top % gN, ty = (top - tx) / gN, nx = pcos(notch), ny = psin(notch);
   const R = Math.ceil((CAP_REACH[1] * radius) / cpn);
   // The slope's height where the rim will stand.
   let sum = 0, count = 0;
@@ -147,13 +155,14 @@ function crater(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Arra
     if (r > CAP_REACH[1] * radius) continue;
     const i = wrapIndex(tx + dx, ty + dy, gN);
     if (isSea[i]) continue;
-    const th = Math.atan2(dy, dx);
-    let turn = Math.abs(th - notch) % (2 * Math.PI);
-    if (turn > Math.PI) turn = 2 * Math.PI - turn;
-    const rim = level + RIM + RIM_VARY * (0.6 * Math.sin(th + ph1) + 0.4 * Math.sin(2 * th + ph2)) - (RIM + RIM_VARY) * Math.exp(-(turn / NOTCH) * (turn / NOTCH));
+    // The bearing as a unit vector; the notch is weighed by the chord to its own bearing.
+    const len = Math.sqrt(dx * dx + dy * dy), c = len > 0 ? dx / len : 1, sn = len > 0 ? dy / len : 0;
+    const chord = Math.sqrt((c - nx) * (c - nx) + (sn - ny) * (sn - ny));
+    const wave = 0.6 * (sn * pcos(ph1) + c * psin(ph1)) + 0.4 * (2 * sn * c * pcos(ph2) + (c * c - sn * sn) * psin(ph2));
+    const rim = level + RIM + RIM_VARY * wave - (RIM + RIM_VARY) * (1 - smoothstep(chord / (2 * NOTCH)));
     const q = r / radius;
     if (q <= 1) {
-      h[i] = Math.max(eps, level - depth + (rim - level + depth) * Math.pow(q, 2.5));
+      h[i] = Math.max(eps, level - depth + (rim - level + depth) * q * q * Math.sqrt(q));
       continue;
     }
     if (r < 2.2 * radius) h[i] = Math.max(h[i], rim - (r - radius) * RIM_FALL);
@@ -168,6 +177,11 @@ function smoothstep(t: number): number {
   return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 }
 
+/** A soft ceiling at 1: rises at slope 1 from 0 and levels off at 1 by u = 2. */
+function softCap(u: number): number {
+  return u <= 0 ? u : u >= 2 ? 1 : u - (u * u) / 4;
+}
+
 /** A table: a flat top tilted to the south, walls straight up from the sea. `toSea` is each node's distance to the sea in nodes. */
 function table(h: Float64Array, gN: number, nodes: Int32Array, core: Core, cpn: number, s: number, toSea: Float32Array, rng: Rng, eps: number): void {
   const top = rng.range(TABLE_TOP[0], TABLE_TOP[1]), tilt = rng.range(TABLE_TILT[0], TABLE_TILT[1]);
@@ -175,26 +189,26 @@ function table(h: Float64Array, gN: number, nodes: Int32Array, core: Core, cpn: 
   for (const i of nodes) {
     const y = Math.floor(i / gN);
     const south = torusDelta(core.y, (y + 0.5) * cpn, n) / core.radius;
-    const surface = top * (1 - Math.exp(-h[i] / TABLE_SOFT)) + TABLE_RELIEF * h[i] - tilt * south;
+    const surface = top * softCap(h[i] / TABLE_SOFT) + TABLE_RELIEF * h[i] - tilt * south;
     const wall = smoothstep((toSea[i] * cpn - 0.5 * cpn) / rim);
     h[i] = Math.max(eps, surface * wall);
   }
 }
 
-/** A lode's course from near the core to the sea, as points in cells relative to the core; null if it never reaches the sea. */
-function lodePath(gN: number, isSea: Uint8Array, core: Core, cpn: number, s: number, rng: Rng): Float64Array | null {
-  const at = rng.range(0, 2 * Math.PI), off = rng.range(0, 0.25) * core.radius;
+/** A lode's course from the land node `from` to the sea, as points in cells relative to the core; null if it never reaches the sea or reaches it within LODE_MIN of the radius. */
+function lodePath(gN: number, isSea: Uint8Array, core: Core, from: number, cpn: number, s: number, rng: Rng): Float64Array | null {
+  const n = gN * cpn, fx = from % gN, fy = (from - fx) / gN;
   const heading = rng.range(0, 2 * Math.PI), wave = rng.range(LODE_WAVE[0], LODE_WAVE[1]) * s, phase = rng.range(0, 2 * Math.PI);
   const drift = rng.range(-0.25, 0.25);
-  const step = cpn / 2, pts: number[] = [off * Math.cos(at), off * Math.sin(at)];
+  const step = cpn / 2, pts: number[] = [torusDelta(core.x, (fx + 0.5) * cpn, n), torusDelta(core.y, (fy + 0.5) * cpn, n)];
   let x = pts[0], y = pts[1];
   for (let k = 1; k * step < 2 * core.radius; k++) {
     const t = k * step;
-    const th = heading + LODE_SWING * Math.sin(phase + (2 * Math.PI * t) / wave) + (drift * t) / core.radius;
-    x += step * Math.cos(th);
-    y += step * Math.sin(th);
+    const th = heading + LODE_SWING * psin(phase + (2 * Math.PI * t) / wave) + (drift * t) / core.radius;
+    x += step * pcos(th);
+    y += step * psin(th);
     pts.push(x, y);
-    if (isSea[wrapIndex(Math.floor((core.x + x) / cpn), Math.floor((core.y + y) / cpn), gN)]) return Float64Array.from(pts);
+    if (isSea[wrapIndex(Math.floor((core.x + x) / cpn), Math.floor((core.y + y) / cpn), gN)]) return t >= LODE_MIN * core.radius ? Float64Array.from(pts) : null;
   }
   return null;
 }
@@ -204,14 +218,14 @@ function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, 
   const n = gN * cpn, period = Math.max(1, Math.round(n / (MERE_CELLS * s)));
   const lodes: Float64Array[] = [];
   const want = LODES[0] + rng.int(LODES[1] - LODES[0] + 1);
-  for (let tries = 0; tries < 4 * want && lodes.length < want; tries++) {
-    const path = lodePath(gN, isSea, core, cpn, s, rng);
+  for (let tries = 0; tries < 12 * want && lodes.length < want && nodes.length > 0; tries++) {
+    const path = lodePath(gN, isSea, core, nodes[rng.int(nodes.length)], cpn, s, rng);
     if (path !== null) lodes.push(path);
   }
   const band = LODE_BAND * s;
   for (const i of nodes) {
     const x = i % gN, y = (i - x) / gN;
-    let level = FEN_TOP * (1 - Math.exp(-h[i] / FEN_TOP));
+    let level = FEN_TOP * softCap(h[i] / FEN_TOP);
     // The nearest lode, and how far along it.
     const px = torusDelta(core.x, (x + 0.5) * cpn, n), py = torusDelta(core.y, (y + 0.5) * cpn, n);
     let near = Infinity, along = 0;
@@ -230,12 +244,13 @@ function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, 
       }
     }
     if (near < band) {
+      // The band is squeezed down onto the lode: its relief is kept, but everything in it falls towards the river.
       const bed = LODE_BED[0] + (LODE_BED[1] - LODE_BED[0]) * along;
-      level = Math.min(level, bed + (FEN_TOP - bed) * (near / band));
+      if (level > bed) level = bed + (level - bed) * (near / band);
     }
     const v = 1.6 * fbm(((x + 0.5) * cpn * period) / n, ((y + 0.5) * cpn * period) / n, period, 2, 0.5, seed);
     // Meres keep clear of the lodes, so the rivers are not drowned in them.
-    const dent = MERE_DEPTH * smoothstep((v - MERE_AT) / 0.12) * smoothstep((near - 0.3 * band) / (0.3 * band));
+    const dent = MERE_DEPTH * smoothstep((v - MERE_AT) / 0.12) * smoothstep((near - 0.15 * band) / (0.15 * band));
     h[i] = Math.max(Math.min(level, MERE_BED), level - dent);
   }
 }
@@ -269,37 +284,31 @@ function lagoonOf(gN: number, isSea: Uint8Array, core: Core, cpn: number, seen: 
   return lagoon;
 }
 
-/** A caldera's walls: the ring stands sheer from its lagoon. `toLagoon` is each node's distance in nodes to a lagoon. */
-function calderaWalls(h: Float64Array, gN: number, isSea: Uint8Array, core: Core, cpn: number, s: number, toLagoon: Float32Array): void {
-  const n = gN * cpn, wall = CALDERA_WALL * s, rim = WALL_RIM * s;
+/** Height of `h` at (x, y) in nodes, bilinear, on the torus. */
+function sampleAt(h: Float64Array, gN: number, x: number, y: number): number {
+  const fx = Math.floor(x), fy = Math.floor(y), tx = x - fx, ty = y - fy;
+  const a = h[wrapIndex(fx, fy, gN)], b = h[wrapIndex(fx + 1, fy, gN)], c = h[wrapIndex(fx, fy + 1, gN)], d = h[wrapIndex(fx + 1, fy + 1, gN)];
+  return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+}
+
+/** A caldera's walls: the ring stands sheer from its lagoon. `toLagoon` is each node's nearest lagoon node; `was` the heights before any wall. */
+function calderaWalls(h: Float64Array, was: Float64Array, gN: number, isSea: Uint8Array, core: Core, cpn: number, s: number, toLagoon: Nearest): void {
+  const n = gN * cpn, pull = WALL_PULL * s, reach = WALL_REACH * s;
   const cx = Math.floor(core.x / cpn), cy = Math.floor(core.y / cpn), R = Math.ceil((1.15 * core.radius) / cpn);
-  // The ring, not the islets: land beyond `inner` of the core, near this lagoon.
+  // The ring, not the islets: land beyond `inner` of the core.
   const inner = 0.36 * core.radius;
-  const ring: number[] = [], bin: number[] = [];
-  const crest = new Float64Array(WALL_BINS);
   for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-    const i = wrapIndex(cx + dx, cy + dy, gN);
-    if (isSea[i]) continue;
-    const ox = torusDelta(core.x, (((cx + dx) % gN + gN) % gN + 0.5) * cpn, n), oy = torusDelta(core.y, (((cy + dy) % gN + gN) % gN + 0.5) * cpn, n);
-    if (ox * ox + oy * oy < inner * inner || toLagoon[i] * cpn > 0.6 * core.radius) continue;
-    const b = Math.floor(((Math.atan2(oy, ox) + Math.PI) / (2 * Math.PI)) * WALL_BINS) % WALL_BINS;
-    ring.push(i);
-    bin.push(b);
-    if (h[i] > crest[b]) crest[b] = h[i];
-  }
-  // Even the crest round the ring, so the wall's top does not step from one bearing to the next.
-  const even = new Float64Array(WALL_BINS);
-  for (let b = 0; b < WALL_BINS; b++) {
-    let sum = 0;
-    for (let k = -2; k <= 2; k++) sum += crest[(b + k + WALL_BINS) % WALL_BINS];
-    even[b] = sum / 5;
-  }
-  for (let k = 0; k < ring.length; k++) {
-    const i = ring[k], d = toLagoon[i] * cpn;
-    if (d > 2 * wall) continue;
-    const top = WALL_SHARE * even[bin[k]];
-    const target = top * smoothstep((d - 0.5 * cpn) / rim) * (1 - smoothstep((d - wall) / wall));
-    if (target > h[i]) h[i] = target;
+    const x = (((cx + dx) % gN) + gN) % gN, y = (((cy + dy) % gN) + gN) % gN, i = y * gN + x;
+    const d = toLagoon.dist[i] * cpn, src = toLagoon.src[i];
+    if (isSea[i] || src < 0 || d >= reach) continue;
+    const ox = torusDelta(core.x, (x + 0.5) * cpn, n), oy = torusDelta(core.y, (y + 0.5) * cpn, n);
+    if (ox * ox + oy * oy < inner * inner) continue;
+    const sx = src % gN, sy = (src - sx) / gN;
+    const ux = torusDelta(sx, x, gN), uy = torusDelta(sy, y, gN), len = Math.sqrt(ux * ux + uy * uy);
+    if (len === 0) continue;
+    const shift = (pull * (1 - d / reach)) / cpn;
+    const v = sampleAt(was, gN, x + (ux / len) * shift, y + (uy / len) * shift);
+    if (v > h[i]) h[i] = v;
   }
 }
 
@@ -313,13 +322,13 @@ export function shapeForms(h: Float64Array, gN: number, isSea: Uint8Array, plan:
   if (calderas.length > 0) {
     const lagoon = new Uint8Array(gN * gN);
     for (const core of calderas) for (const i of lagoonOf(gN, isSea, core, cpn, seen)) lagoon[i] = 1;
-    const toLagoon = nearestSource(gN, lagoon).dist;
-    for (const core of calderas) calderaWalls(h, gN, isSea, core, cpn, s, toLagoon);
+    const toLagoon = nearestSource(gN, lagoon), was = Float64Array.from(h);
+    for (const core of calderas) calderaWalls(h, was, gN, isSea, core, cpn, s, toLagoon);
   }
   plan.cores.forEach((core, k) => {
     if (core.form !== FORM.cone && core.form !== FORM.table && core.form !== FORM.fen) return;
     const rng = rngFor(seed, `form-${k}`);
-    const nodes = islandNodes(h, gN, isSea, core, cpn, 1.3 * core.radius, seen);
+    const nodes = islandNodes(h, gN, isSea, plan, k, cpn, 1.3 * core.radius, seen);
     if (core.form === FORM.cone) crater(h, gN, isSea, nodes, core, cpn, s, rng, p.erode.eps);
     else if (core.form === FORM.table) {
       toSea ??= nearestSource(gN, isSea).dist;
@@ -337,7 +346,7 @@ export interface FormWaters {
 
 /** The waters of the forms, on the land `h` as shapeForms left it: a caldera's lagoon, a fen's flats and a fjord's deeps. */
 export function formWaters(h: Float64Array, gN: number, plan: Plan, p: WorldParams): FormWaters {
-  const nn = gN * gN, cpn = p.n / gN, n = p.n, s = lengthScale(p.n);
+  const nn = gN * gN, cpn = p.n / gN, s = lengthScale(p.n);
   const calm = new Float32Array(nn), shoal = new Float32Array(nn), deep = new Float32Array(nn);
   const isSea = new Uint8Array(nn), isLand = new Uint8Array(nn);
   for (let i = 0; i < nn; i++) {
@@ -347,9 +356,9 @@ export function formWaters(h: Float64Array, gN: number, plan: Plan, p: WorldPara
   const toLand = nearestSource(gN, isLand);
   const seen = new Uint8Array(nn);
   const fenLand = new Uint8Array(nn);
-  plan.cores.forEach((core) => {
+  plan.cores.forEach((core, k) => {
     if (core.form === FORM.fen) {
-      for (const i of islandNodes(h, gN, isSea, core, cpn, 1.3 * core.radius, seen)) {
+      for (const i of islandNodes(h, gN, isSea, plan, k, cpn, 1.3 * core.radius, seen)) {
         fenLand[i] = 1;
         calm[i] = FEN_CALM;
       }
@@ -367,13 +376,15 @@ export function formWaters(h: Float64Array, gN: number, plan: Plan, p: WorldPara
     }
   });
   const flats = FLATS * s;
+  // The flats are measured from the fen alone, so another island's shore nearby does not cut them off.
+  const toFen = plan.cores.some((c) => c.form === FORM.fen) ? nearestSource(gN, fenLand).dist : null;
   for (let i = 0; i < nn; i++) {
     if (!isSea[i]) continue;
-    const d = toLand.dist[i] * cpn, src = toLand.src[i];
-    if (src >= 0 && fenLand[src] && shoal[i] === 0) {
-      const t = d / flats;
-      const bed = t <= 1 ? FLATS_DEPTH[0] + (FLATS_DEPTH[1] - FLATS_DEPTH[0]) * t * t : FLATS_DEPTH[1] + FLATS_FALL * (d - flats);
-      if (bed < SEA_MAX) shoal[i] = bed;
+    const d = toLand.dist[i] * cpn;
+    if (toFen !== null && toFen[i] < Infinity && shoal[i] === 0) {
+      const f = toFen[i] * cpn, t = f / flats;
+      const bed = t <= 1 ? FLATS_DEPTH[0] + (FLATS_DEPTH[1] - FLATS_DEPTH[0]) * t * t : FLATS_DEPTH[1] + FLATS_FALL * (f - flats);
+      if (bed < p.coast.bathy.max) shoal[i] = bed;
     }
     const x = i % gN, y = (i - x) / gN;
     if (plan.fjord[(y >> 1) * plan.n + (x >> 1)]) deep[i] = FJORD_DEEP * Math.min(1, Math.max(0, d - 0.5 * cpn) / (FJORD_SHELF * s));

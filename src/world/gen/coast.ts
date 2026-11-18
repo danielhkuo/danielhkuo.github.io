@@ -219,6 +219,8 @@ const EDGE_CELLS = 60;
 const BATHY_BLUR = 32;
 /** The sea is at least this deep, so a sea node never reads as land. */
 const SEA_MIN = 0.05;
+/** The slope a beach's or ledge's shelf falls at on deep water (ctx.deep), in units a cell. */
+const DEEP_SHELF_SLOPE = 0.6;
 /** The cap falls from the cliff cap to the gate's over this much of |facing·east| short of the gate, and is then evened over CAP_SMOOTH passes along the shore. */
 const CAP_RAMP = 0.35;
 const CAP_SMOOTH = 12;
@@ -861,6 +863,13 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     shoals.push({ x: x + fx[s] * (retreat[s] + 0.55 * reach), y: y + fy[s] * (retreat[s] + 0.55 * reach), r: 0.6 * reach + rng.range(c.shoalR[0], c.shoalR[1]), top: rng.range(1, 2.2) });
   }
 
+  // A shore on a fjord's deep water keeps no shelf: the bed falls away from the foot of its sand or ledge.
+  const onDeep = (i: number): boolean => {
+    if (ctx.deep === undefined) return false;
+    const x = i % n, y = (i - x) / n;
+    for (let q = 0; q < 8; q++) if (ctx.deep[wrapIndex(x + NB8_DX[q], y + NB8_DY[q], n)] > 0) return true;
+    return false;
+  };
   // 6. Beaches. Each stamp lays sand as wide as its shore holds, rising to beachTop at the back;
   // the shelf's width wanders along the shore and narrows with the sand.
   for (let s = 0; s < count; s++) {
@@ -869,7 +878,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     const x = shoreX(s);
     const y = shoreY(s);
     const shelf = c.shelf * (1 + 0.45 * noiseAt(x, y, SHELF_CELLS * scale, 0x51)) * Math.min(1, 0.35 + width[s] / c.beachWidth[1]);
-    stamps.push({ kind: "beach", x, y, land: width[s], base: c.beachBase, rise: (c.beachTop - c.beachBase) / width[s], shelf, shelfSlope: c.shelfSlope });
+    stamps.push({ kind: "beach", x, y, land: width[s], base: c.beachBase, rise: (c.beachTop - c.beachBase) / width[s], shelf, shelfSlope: onDeep(i) ? DEEP_SHELF_SLOPE : c.shelfSlope });
     stamps.push({ kind: "berm", x, y, inner: width[s], outer: width[s] + c.berm[0], top: c.beachTop + c.berm[1] });
   }
 
@@ -877,7 +886,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   for (let s = 0; s < count; s++) {
     if (retreat[s] > 0 || width[s] > 0 || cls[s] !== SHORE.rocky || inCoveAt[shore.nodes[s]]) continue;
     const g = c.ledge;
-    stamps.push({ kind: "ledge", x: px[s], y: py[s], land: g.width, base: g.base, rise: (g.top - g.base) / g.width, shelf: g.shelf, shelfSlope: c.shelfSlope });
+    stamps.push({ kind: "ledge", x: px[s], y: py[s], land: g.width, base: g.base, rise: (g.top - g.base) / g.width, shelf: g.shelf, shelfSlope: onDeep(shore.nodes[s]) ? DEEP_SHELF_SLOPE : c.shelfSlope });
     stamps.push({ kind: "berm", x: px[s], y: py[s], inner: g.width, outer: g.width + c.berm[0], top: g.bank });
   }
 

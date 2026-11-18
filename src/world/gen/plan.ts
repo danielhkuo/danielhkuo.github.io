@@ -2,6 +2,7 @@
 // soft region weights, all on the coarse grid C.
 
 import { fbm, gradNoise, octaveMatrixPower, ridgedFbm } from "../core/noise.ts";
+import { patan2, pcos, psin } from "../core/psin.ts";
 import { rngFor, type Rng } from "../core/rng.ts";
 import { torusDelta } from "../core/torus.ts";
 import { ARCHETYPE, ARCHETYPE_COUNT, FORM, lengthScale, type Archetype, type ArchetypeSpec, type Form, type WorldParams } from "./params.ts";
@@ -35,6 +36,8 @@ export interface Plan {
   regions: Float32Array;
   /** 1 on nodes a fjord was cut through: the coast keeps that water deep. */
   fjord: Uint8Array;
+  /** The core (index into `cores`) whose island's outline lies nearest each node. */
+  owner: Uint16Array;
 }
 
 // Shape constants that are not world parameters. Lengths are in cells of the
@@ -67,8 +70,8 @@ const MOUTH_HALF: readonly [number, number] = [16, 28];
 const ISLET_LEN: readonly [number, number] = [0.2, 0.32];
 const ISLET_HALF: readonly [number, number] = [0.1, 0.14];
 const ISLET_HEIGHT: readonly [number, number] = [0.35, 0.55];
-/** Cone: uplift climbs as this power of the way in, so the flanks steepen to the summit. */
-const CONE_POWER = 1.7;
+/** Cone: uplift climbs as the 1.75th power of the way in (see profile), so the flanks steepen to the summit. */
+const CONE_POWER = 1.75;
 const CONE_TAPER = 0.9;
 /** Table: the flank reaches the top this share of the half-width short of the axis. */
 const TABLE_PLATEAU = 0.82;
@@ -382,8 +385,8 @@ function makeRidge(a: Float64Array, c: Float64Array, half: number, height: numbe
 
 /** The island's own strike: the world's, turned by up to `turn` radians, never past maxTurn from west–east. */
 function ownStrike(p: WorldParams, rng: Rng, slope: number, turn: number): [number, number] {
-  const own = clamp(Math.atan(slope) + rng.range(-turn, turn), -p.strike.maxTurn, p.strike.maxTurn);
-  return [Math.cos(own), Math.sin(own)];
+  const own = clamp(patan2(slope, 1) + rng.range(-turn, turn), -p.strike.maxTurn, p.strike.maxTurn);
+  return [pcos(own), psin(own)];
 }
 
 interface Built {
@@ -516,9 +519,9 @@ function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, s: number):
   const x = new Float64Array(m + 1), y = new Float64Array(m + 1), t = new Float64Array(m + 1);
   for (let i = 0; i <= m; i++) {
     const th = start + (span * i) / m;
-    const r = rc * (1 + w2 * Math.sin(2 * th + ph2) + w3 * Math.sin(3 * th + ph3));
-    x[i] = r * Math.cos(th);
-    y[i] = r * Math.sin(th);
+    const r = rc * (1 + w2 * psin(2 * th + ph2) + w3 * psin(3 * th + ph3));
+    x[i] = r * pcos(th);
+    y[i] = r * psin(th);
     t[i] = i === 0 ? 0 : t[i - 1] + Math.sqrt((x[i] - x[i - 1]) * (x[i] - x[i - 1]) + (y[i] - y[i - 1]) * (y[i] - y[i - 1]));
   }
   const ridges: Ridge[] = [ridgeOf(x, y, t, half, 1, closed ? 1 : RING_TAPER, rng.range(RING_INNER[0], RING_INNER[1]))];
@@ -529,7 +532,7 @@ function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, s: number):
     const shrink = k === 0 ? 1 : 0.6;
     const len = R * rng.range(ISLET_LEN[0], ISLET_LEN[1]) * shrink, isletHalf = R * rng.range(ISLET_HALF[0], ISLET_HALF[1]) * shrink;
     const dir = rng.range(0, Math.PI), at = rng.range(0, 2 * Math.PI), out = k === 0 ? 0 : R * rng.range(0.2, 0.26);
-    const dx = Math.cos(dir), dy = Math.sin(dir), ox = out * Math.cos(at), oy = out * Math.sin(at);
+    const dx = pcos(dir), dy = psin(dir), ox = out * pcos(at), oy = out * psin(at);
     const kink = rng.range(-0.2, 0.2) * len;
     const ia = new Float64Array([-len / 2, 0, len / 2]);
     // The first islet's middle vertex is the core itself.
@@ -545,7 +548,7 @@ function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, s: number):
 
   // The mouth runs out from the lagoon through the ring, with a dogleg, widening to the sea.
   const mouth = rng.range(MOUTH_HALF[0], MOUTH_HALF[1]) * s, bend = rng.range(-0.25, 0.25) * half;
-  const gx = Math.cos(gap), gy = Math.sin(gap);
+  const gx = pcos(gap), gy = psin(gap);
   const radii = [0.3 * R, rc, R + 0.15 * R], wide = [1, 1, 1.6];
   const mx = new Float64Array(3), my = new Float64Array(3), mw = new Float64Array(3);
   for (let i = 0; i < 3; i++) {
@@ -573,7 +576,7 @@ function buildRound(rng: Rng, spec: ArchetypeSpec, length: number, width: number
   const ridges: Ridge[] = [makeRidge(sp.dal, ac, half, 1, ux, uy, taper)];
   if (cone && rng.float() < 0.6) {
     const at = rng.range(0, 2 * Math.PI), out = half * rng.range(0.45, 0.62), ventHalf = half * rng.range(0.2, 0.3);
-    const vx = out * Math.cos(at), vy = out * Math.sin(at);
+    const vx = out * pcos(at), vy = out * psin(at);
     ridges.push(ridgeOf(new Float64Array([vx - 1, vx, vx + 1]), new Float64Array([vy, vy, vy]), new Float64Array([-1, 0, 1]), ventHalf, rng.range(0.5, 0.65), 1));
   }
   return { ridges, ...sp };
@@ -642,7 +645,7 @@ function buildFjords(rng: Rng, built: Built, width: number, s: number, ux: numbe
     const a = new Float64Array(m + 1), c = new Float64Array(m + 1), w = new Float64Array(m + 1);
     for (let j = 0; j <= m; j++) {
       const t = j / m;
-      a[j] = a1 + (a0 - a1) * t + wander * Math.sin(phase + 2 * Math.PI * waves * t) * Math.min(1, 4 * t);
+      a[j] = a1 + (a0 - a1) * t + wander * psin(phase + 2 * Math.PI * waves * t) * Math.min(1, 4 * t);
       c[j] = c1 + (c0 - c1) * t;
       w[j] = mouth * (FJORD_NARROW + (1 - FJORD_NARROW) * Math.min(1, 2.5 * t));
     }
@@ -889,7 +892,11 @@ function edgeTorus(isl: Island, dx: number, dy: number, n: number): number {
 /** Uplift across a belt as a share of its height, from `f` (0 at the coast, 1 on the ridge) and the lowland share. */
 function profile(f: number, lowland: number, plateau: number, power: number): number {
   if (f <= 0) return 0;
-  if (power !== 1) return Math.pow(Math.min(1, f), power);
+  if (power !== 1) {
+    // A cone: f^1.75, as f · √f · ⁴√f.
+    const g = Math.min(1, f), r = Math.sqrt(g);
+    return g * r * Math.sqrt(r);
+  }
   if (f < lowland) return (LOWLAND * f) / lowland;
   const top = Math.max(1 - plateau, lowland + 0.05);
   const rise = smoothstep((f - lowland) / (top - lowland));
@@ -1001,9 +1008,6 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   // The world's strike, as a slope: direction (1, slope) / √(1 + slope²). Each island turns from it by its own amount.
   const slope = rng.range(-p.strike.maxSlope, p.strike.maxSlope);
   const upliftSeed = rng.next(), baySeed = rng.next(), coveSeed = rng.next(), lowSeed = rng.next(), summitSeed = rng.next(), warpSeed = rng.next(), fibreSeed = rng.next();
-  const norm = Math.sqrt(1 + slope * slope);
-  const ux = 1 / norm, uy = slope / norm;
-
   const islands = placeIslands(p, rng, slope);
   // Drawn from a stream of their own, so the islands stand where they did before the massifs were added.
   const massifRng = rngFor(seed, "massif");
@@ -1031,6 +1035,7 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   const rock = new Uint8Array(nodes);
   const regions = new Float32Array(ARCHETYPE_COUNT * nodes);
   const fjord = new Uint8Array(nodes);
+  const owners = new Uint16Array(nodes);
   const weights = new Float64Array(ARCHETYPE_COUNT);
   const edgeOf = new Float64Array(islands.length);
 
@@ -1148,6 +1153,7 @@ export function planWorld(p: WorldParams, seed: number): Plan {
 
       // Rock: stripes across the owning island's strike. They follow the
       // spine's bow and wander by the warp noise.
+      owners[i] = owner;
       const isl = islands[owner];
       const dx = torusDelta(isl.core.x, x, n), dy = torusDelta(isl.core.y, y, n);
       const along = dx * isl.ux + dy * isl.uy;
@@ -1158,5 +1164,5 @@ export function planWorld(p: WorldParams, seed: number): Plan {
     }
   }
 
-  return { n: cN, cores: islands.map((isl) => isl.core), uplift, k, d, rock, regions, fjord };
+  return { n: cN, cores: islands.map((isl) => isl.core), uplift, k, d, rock, regions, fjord, owner: owners };
 }

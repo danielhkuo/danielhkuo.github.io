@@ -32,6 +32,12 @@ Last updated 2026-11-18.
   rainbow; and, very rarely (each about once in 11–16 minutes), a whale, a balloon, a fox, a heron, a tall ship and a
   monk, each logged as a discovery with a caption. The flier leaves a wake on water. Preview every rare sight with
   `/world?sights=all`.
+- **Island variety, first batch** (2026-11-18, `fable-islands`). Islands lie at any strike within 69° of west–east,
+  round to long, and come in new forms, each wearing one of the six region looks: a caldera (a ring of sheer walls
+  round a shallow lagoon, an islet in it, a narrow mouth), a volcanic cone (radial ravines, a crater lake at the
+  summit), a table (flat top, sea walls, falls off the south edge), a fen (winding lodes, meres, saltmarsh, tidal
+  flats) and a fjord highland (deep, steep inlets). Stage S5b `gen/forms.ts`. Next batch: more forms (atoll, tombolo
+  pairs, sea arches, a drowned ria coast).
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
