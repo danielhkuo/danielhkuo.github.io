@@ -33,6 +33,8 @@ export interface Plan {
   rock: Uint8Array;
   /** Six planes of n², archetype-major: soft membership of each node; sums to 1. */
   regions: Float32Array;
+  /** 1 on nodes a fjord was cut through: the coast keeps that water deep. */
+  fjord: Uint8Array;
 }
 
 // Shape constants that are not world parameters. Lengths are in cells of the
@@ -54,15 +56,17 @@ const BOOMERANG_BOW = 2.4;
  * lagoon side, so the wall falls sheer into the lagoon. One in RING_CLOSED is a whole ring; the rest are crescents of
  * RING_SPAN radians, open within RING_GAP of south, where the camera looks in. Islets stand in the lagoon.
  */
-const RING_HALF: readonly [number, number] = [0.28, 0.36];
-const RING_INNER: readonly [number, number] = [0.22, 0.32];
-const RING_CLOSED = 0.25;
-const RING_SPAN: readonly [number, number] = [3.8, 5.3];
-const RING_GAP = 1.05;
-const RING_TAPER = 0.3;
-const ISLET_LEN: readonly [number, number] = [0.2, 0.35];
-const ISLET_HALF: readonly [number, number] = [0.09, 0.14];
-const ISLET_HEIGHT: readonly [number, number] = [0.3, 0.45];
+const RING_HALF: readonly [number, number] = [0.44, 0.52];
+const RING_INNER: readonly [number, number] = [0.08, 0.14];
+const RING_CLOSED = 0.4;
+const RING_SPAN: readonly [number, number] = [5.5, 5.95];
+const RING_GAP = 0.9;
+const RING_TAPER = 0.6;
+/** The mouth: a channel MOUTH_HALF wide (cells) through the ring where it is open, so the lagoon always reaches the sea. */
+const MOUTH_HALF: readonly [number, number] = [16, 28];
+const ISLET_LEN: readonly [number, number] = [0.2, 0.32];
+const ISLET_HALF: readonly [number, number] = [0.1, 0.14];
+const ISLET_HEIGHT: readonly [number, number] = [0.35, 0.55];
 /** Cone: uplift climbs as this power of the way in, so the flanks steepen to the summit. */
 const CONE_POWER = 1.7;
 const CONE_TAPER = 0.9;
@@ -78,10 +82,10 @@ const FEN_BITE = 1.5;
  * FJORD_HALF wide at the mouth (in cells) and FJORD_NARROW of that at the head; FJORD_SOUTH of them open on the south
  * flank, FJORD_ARM of them fork, and their line leans by up to FJORD_LEAN.
  */
-const FJORDS: readonly [number, number] = [5, 8];
-const FJORD_HALF: readonly [number, number] = [34, 52];
-const FJORD_NARROW = 0.55;
-const FJORD_HEAD: readonly [number, number] = [0.15, 0.5];
+const FJORDS: readonly [number, number] = [6, 9];
+const FJORD_HALF: readonly [number, number] = [30, 46];
+const FJORD_NARROW = 0.5;
+const FJORD_HEAD: readonly [number, number] = [0, 0.35];
 const FJORD_SOUTH = 0.62;
 const FJORD_ARM = 0.5;
 const FJORD_LEAN = 0.35;
@@ -390,6 +394,8 @@ interface Built {
   /** The spine's control points relative to the core. */
   spineX: Float64Array;
   spineY: Float64Array;
+  /** Sea channels cut through the island's own uplift. */
+  cuts?: Cut[];
 }
 
 /** A straight spine of four control points through the core, for forms that have no fold belt. */
@@ -492,20 +498,21 @@ function buildBelts(p: WorldParams, rng: Rng, spec: ArchetypeSpec, length: numbe
 }
 
 /**
- * A caldera about a core at the origin: a ring or crescent of high ground, steep to the lagoon it holds, and an
- * islet or two in the lagoon, the first on the core.
+ * A caldera about a core at the origin: a ring or crescent of high ground, steep to the lagoon it holds, an islet or
+ * two in the lagoon, the first on the core, and a narrow mouth cut through the ring where it is open, so the lagoon
+ * is sheltered but never cut off from the sea.
  */
-function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, ux: number, uy: number): Built {
+function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, s: number): Built {
   const R = length / 2;
   const half = R * rng.range(RING_HALF[0], RING_HALF[1]);
   const rc = R - half;
   const closed = rng.float() < RING_CLOSED;
   const span = closed ? 2 * Math.PI : rng.range(RING_SPAN[0], RING_SPAN[1]);
-  // +y is south.
+  // +y is south: the mouth opens within RING_GAP of south, where the camera looks in.
   const gap = Math.PI / 2 + rng.range(-RING_GAP, RING_GAP);
   const start = gap + (2 * Math.PI - span) / 2;
-  const w2 = rng.range(0.04, 0.12), w3 = rng.range(0.02, 0.07), ph2 = rng.range(0, 2 * Math.PI), ph3 = rng.range(0, 2 * Math.PI);
-  const m = 32;
+  const w2 = rng.range(0.04, 0.1), w3 = rng.range(0.02, 0.06), ph2 = rng.range(0, 2 * Math.PI), ph3 = rng.range(0, 2 * Math.PI);
+  const m = 36;
   const x = new Float64Array(m + 1), y = new Float64Array(m + 1), t = new Float64Array(m + 1);
   for (let i = 0; i <= m; i++) {
     const th = start + (span * i) / m;
@@ -521,7 +528,7 @@ function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, ux: number,
   for (let k = 0; k < islets; k++) {
     const shrink = k === 0 ? 1 : 0.6;
     const len = R * rng.range(ISLET_LEN[0], ISLET_LEN[1]) * shrink, isletHalf = R * rng.range(ISLET_HALF[0], ISLET_HALF[1]) * shrink;
-    const dir = rng.range(0, Math.PI), at = rng.range(0, 2 * Math.PI), out = k === 0 ? 0 : R * rng.range(0.22, 0.3);
+    const dir = rng.range(0, Math.PI), at = rng.range(0, 2 * Math.PI), out = k === 0 ? 0 : R * rng.range(0.2, 0.26);
     const dx = Math.cos(dir), dy = Math.sin(dir), ox = out * Math.cos(at), oy = out * Math.sin(at);
     const kink = rng.range(-0.2, 0.2) * len;
     const ia = new Float64Array([-len / 2, 0, len / 2]);
@@ -535,8 +542,20 @@ function buildCaldera(rng: Rng, spec: ArchetypeSpec, length: number, ux: number,
       sy = dy;
     }
   }
+
+  // The mouth runs out from the lagoon through the ring, with a dogleg, widening to the sea.
+  const mouth = rng.range(MOUTH_HALF[0], MOUTH_HALF[1]) * s, bend = rng.range(-0.25, 0.25) * half;
+  const gx = Math.cos(gap), gy = Math.sin(gap);
+  const radii = [0.3 * R, rc, R + 0.15 * R], wide = [1, 1, 1.6];
+  const mx = new Float64Array(3), my = new Float64Array(3), mw = new Float64Array(3);
+  for (let i = 0; i < 3; i++) {
+    const off = i === 1 ? bend : 0;
+    mx[i] = radii[i] * gx - off * gy;
+    my[i] = radii[i] * gy + off * gx;
+    mw[i] = mouth * wide[i];
+  }
   const sp = plainSpine(run, sx, sy);
-  return { ridges, dal: new Float64Array([-R, R]), dac: new Float64Array(2), spineX: sp.spineX, spineY: sp.spineY };
+  return { ridges, dal: new Float64Array([-R, R]), dac: new Float64Array(2), spineX: sp.spineX, spineY: sp.spineY, cuts: [cutFrom(mx, my, mw)] };
 }
 
 /** A round island on one short axis: a volcanic cone or a table, by the profile its form gives it. A cone may carry a side vent. */
@@ -562,7 +581,7 @@ function buildRound(rng: Rng, spec: ArchetypeSpec, length: number, width: number
 
 /** A fen: a low core along the strike with lobes round it, so the outline is all bays and tongues. */
 function buildFen(rng: Rng, spec: ArchetypeSpec, length: number, width: number, ux: number, uy: number): Built {
-  const half = 0.34 * width, run = 0.6 * length;
+  const half = 0.4 * width, run = 0.55 * length;
   const sp = plainSpine(run, ux, uy);
   const ac = new Float64Array([0, rng.range(-0.1, 0.1) * run, rng.range(-0.1, 0.1) * run, 0]);
   const ridges: Ridge[] = [makeRidge(sp.dal, ac, half, 1, ux, uy, 0.7)];
@@ -571,8 +590,8 @@ function buildFen(rng: Rng, spec: ArchetypeSpec, length: number, width: number, 
   for (let k = 0; k < lobes; k++) {
     const side = k % 2 === 0 ? side0 : -side0;
     const a = (-0.55 + (1.1 * (Math.floor(k / 2) + rng.range(0.1, 0.9))) / Math.ceil(lobes / 2)) * run;
-    const lobeHalf = width * rng.range(0.14, 0.24);
-    const c0 = side * half * rng.range(0.55, 0.95), c1 = c0 + side * lobeHalf * rng.range(0.5, 1.1), lean = rng.range(-0.6, 0.6) * lobeHalf;
+    const lobeHalf = width * rng.range(0.12, 0.2);
+    const c0 = side * half * rng.range(0.45, 0.8), c1 = c0 + side * lobeHalf * rng.range(0.2, 0.6), lean = rng.range(-0.6, 0.6) * lobeHalf;
     const la = new Float64Array([0, 0.5, 1]), lx = new Float64Array(3), ly = new Float64Array(3);
     for (let j = 0; j < 3; j++) {
       const pa = a + (lean * j) / 2, pc = c0 + ((c1 - c0) * j) / 2;
@@ -584,6 +603,19 @@ function buildFen(rng: Rng, spec: ArchetypeSpec, length: number, width: number, 
   return { ridges, ...sp };
 }
 
+/** A cut from its vertices relative to the core and its half-width at each. */
+function cutFrom(x: Float64Array, y: Float64Array, w: Float64Array): Cut {
+  const m = x.length;
+  let cx = 0, cy = 0;
+  for (let i = 0; i < m; i++) {
+    cx += x[i] / m;
+    cy += y[i] / m;
+  }
+  let rad = 0;
+  for (let i = 0; i < m; i++) rad = Math.max(rad, Math.sqrt((x[i] - cx) * (x[i] - cx) + (y[i] - cy) * (y[i] - cy)) + w[i]);
+  return { x, y, w, cx, cy, rad };
+}
+
 /** The fjords of a belt island: inlets from beyond the coast to short of the spine, most on the south flank. */
 function buildFjords(rng: Rng, built: Built, width: number, s: number, ux: number, uy: number): Cut[] {
   const main = built.ridges[0], run = main.len;
@@ -591,16 +623,11 @@ function buildFjords(rng: Rng, built: Built, width: number, s: number, ux: numbe
   const cuts: Cut[] = [];
   const cutOf = (a: Float64Array, c: Float64Array, w: Float64Array): Cut => {
     const m = a.length, x = new Float64Array(m), y = new Float64Array(m);
-    let cx = 0, cy = 0;
     for (let i = 0; i < m; i++) {
       x[i] = a[i] * ux - c[i] * uy;
       y[i] = a[i] * uy + c[i] * ux;
-      cx += x[i] / m;
-      cy += y[i] / m;
     }
-    let rad = 0;
-    for (let i = 0; i < m; i++) rad = Math.max(rad, Math.sqrt((x[i] - cx) * (x[i] - cx) + (y[i] - cy) * (y[i] - cy)) + w[i]);
-    return { x, y, w, cx, cy, rad };
+    return cutFrom(x, y, w);
   };
   for (let k = 0; k < count; k++) {
     const side = rng.float() < FJORD_SOUTH ? 1 : -1;
@@ -610,7 +637,7 @@ function buildFjords(rng: Rng, built: Built, width: number, s: number, ux: numbe
     const reach = Math.abs(c0 - c1);
     const a0 = a1 + rng.range(-FJORD_LEAN, FJORD_LEAN) * reach;
     const mouth = rng.range(FJORD_HALF[0], FJORD_HALF[1]) * s;
-    const wander = rng.range(0.03, 0.08) * reach, phase = rng.range(0, 2 * Math.PI), waves = rng.range(1.5, 3);
+    const wander = rng.range(0.04, 0.1) * reach, phase = rng.range(0, 2 * Math.PI), waves = rng.range(1.5, 3);
     const m = 12;
     const a = new Float64Array(m + 1), c = new Float64Array(m + 1), w = new Float64Array(m + 1);
     for (let j = 0; j <= m; j++) {
@@ -714,12 +741,12 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, drawn: numbe
   const width = length * aspect;
   const built =
     form === FORM.cluster ? buildCluster(p, rng, spec, length, aspect, ux, uy)
-    : form === FORM.caldera ? buildCaldera(rng, spec, length, ux, uy)
+    : form === FORM.caldera ? buildCaldera(rng, spec, length, s)
     : form === FORM.cone || form === FORM.table ? buildRound(rng, spec, length, width, ux, uy)
     : form === FORM.fen ? buildFen(rng, spec, length, width, ux, uy)
     : buildBelts(p, rng, spec, length, width, ux, uy);
   const ridges = built.ridges;
-  const cuts = form === FORM.fjord ? buildFjords(rng, built, width, s, ux, uy) : [];
+  const cuts = form === FORM.fjord ? buildFjords(rng, built, width, s, ux, uy) : (built.cuts ?? []);
   const half = ridges[0].half;
   const belted = form === FORM.belts || form === FORM.fjord || form === FORM.cluster;
   const fibre = belted ? Math.min(FIBRE_SHIFT * s, FIBRE_SHARE * length) : 0;
@@ -789,7 +816,7 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, drawn: numbe
     plateau: form === FORM.table ? TABLE_PLATEAU : form === FORM.fen ? FEN_PLATEAU : form === FORM.cone || form === FORM.caldera ? 0.1 : -1,
     lowlandScale: form === FORM.table || form === FORM.cone || form === FORM.caldera ? 0 : 1,
     power: form === FORM.cone ? CONE_POWER : 1,
-    biteAmp: form === FORM.fen ? FEN_BITE : form === FORM.caldera ? 0.5 : form === FORM.cone ? 0.6 : 1,
+    biteAmp: form === FORM.fen ? FEN_BITE : form === FORM.caldera ? 0.5 : form === FORM.cone || form === FORM.table ? 0.6 : 1,
     grainAmp: form === FORM.cone ? 0.25 : form === FORM.table || form === FORM.fen ? 0.5 : 1,
     spineX: built.spineX,
     spineY: built.spineY,
@@ -1003,6 +1030,7 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   const d = new Float64Array(nodes);
   const rock = new Uint8Array(nodes);
   const regions = new Float32Array(ARCHETYPE_COUNT * nodes);
+  const fjord = new Uint8Array(nodes);
   const weights = new Float64Array(ARCHETYPE_COUNT);
   const edgeOf = new Float64Array(islands.length);
 
@@ -1092,7 +1120,10 @@ export function planWorld(p: WorldParams, seed: number): Plan {
           if (rel > 0 && isl.cuts.length > 0) {
             const widen = 1 + 0.35 * cove;
             const px2 = otherImage(plainX, n, isl.reach), py2 = otherImage(plainY, n, isl.reach);
-            if (inCut(isl, plainX, plainY, widen) || (px2 !== plainX && inCut(isl, px2, plainY, widen)) || (py2 !== plainY && (inCut(isl, plainX, py2, widen) || (px2 !== plainX && inCut(isl, px2, py2, widen))))) rel = 0;
+            if (inCut(isl, plainX, plainY, widen) || (px2 !== plainX && inCut(isl, px2, plainY, widen)) || (py2 !== plainY && (inCut(isl, plainX, py2, widen) || (px2 !== plainX && inCut(isl, px2, py2, widen))))) {
+              rel = 0;
+              if (isl.spec.form === FORM.fjord) fjord[i] = 1;
+            }
           }
           if (isl.amp * rel > best) {
             best = isl.amp * rel;
@@ -1127,5 +1158,5 @@ export function planWorld(p: WorldParams, seed: number): Plan {
     }
   }
 
-  return { n: cN, cores: islands.map((isl) => isl.core), uplift, k, d, rock, regions };
+  return { n: cN, cores: islands.map((isl) => isl.core), uplift, k, d, rock, regions, fjord };
 }

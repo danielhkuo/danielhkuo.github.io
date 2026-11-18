@@ -21,6 +21,12 @@ export interface CoastContext {
   regions: Float32Array | null;
   /** Hold the cliffs to one retreat and one cap along the shore (for tests that compare a coast node for node). */
   plain?: boolean;
+  /** Per node, 0–1: the share of a shore's exposure taken away (a lagoon's shores, a fen behind its flats). */
+  calm?: Float32Array;
+  /** Per node, in units: the deepest the sea bed may lie there (a lagoon, tidal flats); 0 leaves it free. */
+  shoal?: Float32Array;
+  /** Per node, in units: the shallowest the sea bed may lie there (a fjord); 0 leaves it free. */
+  deep?: Float32Array;
 }
 
 /**
@@ -340,6 +346,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   // 1. Exposure, facing, concavity and slope of every shore node, and its point on the waterline.
   const shore = shoreExposure(isSea0, n, cpn, c.maxFetch, c.swWeight, c.fetchRange);
   const count = shore.nodes.length;
+  if (ctx.calm !== undefined) for (let s = 0; s < count; s++) shore.e[shore.nodes[s]] *= 1 - ctx.calm[shore.nodes[s]];
   const fx = new Float64Array(count);
   const fy = new Float64Array(count);
   const convex = new Float64Array(count);
@@ -975,7 +982,9 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     const apron = c.shelfWide * (1 - e) * (1 - e) * sand[i] * (1 + 0.6 * wide);
     // On the shelf the bed never falls faster than shelfSlope; the edge noise only moves where the shelf ends.
     const past = Math.max(0, d * (1 + 0.3 * edge) - apron);
-    const depth = c.shelfSlope * Math.min(d, apron) + b.slope * (b.base + b.eGain * e) * past;
+    let depth = c.shelfSlope * Math.min(d, apron) + b.slope * (b.base + b.eGain * e) * past;
+    if (ctx.deep !== undefined && ctx.deep[i] > depth) depth = ctx.deep[i];
+    if (ctx.shoal !== undefined && ctx.shoal[i] > 0 && ctx.shoal[i] < depth) depth = ctx.shoal[i];
     base[i] = -Math.max(SEA_MIN, Math.min(b.max, depth));
   }
   for (const o of shoals) {
