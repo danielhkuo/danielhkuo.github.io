@@ -8,6 +8,8 @@ export interface LayerContext {
   seed: number;
   n: number;
   sites: Manifest["sites"];
+  /** Reports a rare sight the visitor has seen (a stable id and a short caption); the page remembers and shows it. */
+  discover?: (id: string, label: string) => void;
 }
 
 /** Every live layer, in drawing order. Add new layers here; the page and `npm run world:live` both use this list. */
