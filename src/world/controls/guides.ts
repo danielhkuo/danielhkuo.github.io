@@ -4,7 +4,7 @@
 
 import { REMAPPABLE, type KeyFamily, type Keys } from "./bindings.ts";
 import { padNames, type PadFamily } from "./gamepad.ts";
-import { column, keyCap, label, padFace, padStick, padTrigger, plate, row, slip, touchTap, type Sprite } from "./glyphs.ts";
+import { column, keyCap, label, padFace, padStick, padTrigger, plate, row, slip, touchButton, touchStick, touchTap, type Sprite } from "./glyphs.ts";
 import { lessonAlpha, type Lesson } from "./lesson.ts";
 
 export type Device = "keyboard" | "gamepad" | "touch";
@@ -130,7 +130,7 @@ function orWord(): { id: string; sprite: () => Sprite } {
 function lessonGuide(s: GuideState): Guide | null {
   const l = s.lesson;
   const alpha = lessonAlpha(l, s.reduced);
-  if (alpha <= 0 || s.device === "touch") return null;
+  if (alpha <= 0) return null;
   const k = s.keys;
   let lines: { id: string; sprite: () => Sprite }[];
   let say: string;
@@ -151,6 +151,21 @@ function lessonGuide(s: GuideState): Guide | null {
         line([{ id: `plate-${names.options}`, sprite: () => plate(names.options) }], "options"),
       ];
       say = `Press ${capital(names.leave)} to leave the world, ${capital(names.options)} for the options.`;
+    }
+  } else if (s.device === "touch") {
+    // The touch controls' own marks, small: the stick a thumb puts down, and the two speed buttons.
+    if (l.stage === "steer") {
+      lines = [line([{ id: `tstick${s.lit.turn}`, sprite: () => touchStick(s.lit.turn) }], "steer")];
+      say = "Put a thumb down on the stick side and push the way you want to fly.";
+    } else if (l.stage === "speed") {
+      lines = [
+        line([{ id: `tboost${s.lit.boost}`, sprite: () => touchButton("boost", s.lit.boost) }], "boost"),
+        line([{ id: `tslow${s.lit.slow}`, sprite: () => touchButton("slow", s.lit.slow) }], "slow"),
+      ];
+      say = "Hold the up button to boost, the down button to slow down.";
+    } else {
+      lines = [line([{ id: "plate-options", sprite: () => plate("options") }], "pause · leave")];
+      say = "The options button in the corner pauses the flight and holds Leave.";
     }
   } else if (l.stage === "steer") {
     const letters = caps(s, [k.left, k.right]);

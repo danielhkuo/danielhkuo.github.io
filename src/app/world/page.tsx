@@ -6,6 +6,7 @@ import { LANDMARK_CONFIG } from "@/world/landmarks.config";
 import sticky from "@/world/sites/assignments.json";
 import { entryOf, landmarksFor, stickyText, type LandmarkSet } from "@/world/sites/landmarks";
 import Flight from "./Flight";
+import { startBytes } from "./startBytes";
 
 export const metadata: Metadata = {
   title: "Flight · Daniel Kuo",
@@ -57,5 +58,5 @@ export default async function WorldPage() {
     },
   };
 
-  return <Flight landmarks={landmarks} terminal={terminal} />;
+  return <Flight landmarks={landmarks} terminal={terminal} startBytes={startBytes()} />;
 }

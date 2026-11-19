@@ -10,6 +10,7 @@ import { INK_SOFT, keyCap, plate, slip, text, VERMILION } from "../../world/cont
 import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
 import type { PhaseKind } from "./session";
 import type { Options } from "../../world/controls/options";
+import type { Platform } from "../../world/mobile/layout";
 import styles from "./options.module.css";
 import PixelGlyph from "./PixelGlyph";
 
@@ -18,10 +19,25 @@ export interface OptionsPanelProps {
   /** CSS pixels per glyph pixel. */
   px: number;
   options: Options;
+  /** The device used last: on touch the panel shows the touch controls' settings instead of the keys. */
+  device: Device;
+  platform: Platform;
   onChange(next: Options): void;
   /** Shows the first-flight lesson again (and closes the panel). */
   onTeach(): void;
   onClose(): void;
+}
+
+/** Tilt steering needs the motion permission on iOS, asked from the tap that turns it on. */
+async function motionAllowed(): Promise<boolean> {
+  const dm = (window as unknown as { DeviceMotionEvent?: { requestPermission?: () => Promise<string> } }).DeviceMotionEvent;
+  if (!dm) return false;
+  if (typeof dm.requestPermission !== "function") return true;
+  try {
+    return (await dm.requestPermission()) === "granted";
+  } catch {
+    return false;
+  }
 }
 
 /** Words drawn in the pixel font (in palette slot `ink`), with the same words for readers. */
@@ -87,7 +103,9 @@ function pxVar(px: number): CSSProperties {
   return { "--px": `${px}px` } as CSSProperties;
 }
 
-export default function OptionsPanel({ open, px, options, onChange, onTeach, onClose }: OptionsPanelProps) {
+export default function OptionsPanel({ open, px, options, device, platform, onChange, onTeach, onClose }: OptionsPanelProps) {
+  const touch = device === "touch";
+  const canBuzz = platform === "android" && typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
   const dialog = useRef<HTMLDialogElement>(null);
   // The action waiting for its new key, if any.
   const [waiting, setWaiting] = useState<Remappable | null>(null);
@@ -143,38 +161,66 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
       <Choice name="boost" legend="boost" value={options.boost} px={px} choices={[["hold", "Hold to boost"], ["toggle", "Press to start and stop boosting"]]} onPick={(boost) => set({ boost })} />
       <Choice name="pace" legend="pace" value={options.pace} px={px} choices={[["cruise", "Cruise at full speed"], ["gentle", "A gentler pace"]]} onPick={(pace) => set({ pace })} />
       <Choice name="motion" legend="motion" value={options.motion} px={px} choices={[["full", "Full motion"], ["reduced", "Reduced motion"]]} onPick={(motion) => set({ motion })} />
-      <fieldset className={styles.keys}>
-        <legend className={styles.keysTitle}>
-          <Words px={px} ink={VERMILION}>
-            keys
-          </Words>
-        </legend>
-        <ul className={styles.keyGrid}>
-          {REMAPPABLE.map((a) => (
-            <li key={a} className={styles.keyRow}>
-              <span className={styles.keyWord}>
-                <Words px={px}>{ACTION_WORDS[a]}</Words>
-              </span>
-              <button
-                type="button"
-                className={styles.key}
-                aria-label={waiting === a ? `Press a key for ${ACTION_WORDS[a]}, or Esc to keep ${keyWord(options.keys[a])}` : `${ACTION_WORDS[a]}: ${keyWord(options.keys[a])}. Change`}
-                onClick={() => setWaiting(waiting === a ? null : a)}
-              >
-                <PixelGlyph sprite={waiting === a ? plate("press a key", true) : keyCap(options.keys[a])} px={px} />
-              </button>
-            </li>
-          ))}
-        </ul>
-        <p className={styles.note}>
-          <PixelGlyph sprite={text("arrows, shift, enter and esc always work")} px={px} />
-          <span className={styles.sr}>The arrow keys, Shift, Enter and Esc always work.</span>
-        </p>
-      </fieldset>
+      {touch ? (
+        <fieldset className={styles.keys}>
+          <legend className={styles.keysTitle}>
+            <Words px={px} ink={VERMILION}>
+              touch
+            </Words>
+          </legend>
+          <Choice name="hand" legend="hand" value={options.hand} px={px} choices={[["right", "Right-handed: the stick on the left"], ["left", "Left-handed: the stick on the right"]]} onPick={(hand) => set({ hand })} />
+          <Choice name="size" legend="size" value={options.size} px={px} choices={[["s", "Small controls"], ["m", "Normal controls"], ["l", "Large controls"], ["xl", "Largest controls"]]} onPick={(size) => set({ size })} />
+          <Choice name="fade" legend="at rest" value={options.fade} px={px} choices={[["fade", "Controls fade when untouched"], ["solid", "Controls stay solid"]]} onPick={(fade) => set({ fade })} />
+          <Choice name="thumb" legend="thumbs" value={options.thumb} px={px} choices={[["two", "Boost with its button"], ["one", "One thumb: push the stick to its rim to boost"]]} onPick={(thumb) => set({ thumb })} />
+          {canBuzz ? <Choice name="buzz" legend="buzz" value={options.buzz} px={px} choices={[["on", "Light ticks on"], ["off", "No ticks"]]} onPick={(buzz) => set({ buzz })} /> : null}
+          <Choice
+            name="tilt"
+            legend="tilt"
+            value={options.tilt}
+            px={px}
+            choices={[["off", "Steer with the stick"], ["on", "Also steer by tilting the phone like a wheel"]]}
+            onPick={(tilt) => {
+              if (tilt === "off") set({ tilt });
+              else void motionAllowed().then((ok) => ok && set({ tilt: "on" }));
+            }}
+          />
+        </fieldset>
+      ) : (
+        <fieldset className={styles.keys}>
+          <legend className={styles.keysTitle}>
+            <Words px={px} ink={VERMILION}>
+              keys
+            </Words>
+          </legend>
+          <ul className={styles.keyGrid}>
+            {REMAPPABLE.map((a) => (
+              <li key={a} className={styles.keyRow}>
+                <span className={styles.keyWord}>
+                  <Words px={px}>{ACTION_WORDS[a]}</Words>
+                </span>
+                <button
+                  type="button"
+                  className={styles.key}
+                  aria-label={waiting === a ? `Press a key for ${ACTION_WORDS[a]}, or Esc to keep ${keyWord(options.keys[a])}` : `${ACTION_WORDS[a]}: ${keyWord(options.keys[a])}. Change`}
+                  onClick={() => setWaiting(waiting === a ? null : a)}
+                >
+                  <PixelGlyph sprite={waiting === a ? plate("press a key", true) : keyCap(options.keys[a])} px={px} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className={styles.note}>
+            <PixelGlyph sprite={text("arrows, shift, enter and esc always work")} px={px} />
+            <span className={styles.sr}>The arrow keys, Shift, Enter and Esc always work.</span>
+          </p>
+        </fieldset>
+      )}
       <p className={styles.actions}>
-        <Action px={px} onClick={() => set({ keys: { ...DEFAULT_KEYS } })}>
-          <Words px={px}>reset the keys</Words>
-        </Action>
+        {touch ? null : (
+          <Action px={px} onClick={() => set({ keys: { ...DEFAULT_KEYS } })}>
+            <Words px={px}>reset the keys</Words>
+          </Action>
+        )}
         <Action px={px} onClick={onTeach}>
           <Words px={px}>show the lesson again</Words>
         </Action>
@@ -183,7 +229,11 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
           <Words px={px}>leave the world</Words>
         </Link>
         <Action px={px} onClick={() => dialog.current?.close()}>
-          <Words px={px} say="Close the options">close</Words>
+          {touch ? (
+            <Words px={px} say="Close the options and fly on">fly on</Words>
+          ) : (
+            <Words px={px} say="Close the options">close</Words>
+          )}
         </Action>
       </p>
     </dialog>

@@ -104,6 +104,18 @@ Last updated 2026-11-19.
   first split into a session and hooks (React Doctor 81 → 100). The guides cost 0.1 ms p95 at 4× (`world-fly.mjs`
   reports `guideMs`); a Fable critic judged two rounds of renders. Design:
   `specs/2026-11-18-teaching-the-controls-design.md`.
+- **Flying on a phone** (2026-11-19, `claude/mobile-research-9125c0`). Research
+  (`research/2026-11-18-mobile-web-game-controls.md`, with iOS 26.5 Simulator measurements) and an approved design
+  (`specs/2026-11-18-mobile-design.md`; the owner took every recommended option). A touch screen opens on a "before you
+  fly" card; Take wing goes fullscreen and locks landscape where the browser can (Android; fullscreen on iPad). A
+  floating stick under the left thumb points where to fly; Boost and Brake are held under the right, with Land joining
+  them near a landmark. The controls are drawn in the frame's pixels and keep clear of safe areas and back-gesture
+  strips. Upright phones pause behind a "turn your phone" card, which can play sideways when rotation is locked. Hiding
+  the page, a blur, a stall, Back or a lost fullscreen pauses; Fly on resumes. Nothing zooms, scrolls, refreshes or
+  selects on `/world`. Phones bake with two workers and step down to 30 fps when frames run long. Hand, size, fade, one
+  thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (15 flows, real multi-touch in
+  phone emulation). The phone's own title screen (a rose-window contents page, the minimal version first) is built at the
+  noindex bench `/phone-title`, to be mounted on `/` together with the desktop title.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 - **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
@@ -226,12 +238,16 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 
 The owner's asks: mobile as an option (the minimal page first, a different title screen, touch controls, the view
 locked down, its own test suite, researched first); clearer interactivity with simple pixel-style guides; and no
-minimap (a map is for fun only). A `mobile-research` session is writing the research and a design.
+minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see Done); what is left is listed below.
 
 **Mobile (optional; phones get the minimal page by default)**
-- A "Fly anyway" opt-in from the text page; a separate, simpler mobile title screen.
-- Touch flight: a floating joystick where the left thumb lands, boost and brake buttons on the right, tap a prompt to
-  land; tilt steering as an option. All drawn as pixel-art controls.
+- Left: mounting the phone title on `/` with the desktop title (`PhoneSwitch` is ready), when the phone title gains
+  Settings from the desktop title's `settings.ts`; trimming the workers after a long hide; a real-phone pass (feel,
+  heat, memory, the edge swipe); sound unlocked on Take wing once there is sound; one copy list for the phone and
+  desktop titles when the desktop title lands.
+- ~~A "Fly anyway" opt-in from the text page; a separate, simpler mobile title screen.~~
+- ~~Touch flight: a floating joystick where the left thumb lands, boost and brake buttons on the right, tap a prompt to
+  land; tilt steering as an option. All drawn as pixel-art controls.~~
 - A locked view: landscape via the Screen Orientation API where it works (Android, in fullscreen or an installed PWA),
   a "turn your phone" card on iOS; no pinch or double-tap zoom, pull-to-refresh, overscroll or text callouts; safe
   areas and dynamic toolbars handled; pause when hidden.

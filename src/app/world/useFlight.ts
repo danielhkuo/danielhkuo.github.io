@@ -5,7 +5,7 @@ import type { Device } from "../../world/controls/guides";
 import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
 import { getFrameFit } from "./useFrameScale";
-import { startFlight, type FlightSession, type FlightStats, type PhaseKind } from "./session";
+import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
 import type { TerminalLink } from "./useTerminalDrawer";
 
 export interface Caption {
@@ -18,6 +18,17 @@ export interface Caption {
 export interface PanelLink {
   isOpen(): boolean;
   toggle(): void;
+}
+
+/** What a touch flight adds: the shell's pause, the phone's budgets, the touch controls and the ticks. */
+export interface TouchLink {
+  paused(): boolean;
+  stall(): void;
+  phone(): boolean;
+  touch: NonNullable<FlightSetup["touch"]>;
+  buzz(what: "landed" | "discovery"): void;
+  /** The frame wanted, when the phone decides it (played sideways); the window's otherwise. */
+  frame?(): { w: number; h: number };
 }
 
 export interface FlightView {
@@ -39,7 +50,7 @@ export interface FlightView {
 
 /** Runs a flight on the canvas while the page is open, and mirrors what it reports into React state. */
 export function useFlight(
-  canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink,
+  canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink, touch: TouchLink,
 ): FlightView {
   const [failed, setFailed] = useState(false);
   const [phase, setPhase] = useState<FlightView["phase"]>({ kind: "flying", at: null });
@@ -55,7 +66,18 @@ export function useFlight(
     if (!el) return;
     const s = startFlight(
       el,
-      { landmarks, terminalOpen: terminal.isOpen, closeTerminal: terminal.close, optionsOpen: panel.isOpen, options: getOptions, frame: getFrameFit },
+      {
+        landmarks,
+        terminalOpen: terminal.isOpen,
+        closeTerminal: terminal.close,
+        optionsOpen: panel.isOpen,
+        options: getOptions,
+        paused: touch.paused,
+        phone: touch.phone,
+        touch: touch.touch,
+        // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
+        frame: touch.frame ?? getFrameFit,
+      },
       {
         failed: () => setFailed(true),
         phase: (kind, at) => {
@@ -69,6 +91,8 @@ export function useFlight(
         device: setDevice,
         toggleOptions: panel.toggle,
         paper: setPaper,
+        stall: touch.stall,
+        buzz: touch.buzz,
       },
     );
     session.current = s;
@@ -77,7 +101,7 @@ export function useFlight(
       session.current = null;
     };
     // `landmarks` is a build-time prop and the links are stable: the flight runs once per page.
-  }, [canvas, landmarks, terminal, panel]);
+  }, [canvas, landmarks, terminal, panel, touch]);
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);

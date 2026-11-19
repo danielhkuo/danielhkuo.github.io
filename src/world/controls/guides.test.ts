@@ -69,12 +69,22 @@ test("a prompt for each phase, in the glyphs of the device in hand", () => {
   assert.equal(guideFor({ ...base, phase: "landed", landedPrompt: false }), null, "the Codex's own button does it");
 });
 
-test("the prompt takes the place of the lesson; the lesson shows only while it is being taught, and not on touch", () => {
+test("the prompt takes the place of the lesson; the lesson shows only while it is being taught", () => {
   assert.match(guideFor({ ...base, offer: "leaf" })?.id ?? "", /^prompt/);
   assert.match(guideFor(base)?.id ?? "", /^lesson\|steer/);
   assert.equal(guideFor({ ...base, lesson: newLesson(true) }), null);
   assert.equal(guideFor({ ...base, lesson: newLesson(false) }), null, "still waiting");
-  assert.equal(guideFor({ ...base, device: "touch" }), null);
+  assert.match(guideFor({ ...base, device: "touch" })?.id ?? "", /^lesson\|steer\|tstick/);
+});
+
+test("on touch the lesson draws the touch controls' own marks: the stick, then the two speed buttons", () => {
+  const steer = guideFor({ ...base, device: "touch" });
+  assert.equal(steer?.say, "Put a thumb down on the stick side and push the way you want to fly.");
+  const pushed = guideFor({ ...base, device: "touch", lit: { ...lit, turn: true } });
+  assert.notEqual(pushed?.id, steer?.id, "the stick lights while a thumb holds it");
+  const speed = guideFor({ ...base, device: "touch", lesson: { ...base.lesson, stage: "speed" } });
+  assert.match(speed?.id ?? "", /tboost.*tslow/);
+  assert.equal(speed?.say, "Hold the up button to boost, the down button to slow down.");
 });
 
 test("the lesson shows both families until one is used, and lights the keys held", () => {
