@@ -16,7 +16,7 @@ import { type Built, type Conform, conformed, conformGrid, ROAD_PIECE, type Road
 import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
-import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules } from "./sites.ts";
+import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, tempAt } from "./sites.ts";
 import * as S from "./structures.ts";
 import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
@@ -28,7 +28,7 @@ export function siteFieldsOf(t: Terrain): SiteFields {
   return {
     n: land.p.n, gN: land.p.gN, h: rivers.ground, isSea: land.isSea, lakeId: hydro.lakeId, hand: hydro.hand,
     exposure: land.exposure, shoreClass: land.shoreClass, debris: land.debris, rock: land.rock,
-    moisture: climate.moisture, wind: climate.wind, regions: land.plan.regions,
+    moisture: climate.moisture, wind: climate.wind, regions: land.plan.regions, temp: climate.temp,
     reaches: rivers.reaches, stacks,
   };
 }
@@ -802,6 +802,19 @@ function greenBelt(w: Work, roads: readonly RoadLine[]): void {
 // ---------------------------------------------------------------------------
 // Hamlets.
 
+/** No hamlet stands where the sea-level temperature is under this: the ice, and the tundra's far edge. */
+const HAMLET_COLDEST = 0.2;
+
+/** How a house is built at a place, by its climate (structures.ts HOUSE_STYLE). */
+function houseStyle(c: SiteContext, x: number, y: number): number {
+  const temp = tempAt(c, x, y);
+  if (temp < 0.44) return S.HOUSE_STYLE.cold;
+  if (temp <= 0.56) return S.HOUSE_STYLE.temperate;
+  if (temp < 0.7) return S.HOUSE_STYLE.mediterranean;
+  const cN = c.gN / 2, rain = c.moisture[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
+  return rain < 0.3 ? S.HOUSE_STYLE.desert : rain < 0.62 ? S.HOUSE_STYLE.savanna : S.HOUSE_STYLE.jungle;
+}
+
 function isSlate(c: SiteContext, i: number): boolean {
   const cN = c.gN / 2, gx = i % c.gN, gy = (i - gx) / c.gN, ci = (gy >> 1) * cN + (gx >> 1), cc = cN * cN;
   return c.regions[ARCHETYPE.slate * cc + ci] + c.regions[ARCHETYPE.highland * cc + ci] + c.regions[ARCHETYPE.lakes * cc + ci] > 0.5;
@@ -820,6 +833,11 @@ function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
       s += c.slope[j];
     }
     if (wet || s / 25 > 0.16) continue;
+    // Nobody settles the ice. The tundra is thinly settled, and dry country only where there is water.
+    const temp = tempAt(c, 4 * gx + 2, 4 * gy + 2);
+    if (temp < HAMLET_COLDEST) continue;
+    const cN = gN / 2, rain = c.moisture[(gy >> 1) * cN + (gx >> 1)];
+    const arid = temp > 0.66 && rain < 0.24;
     // By a river or a sheltered shore: where a road would cross or end.
     let water = 0;
     for (let d = 3; d <= 9 && water === 0; d += 2) for (let q = 0; q < 8; q++) {
@@ -829,9 +847,10 @@ function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
       else if (c.rw[j] === 1) water = Math.max(water, 0.8);
       else if (c.isSea[j] && c.exposure[i] < 0.4) water = Math.max(water, 0.7);
     }
+    if (arid && water < 0.8) continue;
     xs.push(4 * gx + 2);
     ys.push(4 * gy + 2);
-    score.push(1 - (s / 25) / 0.16 + water + (hash2(gx, gy, w.seed) & 255) / 512);
+    score.push(1 - (s / 25) / 0.16 + water + (hash2(gx, gy, w.seed) & 255) / 512 - (temp < 0.3 ? 0.9 : 0) - (arid ? 0.3 : 0));
   }
   const order = sortIndicesBy(score.map((v) => -v));
   const out: Hamlet[] = [];
@@ -868,7 +887,7 @@ function standHamlet(w: Work, hm: Hamlet): void {
     const hsh = hash2(k, Math.floor(hm.x) + 7919 * Math.floor(hm.y), w.seed);
     const cx = Math.floor(hm.x + ax * t - ay * side + ((hsh & 3) - 1.5)), cy = Math.floor(hm.y + ay * t + ax * side + (((hsh >>> 2) & 3) - 1.5));
     if (!dry(w, cx, cy) || !dry(w, cx - 4, cy) || !dry(w, cx + 4, cy) || !dry(w, cx, cy + 4) || c.slope[node(c, cx, cy)] > 0.3) continue;
-    const hs = S.countryHouse(hsh >>> 4, slate);
+    const hs = S.countryHouse(hsh >>> 4, slate, houseStyle(c, hm.x, hm.y));
     const base = groundAt(w, cx, cy + hs.h / 2);
     if (base < 1) continue;
     addConform(w, flat(cx, cy, hs.w / 2 + 1, hs.h / 2 + 1, false, base, 3, 1.5));

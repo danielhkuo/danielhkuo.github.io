@@ -435,6 +435,10 @@ function buildSpecs(): Spec[] {
   set(M.cactus, evergreen([0.55, 0.06, 158]), CANOPY);
   set(M.trunk, all([0.56, 0.04, 62]), LINE);
   set(M.mound, all([0.58, 0.082, 40]), DUNE);
+  // Built things of the climates: mud plaster, thatch and turf. Lit colours, as the other walls and roofs are.
+  set(M.adobe, all([0.8, 0.052, 68]), BUILT);
+  set(M.thatch, all([0.72, 0.06, 86]), BUILT);
+  set(M.turf, evergreen([0.6, 0.07, 128]), BUILT);
 
   return s;
 }

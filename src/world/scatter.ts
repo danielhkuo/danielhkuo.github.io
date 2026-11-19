@@ -8,7 +8,7 @@ import { climateShift, heatOf, isTemperate, softNoise } from "./biome.ts";
 import { hash2 } from "./core/hash.ts";
 import { gradNoise } from "./core/noise.ts";
 import { HUE_CLASS, hueField, WORLD_N } from "./cover.ts";
-import type { CoverInput, Stamp } from "./look/contract.ts";
+import { SHAPE, type CoverInput, type Stamp } from "./look/contract.ts";
 import { isCrop, MATERIAL as M } from "./look/materials.ts";
 
 /**
@@ -318,9 +318,11 @@ export function scatterAt(
         mat = M.mound;
         shape = 1;
       } else {
-        r = 2.2 + 1.1 * u1;
-        h = 2 + 0.7 * u4;
+        // A picture: a flat crown seven or nine pixels across on a forked stem.
+        r = u1 > 0.55 ? 4 : 3;
+        h = u4 > 0.5 ? 4 : 3;
         mat = M.acacia;
+        shape = SHAPE.acacia;
       }
     } else if (groundMat === M.tigerBush || groundMat === M.reg || groundMat === M.earthPale || inTriple(groundMat, M.steppeCool)) {
       if (heat < 0.5 && (inTriple(groundMat, M.steppeCool)) && u4 > 0.72) {
@@ -328,6 +330,12 @@ export function scatterAt(
         h = 5 + 2 * u3;
         mat = M.cypress;
         shape = 1;
+      } else if (heat > 0.45 && (groundMat === M.reg || groundMat === M.earthPale) && u3 > 0.74) {
+        // On the gravel of a hot desert one bush in four is a cactus.
+        r = 1;
+        h = 3 + Math.floor(3 * u1);
+        mat = M.cactus;
+        shape = SHAPE.cactus;
       } else {
         r = 0.8 + 0.6 * u1;
         h = 0.9 + 0.7 * u4;
@@ -342,9 +350,10 @@ export function scatterAt(
       h = 1.7 + 0.8 * u4;
       mat = M.mangrove;
     } else if (heat > 0 && (groundMat === M.ley || groundMat === M.sandPale)) {
-      r = 1.3 + 0.5 * u1;
-      h = 3.4 + 1.4 * u4;
+      r = 2;
+      h = 5 + Math.floor(3 * u4);
       mat = M.palm;
+      shape = SHAPE.palm;
     } else if (heat > 0 && inTriple(groundMat, M.scrubCool) && (u4 > 0.72 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
       // The Mediterranean's dry sward: a cypress spire here and there, and olives where the temperate sward has bushes.
       if (u4 > 0.72 && heat < 0.5) {
@@ -360,9 +369,10 @@ export function scatterAt(
     } else if (heat > 0 && groundMat === M.floorBroadleaf && heat > 0.07 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 4) + 0.12 * (u3 - 0.5)) {
       // The warm wood is evergreen: dark maquis and holm oak, with umbrella pines standing over it.
       if (u2 > 0.78) {
-        r = 1.8 + 0.8 * u1;
-        h = 1.3 * r + 2.6;
+        r = 2;
+        h = 4 + Math.floor(3 * u1);
         mat = M.pine;
+        shape = SHAPE.pine;
       } else {
         r = 1.1 + 0.9 * u1;
         h = r + 1.2;
@@ -389,8 +399,8 @@ export function scatterAt(
       mat = M.broadleafCool + (v < 0.5 ? 0 : v < 1.5 ? 1 : 2);
     }
     // South of a river the whole crown must stay out of the river's sight line;
-    // north of it the crown's edge keeps 1–2 cells back.
-    if (north < northReach(r, h, shape) || south - r < 1 + (h32 & 1)) return null;
+    // north of it the crown's edge keeps 1–2 cells back. A picture's crown stands two pixels over its stem.
+    if (north < northReach(r, shape >= SHAPE.palm ? h + 2 : h, shape) || south - r < 1 + (h32 & 1)) return null;
     return { x: cx, y: cy, r, h, mat, shape };
   }
   // A cell that grows trees grows nothing smaller: the canopy would hide it.

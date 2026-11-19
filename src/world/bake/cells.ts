@@ -7,12 +7,13 @@ import { DESERT_RAIN, DUNE_HEIGHT, duneAt, ergAt, HEAT_LAPSE, heatOf, HOT_EDGE, 
 import { hash2 } from "../core/hash.ts";
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
-import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
+import { SHAPE_PICTURE, type CoverInput, type Palette, type Stamp } from "../look/contract.ts";
 import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
 import { COVER_FIELDS_MARGIN, coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
+import { SPRITE_STRIDE, spriteShadow } from "./sprites.ts";
 import { HMAX, type BakeWorld, type GridWindow, type Patch } from "./world.ts";
 
 export const TILE = 256;
@@ -41,6 +42,8 @@ export interface Look {
   barSand?: number;
   /** Per material id: 1 for bare rock, whose walls are drawn as strata. Optional: none when absent. */
   isRock?: Uint8Array;
+  /** The material of a picture's stem (a palm's trunk). Optional: the crown's own when absent. */
+  stem?: number;
   /** The shingle and the boulders of the apron at a sea cliff's foot. Optional: cliffs stand in the water when absent. */
   apron?: number;
   apronRock?: number;
@@ -87,6 +90,12 @@ export interface Cells {
   flags: Uint8Array;
   /** Water cells: depth tone 0–15 (sea, lakes) or flow phase 0–15 (rivers). Land: the AUX_ bits. */
   aux: Uint8Array;
+  /**
+   * The pictures rooted on this window's own cells (bake/sprites.ts), SPRITE_STRIDE values each: the root cell in
+   * the window, the ground there, the shape, crown half-width, stem height, crown material, stem material. Absent
+   * when there are none.
+   */
+  sprites?: Float32Array;
 }
 
 // Margins round the core, in cells.
@@ -686,6 +695,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
   const sight = { north: Infinity, south: Infinity };
+  /** Pictures rooted in the cover region: window cell x, y, shape, crown half-width, stem height, crown material. */
+  const pictures: number[] = [];
   // Distance to the nearest river in any direction, for the cover's field boundaries. River cells stay 0.
   if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_OFFSET - 1);
 
@@ -854,7 +865,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
       if (pad !== null && pad[i] > 40) {
         // A pad is a clearing: grass, speckled out over its skirt, and nothing planted.
-        if (bi && pad[i] > mask[((c.y + 37) & 255) * 256 + ((c.x + 101) & 255)]) gmat[i] = bi.built.mats.yard;
+        // In another climate the clearing keeps that climate's own ground: no pasture round a house on the sand.
+        if (bi && foreign[i] === 0 && pad[i] > mask[((c.y + 37) & 255) * 256 + ((c.x + 101) & 255)]) gmat[i] = bi.built.mats.yard;
         continue;
       }
 
@@ -865,6 +877,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       if (st.h <= 0) {
         // A flat stamp (flowers) only recolours the ground it is rooted on.
         gmat[i] = st.mat;
+        continue;
+      }
+      if (st.shape >= SHAPE_PICTURE) {
+        // A picture is not stamped into the ground: it is kept for the painter, and only its shadow is laid here.
+        pictures.push(x + cOff, y + cOff, st.shape, st.r, st.h, st.mat);
         continue;
       }
       // The stamp's centre in window cells, and the ground it stands on.
@@ -948,6 +965,26 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
 
+  // Pictures: the shadow each crown lays on the ground, and the list of the ones rooted on the core's own cells.
+  let sprites: Float32Array | undefined;
+  if (pictures.length > 0) {
+    const own: number[] = [];
+    for (let k = 0; k < pictures.length; k += 6) {
+      const px = pictures[k], py = pictures[k + 1];
+      spriteShadow(pictures[k + 2], pictures[k + 3], pictures[k + 4], (dx, dy) => {
+        const xx = px + dx, yy = py + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) return;
+        if (pictShadow[yy * W + xx] === 0) pictShadow[yy * W + xx] = 1;
+      });
+      if (px >= PAD_N && py >= PAD_N && px < PAD_N + w && py < PAD_N + h) {
+        // Its own draw comes from its place in the world, so a picture is the same in every window.
+        own.push(px - PAD_N, py - PAD_N, ground[py * W + px], pictures[k + 2], pictures[k + 3], pictures[k + 4], pictures[k + 5], look.stem ?? pictures[k + 5],
+          hash2(wrap(wx0 + px, n), wrap(wy0 + py, n), 0x5b17e) & 0xffff);
+      }
+    }
+    if (own.length > 0) sprites = Float32Array.from(own);
+  }
+
   // 7. The drawn surface over the crown region.
   const surf = new Float32Array(count);
   for (let y = sLo - 1; y <= sHiY; y++) {
@@ -988,6 +1025,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
 
   // 8. Light, shadow and flags for the core.
   const out: Cells = { w, h, surf: new Float32Array(w * h), mat: new Uint8Array(w * h), light: new Uint8Array(w * h), flags: new Uint8Array(w * h), aux: new Uint8Array(w * h) };
+  if (sprites) out.sprites = sprites;
   const noInk = look.noInk;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {

@@ -243,9 +243,9 @@ test("the home river is a hard requirement: too short a river rejects the seed, 
   assert.match(failure(() => placeSites(bare, only({ abbey: 1, town: 1 }))).message, /town: sheltered south-facing shore/);
 });
 
-test("the rules: twelve sites, spacing and the home river scale with the world; the built rules only loosen", () => {
+test("the rules: one site of each kind, spacing and the home river scale with the world; the built rules only loosen", () => {
   const r = siteRules(6400), b = builtRules(6400);
-  assert.equal(Object.values(r.counts).reduce((a, v) => a + v, 0), 12);
+  for (const count of Object.values(r.counts)) assert.equal(count, 1);
   assert.equal(r.spacing, 1500);
   assert.deepEqual(r.homeRiver, [1200, 2000]);
   assert.equal(siteRules(3200).spacing, 750);

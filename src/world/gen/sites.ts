@@ -12,7 +12,7 @@ import { torusDelta, wrap } from "../core/torus.ts";
 import type { CoverInput } from "../look/contract.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { LandmarkType } from "../sites/assign.ts";
-import { ARCHETYPE, countFor, lengthScale } from "./params.ts";
+import { ARCHETYPE, lengthScale } from "./params.ts";
 import { visibility } from "./visibility.ts";
 
 /** What siting reads. Everything is on G unless it says C. */
@@ -37,6 +37,8 @@ export interface SiteFields {
   moisture: ArrayLike<number>;
   wind: ArrayLike<number>;
   regions: ArrayLike<number>;
+  /** C grid: sea-level temperature, 0.5 on the temperate plateau (gen/climate.ts). Absent: one temperate climate. */
+  temp?: ArrayLike<number>;
   reaches: readonly SiteReach[];
   /** Sea stacks from the coast stage, in cells. */
   stacks: readonly { x: number; y: number; r: number; top: number }[];
@@ -93,9 +95,10 @@ export const BOX: Record<LandmarkType, { w: number; d: number; h: number; round:
  * world keeps them and holds more landmarks (one abbey and one town in any world).
  */
 export function siteRules(n: number): SiteRules {
-  const k = lengthScale(n), two = countFor(n, 2);
+  const k = lengthScale(n);
   return {
-    counts: { abbey: 1, town: 1, lighthouse: two, bridge: two, cathedral: two, windmill: two, yew: two },
+    // One of each, in a world of any size: a project is at the windmill, never at the third lighthouse.
+    counts: { abbey: 1, town: 1, lighthouse: 1, bridge: 1, cathedral: 1, windmill: 1, yew: 1 },
     spacing: 1500 * k,
     homeRiver: [1200 * k, 2000 * k],
     visible: 0.8,
@@ -399,6 +402,7 @@ export function coverAtNode(c: SiteContext, gx: number, gy: number): number {
     x: 4 * wrap(gx, gN) + 2, y: 4 * wrap(gy, gN) + 2, e: c.h[i], slope: s, northness: s > 1e-6 ? dy / s : 0,
     hand: c.hand[i], moisture: c.moisture[ci], wind: c.wind[ci], exposure: c.exposure[i], debris: d > 1 ? 1 : d,
     rock: c.rock[i], region: region6, water: 0, shore: c.shoreClass[i],
+    temp: c.temp ? c.temp[ci] : undefined,
   };
   return cover(inp, FLAT_MASK, c.n);
 }
@@ -1046,6 +1050,23 @@ export interface PlaceOptions {
 /** Order the types are taken in after the abbey and the town. */
 export const SITE_ORDER: readonly LandmarkType[] = ["lighthouse", "bridge", "cathedral", "windmill", "yew"];
 
+/**
+ * The sea-level temperature a kind's site may have (gen/climate.ts: 0.5 is the temperate plateau). The windmill may
+ * also stand in the Mediterranean; the abbey and the town are on the home island, which is temperate by rule.
+ */
+export const SITE_CLIMATE: Readonly<Record<LandmarkType, readonly [number, number]>> = {
+  abbey: [0, 1], town: [0, 1],
+  lighthouse: [0.44, 0.58], bridge: [0.44, 0.58], cathedral: [0.44, 0.58], yew: [0.44, 0.58],
+  windmill: [0.44, 0.7],
+};
+
+/** Sea-level temperature at a cell: the temperate plateau's where the world has no climates. */
+export function tempAt(c: Pick<SiteContext, "gN" | "temp">, x: number, y: number): number {
+  if (!c.temp) return 0.5;
+  const cN = c.gN / 2;
+  return c.temp[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
+}
+
 export class SitingError extends Error {
   rule: string;
   constructor(type: string, rule: string) {
@@ -1102,6 +1123,19 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
     const tally = new Tally();
     const all = type === "lighthouse" ? lighthouseCandidates(c, rules, tally) : type === "bridge" ? bridgeCandidates(c, rules, tally)
       : type === "cathedral" ? cathedralCandidates(c, rules, tally) : type === "windmill" ? windmillCandidates(c, rules, tally) : yewCandidates(c, rules, tally);
+    // Each kind keeps to its own climate: the five that came with the temperate land stand in temperate country.
+    if (c.temp) {
+      const [lo, hi] = SITE_CLIMATE[type];
+      let kept = 0;
+      for (let q = 0; q < all.length; q++) {
+        const t = tempAt(c, all[q].x, all[q].y);
+        if (t >= lo && t <= hi) all[kept++] = all[q];
+      }
+      all.length = kept;
+      const rule = `in its own climate (temperature ${lo}–${hi})`;
+      tally.declare(rule);
+      for (let q = 0; q < kept; q++) tally.pass(rule);
+    }
     every.set(type, all);
     lists.set(type, thin(c, all, rules.spacing / 12, 90));
     tallies.set(type, tally);

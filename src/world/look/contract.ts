@@ -115,9 +115,18 @@ export interface Stamp {
   h: number;
   /** Material of the stamped cells. */
   mat: number;
-  /** 0 dome (broadleaf, boulder), 1 cone (conifer). */
+  /**
+   * 0 dome (broadleaf, boulder), 1 cone (conifer). From SHAPE_PICTURE up the stamp is a picture, a crown over a
+   * stem, drawn into the chunk a pixel at a time and not stamped into the ground (bake/sprites.ts): 2 a palm, 3 an
+   * umbrella acacia, 4 an umbrella pine, 5 a columnar cactus. For a picture, `r` is the crown's half-width in
+   * pixels and `h` the stem's height.
+   */
   shape: number;
 }
+
+/** Stamp shapes from this value up are pictures. */
+export const SHAPE_PICTURE = 2;
+export const SHAPE = { dome: 0, cone: 1, palm: 2, acacia: 3, pine: 4, cactus: 5 } as const;
 
 /** Palette lookup: index (material << 8) | light → packed RGBA (little-endian 0xAABBGGRR). */
 export type Palette = Uint32Array;

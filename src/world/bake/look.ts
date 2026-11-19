@@ -83,5 +83,6 @@ export function worldLook(n: number, palette: Palette): Look {
     apronRock: M.boulder,
     isBuilt,
     isChannel: channelFlags(),
+    stem: M.trunk,
   };
 }

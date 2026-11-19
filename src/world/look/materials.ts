@@ -286,11 +286,19 @@ export const MATERIAL = {
   trunk: 159,
   /** A termite mound. */
   mound: 160,
+
+  // Built things of the climates.
+  /** Mud plaster: the wall of a house of the desert and the savanna. */
+  adobe: 161,
+  /** Thatch: a roof of grass or palm. */
+  thatch: 162,
+  /** A turf roof of the far north. */
+  turf: 163,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 161;
+export const MATERIAL_COUNT = 164;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -352,6 +360,7 @@ export const isBuilt: Uint8Array = flags([
   M.whitewash, M.plaster, M.stone, M.stoneDark, M.roofSlate, M.roofTile, M.roofLead, M.timber, M.brick, M.opening,
   M.cobble, M.gilt, M.dial, M.lantern, M.sailcloth, M.quarry,
   M.copper, M.plasterButter, M.plasterRose, M.plasterSage, M.plasterSea, M.ivy, M.moss,
+  M.adobe, M.thatch, M.turf,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */
