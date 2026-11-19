@@ -1,11 +1,11 @@
 {
-  "worldId": "ae1d17a8da49",
+  "worldId": "df6c80303138",
   "bySite": {
-    "bridge-0": "skyspace",
-    "lighthouse-3": "HoldTrue",
-    "lighthouse-4": "leaf",
+    "bridge-0": "project-plant",
+    "cathedral-0": "leaf",
+    "lighthouse-0": "HoldTrue",
     "town-0": "DermAtlas",
-    "yew-0": "project-plant",
-    "yew-1": "MeetMe"
+    "windmill-0": "MeetMe",
+    "yew-0": "skyspace"
   }
 }

@@ -97,7 +97,55 @@ dunes half as tall again, wider apart and full-bodied; termite mounds rare and b
 thorn in the bands; the Mediterranean's dress sooner and to straw, cypress rarer; a calmer green by a desert river;
 lower jungle crowns and a quieter emergent.
 
+**Round 5 (2026-11-19: the owner's decisions, and landforms).** The climates no longer mirror about the equator:
+the route through home is the wet side (taiga, temperate, warm forest, jungle) and the other the dry side (stony
+tundra, steppe, Mediterranean, desert, savanna), so a lap meets each climate once. New looks: the warm forest (woods
+closing over the temperate fields, slopes first, evergreen crowns with the jungle's coming in); the steppe as its
+own country (khaki grass, wheat, pine groves, grey-green bushes, green only by water); the Mediterranean in sage
+with garrigue in patches and fewer pines; a hotter, drier desert core (2 % of the land on the first curves, 5 %
+after); warm sandstone in place of slate on desert hills. Landforms by climate over the grown land: desert benches
+with red scarps, dune ridges on the sand seas, an ice sheet filling hollows, karst towers in the jungle, rock domes
+on the savanna. Seven landmarks, each in its climate: lighthouse by the pack ice, yew off the home island, ruined
+cathedral in the jungle, bridge in the Mediterranean, windmill on the steppe.
+
+**Round 5, scored by a fresh critic** (one Opus critic, art and geography together, on the overview before and
+after, five sheets of labelled close views and a sheet of the same places before climates; a different critic from
+rounds 1 and 3, so compare with care).
+
+| Biome | Reads | Style | Craft | What the critic saw |
+|---|---|---|---|---|
+| Ice and pack | 3 | 3 | 1 | Dark dashes all over the ice, stray ink strokes, straight lines through the floes |
+| Tundra | 2 | 3 | 2 | The view was an alpine snowfield over conifers, not tundra |
+| Taiga | 2 | 3 | 2 | Rust-brown slopes under lavender snow read as autumn or desert; the coast view names itself |
+| Temperate | 4 | 4 | 3 | Unchanged and good |
+| Warm forest | 1 | 4 | 3 | The temperate look a shade darker |
+| Jungle | 3 | 3 | 2 | Pale grey cones in the canopy like tents (the towers' limestone); tonal steps in the canopy |
+| Savanna | 2 | 3 | 2 | Red squiggle stamps evenly over the slopes; dark clumps, no flat-topped trees on the hills |
+| Desert | 3 | 2 | 1 | Green ribbons in every valley, trees on the sand, lavender-grey washes that look dirty |
+| Mediterranean | 1 | 4 | 3 | Green hills with tan stripes: a visitor would call them temperate |
+| Steppe | 3 | 3 | 3 | Too many trees for open grassland |
+
+The world as a whole, before → after: Variety 2 → 7, Depth 5 → 6, Quality 7 → 5, Detail 6 → 6. The overview as a
+globe 2 of 4: the two sides do read as different (green wet above the equator, khaki and orange dry below), but the
+middle climates run together; the taiga's dark green and the jungle's read as one forest twice; the rust of the
+polar islands as a second desert; the sea ice and the clear tropical sea as two latitude bands that ignore the
+land. Landforms: benches and scarps 3 of 4 ("red badlands"), dune ridges 1, karst towers 1 ("darker bumps, no
+height"), ice sheet 2. Landmarks: abbey, town and lighthouse strong; cathedral small and pale; the bridge's ground
+read as steppe and the windmill's as Mediterranean; the yew weakest, a dark blob by a building.
+
+**Round 6 (changes on round 5's findings, not yet scored).** The Mediterranean has its own sage sward (three new
+materials, greyer and paler than any temperate green), white limestone for its crags, opener woods and a lighter
+maquis; the warm forest has palms in its clearings and along its shores; the desert's gravel shades warm, sand and
+gravel carry a third of their bushes, and only a real river greens its banks; crevasses rare, pale and only on
+steep ice; the savanna's red earth rare and off the banks; the steppe a sixth of its bushes; a field's grass in dry
+country is sage, not a temperate green; less russet in the tundra; the pack ice reaches further over a shelf and
+less over deep sea, so its edge follows the land more; dune ridges closer set; towers a little taller. The windmill
+now stands in the Mediterranean and the bridge on the steppe, as the critic read their grounds. Not answered: the
+yew's own drawing; towers and dune ridges that read at a glance (towers want to be drawn at cell size, as sea
+stacks are); the taiga's and the jungle's greens on the overview; tundra on level ground in a close view.
+
+
 Consensus left: the borders the tests hold to 150 cells are measured on level ground, and on the map a long island
 lying along a latitude still changes climate along a line that follows it; one south-west wind puts rain on the same
-side of every island, where a globe has trades and westerlies; the open polar sea is the temperate blue; the ice cap
-on level land has little form of its own; rounds 2 and 3 want a fresh critic's scores.
+side of every island, where a globe has trades and westerlies; the open polar sea is the temperate blue; the land's
+outlines and rivers are the temperate generator's in every climate (the landforms work over them).

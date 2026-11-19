@@ -68,15 +68,20 @@ Last updated 2026-11-19.
   description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
   is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
   discovery, by repository. Preview a site with `/world?at=<site id>`.
-- **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round: latitude is a band of
-  temperature from an equator line to a pole line and back, cooler with height, more extreme inland, with rain by
-  zone. Nine climates from one rule table read with the climate's offset of height: ice with plate pack ice, tundra,
-  taiga, temperate (unchanged to the byte, and held round the home island), Mediterranean, steppe, desert with real
-  dunes and dry wadis, savanna, jungle. Palms, acacias, umbrella pines and cactus are small pictures drawn over the
-  painted land. One landmark of each kind, each in its own climate; hamlets and houses by climate. Sea-level
-  temperature ships as one more section a region (about 4 KB); the haze and the manifest know the climate. Design,
-  decisions waiting and follow-ups: `specs/2026-11-18-biomes-and-climate-design.md`. The world on disk has not been
-  re-shipped: `npm run world:build -- --seed 3 --n 10240 --cache` makes the new one.
+- **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round, and its two routes differ
+  (the owner's decisions of 2026-11-19). Temperature is a band by latitude from an equator line to a pole line and
+  back, cooler with height. The route through home is the wet side: taiga, the temperate belt (unchanged to the
+  byte, and held round the home island), warm forest, jungle. The other is the dry side: stony tundra, steppe, the
+  Mediterranean, desert with sand seas and wadis, savanna. So a lap meets each of ten climates once. Landforms by
+  climate reshape the grown land outside the temperate belt: desert benches, mesas and dune ridges, an ice sheet,
+  karst towers in the jungle, rock domes on the savanna (`gen/landforms.ts`); rivers, coasts and the home island
+  are untouched. Palms, acacias, umbrella pines and cactus are small pictures drawn over the painted land. Seven
+  landmarks, one of each kind, each in a climate that suits it: the lighthouse by the pack ice, the yew in temperate
+  country off the home island, the ruined cathedral in the jungle, the windmill in the Mediterranean, the bridge on
+  the steppe. Hamlets and houses by climate. Temperature and the dry side's share ship as two more sections a region;
+  the haze and the manifest know the climate. Design, measurements and follow-ups:
+  `specs/2026-11-18-biomes-and-climate-design.md`. The world on disk has not been re-shipped: `npm run world:build --
+  --seed 3 --n 10240 --cache` makes the new one, and `src/world/sites/assignments.json` is pinned to it.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
@@ -247,9 +252,13 @@ From the climates (2026-11-19):
   `isSea` in life, sights, rare and moments).
 - Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
   pasture; no animal belongs to the new climates yet.
-- Islands grown for their climate (atolls and reefs, more fjords in the cold): a plan-stage change and a seed search.
-- The ice cap on level land is flat; black sand on tropical volcanic islands; tidewater glaciers; burn scars on the
-  savanna. Rounds 2 and 3 of the climate looks have not been scored by a fresh critic (look ledger).
+- Land grown for its climate (plains for the steppe, plateaux and few rivers in the desert, fjords in the cold,
+  atolls and deltas in the tropics): the plan, uplift, erosion and rain take the climate. A new land everywhere but
+  home, a seed search and a judging round; the owner's to ask for (spec 6.6, **[Decide 4]**). The landform stage built
+  now works over the land as grown.
+- The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
+  are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.
+- Black sand on tropical volcanic islands; tidewater glaciers; burn scars on the savanna.
 
 From landing (2026-11-18):
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
@@ -266,10 +275,11 @@ From the first-flight review:
 
 ## Decisions waiting: climates (2026-11-19)
 
-All in `specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise:
-the looping climate on the torus in place of a true sphere; north colder at home; the home island kept temperate with
-the belt swelling round it; no new water colours yet; the world stays 10240 for now; thirteen landmarks, none
-repeated, six of them new (which asks the story for six more keepers, or leaves those six without one).
+The owner decided the large ones on 2026-11-19 (a simple story that asks nothing of the generator; two sides, each
+climate once a lap; seven landmarks; size left to the design, which keeps 10240). Still open in
+`specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise: north
+colder at home; the home island kept temperate with the belt swelling round it; no new water colours yet; and
+whether to grow each climate's land natively (6.6).
 
 ## Decisions waiting (2026-11-18 morning)
 
