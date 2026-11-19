@@ -6,7 +6,9 @@ import { firstPad, NO_PRESSES, padFamily, presses, readPad, type PadFamily, type
 import type { Device, Lit, Tap } from "../../world/controls/guides";
 import { paceOf, type Options } from "../../world/controls/options";
 import type { FlightInput } from "../../world/runtime/flight";
+import { pointTurn } from "../../world/controls/steer";
 import type { PhaseKind } from "./session";
+import type { TouchFrame } from "./touchLayer";
 
 export interface ControlsHooks {
   /** What holds the keys instead of the flight: the abbey's terminal, the options panel, or nothing. */
@@ -23,6 +25,10 @@ export interface ControlsHooks {
   toggleOptions(): void;
   /** The device the guides are drawn for has changed. */
   device(d: Device): void;
+  /** Touch flight this frame (the stick, Boost and Brake, Land taps), when the page has touch controls. */
+  touch?(): TouchFrame | null;
+  /** The dragon's heading, which the touch stick steers toward. */
+  heading?(): number;
 }
 
 /** What the controls ask of the flight this frame. */
@@ -47,6 +53,8 @@ export interface TapTarget {
 
 export interface Controls {
   frame(): ControlRead;
+  /** The device used last. */
+  device(): Device;
   /** The guide drawn this frame, for clicks and taps. */
   target(t: TapTarget | null): void;
   dispose(): void;
@@ -80,6 +88,8 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
   let padSlowBefore = false;
   let pad: PadFamily = "generic";
   let target: TapTarget | null = null;
+  // The last turn asked for: a stick flicked straight behind keeps turning this way.
+  let lastTurn = 0;
   // The page starts out drawing for a keyboard: tell it if this is a touch screen.
   if (device !== "keyboard") hooks.device(device);
 
@@ -168,6 +178,9 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
   const onPointerMove = (e: PointerEvent) => {
     canvas.style.cursor = onTarget(e) ? "pointer" : "";
   };
+  const onAnyPointer = (e: PointerEvent) => {
+    if (e.pointerType === "touch" || e.pointerType === "pen") switchTo("touch");
+  };
   const onPadConnected = () => {
     pads += 1;
   };
@@ -183,6 +196,7 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
   window.addEventListener("gamepaddisconnected", onPadDisconnected);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerdown", onAnyPointer, true);
 
   /** The pad this frame: presses act, the reading steers. Null with no pad. */
   const pollPad = (): PadRead | null => {
@@ -217,19 +231,49 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
       const free = hooks.busy() === null;
       const keys = free ? heldFrom(down, options.keys) : NONE_HELD;
       const padTurn = read?.turn ?? 0;
-      const turn = padTurn !== 0 ? padTurn : (keys.left ? -1 : 0) + (keys.right ? 1 : 0);
-      const holdBoost = keys.boost || (read?.boost ?? false);
-      const slow = keys.slow || (read?.slow ?? false);
+      const tf = free ? (hooks.touch?.() ?? null) : null;
+      if (tf) {
+        // Toggle boost flips on a press of the Boost button; Brake turns it off, as the keys do.
+        for (const p of tf.presses) {
+          if (p === "boost" && options.boost === "toggle") boostOn = !boostOn;
+          if (p === "brake") boostOn = false;
+        }
+        for (const t of tf.taps) if (t === "land") landOrTakeOff();
+      }
+      const stick = tf?.stick.mag ?? 0;
+      let turn: number;
+      if (tf && stick > 0) turn = pointTurn(tf.stick, hooks.heading?.() ?? 0, lastTurn);
+      else if (padTurn !== 0) turn = padTurn;
+      else if (tf && tf.tilt !== null && tf.tilt !== 0) turn = tf.tilt;
+      else turn = (keys.left ? -1 : 0) + (keys.right ? 1 : 0);
+      if (turn !== 0) lastTurn = turn;
+      const touchBoost = tf?.boost ?? false;
+      const touchSlow = tf?.brake ?? false;
+      const holdBoost = keys.boost || (read?.boost ?? false) || touchBoost;
+      const slow = keys.slow || (read?.slow ?? false) || touchSlow;
       if (options.boost === "hold") boostOn = false;
-      const boost = options.boost === "toggle" ? boostOn : holdBoost;
+      const rim = tf?.rim ?? false;
+      const boost = (options.boost === "toggle" ? boostOn : holdBoost) || rim;
+      // For the lesson, a stick pushed past half-way steers both ways: point steering has no left and right of its own.
+      const steering = stick > 0.5;
       return {
         input: { turn, boost, brake: slow, pace: paceOf(options) },
-        held: { left: keys.left || padTurn < -0.5, right: keys.right || padTurn > 0.5, boost: holdBoost || boost, slow },
-        lit: { keys: down, turn: padTurn !== 0, boost: (read?.boost ?? false) || (options.boost === "toggle" && boostOn), slow: read?.slow ?? false, south: read?.down.land ?? false, east: read?.down.back ?? false },
+        held: { left: keys.left || padTurn < -0.5 || steering, right: keys.right || padTurn > 0.5 || steering, boost: holdBoost || boost, slow },
+        lit: {
+          keys: down,
+          turn: padTurn !== 0 || stick > 0,
+          boost: (read?.boost ?? false) || touchBoost || rim || (options.boost === "toggle" && boostOn),
+          slow: (read?.slow ?? false) || touchSlow,
+          south: read?.down.land ?? false,
+          east: read?.down.back ?? false,
+        },
         pad,
         device,
         family,
       };
+    },
+    device() {
+      return device;
     },
     target(t) {
       target = t;
@@ -242,6 +286,7 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
       window.removeEventListener("gamepaddisconnected", onPadDisconnected);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerdown", onAnyPointer, true);
     },
   };
 }

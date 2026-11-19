@@ -22,8 +22,10 @@ import { blit } from "../../world/controls/blit";
 import { chooseSlot, clampInto, guideFor, slotAt, SLOTS, SLOTS_HIGH, type Device, type Slot } from "../../world/controls/guides";
 import { LESSON_KEY, newLesson, stepLesson } from "../../world/controls/lesson";
 import type { Options } from "../../world/controls/options";
+import { createPacer, phoneWorkers } from "../../world/mobile/perf";
 import { createControls } from "./controls";
 import { storage } from "./optionsStore";
+import type { TouchLayer } from "./touchLayer";
 
 export const FRAME_W = 400;
 export const FRAME_H = 225;
@@ -38,6 +40,11 @@ const BODY_JOINTS = 16;
 const BODY_SPACING = 5.5;
 /** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
 const GLIDE = 10;
+/** A gap this long between frames, while flying on a touch screen, is a stall: the page was frozen, s. */
+const STALL = 0.25;
+/** Where a touch flight was, kept every so often so a reload after the phone reclaims the tab starts there. */
+const WHERE_KEY = "world:where";
+const WHERE_EVERY = 2;
 
 export type PhaseKind = Phase["kind"];
 
@@ -63,6 +70,10 @@ export interface FlightEvents {
   device(d: Device): void;
   /** The options key or the pad's Menu was pressed. */
   toggleOptions(): void;
+  /** A touch flight's frames stopped for a while (the page was frozen): the page pauses it. */
+  stall?(): void;
+  /** Something worth a light tick on a phone: a landing touched down, or a discovery. */
+  buzz?(what: "landed" | "discovery"): void;
 }
 
 export interface FlightSetup {
@@ -75,6 +86,12 @@ export interface FlightSetup {
   optionsOpen(): boolean;
   /** The options in force, read each frame. */
   options(): Options;
+  /** True while the flight is held still: the first card, a pause, the phone upright. The world still loads. */
+  paused?(): boolean;
+  /** A phone (read when the world has loaded): two bake workers, and a frame rate that steps down to 30. */
+  phone?(): boolean;
+  /** The touch controls, made once the canvas is in the page; null without touch flight. */
+  touch?: (canvas: HTMLCanvasElement, hooks: { options(): Options; ghost(): boolean; touched(): void }) => TouchLayer | null;
 }
 
 export interface FlightSession {
@@ -101,6 +118,8 @@ interface FlightProbe {
   baked: () => number;
   error: string | null;
   workerErrors: string[];
+  /** Where the flight is, for the mobile tests: position, heading, speed, phase, and whether it is held still. */
+  state?: () => { x: number; y: number; heading: number; speed: number; phase: string; paused: boolean; workers: number; rate: number };
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -141,6 +160,18 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
     : null;
   if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
+  if (probe) {
+    probe.state = () => ({
+      x: flight?.x ?? 0,
+      y: flight?.y ?? 0,
+      heading: flight?.heading ?? 0,
+      speed: flight?.speed ?? 0,
+      phase: phase.kind,
+      paused: isPaused(),
+      workers: pool?.stats().workers ?? 0,
+      rate: pacerRate(),
+    });
+  }
 
   let flight: FlightState | null = null;
   let worldN = 0;
@@ -156,6 +187,16 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   // The first-flight lesson, until it has been learned once.
   let lesson = newLesson(store?.getItem(LESSON_KEY) === "learned");
   let lessonStored = lesson.stage === "done";
+
+  // Touch flight: the controls, whether they take touches this frame, and the frame's dt for them.
+  const isPaused = setup.paused ?? (() => false);
+  // The phone pacer's cap, for the probe; 60 where there is none.
+  let pacerRate: () => number = () => 60;
+  let touchLive = false;
+  let touchDt = 0;
+  const touchLayer = setup.touch
+    ? setup.touch(canvas, { options: setup.options, ghost: () => lesson.stage !== "done", touched: () => undefined })
+    : null;
 
   const doLand = () => {
     if (!flight || !groundHeight) return;
@@ -197,6 +238,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     },
     toggleOptions: events.toggleOptions,
     device: events.device,
+    touch: () => (touchLayer && touchLive ? touchLayer.frame(touchDt) : null),
+    heading: () => flight?.heading ?? 0,
   });
 
   const discoveries = createDiscoveries(store, () => performance.now());
@@ -220,7 +263,11 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const coast = new Float32Array(loaded.core.overview.length);
     for (let i = 0; i < coast.length; i++) coast[i] = loaded.core.overview[i] === 0 ? -1 : loaded.core.overview[i];
 
-    const size = clamp((navigator.hardwareConcurrency ?? 2) - 1, 1, 4);
+    // A phone bakes with two workers: iOS reports four cores on every iPhone, and each worker holds 30–50 MB.
+    const isPhone = setup.phone?.() ?? false;
+    const size = isPhone
+      ? phoneWorkers((navigator as Navigator & { deviceMemory?: number }).deviceMemory)
+      : clamp((navigator.hardwareConcurrency ?? 2) - 1, 1, 4);
     const workers = createPool(
       () => new Worker(new URL("../../world/runtime/bake.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike,
       size,
@@ -269,7 +316,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     // ?at=<site id> starts just south of a site, heading for it: a preview, like ?sights=all.
     const at = params.get("at");
     const atSite = at ? loaded.manifest.sites.find((s) => s.id === at) : undefined;
-    const start = atSite ? { x: atSite.x, y: (atSite.y + AT_SOUTH) % worldN, dx: 0, dy: -1 } : loaded.manifest.start;
+    const where = !atSite && setup.touch ? savedWhere(worldN) : null;
+    const start = atSite
+      ? { x: atSite.x, y: (atSite.y + AT_SOUTH) % worldN, dx: 0, dy: -1 }
+      : where ?? loaded.manifest.start;
     flight = startState(start, view);
     const sky = createSky(loaded.manifest.seed, regions.n, styleFrom(params.get("clouds")), loaded.manifest.start);
     const dragon = createDragon(worldN);
@@ -279,15 +329,29 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const imageData = ctx.createImageData(FRAME_W, FRAME_H);
     const buffer = new Uint32Array(imageData.data.buffer);
     const frame = new Uint32Array(FRAME_W * FRAME_H);
-    const clock = { last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "" };
+    const clock = { last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "", where: 0, wasPaused: true };
+    const pacer = isPhone ? createPacer() : null;
+    if (pacer) pacerRate = () => pacer.rate();
     // Where the guide stands: its slot round the head, where it was drawn, and what is left of a glide between slots.
     const place = { slot: null as Slot | null, x: 0, y: 0, carryX: 0, carryY: 0 };
 
     const tick = (t: number) => {
       if (!alive || !flight) return;
+      if (pacer && !pacer.want(t)) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       const work = performance.now();
-      const dt = clock.last ? (t - clock.last) / 1000 : 0;
+      const paused = isPaused();
+      const gap = clock.last ? (t - clock.last) / 1000 : 0;
+      // Held still, the flight does not move; coming back, it starts from now, not from the pause.
+      const dt = paused || clock.wasPaused ? 0 : gap;
+      if (!paused && !clock.wasPaused && setup.touch && gap > STALL && document.visibilityState === "visible") events.stall?.();
+      clock.wasPaused = paused;
       clock.last = t;
+      touchDt = dt;
+      touchLive = touchLayer !== null && !paused && phase.kind === "flying";
+      touchLayer?.setLive(touchLive && controls.device() === "touch");
       const options = setup.options();
       const reduced = options.motion === "reduced";
       const controlsStart = performance.now();
@@ -304,6 +368,11 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
           discoveries.discover(d.id, d.label);
         }
         events.phase("landed", l);
+        events.buzz?.("landed");
+      }
+      if (setup.touch && phase.kind === "flying" && t / 1000 - clock.where >= WHERE_EVERY) {
+        clock.where = t / 1000;
+        saveWhere(flight, worldN);
       }
       const settling = phase.kind !== "flying";
       // Under reduced motion the camera cuts to the landmark and back instead of swooping.
@@ -317,7 +386,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const skyStart = performance.now();
       sky.draw(frame, rect, t / 1000, "below");
       const skyBelow = performance.now() - skyStart;
-      dragon.step(flight, Math.min(dt, 0.1), restShare(phase));
+      if (dt > 0) dragon.step(flight, Math.min(dt, 0.1), restShare(phase));
       dragon.draw(frame, rect, flight, view, !reduced);
       const skyAgain = performance.now();
       sky.draw(frame, rect, t / 1000, "above");
@@ -326,8 +395,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // The guide by the dragon: a prompt when there is something to press, else the lesson while it is taught.
       const guideStart = performance.now();
       const offer = offered(phase, flight.x, flight.y, targets, worldN);
+      touchLayer?.setLand(offer !== null);
       const prompting = phase.kind !== "flying" || offer !== null;
-      const teachable = readyFrame && asked.device !== "touch" && !setup.optionsOpen();
+      const teachable = readyFrame && !paused && (asked.device !== "touch" || touchLayer !== null) && !setup.optionsOpen();
       lesson = stepLesson(lesson, dt, asked.held, teachable && !prompting, reduced);
       if (lesson.stage === "done" && !lessonStored) {
         lessonStored = true;
@@ -337,7 +407,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
           // storage refused: the lesson shows again next visit
         }
       }
-      const guide = guideFor({
+      const guide = paused ? null : guideFor({
         device: asked.device,
         phase: phase.kind,
         offer: offer ? offerName(byId.get(offer.id)) : null,
@@ -382,6 +452,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         place.slot = null;
         controls.target(null);
       }
+      touchLayer?.draw(frame, FRAME_W, FRAME_H);
       const say = guide?.say ?? "";
       if (say !== clock.say) {
         clock.say = say;
@@ -392,6 +463,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       buffer.set(frame);
       ctx.putImageData(imageData, 0, 0);
 
+      pacer?.worked(performance.now() - work);
       const ready = view.ready();
       if (ready) readyFrame = true;
       if (probe) {
@@ -405,6 +477,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         clock.captionPoll = t;
         const cap = discoveries.caption();
         if (cap !== clock.caption) {
+          if (cap !== null && clock.caption !== undefined) events.buzz?.("discovery");
           clock.caption = cap;
           events.caption(cap);
         }
@@ -448,6 +521,29 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       cancelAnimationFrame(raf);
       pool?.dispose();
       controls.dispose();
+      touchLayer?.dispose();
     },
   };
+}
+
+/** The touch flight's last saved place, if it is in this world. */
+function savedWhere(n: number): { x: number; y: number; dx: number; dy: number } | null {
+  try {
+    const raw = window.sessionStorage.getItem(WHERE_KEY);
+    if (!raw) return null;
+    const w = JSON.parse(raw) as { x?: unknown; y?: unknown; h?: unknown; n?: unknown };
+    if (typeof w.x !== "number" || typeof w.y !== "number" || typeof w.h !== "number" || w.n !== n) return null;
+    if (!Number.isFinite(w.x) || !Number.isFinite(w.y) || !Number.isFinite(w.h)) return null;
+    return { x: w.x, y: w.y, dx: Math.cos(w.h), dy: Math.sin(w.h) };
+  } catch {
+    return null;
+  }
+}
+
+function saveWhere(s: FlightState, n: number): void {
+  try {
+    window.sessionStorage.setItem(WHERE_KEY, JSON.stringify({ x: s.x, y: s.y, h: s.heading, n }));
+  } catch {
+    // storage refused: a reload starts at the start
+  }
 }

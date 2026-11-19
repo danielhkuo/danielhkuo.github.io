@@ -14,6 +14,8 @@ export const VERMILION_DARK = 6;
 export const GOLD = 7;
 export const SHADOW = 8;
 export const INK_SOFT = 9;
+/** The paper, half seen through: the touch stick's well, so the land shows under it. */
+export const PAPER_WASH = 10;
 
 /** r, g, b, a (0–255) for each slot. The Codex sheet's colours, so the guides and the Codex read as one hand. */
 export const COLOURS: readonly (readonly [number, number, number, number])[] = [
@@ -27,6 +29,7 @@ export const COLOURS: readonly (readonly [number, number, number, number])[] = [
   [217, 166, 55, 255],
   [46, 42, 36, 80],
   [90, 82, 70, 255],
+  [240, 232, 210, 120],
 ];
 
 /** A small picture: w × h palette slots, row-major. */

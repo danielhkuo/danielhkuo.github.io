@@ -16,14 +16,40 @@ export interface Options {
   /** Reduced: no boost streaks, a cut for the landing camera, guides that neither fade nor pulse. */
   motion: "full" | "reduced";
   keys: Keys;
+  /** Touch: which thumb steers. Right-handed puts the stick on the left and the buttons on the right. */
+  hand: "right" | "left";
+  /** Touch: the controls' size, 80, 100, 125 or 150%. */
+  size: "s" | "m" | "l" | "xl";
+  /** Touch: the controls fade when untouched, or stay solid. */
+  fade: "fade" | "solid";
+  /** Touch: with one thumb, pushing the stick to its rim boosts. */
+  thumb: "two" | "one";
+  /** Touch: a light tick on Boost, a landing and a discovery, where the phone can (Android). */
+  buzz: "on" | "off";
+  /** Touch: steer by tilting the phone like a wheel. */
+  tilt: "off" | "on";
 }
+
+/** The size setting as a scale. */
+export const SIZE_SCALE: Record<Options["size"], number> = { s: 0.8, m: 1, l: 1.25, xl: 1.5 };
 
 export const OPTIONS_KEY = "world:options";
 /** The gentle pace, as a share of cruising speed. */
 export const GENTLE = 0.6;
 
 export function defaultOptions(prefersReducedMotion: boolean): Options {
-  return { boost: "hold", pace: "cruise", motion: prefersReducedMotion ? "reduced" : "full", keys: { ...DEFAULT_KEYS } };
+  return {
+    boost: "hold",
+    pace: "cruise",
+    motion: prefersReducedMotion ? "reduced" : "full",
+    keys: { ...DEFAULT_KEYS },
+    hand: "right",
+    size: "m",
+    fade: "fade",
+    thumb: "two",
+    buzz: "on",
+    tilt: "off",
+  };
 }
 
 /** The keys in `raw`, where each is a key that can be bound and no two actions share one; the defaults otherwise. */
@@ -52,6 +78,12 @@ export function readOptions(store: Store | null, prefersReducedMotion: boolean):
       pace: o.pace === "gentle" ? "gentle" : "cruise",
       motion: o.motion === "reduced" ? "reduced" : o.motion === "full" ? "full" : d.motion,
       keys: keysFrom(o.keys),
+      hand: o.hand === "left" ? "left" : "right",
+      size: o.size === "s" || o.size === "l" || o.size === "xl" ? o.size : "m",
+      fade: o.fade === "solid" ? "solid" : "fade",
+      thumb: o.thumb === "one" ? "one" : "two",
+      buzz: o.buzz === "off" ? "off" : "on",
+      tilt: o.tilt === "on" ? "on" : "off",
     };
   } catch {
     return d;

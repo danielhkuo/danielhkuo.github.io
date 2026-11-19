@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { Device } from "../../world/controls/guides";
 import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
-import { startFlight, type FlightSession, type FlightStats, type PhaseKind } from "./session";
+import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
 import type { TerminalLink } from "./useTerminalDrawer";
 
 export interface Caption {
@@ -17,6 +17,15 @@ export interface Caption {
 export interface PanelLink {
   isOpen(): boolean;
   toggle(): void;
+}
+
+/** What a touch flight adds: the shell's pause, the phone's budgets, the touch controls and the ticks. */
+export interface TouchLink {
+  paused(): boolean;
+  stall(): void;
+  phone(): boolean;
+  touch: NonNullable<FlightSetup["touch"]>;
+  buzz(what: "landed" | "discovery"): void;
 }
 
 export interface FlightView {
@@ -36,7 +45,7 @@ export interface FlightView {
 
 /** Runs a flight on the canvas while the page is open, and mirrors what it reports into React state. */
 export function useFlight(
-  canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink,
+  canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink, touch: TouchLink,
 ): FlightView {
   const [failed, setFailed] = useState(false);
   const [phase, setPhase] = useState<FlightView["phase"]>({ kind: "flying", at: null });
@@ -51,7 +60,16 @@ export function useFlight(
     if (!el) return;
     const s = startFlight(
       el,
-      { landmarks, terminalOpen: terminal.isOpen, closeTerminal: terminal.close, optionsOpen: panel.isOpen, options: getOptions },
+      {
+        landmarks,
+        terminalOpen: terminal.isOpen,
+        closeTerminal: terminal.close,
+        optionsOpen: panel.isOpen,
+        options: getOptions,
+        paused: touch.paused,
+        phone: touch.phone,
+        touch: touch.touch,
+      },
       {
         failed: () => setFailed(true),
         phase: (kind, at) => {
@@ -64,6 +82,8 @@ export function useFlight(
         say: setSay,
         device: setDevice,
         toggleOptions: panel.toggle,
+        stall: touch.stall,
+        buzz: touch.buzz,
       },
     );
     session.current = s;
@@ -72,7 +92,7 @@ export function useFlight(
       session.current = null;
     };
     // `landmarks` is a build-time prop and the links are stable: the flight runs once per page.
-  }, [canvas, landmarks, terminal, panel]);
+  }, [canvas, landmarks, terminal, panel, touch]);
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);

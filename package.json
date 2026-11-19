@@ -23,7 +23,9 @@
     "world:build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-build.ts",
     "world:map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-map.ts",
     "bench:cbonsai": "node scripts/bench-cbonsai.mjs",
-    "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs"
+    "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs",
+    "world:controls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-controls.ts",
+    "test:mobile": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/world-mobile.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.6.2",
