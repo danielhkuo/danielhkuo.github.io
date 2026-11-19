@@ -7,6 +7,10 @@ import ProjectCard from "@/components/ProjectCard";
 import TerminalLauncher from "@/components/terminal/TerminalLauncher";
 import { fetchPinnedRepos } from "@/lib/github";
 import { VStack, HStack, Grid, Heading, Text } from "@astryxdesign/core";
+import PhoneSwitch from "@/components/title/phone/PhoneSwitch";
+import PhoneTitle from "@/components/title/phone/PhoneTitle";
+import { PHONE_TAGLINE, phoneEntries } from "@/components/title/phone/copy";
+import { startBytes } from "./world/startBytes";
 
 export const metadata: Metadata = {
   title: "Daniel Kuo",
@@ -58,7 +62,7 @@ export default async function Home() {
     forks: p.forkCount,
   }));
 
-  return (
+  const home = (
     <VStack gap={0} width="100%" height="100%" className="min-h-screen bg-bg text-text-primary">
       <NeofetchHeader projects={headerProjects} />
 
@@ -113,4 +117,10 @@ export default async function Home() {
       <TerminalLauncher projects={terminalProjects} site={site} />
     </VStack>
   );
+
+  // Phones get their own title screen; everything else gets this page as it was (mobile design §2, and its "As built"
+  // note: docs/superpowers/specs/2026-11-18-mobile-design.md). One switch, so the parked desktop title can take the
+  // desktop side alone.
+  const phone = <PhoneTitle entries={phoneEntries(startBytes() / 1_000_000)} tagline={PHONE_TAGLINE} selected="recruiter" />;
+  return <PhoneSwitch phone={phone}>{home}</PhoneSwitch>;
 }

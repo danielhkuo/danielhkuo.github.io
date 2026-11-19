@@ -43,6 +43,18 @@ test("the stick is a washed well in an inked ring, with a quatrefoil knob that r
 
 // Golden hashes of the pinned scenes: any change to the controls' pixels must be judged on renders and retaken here.
 const GOLDEN: Record<string, string> = {
+  "fill-held": "4aab6c44ddf2235fba89ec646d9e3841f99a6c065ffa9756581f1ed17ba2c644",
+  "fill-huge": "5331ecc33310cd80bfdc9246c7e02658bb26ac8a9ede7c5b4a810ac5effe2105",
+  "fill-idle": "ba951af8b1f776b68281350db314578ba4ac86507d6f92c132c5fb960c2046cc",
+  "fill-left": "3b1aef9b8daba2bd616b2a3ffe9ca8aa1c7408f22ac0327be3e55818dbf3c6ef",
+  "letterbox-held": "2ba7db5db64a751eb161b8d718fa9f81babe2f3b19c6d93a876f024fd489930b",
+  "letterbox-huge": "430ce679126052a80be3f8d86c214b1be36474f5c7c0bfe6af3dbff1d25398f0",
+  "letterbox-idle": "e50ba22a78422fb85145961e1f37348bef5c12782b609b7f601cf52e2c12652e",
+  "letterbox-left": "b37d6c027a0fe3efbde8a4a538a3bca14296dfd0876ab6d886f7ebb1b609fdb1",
+  "tabbar-held": "abc4a8c8eee5ef2f5df5a0380fcd47e85d094146defc0b52f05aa6ff2ad8a95a",
+  "tabbar-huge": "67e6f8c3e2a931dcfc1a6468b075f8bf0e19678c521a3b7baae27ab42cfc561e",
+  "tabbar-idle": "7da12d8ef6a685803b7dd85742869c0c4fbe6d86e827ceaca75a3acae0e13edd",
+  "tabbar-left": "9de95826b0ba938966aba27511b7d33cefa3f537a185e359c189006c08eea4ac",
 };
 
 test("the pinned scenes draw the same pixels as when they were judged", () => {

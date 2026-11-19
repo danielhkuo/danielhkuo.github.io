@@ -29,7 +29,7 @@ export const COLOURS: readonly (readonly [number, number, number, number])[] = [
   [217, 166, 55, 255],
   [46, 42, 36, 80],
   [90, 82, 70, 255],
-  [240, 232, 210, 120],
+  [240, 232, 210, 92],
 ];
 
 /** A small picture: w × h palette slots, row-major. */

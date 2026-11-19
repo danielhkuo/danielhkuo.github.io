@@ -193,12 +193,17 @@ export function useShell(root: RefObject<HTMLElement | null>): Shell {
       // page's own buttons keep their taps.
       if (!onDomControl(e.target)) e.preventDefault();
     };
-    for (const g of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(g, stop, { passive: false });
+    // WebKit's own pinch events: cancelled, they stop the page zooming where touch-action alone lets a pinch through.
+    document.addEventListener("gesturestart", stop, { passive: false });
+    document.addEventListener("gesturechange", stop, { passive: false });
+    document.addEventListener("gestureend", stop, { passive: false });
     el.addEventListener("touchstart", onTouchStart, { passive: false });
     el.addEventListener("contextmenu", stop);
     el.addEventListener("dblclick", stop);
     return () => {
-      for (const g of ["gesturestart", "gesturechange", "gestureend"]) document.removeEventListener(g, stop);
+      document.removeEventListener("gesturestart", stop);
+      document.removeEventListener("gesturechange", stop);
+      document.removeEventListener("gestureend", stop);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("contextmenu", stop);
       el.removeEventListener("dblclick", stop);

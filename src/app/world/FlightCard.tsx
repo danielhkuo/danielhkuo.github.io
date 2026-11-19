@@ -6,9 +6,9 @@
 
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
-import { INK_SOFT, plate, text, VERMILION } from "../../world/controls/glyphs";
+import { INK_SOFT, text, VERMILION } from "../../world/controls/glyphs";
 import type { Card } from "../../world/mobile/lifecycle";
-import { phoneTurn } from "../../world/mobile/art";
+import { cardPlate, phoneTurn, titleFoil } from "../../world/mobile/art";
 import styles from "./card.module.css";
 import PixelGlyph from "./PixelGlyph";
 
@@ -45,7 +45,7 @@ function Words({ children, px, ink, say }: { children: string; px: number; ink?:
 function Button({ word, say, lit, px, onClick }: { word: string; say: string; lit?: boolean; px: number; onClick(): void }) {
   return (
     <button type="button" className={`${styles.button} ${lit ? styles.primary : ""}`} onClick={onClick} data-act={word.replace(/ /g, "-")}>
-      <PixelGlyph sprite={plate(word, lit)} px={px} />
+      <PixelGlyph sprite={cardPlate(word, lit)} px={px} />
       <span className={styles.sr}>{say}</span>
     </button>
   );
@@ -123,8 +123,9 @@ export default function FlightCard(p: FlightCardProps) {
         {p.homeScreenHint ? (
           <p className={styles.note}>
             <Words px={px} say="For the whole screen, add this page to your Home Screen: Share, then Add to Home Screen.">
-              for the whole screen: share → add to home screen
+              for the whole screen:
             </Words>
+            <PixelGlyph sprite={text("share → add to home screen")} px={px} />
           </p>
         ) : null}
         <Leave px={px} />
@@ -133,14 +134,16 @@ export default function FlightCard(p: FlightCardProps) {
   }
   return (
     <div className={styles.veil} data-touch-skip="" data-card={p.card}>
-      <section className={styles.card} style={{ "--px": `${px}px` } as CSSProperties} role="dialog" aria-modal="true" aria-labelledby="flight-card-title">
+      {/* A dialog left in the page (open, not modal), so it turns with the flight when played sideways. */}
+      <dialog open className={styles.card} style={{ "--px": `${px}px` } as CSSProperties} aria-labelledby="flight-card-title">
         <h2 id="flight-card-title" className={styles.title}>
+          <PixelGlyph sprite={titleFoil()} px={px} />
           <Words px={px} ink={VERMILION}>
             {title}
           </Words>
         </h2>
         {body}
-      </section>
+      </dialog>
     </div>
   );
 }

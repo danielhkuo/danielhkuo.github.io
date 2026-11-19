@@ -350,8 +350,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       clock.wasPaused = paused;
       clock.last = t;
       touchDt = dt;
-      touchLive = touchLayer !== null && !paused && phase.kind === "flying";
-      touchLayer?.setLive(touchLive && controls.device() === "touch");
+      // Touch counts only while flying with touch the last device used: a desktop never pays for the layout.
+      touchLive = touchLayer !== null && !paused && phase.kind === "flying" && controls.device() === "touch";
+      touchLayer?.setLive(touchLive);
       const options = setup.options();
       const reduced = options.motion === "reduced";
       const controlsStart = performance.now();

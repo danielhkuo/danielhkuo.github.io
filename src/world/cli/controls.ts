@@ -51,6 +51,14 @@ function pasteScaled(dst: Sheet, dx: number, dy: number, src: Uint32Array, w: nu
   }
 }
 
+/** Pastes a w × h frame into the dw × dh box of `dst` at (dx, dy), nearest neighbour, as the page's canvas scales it. */
+function pasteFit(dst: Sheet, dx: number, dy: number, dw: number, dh: number, src: Uint32Array, w: number, h: number): void {
+  for (let y = 0; y < dh && dy + y < dst.h; y++) {
+    const from = Math.min(h - 1, Math.floor((y * h) / dh)) * w;
+    for (let x = 0; x < dw && dx + x < dst.w; x++) dst.px[(dy + y) * dst.w + dx + x] = src[from + Math.min(w - 1, Math.floor((x * w) / dw))];
+  }
+}
+
 function save(dir: string, name: string, s: Sheet): string {
   const file = join(dir, name);
   writeFileSync(file, encodePng(new Uint8Array(s.px.buffer, s.px.byteOffset, s.px.byteLength), s.w, s.h));
@@ -144,9 +152,8 @@ export async function main(): Promise<number> {
       const scene: ControlsScene = { layout, frame: rect, stick: knob, ghost: false, pressed: { boost: true, brake: false, land: false }, alpha: 1 };
       drawControls(out, fw, fh, scene);
       // The phone's screen at 2 sheet pixels a CSS pixel: paper round a letterboxed frame.
-      const scale = Math.max(1, Math.round((2 * rect.w) / fw));
       const shot = sheet(Math.round(screen.w * 2), Math.round(screen.h * 2));
-      pasteScaled(shot, Math.round(rect.x * 2), Math.round(rect.y * 2), out, fw, fh, scale);
+      pasteFit(shot, Math.round(rect.x * 2), Math.round(rect.y * 2), Math.round(rect.w * 2), Math.round(rect.h * 2), out, fw, fh);
       written.push(save(dir, `phone-${screen.name}-${place}.png`, shot));
       pieces.push(shot);
     }

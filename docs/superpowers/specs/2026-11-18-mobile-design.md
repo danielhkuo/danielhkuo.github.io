@@ -699,3 +699,46 @@ The research doc lists every unverified finding; these are the ones that bite he
   300 MB budget and the trim-not-terminate choice need a long flight on the smallest iPhone the owner can borrow.
 - **`putImageData` on iOS** may force a GPU readback each frame, and is unmeasured on phones.
 - **iOS 27** shipped in September 2026, and the Simulator runtime here is 26.5, so iOS 27 Safari is unmeasured.
+
+## As built (2026-11-19)
+
+Built on `claude/mobile-research-9125c0`, on top of `world/bigmap` (the controls guide, landing and the Codex). Where
+the build departs from the sections above:
+
+- **The frame (§3).** The shared canvas fitting is left to the edge-sprites session's fill-the-window work; the phone's
+  needs were passed on (size from `visualViewport`, whole device pixels per frame pixel, about 110,000 frame pixels at
+  most, the size held steady mid-flight). The touch controls are laid out inside the frame's on-screen rectangle, so
+  they work over today's letterboxed 400×225 and over a filled frame alike.
+- **The controls (§4).** As designed, numbers as in §4.1. Boost and Brake carry up and down chevrons, the shared glyph
+  set's own touch buttons, so the lesson's small glyphs match the big ones. Land is in the cluster, and the guide's
+  prompt by the dragon still lands on a tap too. The stick shows as a faint ghost until the first-flight lesson is
+  learned, then only under the thumb.
+- **The pause sheet (§5).** The options panel is the pause sheet on a touch screen: the corner's options plate opens
+  it, it holds the flight while open, and its Close reads "fly on". Interruptions show a small Paused card (Fly on,
+  options, leave). The phone's settings (hand, size, fade, one thumb, vibration, tilt) are a "touch" section of the
+  same panel, in place of the keys.
+- **The lesson (§7).** The shared lesson's stages are kept and drawn in touch glyphs: the stick, then the two speed
+  buttons, then the options plate ("pause · leave"). The land prompt teaches landing, as on a desktop.
+- **Not built.** Trimming the workers' caches after a minute hidden (§5) needs a new worker message; phones already run
+  two workers, so it waits for a long-flight measurement on a real iPhone. Audio unlock on Take wing waits for the
+  world to have sound.
+- **The phone title (§2).** Built in `src/components/title/phone/` (`PhoneTitle`, its own `copy.ts`) and mounted on
+  `/` for phones only. `PhoneSwitch` in `src/app/page.tsx` is one wrapper with a component each side. The title's
+  phone query (`phone.ts`, held to the CSS by a test) shows the phone title. The home page sits in a
+  `display: contents` box, so desktops lay out exactly as before. The hidden side is `display: none`, out of the
+  accessibility tree. The noindex route `/phone-title` stays as the bench Fable judged it on.
+- **Merging the title later.** The desktop title (the parked title-menu work) replaces the desktop side of the switch
+  alone. Its `copy.ts` and `title/phone/copy.ts` name the same four ways in, so the two should become one list
+  then.
+- **Links into other branches.** "Read the short version" goes to `/recruiter` (on `feat/dragon-world`), and on a phone
+  the abbey's terminal opens `/artificer#terminal`, which exists only once the title-menu work lands.
+
+Tests, as §9 asks:
+- **Unit, `npm test`.** `controls/{stick,steer,touch,options-touch,guides}`; `mobile/{layout,turned,lifecycle,perf,tilt,art}`.
+  The steering test flies the real flight model from 16 headings toward 8 directions. The art test pins the controls'
+  pixels by hashing twelve scenes.
+- **Browser, `npm run test:mobile`.** Fourteen flows in phone emulation with real multi-touch: the gate, two fingers,
+  touch cancel, upright and level, played sideways, no zoom or scroll, Back, hidden and blur, landing, Android
+  fullscreen and lock, an iPhone asking for neither, the lock lifting on leaving, and a desktop unchanged.
+- **Renders.** `npm run world:controls` draws the controls over the world. `scripts/world-mobile-shots.mjs` takes the
+  phone screenshots.

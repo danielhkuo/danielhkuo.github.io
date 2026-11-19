@@ -14,6 +14,10 @@
 }
 
 .card {
+  /* An open <dialog>: clear the UA's placement (absolute, auto margins and insets) so the veil centres it. */
+  position: static;
+  inset: auto;
+  margin: 0;
   --ink: #2e2a24;
   --paper: #f0e8d2;
   --face: #f8f2e1;
@@ -44,6 +48,14 @@
   line-height: 0;
 }
 
+/* The title stands over a double rule, as a rubric heads a page. */
+.title {
+  justify-self: stretch;
+  padding-bottom: calc(var(--px) * 4);
+  border-bottom: calc(var(--px) * 3) double var(--ink);
+  margin-bottom: calc(var(--px) * 3);
+}
+
 .note {
   opacity: 0.75;
 }
@@ -52,7 +64,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--px) * 3);
-  margin: calc(var(--px) * 2) 0 0;
+  margin: calc(var(--px) * 1) 0 0;
   line-height: 0;
 }
 
@@ -70,7 +82,7 @@
   touch-action: manipulation;
 }
 
-/* A plate is drawn 12 glyph pixels tall: the finger's target is grown to at least 44 px round it. */
+/* A plate is drawn 17 glyph pixels tall: the finger's target is grown to at least 44 px round it. */
 .button {
   min-height: 44px;
   min-width: 44px;
