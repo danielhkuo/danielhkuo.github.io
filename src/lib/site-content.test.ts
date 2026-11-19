@@ -124,9 +124,9 @@ test("the text version is a page of the site, at the address its route folder ha
   assert.ok(existsSync(new URL(`../app${TEXT_PAGE}/page.tsx`, import.meta.url)), `no page at src/app${TEXT_PAGE}`);
 });
 
-test("the terminal has no page of its own: the text version is where it is", () => {
+test("the terminal has no page of its own, and the text version says what it is: a file open in nano", () => {
   assert.ok(!SITE_PAGES.some((page) => page.title === "Terminal"));
-  assert.match(SITE_PAGES.find((page) => page.path === TEXT_PAGE)?.summary ?? "", /terminal/);
+  assert.match(SITE_PAGES.find((page) => page.path === TEXT_PAGE)?.summary ?? "", /nano/);
 });
 
 test("a page's list of the others leaves itself out, and carries what a sitemap prints", () => {

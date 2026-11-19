@@ -26,9 +26,8 @@ export interface Project {
 
 /**
  * Where the text version lives: the one page that holds the whole site as
- * text. It is set as a terminal session and can be typed into, so the
- * terminal has no page of its own. The address is this one constant; a page
- * at the old address forwards here.
+ * text, dressed as one plain file open in nano. The address is this one
+ * constant; a page at the old address forwards here.
  */
 export const TEXT_PAGE = "/minimal";
 
@@ -51,7 +50,7 @@ export const SITE_PAGES: readonly SitePage[] = [
     path: TEXT_PAGE,
     title: "Text version",
     summary:
-      "The whole site as one page of plain text: profile, projects and contact, set as a terminal session that can also be typed into. The quickest read on any device, and the one for screen readers.",
+      "The whole site as one page of plain text: profile, projects and contact, as a single file open in nano. The quickest read on any device, and the one for screen readers.",
     isText: true,
   },
   {

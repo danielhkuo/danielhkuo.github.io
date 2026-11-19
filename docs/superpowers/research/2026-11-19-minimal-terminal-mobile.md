@@ -305,6 +305,16 @@ One more fault is a desktop one, found when the page's tests moved into the end-
 >
 > Not checked in Safari itself. The earlier test read the position at once, 25 ms too early to see it.
 
+One more came with the page's nano dress (spec, section 13), whose only input is a search field that opens at the top of the screen, over the title bar.
+
+> **Measured in the iOS 26.5 Simulator (iPhone 17e), Safari, on the built page.**
+>
+> | What the page did | What happened | What fixed it |
+> |---|---|---|
+> | Tapped Where Is: in the tap's handler, put the search field on screen (`position: fixed; top: 0`) and focused it with `focus()` | The keyboard opened and the field stayed in view at the top, but the page under it scrolled up by about 170 pt as the field took focus | `focus({ preventScroll: true })`. The page stayed where it was, the keyboard still opened, and dismissing the keyboard left the page in place |
+>
+> With the fix, nothing was pinned above the keyboard (the shortcut rows hide while the field has focus), Return found the word, closed the keyboard and brought the match on screen, and the shortcut rows sat clear of Safari's bar both at full size and minimised after a scroll.
+
 Some of these extend findings above. The first shows that the viewport's reported position is no better for working out a scroll than for pinning a bar: the probe had already logged `window.scrollY` at 310 while `pageTop` still read 0. The rows on the hidden input agree with the source reading that `preventScroll` suppresses Safari's reveal, and add two things: with the reveal suppressed nothing else moves the page, and the reveal comes back at the first key typed if the field is out of view. That the click handler mattered fits a known rule, that iOS sends a click only to an element it counts as clickable (recalled; React sets an empty click handler on such elements for this reason), but the link to the keyboard is inference. The `<hr>` fault has no source, and no WebKit bug was searched for. The lesson for a hidden input is the same as for a visible one: Safari places a field it can see, and fights a page over one it cannot.
 
 With the fixes in, the final build was taken through each case again: reading, the jump to the prompt, focus, a typed command, a command tapped with the keyboard closed and with it open, a line completed by tapping, and two full-screen programs, one of them taking typed input. In each case the prompt, or the program's input, rested on the bottom of the visible area, directly above Safari's bar when the keyboard was open, and nothing moved once it had settled. Screenshots are in `minimal-terminal-shots/final/` in the session notes.
