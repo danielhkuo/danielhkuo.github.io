@@ -232,6 +232,11 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
 
 From landing (2026-11-18):
+- Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
+  (the chain forgot its path), the tail hanging in the air, stiff whiskers and a rolled body at rest; and the dragon is
+  now about 78 % of its first size. See the landing design.
+- A lighthouse stands on a cliff's edge, so its coil is draped from the sea up over the rock behind the tower. A coil
+  wound up the tower itself, held by it, would be the better picture there.
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
   could part round a landed site.
 - In the town the coil lies among the houses round the bell tower, and the houses hide some of it.
