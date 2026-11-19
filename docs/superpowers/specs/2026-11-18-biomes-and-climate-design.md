@@ -22,6 +22,10 @@ make; each has a recommendation, and the build takes the recommendation until th
 - **The land itself. [Owner]** Asked on 2026-11-19 whether the geography differs by climate, or is the same
   generation as before with new cover. It was the same. Section 6.6 is the answer built now: landforms by climate
   over the grown land. Growing each climate's land natively is **[Decide 4]** there.
+- **The land itself, decided. [Owner]** (2026-11-19, through the coordinator) Grow each climate's own land shapes
+  before shipping: island outlines, coasts, relief and river courses that belong to each climate. Re-rolling
+  everything outside home is accepted; home's start and abbey frames stay byte-identical; each biome still appears
+  once a lap. Section 6.7.
 
 ## 1. The brief
 
@@ -406,6 +410,66 @@ is B's work.
 **What follows from it.** Sites, hamlets and roads are placed on the reshaped ground, so a road goes round a scarp.
 The change ships as part of the ground's own planes. The rain, the wind and the temperature are read off the land
 as grown.
+
+### 6.7 Native land by climate
+
+**[Owner]** Every island outside home is grown again for its climate. Home's start and abbey frames stay the same
+to the byte.
+
+**Why the generator cannot simply take the climate.** Four couplings make every island's land depend on every
+other's, so a climate-aware generator run once would move home:
+
+- the erosion schedule runs until the erosion over all the land balances the uplift (`erode.ts`, `stopAt`);
+- the cap scales all land by one factor so the highest peak stays under it (`capLand`);
+- the rivers stage draws its bends, oxbows and wiggles from one random stream, in scan order from the top row
+  (`rivers.ts`), and the polar islands north of home come first;
+- region membership blends every island's look into every node with no cut-off (`plan.ts`).
+
+| | What | For | Against |
+|---|---|---|---|
+| **A. Two grown lands, joined by island** | L0 is the land the generator grows today. L1 is grown with the same island placement, every island but the kept ones re-formed by its climate, eroded and drained under its climate's rain. The world takes each island whole from one of them; the join runs through open sea | Home is L0's by construction; every stage is reused as it is; the climates' land grows with the generator's own erosion, coasts and rivers | Two lands to grow (about 5 minutes each at 10240; each cached) |
+| B. One run, the couplings made local | Fixed step count, a per-island cap, a random stream per reach, a blend with a cut-off | One land | Each change moves home today: the shipped home would change once, and every later tune risks it again |
+| C. Re-grow each island on its own window | A small erosion run per island, pasted in | Fast to tune one climate | A second copy of the schedule, the coast and the rivers, at window edges |
+
+**[Call] A.**
+
+**What is kept from L0.** Home; every island whose own climate is temperate (its land is the temperate generator's
+already); and every island whose land lies within 400 cells of the start or abbey view (one skerry group), since the
+moisture blur and the wind's horizon reach about 360 cells. Volcanic cones, calderas and skerry groups keep their
+forms everywhere, but are taken from L1, so they are eroded and drained under their own climate.
+
+**Which recipe.** Each island takes the climate of its own land (L0's climate, averaged over the island): its mean
+sea-level temperature, its side and its mean moisture.
+
+| Recipe | Where | Form | Relief | Coast |
+|---|---|---|---|---|
+| Ice | temp under 0.16 | fjord belts | high massif, broad top: the ice sheet fills it to a dome with nunataks | outlet fjords |
+| Tundra, wet side | 0.16–0.29 | fen | low, lobed, lake-studded, glacial ribbon lakes | ragged, many islets |
+| Tundra, dry side | 0.16–0.29 | belts | low stony plateau | plain rocky |
+| Taiga | 0.29–0.44, wet | fjord belts | glaciated mountains, troughs | fjords |
+| Steppe | 0.29–0.5, dry | broad low belts | a plain: a wide lowland ramp, low swells, smooth slopes | smooth, low |
+| Mediterranean | 0.5–0.7, dry | belts | rugged limestone ridges | peninsulas, cliffs and coves |
+| Desert | over 0.7, dry, moisture under 0.25 | belts with a broad flat top | a plateau with scarps (benched by 6.6) over lowland plains (the ergs) | straight, cliffed |
+| Savanna | over 0.86, dry, moisture 0.25–0.6 | broad low belts | a plain, its rock domes by 6.6 | smooth |
+| Warm forest | 0.56–0.85, wet | belts | steep ridges, deep valleys | rias |
+| Jungle | over 0.85 (wet) or 0.95 (dry), moist | belts | rugged limestone mountains over wide coastal plains (towers by 6.6) | deltas, mangrove |
+
+An island keeps its size: it is rebuilt from the same drawn length at the same place, and shrunk if its new outline
+would reach past the old one's extents, so the channels the placement kept between islands still hold.
+
+**Rain by climate.** In L1 the erosion's drainage area and the hydrology's runoff are weighted by the climate's
+zonal rain (`Climate.rainZone`, from L0's climate): a desert island wears little and keeps its plateau and has few
+rivers; a jungle island is cut deep and carries many. The moisture field still comes from the orographic rain, so
+the zonal factor is not counted twice.
+
+**The join.** On G, a node belongs to the island whose outline lies nearest (`plan.owner`, L0's); kept islands' nodes
+come from L0, the rest from L1. Land, coast fields, plan fields, hydrology fields and the river ground are taken by
+that mask; stamps, glacial features, lakes and river reaches by the node they stand on. L1's lakes and reaches are
+numbered after L0's, so home keeps its own numbers. The climate is then worked out over the joined land, with the
+moisture normalised by L0's 95th percentile, and the landforms of 6.6 run as before.
+
+**Proof.** The build's own check: the start and abbey frames, as generated and as shipped, hash the same as before
+(`9b28eb…`, `b3064c…`, `4af97f…`, `99b54d…`). A test pins the join: a kept island's nodes equal L0's in every field.
 
 ## 7. Shipping
 
