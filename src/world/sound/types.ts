@@ -15,6 +15,10 @@ export interface Pose {
   /** −1 (left) … 1 (right). */
   bank: number;
   rest: number;
+  /** The air (sky/air.ts), 0–1 each, absent as 0: mist lying, how dark it is, rain falling. */
+  mist?: number;
+  night?: number;
+  rain?: number;
 }
 
 /** An area source as the ear sums it: energy, direction sum (relative to the dragon), mean distance. */

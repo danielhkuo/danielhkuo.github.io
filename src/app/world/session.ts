@@ -580,7 +580,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
 
       // The sound, after the picture: the ear has what this frame saw.
       if (sound) {
-        const soundMs = sound.frame(t / 1000, flight, restShare(phase));
+        const soundMs = sound.frame(t / 1000, flight, restShare(phase), air);
         if (probe) {
           probe.soundMs.push(soundMs);
           probe.soundKit.push(sound.kitMs());

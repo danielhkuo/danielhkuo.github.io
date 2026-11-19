@@ -362,15 +362,18 @@ test("?soundlog records the flight whether sound is on or off, for at most 120 s
   const c = createSoundControl(w.env);
   c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.world({ seed: 3, n: 10240, sites: [{ id: "abbey-0", type: "abbey", x: 5, y: 6 }] }, "abc");
-  for (let k = 0; k < 10; k++) c.frame(10 + k / 60, { ...FLIGHT, x: k }, 0.25);
+  for (let k = 0; k < 10; k++) c.frame(10 + k / 60, { ...FLIGHT, x: k }, 0.25, k === 3 ? { mist: 0.4, night: 1, rain: 0.25 } : undefined);
   c.frame(10 + 121, FLIGHT, 0);
   const log = c.log()!;
   assert.equal(log.v, 1);
   assert.equal(log.worldId, "abc");
   assert.deepEqual(log.places?.abbeys, [{ x: 5, y: 6 }]);
   assert.equal(log.frames.length, 10, "the frame past two minutes is not kept");
-  assert.equal(log.frames[3].length, 10);
+  // t, dt, x, y, alt, heading, speed, bank, rest, the Hearing's index, then the air: mist, night, rain.
+  assert.equal(log.frames[3].length, 13);
   assert.deepEqual(log.frames[3].slice(2, 9), [3, 2, 30, 0, 60, 0, 0.25]);
+  assert.deepEqual(log.frames[3].slice(10), [0.4, 1, 0.25]);
+  assert.deepEqual(log.frames[4].slice(10), [0, 0, 0], "a frame without the air is clear daylight");
   assert.equal(w.contexts.length, 0, "recording makes no context");
   assert.equal(c.state(), "off");
 });

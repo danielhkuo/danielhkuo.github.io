@@ -1374,3 +1374,30 @@ Also by ruling: the fall memory, the stall dip and the second (fallback) clock a
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike
 runs on this Mac only (Chrome and Firefox), with Safari, iOS and Bluetooth on the owner's checklist; Fable builds
 everything.
+
+## 13. After the merge with `world/bigmap` (2026-11-19, built by Opus while Fable was at its usage limit)
+
+- **Where the sound lives now.** `useSound` (src/app/world) makes the control; `useFlight` hands it to `session.ts`,
+  whose frame loop puts the ear last in the live layers and calls `sound.frame(t, flight, rest, air)` after the picture,
+  with the probe's fields. Reduced motion is the options' `motion: "reduced"` or the system's.
+- **The air.** `sound.frame` takes the page's `Air` (sky/air.ts): `mist`, `night` and `rain`, each 0–1, into the
+  Pose (absent: clear daylight). Recorded flights carry them as three more columns; older logs read as clear.
+- **Mist** muffles the world bus, not the wind at the ears: its low-pass falls from 20 kHz to 3.5 kHz in log frequency
+  (`T.WORLD_HZ`, τ 0.2 s) and the world bus by 2 dB, at full mist. Measured (`mist-muffle` against `coast-run`, the
+  same flight, 20–30 s): 3.5–8 kHz −4.3 dB, above 8 kHz −5.0 dB, all −0.8 dB under cruise wind; the clear stretches
+  match to 0.0 dB.
+- **Night**: the gull colonies keep a seeded share of their calls, 1 − 0.85·night (15 % at full night; a smaller share
+  keeps a subset of a larger one's, `nightKeeps`). Startled gulls still call. `gulls-night` (the harbour, full night,
+  60 s) happened to keep none.
+- **Options.** The options panel has a Sound section in its own plates: sound on/off (the same switch as the corner
+  speaker, and a gesture that unlocks audio) and volume in five steps, mute 0, soft 0.3, half 0.5, loud 0.7 (the
+  default), full 1; mute gives a master gain of exactly 0. Marked as sound UI, so the unlock listeners leave it alone.
+- **e2e.** The sound hint is a `role="status"` live region without an `aria-live` attribute, so the flight guide stays
+  the page's one `p[aria-live]` (the suite's locator).
+- **The frame budget on the merged tree** (`world-fly --arms off,on --pairs 5 --rates 4,1 --warm 8`, load 2–10): at 4×,
+  frame p95 3.20 ms with sound against 3.10 without (+0.10, bar +0.15; off runs 2.6–3.6), `soundMs` mean 49 µs (bar
+  100), p95 0.4; at 1×, frame p95 2.50 against 2.60 (−0.10), `soundMs` p95 0.1 ms, mean 40 µs. The 1× mean is over the
+  25 µs set in phase 2 (it was 14 then): the merged world's gulls along the coast and the census at 15 Hz. To profile
+  in the Fable round; the brief's 0.3 ms is met.
+- **Waiting for Fable** (after its limit): the rain bed (spec §6.1's world-bus place is ready; `pose.rain` is in) and the
+  re-pin of every level against the whole mix (phase 7's `busiest` and `long-flight`).

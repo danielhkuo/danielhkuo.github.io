@@ -28,8 +28,17 @@ export const LIMITER_DELAY_S = 0.006;
 export const LIMITER_METER_SETTLE_S = 3;
 /** The soft clip is linear to this sample value, then bends toward 1. */
 export const CLIP_KNEE = 0.7;
-/** World low-pass (Hz, Q_FLAT_DB): wide open now; mist will close it later. */
+/** World low-pass (Hz, Q_FLAT_DB): wide open in clear air; mist closes it (below). */
 export const WORLD_LOWPASS_HZ = 20000;
+/**
+ * Mist (the weather's 0–1): the world low-pass falls from WORLD_LOWPASS_HZ to this in log frequency, and the world bus
+ * by MIST_WORLD_DB, so everything but the wind at the listener's ears goes soft and a little far. A storytelling
+ * convention: real fog hardly muffles sound (Engine §1).
+ */
+export const MIST_LOWPASS_HZ = 3500;
+export const MIST_WORLD_DB = -2;
+/** Night (the air's 0–1 darkness): the share of the gull colonies' calls still made at full night. */
+export const NIGHT_GULLS = 0.15;
 /** The limiter may not pull the level down by more than this (dB) anywhere in a render. */
 export const LIMITER_IDLE_DB = -0.5;
 

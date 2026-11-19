@@ -4,11 +4,11 @@
 // rendered in one go (the bench's unstepped mode, and how Firefox renders).
 
 import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
-import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU } from "../levels.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, NIGHT_GULLS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
-import { gullCues, type Colony } from "../schedule/gulls.ts";
+import { gullCues, nightKeeps, type Colony } from "../schedule/gulls.ts";
 import { ferryCues, flockCues, planeCues, trainCues } from "../schedule/moments.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
@@ -18,7 +18,7 @@ import { RING_S, TENOR } from "../synth/bells.ts";
 import { IR_TAPS } from "../synth/ir.ts";
 import { TAIL_S } from "../synth/probe.ts";
 import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
-import { bind, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
+import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
 import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
@@ -171,6 +171,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const bindings: Binding[] = [
     bind(T.MASTER, [master.volume.gain]),
     bind(T.WORLD, [master.world.gain]),
+    bindHz(T.WORLD_HZ, [master.worldLow], WORLD_LOWPASS_HZ),
     bind(T.DUCK, [master.bus.wind.gain, master.bus.water.gain], (v, k) => (busOn[k === 0 ? "wind" : "water"] ? v : 0)),
   ];
   const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40);
@@ -213,8 +214,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let gulls: Gulls | null = null;
   let lifePool: Pool | null = null;
   const gullLog: EngineStats["gullCalls"] = [];
-  /** Where the dragon was at the last frame: colonies are asked for calls only within 350 cells of it. */
-  const last = { x: 0, y: 0 };
+  /** Where the dragon was at the last frame (colonies are asked for calls only within 350 cells of it), and how dark. */
+  const last = { x: 0, y: 0, night: 0 };
   const gullSource: CueSource = {
     kind: "gull", lookBack: 0,
     cues(a, b, out) {
@@ -227,7 +228,19 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         const dx = torusDelta(last.x, c.x, n), dy = torusDelta(last.y, c.y, n);
         if (dx * dx + dy * dy <= 350 * 350) near.push(c);
       }
-      if (near.length) gullCues(opts.seed, near, a, b, out);
+      if (!near.length) return;
+      const from = out.length;
+      gullCues(opts.seed, near, a, b, out);
+      // At night the colonies roost: only a seeded share of the day's calls is made (the same ones each time).
+      const keep = 1 - (1 - NIGHT_GULLS) * last.night;
+      if (keep < 1) {
+        let w = from;
+        for (let r = from; r < out.length; r++) {
+          const c = out[r];
+          if (nightKeeps(opts.seed, c.colony ?? 0, c.k ?? 0, keep)) out[w++] = c;
+        }
+        out.length = w;
+      }
     },
   };
   /** The clock and the moments, by the kind of their cues; built once their buffers are in. */
@@ -729,6 +742,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       // The scheduler, every frame.
       if (sources.length) {
         due.length = 0;
+        last.night = pose.night ?? 0;
         scheduler.pass(pose.t, dt, look, due);
         last.x = pose.x;
         last.y = pose.y;

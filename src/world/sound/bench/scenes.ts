@@ -181,6 +181,21 @@ const APPROACH: Mark[] = [400, 300, 200, 100, 50].map((d) => ({ name: `${d} cell
 /** No rivers or falls. */
 const NO_FRESH = { "K_RIVER.flow": 0, "K_RIVER.brook": 0, "K_RIVER.riffle": 0, "K_RIVER.fallSmall": 0, "K_RIVER.fallTall": 0 };
 /** The water alone: the still surf scenes are solo, so their levels can be read against §3.6. */
+/** The air (mist, night, rain: each 0–1) laid over a scene's frames, as the page hands it to the sound each frame. */
+function aired(at: (t: number) => SceneFrame, air: (t: number) => { mist?: number; night?: number; rain?: number }): (t: number) => SceneFrame {
+  return (t) => {
+    const f = at(t);
+    const a = air(t);
+    f.pose.mist = a.mist ?? 0;
+    f.pose.night = a.night ?? 0;
+    f.pose.rain = a.rain ?? 0;
+    return f;
+  };
+}
+
+/** 0 before `a`, 1 after `b`, a smooth rise between: how a mist comes in. */
+const rise = (t: number, a: number, b: number): number => (t <= a ? 0 : t >= b ? 1 : (1 - Math.cos((Math.PI * (t - a)) / (b - a))) / 2);
+
 const NO_WIND = { "K_WIND.a": 0, "K_WIND.b": 0, "K_WIND.c": 0, "K_WIND.d": 0, "K_WIND.e": 0, "K_WIND.w": 0 };
 
 /** brake 6, cruise 6, boost 8, cruise 4, brake 6. */
@@ -452,6 +467,14 @@ export const SCENES: Scene[] = [
     at: heard(coastOfKinds(5040, [M.sand, M.shingle, M.cliffHard], 3000, 900), 45, alongCoast(45, 100)),
   }),
   scene({
+    name: "mist-muffle",
+    seconds: 45,
+    about: "The coast run while a mist comes in (8–20 s), lies (20–30 s) and thins (30–42 s): the surf and the world go soft and dull and a little further off; the wind at the ears does not.",
+    beds: true,
+    marks: [{ name: "clear", t0: 2, t1: 8 }, { name: "mist", t0: 20, t1: 30 }],
+    at: aired(heard(coastOfKinds(5040, [M.sand, M.shingle, M.cliffHard], 3000, 900), 45, alongCoast(45, 100)), (t) => ({ mist: rise(t, 8, 20) * (1 - rise(t, 30, 42)) })),
+  }),
+  scene({
     name: "sea-to-coast",
     seconds: 40,
     about: "From 600 cells out, straight in, across the beach, inland: far rumble first; waves resolve; they pass under and fall behind, duller.",
@@ -563,6 +586,15 @@ export const SCENES: Scene[] = [
     places: HARBOUR,
     t0: 400,
     at: hover(60, 400, 5000, 5080),
+  }),
+  scene({
+    name: "gulls-night",
+    set: NO_WIND,
+    seconds: 60,
+    about: "The same harbour at full night: the colonies roost, so only a seeded few of the day's calls are made (about one in seven).",
+    places: HARBOUR,
+    t0: 400,
+    at: aired(hover(60, 400, 5000, 5080), () => ({ night: 1 })),
   }),
   scene({
     name: "gulls-lowpass",
@@ -837,6 +869,10 @@ export function replayScene(log: SoundLog, seconds = 30): Scene {
       p.speed = r[6];
       p.bank = r[7];
       p.rest = r[8];
+      // The air, in logs recorded since it was (older rows stop at the Hearing's index).
+      p.mist = r[10] ?? 0;
+      p.night = r[11] ?? 0;
+      p.rain = r[12] ?? 0;
       frame.hearing = log.hearings[r[9]] ?? QUIET;
       return frame;
     },

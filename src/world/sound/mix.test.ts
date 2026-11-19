@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BOOST, BRAKE, CRUISE, startState, stepFlight, type FlightInput, type FlightState } from "../runtime/flight.ts";
-import { K_WIND } from "./levels.ts";
+import { K_WIND, MIST_LOWPASS_HZ, MIST_WORLD_DB, WORLD_LOWPASS_HZ } from "./levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T, windSpeed } from "./mix.ts";
 import { gainToDb } from "./space.ts";
 import { EMPTY_CENSUS, emptyHearing, type Pose, type Prefs } from "./types.ts";
@@ -292,4 +292,21 @@ test("the bell duck: 3 dB while the abbey rings, between an abbey gain of −16 
   assert.equal(duckAt(60, quiet), 0, "nor when the abbey is not ringing");
   // Down quickly, back slowly.
   assert.deepEqual([SEND[T.DUCK].down, SEND[T.DUCK].up], [0.13, 0.8]);
+});
+
+test("mist muffles the world, not the wind: the cutoff falls to 3.5 kHz and the world 2 dB at full mist", () => {
+  const clear = one(pose()), half = one(pose({ mist: 0.5 })), full = one(pose({ mist: 1 }));
+  near(clear[T.WORLD_HZ], WORLD_LOWPASS_HZ, 1e-3, "clear air stands wide open");
+  near(full[T.WORLD_HZ], MIST_LOWPASS_HZ, 1e-3, "full mist");
+  // Halfway in log frequency: the geometric mean.
+  near(half[T.WORLD_HZ], Math.sqrt(WORLD_LOWPASS_HZ * MIST_LOWPASS_HZ), 1, "half mist");
+  near(gainToDb(full[T.WORLD]) - gainToDb(clear[T.WORLD]), MIST_WORLD_DB, 1e-3, "the world a little further off");
+  for (const i of [T.A_L, T.A_R, T.B_GAIN, T.C_GAIN, T.D_GAIN, T.E_GAIN, T.W_GAIN, T.MASTER]) near(full[i], clear[i], 1e-9, `target ${i} under mist`);
+  // A pose with no air is clear air; a fresh targets array is open before the first mix.
+  near(newTargets()[T.WORLD_HZ], WORLD_LOWPASS_HZ, 1e-3, "before the first mix");
+});
+
+test("the volume can mute fully: at 0 the master target is exactly 0", () => {
+  assert.equal(one(pose(), { ...PREFS, volume: 0 })[T.MASTER], 0);
+  near(one(pose(), { ...PREFS, volume: 0.7 })[T.MASTER], 0.49, 1e-6, "the default 70 % is about −6 dB");
 });

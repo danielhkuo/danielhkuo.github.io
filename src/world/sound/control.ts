@@ -73,7 +73,10 @@ export interface ControlEnv {
   arm?: string;
 }
 
-/** A recorded flight: one row a frame (t, dt, x, y, alt, heading, speed, bank, rest, index of the Hearing in force). */
+/**
+ * A recorded flight: one row a frame (t, dt, x, y, alt, heading, speed, bank, rest, index of the Hearing in force, then
+ * mist, night and rain; rows from before the air was recorded stop at the index).
+ */
 export interface SoundLog {
   v: 1;
   worldId: string;
@@ -81,6 +84,13 @@ export interface SoundLog {
   prefs: Prefs;
   frames: number[][];
   hearings: Hearing[];
+}
+
+/** The slice of the page's air (sky/air.ts) the sound hears: each 0–1. */
+export interface AirLike {
+  mist: number;
+  night: number;
+  rain: number;
 }
 
 export interface FlightLike {
@@ -97,8 +107,11 @@ export interface SoundControl {
   ear: LiveLayer;
   /** Once the world has loaded: its places. */
   world(ctx: LayerContext, worldId: string): void;
-  /** One frame, after view.frame. Returns the main-thread ms it took (0 when off). */
-  frame(t: number, flight: FlightLike, rest: number): number;
+  /**
+   * One frame, after view.frame. `air` is the page's air this frame (sky/air.ts: mist, darkness, rain, each 0–1); left
+   * out, the air is clear daylight. Returns the main-thread ms it took (0 when off).
+   */
+  frame(t: number, flight: FlightLike, rest: number, air?: AirLike): number;
   /** The kit's share of the last frame's ms. */
   kitMs(): number;
   /** What the last frame did, as bits (engine WORK): 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample, 128 the waves' turn. */
@@ -446,7 +459,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         record.places = placesOf(layers, worldId);
       }
     },
-    frame(t, flight, rest) {
+    frame(t, flight, rest, air) {
       const live = rt !== null && wanted && !hidden && running();
       if (!live && !record) return 0;
       const a = env.now();
@@ -460,6 +473,9 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       pose.speed = flight.speed;
       pose.bank = flight.bank;
       pose.rest = rest;
+      pose.mist = air ? air.mist : 0;
+      pose.night = air ? air.night : 0;
+      pose.rain = air ? air.rain : 0;
       kitMs = 0;
       lastWork = 0;
       if (live && rt) {
@@ -483,7 +499,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
             record.hearings.push(copyHearing(h));
           }
           const r = (v: number, k: number) => Math.round(v * k) / k;
-          record.frames.push([r(t, 1e4), r(pose.dt, 1e4), r(pose.x, 100), r(pose.y, 100), r(pose.alt, 100), r(pose.heading, 1e4), r(pose.speed, 100), r(pose.bank, 1e4), r(rest, 1e4), record.hearings.length - 1]);
+          record.frames.push([r(t, 1e4), r(pose.dt, 1e4), r(pose.x, 100), r(pose.y, 100), r(pose.alt, 100), r(pose.heading, 1e4), r(pose.speed, 100), r(pose.bank, 1e4), r(rest, 1e4), record.hearings.length - 1, r(pose.mist ?? 0, 1e3), r(pose.night ?? 0, 1e3), r(pose.rain ?? 0, 1e3)]);
         }
       }
       return env.now() - a;

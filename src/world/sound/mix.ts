@@ -5,7 +5,7 @@
 
 import {
   A_CUT_HZ, A_CUT_RANGE, A_EXP, A_TILT_DB, B_HZ, B_RANGE, BELL_DUCK_EDGES_DB, BELL_FAR, BELL_NEAR, BELL_SPREAD, C_FROM, C_LOW, C_PUSH, D_FROM, E_REST, BED_SPREAD, K_BELL, K_RIVER, K_SURF, K_WIND, RIVER_STREAM_PURL, W_BLOOM_FULL, W_BLOOM_TAU, W_FLOOR, W_GATE, W_HOLD, W_HZ, W_PAN, W_RISE, WIND_FLOOR, WIND_SLEW,
-  WORLD_BOOST_DB, WORLD_REST_DB,
+  MIST_LOWPASS_HZ, MIST_WORLD_DB, WORLD_BOOST_DB, WORLD_LOWPASS_HZ, WORLD_REST_DB,
 } from "./levels.ts";
 import { volumeGain } from "./prefs.ts";
 import { torusDelta } from "../core/torus.ts";
@@ -62,7 +62,9 @@ export const T = {
   RIVER_AIR_HZ: 33,
   RIVER_PAN_A: 34,
   RIVER_PAN_B: 35,
-  COUNT: 36,
+  /** The world low-pass's cutoff (Hz): mist closes it. */
+  WORLD_HZ: 36,
+  COUNT: 37,
 } as const;
 
 /** How a target is sent: its unit decides how "moved" is measured (§3.5). */
@@ -111,6 +113,8 @@ export const SEND: readonly SendRule[] = (() => {
   r[T.BELL_PAN_B] = { unit: "pan", by: 0.02, up: 0.06, down: 0.06 };
   r[T.BELL_SEND] = gain(0.5, 0.25);
   r[T.BELL_FAR] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
+  // Mist comes and goes over minutes: the muffle follows it gently (about 0.6 s to settle on a step).
+  r[T.WORLD_HZ] = { unit: "hz", by: 50, up: 0.2, down: 0.2 };
   return r;
 })();
 
@@ -159,7 +163,10 @@ export function newMemory(): MixMemory {
 }
 
 export function newTargets(): Float32Array {
-  return new Float32Array(T.COUNT);
+  const t = new Float32Array(T.COUNT);
+  // A cutoff of 0 would close the world: before the first mix it stands wide open.
+  t[T.WORLD_HZ] = WORLD_LOWPASS_HZ;
+  return t;
 }
 
 /**
@@ -215,7 +222,10 @@ export function mix(
   const rest = clamp(pose.rest, 0, 1);
 
   targets[T.MASTER] = volumeGain(prefs.volume);
-  targets[T.WORLD] = dbToGain(WORLD_BOOST_DB * clamp((speed - 1) / 0.8, 0, 1)) * dbToGain(WORLD_REST_DB * rest);
+  // Mist muffles the world (not the wind, which is at the ears): the cutoff falls in log frequency, the level a little.
+  const mist = clamp(pose.mist ?? 0, 0, 1);
+  targets[T.WORLD] = dbToGain(WORLD_BOOST_DB * clamp((speed - 1) / 0.8, 0, 1)) * dbToGain(WORLD_REST_DB * rest) * dbToGain(MIST_WORLD_DB * mist);
+  targets[T.WORLD_HZ] = WORLD_LOWPASS_HZ * Math.pow(MIST_LOWPASS_HZ / WORLD_LOWPASS_HZ, mist);
 
   // The abbey (§3.1, §3.4): heard from the dragon; its bells hang about as high as the dragon flies, so only the
   // ground between counts. Wind and water yield while it rings, and only when it is near.

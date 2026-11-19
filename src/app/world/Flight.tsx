@@ -87,6 +87,7 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
         device={flight.device}
         platform={shell.platform}
         onChange={setOptions}
+        sound={sound.control}
         onTeach={() => {
           flight.teachAgain();
           panel.link.toggle();

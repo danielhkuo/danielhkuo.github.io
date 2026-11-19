@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ALOFT } from "../../live/life.ts";
 import type { Cue } from "../types.ts";
-import { callLength, callNotes, FLAP_FRAMES, gullCues, KEKS, LONG, MEW, P_LIGHT, P_TOWN, SLOT_S, startleNotes, YELP, type Colony } from "./gulls.ts";
+import { callLength, callNotes, FLAP_FRAMES, gullCues, KEKS, LONG, MEW, nightKeeps, P_LIGHT, P_TOWN, SLOT_S, startleNotes, YELP, type Colony } from "./gulls.ts";
 
 const SEED = 3;
 const TOWN: Colony = { id: 1, birds: 9, town: true }, LIGHT: Colony = { id: 2, birds: 5, town: false };
@@ -86,3 +86,21 @@ test("a startled gull: one to three runs of keks in its first second, and a wing
     assert.ok(flaps[flaps.length - 1].db < flaps[0].db - 8);
   }
 });
+
+test("at night the colonies keep a seeded share of their calls: none, all, about the share, and a smaller share keeps a subset", () => {
+  let kept15 = 0, kept50 = 0, subset = true;
+  for (let k = 0; k < 10000; k++) {
+    assert.equal(nightKeeps(SEED, 1, k, 1), true);
+    assert.equal(nightKeeps(SEED, 1, k, 0), false);
+    const a = nightKeeps(SEED, 1, k, 0.15), b = nightKeeps(SEED, 1, k, 0.5);
+    if (a) kept15++;
+    if (b) kept50++;
+    if (a && !b) subset = false;
+  }
+  assert.ok(Math.abs(kept15 / 10000 - 0.15) < 0.015, `share kept at 0.15: ${kept15 / 10000}`);
+  assert.ok(Math.abs(kept50 / 10000 - 0.5) < 0.02, `share kept at 0.5: ${kept50 / 10000}`);
+  assert.ok(subset, "every call kept at a 15 % share is also kept at 50 %");
+  // The same call, the same answer: the seed and the call decide, nothing else.
+  assert.equal(nightKeeps(SEED, 2, 77, 0.3), nightKeeps(SEED, 2, 77, 0.3));
+});
+

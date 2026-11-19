@@ -123,6 +123,8 @@ export interface Master {
   sum: GainNode;
   volume: GainNode;
   limiter: DynamicsCompressorNode;
+  /** The world low-pass, which mist closes (its frequency stays at WORLD_LOWPASS_HZ; the mix moves its detune). */
+  worldLow: BiquadFilterNode;
   /** 0 when off, hidden or not yet enabled; every fade of §6.7 that is not a voice's own is made here. */
   mute: GainNode;
   nodes: AudioNode[];
@@ -166,7 +168,7 @@ export function buildMaster(ctx: Ctx): Master {
   trim.connect(clip);
   clip.connect(mute);
   mute.connect(ctx.destination);
-  return { bus, windIn, send, world, sum, volume, limiter, mute, nodes: [...BUSES.map((b) => bus[b]), windIn, world, worldLow, send, sum, rumble, volume, limiter, trim, clip, mute] };
+  return { bus, windIn, send, world, worldLow, sum, volume, limiter, mute, nodes: [...BUSES.map((b) => bus[b]), windIn, world, worldLow, send, sum, rumble, volume, limiter, trim, clip, mute] };
 }
 
 /** One target of the mix bound to the parameters that carry it. */

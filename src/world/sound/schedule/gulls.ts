@@ -190,3 +190,14 @@ export function startleNotes(seed: number, g: number, t0: number, aloft: number,
   out.sort((a, b) => a.t - b.t);
   return out;
 }
+
+/**
+ * Whether call `k` of colony `colony` is still made when only a share `keep` (0–1) of the calls is: at night the
+ * colonies roost (levels.ts NIGHT_GULLS). Seeded, so the same calls fall silent every time; a smaller share keeps a
+ * subset of a larger one's.
+ */
+export function nightKeeps(seed: number, colony: number, k: number, keep: number): boolean {
+  if (keep >= 1) return true;
+  if (keep <= 0) return false;
+  return (hash2(colony * 4099 + k, 0x6e17, seed) & 0xffff) / 65536 < keep;
+}
