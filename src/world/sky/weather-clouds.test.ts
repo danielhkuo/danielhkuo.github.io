@@ -21,14 +21,17 @@ test("the weather's clouds are the same for a seed, low, on the world, sorted no
   }
 });
 
-test("a built sky is heaps, about one to a view, and the list stays short enough to walk each frame", () => {
+test("a built sky is middling heaps, about two to a view, and the list stays short enough to walk each frame", () => {
   const heaps = clouds.filter((c) => shapes[c.shape].kind === "heap");
   const perView = heaps.length / VIEWS;
-  assert.ok(perView > 0.9 && perView < 1.5, `${perView} heaps a view`);
-  assert.ok(clouds.length < 1800, `${clouds.length} weather clouds`);
+  assert.ok(perView > 1.5 && perView < 2.3, `${perView} heaps a view`);
+  assert.ok(clouds.length < 2500, `${clouds.length} weather clouds`);
   // Broken, not a blanket: the heaps' boxes together are well under half the sky.
   const boxes = heaps.reduce((s, c) => s + area(c.shape), 0) / (N * 0.8 * N);
-  assert.ok(boxes > 0.15 && boxes < 0.4, `heap boxes cover ${boxes}`);
+  assert.ok(boxes > 0.2 && boxes < 0.45, `heap boxes cover ${boxes}`);
+  // The giants are left to the fair-weather sky: a gathering sky is many heaps, not one pasted on.
+  const greatest = Math.max(...shapes.filter((sh) => sh.kind === "heap").map((sh) => sh.w * sh.h));
+  for (const c of heaps) assert.ok(area(c.shape) < 0.8 * greatest);
 });
 
 test("the sky closes in by steps: puffs first, then heaps, the small before the great", () => {
@@ -50,9 +53,29 @@ test("the sky closes in by steps: puffs first, then heaps, the small before the 
 
 test("no two of the weather's heaps stand on one another", () => {
   const heaps = clouds.filter((c) => shapes[c.shape].kind === "heap");
-  const cell = N / Math.round((22 * N) / 6400);
+  const cell = N / Math.round((28 * N) / 6400);
   for (let i = 0; i < heaps.length; i++) for (let j = i + 1; j < heaps.length && heaps[j].y - heaps[i].y < cell * 0.2; j++) {
     const dx = Math.abs(heaps[i].x - heaps[j].x);
     assert.ok(Math.min(dx, N - dx) > cell * 0.05, `heaps ${i} and ${j}`);
+  }
+});
+
+test("a puff comes before its heap and stands at its foot, so the heap grows where there was cloud", () => {
+  const heaps = clouds.filter((c) => shapes[c.shape].kind === "heap");
+  const puffs = clouds.filter((c) => shapes[c.shape].kind === "puff");
+  assert.ok(puffs.length > 0.2 * heaps.length && puffs.length < 0.4 * heaps.length, `${puffs.length} puffs`);
+  const gap = (a: number, b: number, ring = N) => {
+    const d = Math.abs(a - b) % ring;
+    return Math.min(d, ring - d);
+  };
+  for (const p of puffs) {
+    const ps = shapes[p.shape];
+    const host = heaps.find((h) => {
+      const hs = shapes[h.shape];
+      // Boxes touching on screen, the puff's base within a few pixels of the heap's.
+      return gap(p.x + ps.w / 2, h.x + hs.w / 2) < (ps.w + hs.w) / 2 && gap(0.8 * p.y + ps.h, 0.8 * h.y + hs.h, 0.8 * N) < 8
+        && p.need! < h.need! && h.need! - p.need! < 0.21;
+    });
+    assert.ok(host, `puff at ${p.x},${p.y}`);
   }
 });

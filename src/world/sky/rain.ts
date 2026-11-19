@@ -17,7 +17,7 @@ import { matOf } from "../live/pixel.ts";
 import { lightKey, paletteOptions, type Air } from "./air.ts";
 
 /** Streaks in the rain's space in full rain; about two thirds of them are on the frame at once. */
-export const STREAKS = 520;
+export const STREAKS = 640;
 /** The rain's space, in pixels: streaks and splashes wrap round it. Wider and taller than the frame; powers of two. */
 const SPACE_W = 512;
 const SPACE_H = 256;

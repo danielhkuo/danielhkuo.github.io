@@ -250,11 +250,11 @@ test("a low sun burns on a cloud's rim and crown over violet undersides; the moo
   for (const time of [0.25, 0.75]) {
     const ramp = rampIn(airOf(time, 0.25));
     const rim = oklabOf(ramp.rim), crown = oklabOf(ramp.tones[0]), under = oklabOf(ramp.tones[ramp.tones.length - 1]);
-    assert.ok(rim[1] > 0.04 && rim[2] > 0 && crown[1] > 0.03, `rim ${rim} crown ${crown} at ${time}`);
+    assert.ok(rim[1] > 0.02 && rim[2] > 0 && crown[1] > 0.015, `rim ${rim} crown ${crown} at ${time}`);
     assert.ok(under[2] < -0.03 && under[0] < rim[0] - 0.2, `underside ${under} at ${time}`);
   }
   const golden = oklabOf(rampIn(airOf(0.705, 0.25)).rim);
-  assert.ok(golden[2] > 0.05 && golden[2] > golden[1], `golden rim ${golden}`);
+  assert.ok(golden[2] > 0.035 && golden[2] > golden[1], `golden rim ${golden}`);
   const night = rampIn(airOf(0, 0.25));
   for (const c of [night.rim, ...night.tones]) {
     const [, a, b] = oklabOf(c);

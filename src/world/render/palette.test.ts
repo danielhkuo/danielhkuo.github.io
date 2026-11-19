@@ -156,12 +156,13 @@ test("ink darkens: soft about 50 %, full about 85 %, toward a warm sepia-black",
 });
 
 test("shadow darkens, toward blue-violet, never to black", () => {
-  everyPalette((pal, _o, label) => {
+  everyPalette((pal, o, label) => {
     for (const mat of LAND) {
       for (let tone = 0; tone < 16; tone += 3) {
         for (let shadow = 1; shadow < 4; shadow++) {
+          // By moonlight and in mist a cast shadow all but goes: there it may round a step either way.
           assert.ok(
-            lstar(at(pal, mat, tone, shadow)) <= lstar(at(pal, mat, tone, shadow - 1)),
+            lstar(at(pal, mat, tone, shadow)) <= lstar(at(pal, mat, tone, shadow - 1)) + (darkness(o.time) > 0.5 ? 0.6 : 0),
             `${label}: ${MATERIAL_NAMES[mat]} tone ${tone} shadow ${shadow}`,
           );
         }
@@ -279,7 +280,7 @@ test("time of day: dusk is warm, night is blue and dark, overcast is grey", () =
   const night = mean({ ...NOON, time: PHASES.night });
   const morning = mean({ ...NOON, time: PHASES.morning });
   assert.ok(dusk[1] > noon[1] + 0.008, "dusk is redder");
-  assert.ok(dusk[0] < noon[0] && dusk[0] > night[0] + 0.15);
+  assert.ok(dusk[0] < noon[0] && dusk[0] > night[0] + 0.1);
   assert.ok(night[0] < noon[0] * 0.6, `night lightness ${night[0]} against ${noon[0]}`);
   assert.ok(night[2] < noon[2] - 0.03 && night[2] < 0, "night is blue");
   assert.ok(night[0] > 0.2, "night is dark, not black");
@@ -435,7 +436,10 @@ test("the day runs night, blue hour, dawn, day, golden hour, dusk, blue hour, ni
   assert.ok(day[0] > golden[0] && golden[0] > dusk[0] && dusk[0] > night[0], "evening darkens");
   // Dawn is rose, golden hour gold, dusk red-orange: all warmer than noon; the blue hour is blue.
   assert.ok(dawn[1] > day[1] + 0.006, "dawn is rosier than noon");
-  assert.ok(golden[2] > day[2] + 0.01, "golden hour is yellower than noon");
+  // Golden hour is no yellow filter: the gold is on the pale faces the sun strikes, and the greens keep clear of it.
+  const gold = buildPalette({ ...NOON, time: PHASES.golden }), noon = buildPalette(NOON);
+  assert.ok(oklabOf(at(gold, M.whitewash, 15))[2] > oklabOf(at(noon, M.whitewash, 15))[2] + 0.02, "golden hour gilds a lit wall");
+  assert.ok(golden[2] < day[2] + 0.01 && golden[1] > day[1], "golden hour warms the land without yellowing it");
   assert.ok(dusk[1] > day[1] + 0.008, "dusk is redder than noon");
   assert.ok(blue[2] < day[2] - 0.02 && blue[2] < 0, "the blue hour is blue");
   // The shipped midday is plain noon, wherever noon is held.
@@ -455,22 +459,28 @@ test("darkness is none by day and full at night, rising through the dusk and fal
   assert.ok(darkness(PHASES.dusk) > 0.2 && darkness(PHASES.dusk) < 0.8);
 });
 
-test("mist is a pale veil: darks lift, colour drains, and the light and shade draw together", () => {
+test("mist is a thin veil in the hour's own light: darks lift a little, colour and contrast ease, never a grey sheet", () => {
   const clear = buildPalette(NOON);
   const misty = buildPalette({ ...NOON, mist: 1 });
-  const dark = (pal: Palette): number => lstar(at(pal, M.coniferCool, 0, 3));
+  const dark = (pal: Palette): number => lstar(at(pal, M.coniferCool, 0));
   const range = (pal: Palette): number => lstar(at(pal, M.meadowMid, 15)) - lstar(at(pal, M.meadowMid, 0));
-  assert.ok(dark(misty) > dark(clear) + 8, `darks ${dark(clear)} → ${dark(misty)}`);
-  assert.ok(range(misty) < range(clear) * 0.75);
+  assert.ok(dark(misty) > dark(clear) + 1.5 && dark(misty) < dark(clear) + 12, `darks ${dark(clear)} → ${dark(misty)}`);
+  assert.ok(range(misty) < range(clear) * 0.95 && range(misty) > range(clear) * 0.7);
   const chroma = (o: PaletteOptions): number => {
     const pal = buildPalette(o);
     let sum = 0;
     for (const mat of LAND) sum += lch(at(pal, mat, FLAT_TONE))[1] / LAND.length;
     return sum;
   };
-  assert.ok(chroma({ ...NOON, mist: 1 }) < chroma(NOON) * 0.75);
-  // At night the mist is a dim blue-grey, not a white sheet.
-  assert.ok(lstar(paperIn({ ...NOON, time: PHASES.night, mist: 1 })) < 60);
+  assert.ok(chroma({ ...NOON, mist: 1 }) < chroma(NOON) * 0.95);
+  // The veil takes the light: gold at golden hour, a dim blue at night, not a white or grey sheet.
+  const golden = oklabOf(paperIn({ ...NOON, time: PHASES.golden, mist: 1 }));
+  assert.ok(golden[2] > 0.03 && golden[1] > 0, `paper in a golden mist ${golden}`);
+  const night = paperIn({ ...NOON, time: PHASES.night, mist: 1 });
+  assert.ok(lstar(night) < 60 && oklabOf(night)[2] < -0.01);
+  // Mist has no sun to cast with: a cast shadow all but goes.
+  const shadow = (pal: Palette): number => lstar(at(pal, M.meadowMid, FLAT_TONE)) - lstar(at(pal, M.meadowMid, FLAT_TONE, 3));
+  assert.ok(shadow(misty) < shadow(clear) * 0.1, `shadow in mist ${shadow(misty)}`);
   // No mist is no change.
   assert.deepEqual(buildPalette({ ...NOON, mist: 0 }), clear);
 });
@@ -492,7 +502,7 @@ test("a low sun lights the faces turned to it and leaves their shade cool; the m
   for (const [pal, name] of [[dusk, "dusk"], [dawn, "dawn"]] as const) {
     const lit = oklabOf(at(pal, M.whitewash, 15)), shade = oklabOf(at(pal, M.whitewash, 2, 2));
     assert.ok(lit[1] > 0.025 && lit[2] > 0, `${name}: a lit wall is ${lit}`);
-    assert.ok(shade[2] < -0.02 && shade[1] > 0, `${name}: its shade is ${shade}`);
+    assert.ok(shade[2] < -0.03 && shade[1] > -0.015, `${name}: its shade is ${shade}`);
   }
   // Dusk burns redder than dawn, and its shade is deeper.
   assert.ok(lch(at(dusk, M.whitewash, 15))[1] > lch(at(dawn, M.whitewash, 15))[1]);
@@ -508,26 +518,48 @@ test("a low sun lights the faces turned to it and leaves their shade cool; the m
   assert.ok(oklabOf(at(dusk, M.sea, 10))[1] > 0.01);
 });
 
-test("night is a painting, not a filter: blue all through, pale roads and fields over dark woods and deep water", () => {
+test("night is a painting, not a filter: each thing its own hue at low chroma, pale roads and fields over dark woods and deep water", () => {
   const night = buildPalette({ ...NOON, time: PHASES.night });
   for (const mat of LAND) {
     for (const tone of [2, FLAT_TONE, 15]) {
       const c = oklabOf(at(night, mat, tone));
-      assert.ok(c[2] < 0.012, `${MATERIAL_NAMES[mat]} tone ${tone} is not blue at night: ${c}`);
+      assert.ok(Math.hypot(c[1], c[2]) < 0.09 && c[2] < 0.03, `${MATERIAL_NAMES[mat]} tone ${tone} at night: ${c}`);
+      // Dark, never black: the deepest shade holds a colour.
+      assert.ok(c[0] > 0.2, `${MATERIAL_NAMES[mat]} tone ${tone} is ${c[0].toFixed(3)} at night`);
     }
   }
-  const L = (mat: number, tone = FLAT_TONE): number => lstar(at(night, mat, tone));
-  assert.ok(L(M.road) > L(M.meadowMid) + 4 && L(M.meadowMid) > L(M.broadleafMid) + 12, `road ${L(M.road)} meadow ${L(M.meadowMid)} wood ${L(M.broadleafMid)}`);
-  assert.ok(L(M.sea, 15) < L(M.meadowMid) - 8, "deep water is darker than the fields");
+  // Not one hue: tiles stay plum, fields green-blue, slate blue.
+  assert.ok(oklabOf(at(night, M.roofTile, FLAT_TONE))[1] > 0.008, "roofs keep their red as plum");
+  assert.ok(oklabOf(at(night, M.meadowMid, FLAT_TONE))[1] < -0.02, "fields keep their green");
+  const L = (pal: Palette, mat: number, tone = FLAT_TONE): number => lstar(at(pal, mat, tone));
+  assert.ok(L(night, M.road) > L(night, M.meadowMid) + 4 && L(night, M.meadowMid) > L(night, M.broadleafMid) + 12);
+  assert.ok(L(night, M.sea, 15) < L(night, M.meadowMid) - 8, "deep water is darker than the fields");
   // Dark enough for a lamp to glow against, and the paper's grain with it.
-  assert.ok(L(M.whitewash) < 62 && lstar(paperIn({ ...NOON, time: PHASES.night })) < 62);
-  // Moonlit faces are paler and greener-blue than their indigo shade.
-  const lit = oklabOf(at(night, M.rockLime, 15)), shade = oklabOf(at(night, M.rockLime, 1, 2));
-  assert.ok(lit[0] > shade[0] + 0.1 && lit[1] < shade[1], `moonlit ${lit} shade ${shade}`);
+  assert.ok(L(night, M.whitewash) < 62 && lstar(paperIn({ ...NOON, time: PHASES.night })) < 62);
+  // Moonlit faces are paler than their indigo shade.
+  const lit = oklabOf(at(night, M.rockLime, 15)), shade = oklabOf(at(night, M.rockLime, 1));
+  assert.ok(lit[0] > shade[0] + 0.1 && lit[2] > shade[2], `moonlit ${lit} shade ${shade}`);
+  // The small hours are deeper and cooler than the evening's night, and still not black.
+  const small = buildPalette({ ...NOON, time: 0.02 });
+  for (const mat of [M.meadowMid, M.road, M.whitewash, M.broadleafMid, M.sea]) {
+    assert.ok(L(small, mat) < L(night, mat) - 1.5, `${MATERIAL_NAMES[mat]} in the small hours`);
+  }
+  assert.ok(L(small, M.whitewash) < L(night, M.whitewash) * 0.9 && oklabOf(at(small, M.coniferCool, 0))[0] > 0.17);
+  assert.ok(meanLand({ ...NOON, time: 0.02 })[0] < meanLand({ ...NOON, time: PHASES.night })[0] * 0.92);
 });
 
-test("mist stays cool in a warm light", () => {
-  const o = { ...NOON, time: DAY_KEYS.sunset };
-  const clear = oklabOf(paperIn(o)), misty = oklabOf(paperIn({ ...o, mist: 1 }));
-  assert.ok(misty[2] < clear[2] - 0.02 && misty[1] < clear[1], `paper at dusk ${clear}, in mist ${misty}`);
+test("sun shadows need the sun: they fade with the light, under cloud and in mist", () => {
+  const depth = (o: PaletteOptions): number => {
+    const pal = buildPalette(o);
+    return lstar(at(pal, M.meadowMid, FLAT_TONE)) - lstar(at(pal, M.meadowMid, FLAT_TONE, 2));
+  };
+  const day = depth(NOON);
+  assert.ok(depth({ ...NOON, time: PHASES.night }) < day * 0.3, "at night");
+  assert.ok(depth({ ...NOON, overcast: 1 }) < day * 0.55, "under cloud");
+  assert.ok(depth({ ...NOON, mist: 0.5 }) < day * 0.65, "in mist");
+});
+
+test("rain light dims and greys the land", () => {
+  const clear = meanLand(NOON), wet = meanLand({ ...NOON, overcast: 0.7 });
+  assert.ok(wet[0] < clear[0] * 0.92 && wet[0] > clear[0] * 0.8, `lightness ${clear[0]} → ${wet[0]}`);
 });

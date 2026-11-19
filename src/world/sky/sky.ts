@@ -3,7 +3,7 @@
 // each bank again as a veil over it, so the flier shows faintly inside the bank.
 
 import type { ViewRect } from "../render/compose.ts";
-import { gradeRgb } from "../render/palette.ts";
+import { gradeRgb, lowLight } from "../render/palette.ts";
 import { lightKey, sunOn, type Air } from "./air.ts";
 import { ALT, makeField, weatherClouds, type CloudLayer, type Opening, type SkyField } from "./field.ts";
 import { MIDDAY_RAMP, type Ramp } from "./paint/cumulus.ts";
@@ -210,12 +210,18 @@ function mixRgb(a: number, b: number, t: number): number {
   return (0xff000000 | (Math.round(bl) << 16) | (Math.round(g) << 8) | Math.round(r)) >>> 0;
 }
 
-/** How far each tone of the ramp is turned to the light, crown to underside; the rim is fully in it. */
-const TONE_LIT: readonly number[] = [0.9, 0.55, 0.28, 0.1, 0];
+/**
+ * How far each tone of the ramp is turned to the light, crown to underside; the rim is fully in it. A low sun reaches
+ * well under a cloud, so only its deepest underside (about a quarter of it) is left to the shade's colour: the rest
+ * burns gold or rose, and under the moon is pale.
+ */
+const TONE_LIT: readonly number[] = [1, 0.95, 0.85, 0.6, 0.28];
 /** A cloud takes more of the light's colour than the land does, and most on its rim: a low sun burns there. */
-const CATCH = 0.7;
+const CATCH = 0.8;
 /** Its undersides are blue-violet already: they take only this share of the shade's colour. */
-const SHADE_TAKE = 0.6;
+const SHADE_TAKE = 0.45;
+/** In a low light the lit tones are paled toward the crown's white first, by up to this share, so they glow over the shade. */
+const GLOW = 0.35;
 
 /**
  * The cloud ramp in this air: the midday ramp greyed toward the storm by the built cloud, then graded with the light,
@@ -225,8 +231,12 @@ export function rampIn(air: Air): Ramp {
   const o = { time: air.time, season: air.season, overcast: air.overcast * 0.5, mist: air.mist };
   const k = STORM_SHARE * air.cloud;
   // Under a built sky little direct light is left to catch.
-  const more = CATCH * (1 - 0.7 * air.cloud);
-  const one = (c: number, storm: number, lit: number): number => gradeRgb(k > 0 ? mixRgb(c, storm, k) : c, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + more) * lit);
+  const open = 1 - 0.7 * air.cloud;
+  const glow = GLOW * lowLight(air.time) * open;
+  const one = (c: number, storm: number, lit: number): number => {
+    const base = glow > 0 ? mixRgb(c, MIDDAY_RAMP.tones[0], glow * lit) : c;
+    return gradeRgb(k > 0 ? mixRgb(base, storm, k) : base, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + CATCH * open) * lit);
+  };
   return {
     rim: one(MIDDAY_RAMP.rim, STORM[0], 1), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1], TONE_LIT[i])), cuts: MIDDAY_RAMP.cuts,
   };

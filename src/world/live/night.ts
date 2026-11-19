@@ -9,6 +9,10 @@
 // light again before dawn. The glass the builders painted lit by day (lantern marks: the bathhouse's windows, the
 // marsh house's one) all light at dusk and burn till morning.
 //
+// Lamplight lands on things: a little on the wall round a window, a pool on the quay under a harbour lantern, and a
+// short broken reflection in water that lies just under a light. The quays' bollards carry lanterns, and so do some
+// jetties and moored boats; nobody marked those, so they are found here from the shape of what was built.
+//
 // Everything is drawn in flat steps and ordered dither, as the rest of the page is: no soft gradients.
 
 import type { Structure } from "../gen/built.ts";
@@ -31,38 +35,51 @@ const LANTERN = 0xffe89f;
 const EARLY_GLASS = 0xfff4c0;
 /** The lamplight that falls on a wall: a deeper amber than the glass. */
 const SPILL_RGB = 0xf0a040;
-/** Of 256: how strongly a window's light falls on the wall under it and beside it, at full dark. */
-const SPILL_UNDER = 78;
-const SPILL_BESIDE = 30;
+/** Of 256: how strongly a window's light falls on the wall under it, beside it and over it, at full dark. */
+const SPILL_UNDER = 96;
+const SPILL_BESIDE = 46;
+const SPILL_OVER = 24;
+/** A lantern on a post: its flame, and of 256 the pool it throws on the 3 × 3 pixels round it. */
+const POST = 0xffd27a;
+const POOL = 78;
+/** A light's reflection: looked for in water this many pixels under it at most, and of 256 each pixel of it going down. */
+const MIRROR_REACH = 7;
+const MIRROR = [132, 92, 60, 34] as const;
 /** Of 65536: the share of windows that ever light. */
 const LIT_SHARE = 0.76 * 65536;
 /** Of 65536: of those, the share that burn all night, and the share that light again before dawn. */
-const ALL_NIGHT = 0.12 * 65536;
+const ALL_NIGHT = 0.16 * 65536;
 const EARLY = 0.3 * 65536;
 
-/** Lighthouse beams: seconds a turn, world cells long, and how fast they widen (pixels a pixel). */
+/** Lighthouse beams: seconds a turn, world cells long, and how fast they widen (pixels a pixel: 12 across at 80 out). */
 const BEAM_TURN = 14;
-const BEAM_LENGTH = 230;
-const BEAM_SPREAD = 0.062;
-/** The beam's light, and the lamp's own. */
-const BEAM = 0xfff2c4;
-const LAMP_WHITE = 0xfffbe6;
+const BEAM_LENGTH = 170;
+const BEAM_SPREAD = 0.07;
+/** The beam's light: warm, so what it crosses brightens toward gold and never greys. And the lamp's own. */
+const BEAM = 0xffe196;
+const HALO = 0xffd27a;
+const LAMP_WHITE = 0xfff6d8;
 /**
- * A beam in flat bands from the lamp outward: where each ends (a share of the length) and its strength of 256. Past
- * BEAM_TIP the last band is a checker of pixels, so the beam breaks up into the dark instead of stopping.
+ * A beam is lit pixels or none, never a thin wash: its light thins out along its length and toward its edges as an
+ * ordered dither, and the pixels it does light take the beam's colour at one of these strengths (of 256), by how far
+ * out they are: the ends of the three stretches as shares of the length.
  */
-const BAND_END = [0.07, 0.2, 0.4, 0.62, 0.82, 1] as const;
-const BAND_ALPHA = [156, 112, 82, 58, 40, 27] as const;
-const BEAM_TIP = 0.92;
-/** The middle of a beam is solid; outside this share of its half-width it is a checker. */
-const BEAM_CORE = 0.5;
+const BAND_END = [0.16, 0.45] as const;
+const BAND_ALPHA = [196, 158, 124] as const;
+/** The 4 × 4 ordered dither, fixed to the world, so a beam sweeps over it and nothing crawls. */
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5] as const;
 
-/** Stars on the water: one in this many bake pixels, on a tile of STAR_TILE² that repeats over the world. */
-const STAR_EVERY = 300;
+/**
+ * Stars on the water: about one in this many bake pixels, on a tile of STAR_TILE² that repeats over the world. They
+ * lie in loose drifts with dark water between, as a real sky does, not an even scatter.
+ */
+const STAR_EVERY = 430;
 const STAR_TILE = 512;
 /** Water this far from the shore (its tone) or farther shows them. */
 const STAR_OFFSHORE = 4;
 const STAR = 0xe6eef6;
+/** Of 256: a star's hash above this is one of the few bright ones. */
+const STAR_BRIGHT = 238;
 
 // ── Finding the lights ───────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -73,6 +90,8 @@ const flags = (ids: readonly number[]): Uint8Array => {
 };
 const ROOF = flags([M.roofSlate, M.roofTile, M.roofLead, M.copper]);
 const STARRY = flags([M.sea, M.seaClear, M.lake]);
+/** Water that mirrors a light standing over it. */
+const WATERY = flags([M.sea, M.seaClear, M.lake, M.river]);
 /** The light bytes the builders give the shade under an arch. */
 const ARCH_TONES = new Set([92, 104]);
 
@@ -109,6 +128,8 @@ export interface Lamp {
 export interface NightLights {
   windows: LightFile;
   lanterns: LightFile;
+  /** Lanterns nobody marked: on the quays' bollards, at the ends of jetties, in the sterns of moored boats. */
+  posts: LightFile;
   lamps: Lamp[];
 }
 
@@ -136,9 +157,41 @@ function markPixel(x: number, y: number, top: number, n: number): [number, numbe
   return [((x % n) + n) % n, modP(Math.floor((4 * cy) / 5) - Math.floor(top + 0.5), 0.8 * n)];
 }
 
+/**
+ * The lanterns a roofless structure carries, pushed onto `posts`: one on each bollard of a quay (a dark stone post
+ * standing clear of the stone round it), one at the seaward end of every other jetty (planks and posts, nothing
+ * else), and one in the stern of every other moored boat.
+ */
+function postLanterns(s: Structure, id: number, n: number, posts: number[]): void {
+  const at = (i: number, j: number): number => (i < 0 || j < 0 || i >= s.w || j >= s.h ? 0 : s.top[j * s.w + i]);
+  const light = (i: number, j: number, z: number): void => {
+    const [bx, by] = markPixel(s.x + i, s.y + j, s.base + z, n);
+    posts.push(bx, by, hash2(bx, by, 0x9057 + id));
+  };
+  let timber = 0, built = 0;
+  for (let c = 0; c < s.mat.length; c++) if (s.top[c] > 0) { built++; if (s.mat[c] === M.timber) timber++; }
+  const some = (mix32(id + 0x60a7) & 1) === 0;
+  if (built > 0 && timber === built && s.w === 4 && s.h >= 6) {
+    // A jetty: the last post on its east side.
+    for (let j = s.h - 1; j >= 0 && some; j--) if (at(3, j) > at(2, j)) { light(3, j, at(3, j) + 1); break; }
+    return;
+  }
+  if (s.w === 5 && s.h === 3 && built === 8 && s.marks.every((v, k) => k % 5 !== 3 || v === M.timber)) {
+    // A boat at its mooring: a lantern in the stern.
+    if (some) light(4, 1, 2);
+    return;
+  }
+  for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) {
+    const top = at(i, j);
+    if (top <= 0 || s.mat[j * s.w + i] !== M.stoneDark) continue;
+    if (at(i - 1, j) > top - 0.5 || at(i + 1, j) > top - 0.5 || at(i, j + 1) > top - 0.5) continue;
+    light(i, j, top + 1);
+  }
+}
+
 /** Every window, lantern and lighthouse lamp among `structures`, on a world n cells across. */
 export function nightLights(structures: readonly Structure[], n: number): NightLights {
-  const windows: number[] = [], lanterns: number[] = [], lamps: Lamp[] = [];
+  const windows: number[] = [], lanterns: number[] = [], posts: number[] = [], lamps: Lamp[] = [];
   for (let id = 0; id < structures.length; id++) {
     const s = structures[id];
     let roofed = false;
@@ -187,6 +240,7 @@ export function nightLights(structures: readonly Structure[], n: number): NightL
         }
       }
     }
+    if (!roofed && !s.onGround) postLanterns(s, id, n, posts);
     // A lamp room: lantern cells high on a tower.
     let lx = 0, ly = 0, cells = 0, top = 0;
     for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) {
@@ -203,7 +257,7 @@ export function nightLights(structures: readonly Structure[], n: number): NightL
       lamps.push({ bx: ((cx % n) + n) % n, by: modP(0.8 * wy - (s.base + top - 1.5), 0.8 * n), key: mix32(id + 0x1a3b) });
     }
   }
-  return { windows: file(windows, n), lanterns: file(lanterns, n), lamps };
+  return { windows: file(windows, n), lanterns: file(lanterns, n), posts: file(posts, n), lamps };
 }
 
 // ── Drawing ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -236,8 +290,8 @@ export function windowLit(key: number, time: number, dark: number): number {
   if (come === 0) return 0;
   const habit = (mix32(key) & 0xffff);
   if (habit < ALL_NIGHT) return come;
-  // Bed from late evening on, most before midnight and the last in the small hours; early risers light again before dawn.
-  const bed = 0.935 + 0.1 * v * v;
+  // Bed from late evening on, nearly all before midnight; early risers light again before dawn.
+  const bed = 0.925 + 0.085 * v * v;
   if (e < bed) return come * clamp01((bed - e) / 0.004);
   if (habit < ALL_NIGHT + EARLY) {
     const wake = 1.14 + 0.06 * u;
@@ -252,14 +306,65 @@ function takesSpill(v: number): boolean {
   return m !== M.opening && m !== M.lantern && m !== 0;
 }
 
-/** Lamplight on the wall round the lit pixel i at (px, py): under it, and fainter to either side. */
+/** Lamplight on the wall round the lit pixel i at (px, py): under it, and fainter beside it and over it. */
 function spill(f: LiveFrame, i: number, px: number, py: number, a: number): void {
   const { out, bake } = f;
   const w = f.rect.w;
   if (py + 1 < f.rect.h && takesSpill(bake[i + w])) tint(out, i + w, SPILL_RGB, (SPILL_UNDER * a) >> 8);
+  if (py > 0 && takesSpill(bake[i - w])) tint(out, i - w, SPILL_RGB, (SPILL_OVER * a) >> 8);
   const beside = (SPILL_BESIDE * a) >> 8;
   if (px > 0 && takesSpill(bake[i - 1])) tint(out, i - 1, SPILL_RGB, beside);
   if (px + 1 < w && takesSpill(bake[i + 1])) tint(out, i + 1, SPILL_RGB, beside);
+}
+
+/**
+ * The reflection of the light at pixel i, where water lies within MIRROR_REACH pixels under it: a short broken
+ * streak straight down from where the water starts, in the light's colour, one pixel of it out at a time.
+ */
+function mirror(f: LiveFrame, i: number, py: number, rgb: number, a: number, key: number): void {
+  const { out, bake } = f;
+  const w = f.rect.w, h = f.rect.h;
+  const last = py + MIRROR_REACH < h ? py + MIRROR_REACH : h - 1;
+  let at = i + w;
+  for (let y = py + 1; y <= last; y++, at += w) {
+    if (WATERY[matOf(bake[at])] === 0) continue;
+    const gap = (Math.floor(f.t * 2.5) + key) & 3;
+    for (let k = 0; k < MIRROR.length && y + k < h; k++, at += w) {
+      if (WATERY[matOf(bake[at])] === 0) return;
+      if (k !== 0 && k === gap) continue;
+      tint(out, at, rgb, (MIRROR[k] * a) >> 8);
+    }
+    return;
+  }
+}
+
+/** The quays' lanterns, the jetties' and the boats': a flame, a warm pool on what stands round it, and its reflection. */
+function drawPosts(f: LiveFrame, lights: LightFile, dark: number, glow: number): void {
+  const { out, bake, rect, n } = f;
+  const w = rect.w, h = rect.h;
+  const yPeriod = 0.8 * n;
+  const tx0 = Math.floor(rect.x / TILE), tx1 = Math.floor((rect.x + w - 1) / TILE);
+  const ty0 = Math.floor(rect.y / TILE), ty1 = Math.floor((rect.y + h - 1) / TILE);
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const tile = modP(ty, lights.ty) * lights.tx + modP(tx, lights.tx);
+    for (let k = lights.start[tile]; k < lights.start[tile + 1]; k++) {
+      const px = modP(lights.bx[k] - rect.x, n), py = modP(lights.by[k] - rect.y, yPeriod);
+      if (px < 1 || py < 1 || px >= w - 1 || py >= h - 1) continue;
+      const i = py * w + px;
+      if (matOf(bake[i]) === 0) continue;
+      const key = lights.key[k];
+      // Lit one by one, early in the dusk: somebody walks the quay with a taper.
+      const lit = clamp01((dark - 0.14 - 0.22 * (((key >>> 16) & 255) / 255)) / 0.12);
+      if (lit === 0) continue;
+      const a = Math.round(256 * lit);
+      const pool = Math.round(POOL * lit * glow);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx !== 0 || dy !== 0) tint(out, i + dy * w + dx, POST, pool);
+      }
+      tint(out, i, POST, a);
+      mirror(f, i + w, py + 1, POST, Math.round(a * glow), key);
+    }
+  }
 }
 
 /**
@@ -305,7 +410,10 @@ function drawLights(f: LiveFrame, lights: LightFile, own: boolean, time: number,
       tint(out, i, glass, a);
       // The first lamps show against walls still bright with the evening: paler, so they read.
       if (early > 0) tint(out, i, EARLY_GLASS, (early * a) >> 8);
-      spill(f, i, px, py, Math.round(a * glow));
+      const soft = Math.round(a * glow);
+      spill(f, i, px, py, soft);
+      // The foot of a window is mirrored where water lies under it.
+      if (py + 1 < h && matOf(bake[i + w]) !== want) mirror(f, i, py, glass, soft, key);
     }
   }
 }
@@ -316,13 +424,13 @@ function crossing(cy: number, x1: number, y1: number, x2: number, y2: number): n
   return x1 + ((cy - y1) / (y2 - y1)) * (x2 - x1);
 }
 
-/** The strengths of a beam's bands this frame (of 256). */
+/** This frame, of 256: the strengths of a beam's three stretches, and (of 16) how dense its dither is at the lamp. */
 const bandNow = new Int32Array(BAND_ALPHA.length);
+let beamDensity = 0;
 
 /**
- * One beam from the frame point (ox, oy) along world heading `a`: a wedge of light in flat bands, each fainter than
- * the one before, solid down its middle and a checker at its edges and its far end. The checker is fixed to the
- * world, so the beam sweeps over it and nothing crawls.
+ * One beam from the frame point (ox, oy) along world heading `a`: a wedge of warm light, solid at the lamp and down
+ * its middle, thinning into an ordered dither toward its edges and its far end.
  */
 function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
   const { out, rect } = f;
@@ -336,8 +444,7 @@ function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
   const ax = ox + ux * L + qx * end, ay = oy + uy * L + qy * end;
   const bx = ox + ux * L - qx * end, by = oy + uy * L - qy * end;
   const y0 = Math.max(0, Math.floor(Math.min(oy, ay, by))), y1 = Math.min(h - 1, Math.ceil(Math.max(oy, ay, by)));
-  const e0 = BAND_END[0] * L, e1 = BAND_END[1] * L, e2 = BAND_END[2] * L, e3 = BAND_END[3] * L, e4 = BAND_END[4] * L;
-  const tip = BEAM_TIP * L, last = 0.5 * (tip + L);
+  const e0 = BAND_END[0] * L, e1 = BAND_END[1] * L;
   for (let y = y0; y <= y1; y++) {
     const cy = y + 0.5;
     let lo = Infinity, hi = -Infinity;
@@ -354,26 +461,16 @@ function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
     const c0 = Math.max(0, Math.ceil(lo - 0.5)), c1 = Math.min(w - 1, Math.floor(hi - 0.5));
     const py = cy - oy;
     let s = (c0 + 0.5 - ox) * ux + py * uy, d = (c0 + 0.5 - ox) * qx + py * qy;
-    const even = (rect.y + y) & 1, row = y * w;
+    const ditherRow = ((rect.y + y) & 3) * 4, row = y * w;
     for (let c = c0; c <= c1; c++, s += ux, d += qx) {
       if (s <= 0 || s >= L) continue;
       const half = 0.5 + BEAM_SPREAD * s, off = d < 0 ? -d : d;
       if (off >= half) continue;
-      const checker = ((rect.x + c) & 1) === even;
-      const edge = off > BEAM_CORE * half;
-      let band: number;
-      if (s < e0) band = 0;
-      else if (s < e1) band = 1;
-      else if (s < e2) band = 2;
-      else if (s < e3) band = 3;
-      else if (s < e4) band = 4;
-      else {
-        // The tip: a checker, and at its edges one pixel in four.
-        if (s > tip && (!checker || ((edge || s > last) && even === 1))) continue;
-        band = 5;
-      }
-      if (edge && !checker) continue;
-      tint(out, row + c, BEAM, bandNow[band]);
+      // How much light is here: all of it at the lamp and on the axis, none at the tip and the edges.
+      const along = 1 - s / L, across = off / half;
+      const light = beamDensity * along * (1.25 - across * across);
+      if (light <= BAYER[ditherRow + ((rect.x + c) & 3)]) continue;
+      tint(out, row + c, BEAM, bandNow[s < e0 ? 0 : s < e1 ? 1 : 2]);
     }
   }
 }
@@ -382,10 +479,11 @@ function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
 function drawLamps(f: LiveFrame, lamps: readonly Lamp[], dark: number, mist: number): void {
   const { out, bake, rect, n, t } = f;
   const w = rect.w, h = rect.h;
-  const strength = clamp01((dark - 0.3) / 0.4);
+  const strength = clamp01((dark - 0.18) / 0.3);
   if (strength === 0) return;
-  // Mist shows a beam up.
-  for (let k = 0; k < bandNow.length; k++) bandNow[k] = Math.round(BAND_ALPHA[k] * strength * (1 + 0.45 * mist));
+  // A beam is fewer lit pixels in the half-light, not paler ones; mist shows it up.
+  for (let k = 0; k < bandNow.length; k++) bandNow[k] = Math.min(236, Math.round(BAND_ALPHA[k] * (0.7 + 0.3 * strength) * (1 + 0.2 * mist)));
+  beamDensity = 21 * strength * (1 + 0.3 * mist);
   const reach = BEAM_LENGTH + 4;
   for (let i = 0; i < lamps.length; i++) {
     const lamp = lamps[i];
@@ -399,14 +497,15 @@ function drawLamps(f: LiveFrame, lamps: readonly Lamp[], dark: number, mist: num
     const flare = s4 * s4;
     const cx = Math.floor(ox), cy = Math.floor(oy);
     if (cx < -8 || cy < -8 || cx >= w + 8 || cy >= h + 8) continue;
-    // The halo: two flat rings, the outer a checker.
-    const near = 2.3 + 1.2 * flare, far = 4.3 + 2.4 * flare;
+    // The halo: a bright disc, a warm checker round it, and a thin scatter of gold beyond.
+    const near = 2.3 + 1.2 * flare, far = 4.3 + 2 * flare, glow = 7.4;
     for (let y = cy - 7; y <= cy + 7; y++) for (let x = cx - 7; x <= cx + 7; x++) {
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       const r2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
       const at = y * w + x;
-      if (r2 <= near * near) tint(out, at, BEAM, Math.round(150 * strength));
-      else if (r2 <= far * far && ((x + rect.x + y + rect.y) & 1) === 0) tint(out, at, BEAM, Math.round(84 * strength));
+      if (r2 <= near * near) tint(out, at, BEAM, Math.round(176 * strength));
+      else if (r2 <= far * far) { if (((x + rect.x + y + rect.y) & 1) === 0) tint(out, at, HALO, Math.round(120 * strength)); }
+      else if (r2 <= glow * glow && ((x + rect.x) & 1) === 0 && ((y + rect.y) & 1) === 0) tint(out, at, HALO, Math.round(84 * strength));
       // The lamp room burns: its glazing, wherever the bake shows it.
       if (r2 <= 18 && matOf(bake[at]) === M.lantern) tint(out, at, LAMP_WHITE, Math.round(256 * strength));
     }
@@ -427,17 +526,22 @@ function drawLamps(f: LiveFrame, lamps: readonly Lamp[], dark: number, mist: num
   }
 }
 
-/** The stars on one tile of bake space: x, y and a twinkle hash, one in about STAR_EVERY pixels. */
+/**
+ * The stars on one tile of bake space: x, y and a twinkle hash. Twice as many places are tried as stars are wanted,
+ * and each is kept by how thick the drift is there: two slow waves across the tile, which repeat with it.
+ */
 function starTile(seed: number): Uint32Array {
-  const cells = (STAR_TILE * STAR_TILE) / STAR_EVERY;
-  const out = new Uint32Array(Math.floor(cells) * 3);
-  for (let k = 0; k < Math.floor(cells); k++) {
+  const tries = Math.floor((2 * STAR_TILE * STAR_TILE) / STAR_EVERY);
+  const kept: number[] = [];
+  const turn = (2 * Math.PI) / STAR_TILE;
+  for (let k = 0; k < tries; k++) {
     const hsh = hash2(k, 0x57a2, seed);
-    out[k * 3] = hsh % STAR_TILE;
-    out[k * 3 + 1] = (hsh >>> 9) % STAR_TILE;
-    out[k * 3 + 2] = mix32(hsh);
+    const x = hsh % STAR_TILE, y = (hsh >>> 9) % STAR_TILE;
+    const drift = 0.5 + 0.3 * psin(turn * (2 * x + y) + (seed & 7)) + 0.26 * psin(turn * (3 * y - x) + 1.7);
+    const key = mix32(hsh);
+    if (((key >>> 21) & 1023) / 1023 < drift * drift) kept.push(x, y, key);
   }
-  return out;
+  return Uint32Array.from(kept);
 }
 
 /** Stars in the calm water: most faint, a few bright with a short streak; each winks in steps, on its own time. */
@@ -456,13 +560,13 @@ function drawStars(f: LiveFrame, stars: Uint32Array, strength: number): void {
       if (STARRY[matOf(v)] === 0 || toneOf(v) < STAR_OFFSHORE) continue;
       const key = stars[k + 2];
       const rank = key & 255;
-      const bright = rank > 232 ? 1 : 0.3 + 0.4 * (rank / 232);
+      const bright = rank > STAR_BRIGHT ? 1 : 0.22 + 0.36 * (rank / STAR_BRIGHT);
       const wave = psin(t * (0.7 + ((key >>> 8) & 7) * 0.22) + ((key >>> 11) & 1023));
       const wink = wave > -0.2 ? 1 : wave > -0.8 ? 0.7 : 0.4;
       const a = Math.round(236 * strength * bright * wink);
       tint(out, i, STAR, a);
       // The brightest lie a little long on the water.
-      if (rank > 232 && wink === 1) {
+      if (rank > STAR_BRIGHT && wink === 1) {
         if (px > 0 && STARRY[matOf(bake[i - 1])] === 1) tint(out, i - 1, STAR, a >> 2);
         if (px + 1 < w && STARRY[matOf(bake[i + 1])] === 1) tint(out, i + 1, STAR, a >> 2);
       }
@@ -488,6 +592,7 @@ export function nightLayer(seed: number, lights?: NightLights): LiveLayer {
       const glow = dark * (1 + 0.6 * air.mist);
       drawLights(f, lights.windows, false, air.time, dark, glow);
       drawLights(f, lights.lanterns, true, air.time, dark, glow);
+      drawPosts(f, lights.posts, dark, glow);
       drawLamps(f, lights.lamps, dark, air.mist);
     },
   };

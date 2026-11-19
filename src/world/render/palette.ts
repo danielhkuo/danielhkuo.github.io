@@ -430,28 +430,33 @@ function grade(s: GradeSpec): Grade {
 }
 
 // The day, in sun phase (sky/clock.ts): 0.25 sunrise, 0.5 noon, 0.75 sunset. Each grade names two lights: the one
-// on faces turned to the sun or the moon, and the one in their shade. Night is moonlit: most of the land's own colour
-// goes, pale blue-green where the moon falls and indigo in the shade, and the curve keeps roads, fields and snow
-// pale over dark woods. The blue hours are one deep blue wash. Dawn is rose-peach over lavender. Golden hour is
-// buff-gold over blue-violet. Dusk is a red-orange afterglow over deepening violet.
-const NIGHT = grade({ gain: 0.47, lift: 0.09, sat: 0.2, curve: 1.4, shade: 0.1, water: 1.1, light: [0.045, 238], dark: [0.06, 276] });
+// on faces turned to the sun or the moon, and the one in their shade. Night is moonlit: each thing keeps its own hue
+// at low chroma (roofs plum, woods teal, fields sage), paler where the moon falls and indigo in the shade, and the
+// curve keeps roads, fields and snow pale over dark woods. The small hours are deeper and cooler still. The blue
+// hours are one deep blue wash. Dawn is rose over blue-lavender. Golden hour is buff-gold over blue-violet. Dusk is
+// peach over deepening violet. In a low sun, greens lean to teal with the shade, not to olive with the light.
+const DEEP = grade({ gain: 0.34, lift: 0.125, sat: 0.34, curve: 1.45, shade: 0.08, light: [0.03, 246], dark: [0.046, 272] });
+const NIGHT = grade({ gain: 0.43, lift: 0.135, sat: 0.42, curve: 1.4, shade: 0.1, water: 1.1, light: [0.034, 236], dark: [0.046, 270] });
 const BLUE = grade({ gain: 0.62, lift: 0.07, sat: 0.3, curve: 1.2, shade: 0.08, water: 1.2, light: [0.042, 250], dark: [0.064, 274] });
-const DAWN = grade({ gain: 0.88, lift: 0.06, sat: 0.7, shade: 0.07, dyed: 0.6, water: 1.3, light: [0.056, 18], dark: [0.05, 282] });
+const DAWN = grade({ gain: 0.86, lift: 0.055, sat: 0.8, shade: 0.08, dyed: 0.25, water: 1.3, light: [0.056, 20], dark: [0.056, 262] });
 const MORNING = grade({ gain: 0.985, lift: 0.008, sat: 0.94, light: [0.014, 70], dark: [0.014, 255] });
 const NOON = grade({ gain: 1, sat: 1, light: [0, 0], dark: [0, 0] });
-const GOLDEN = grade({ gain: 0.95, sat: 0.9, shade: 0.08, dyed: 0.7, water: 0.5, light: [0.056, 72], dark: [0.04, 284] });
-const DUSK = grade({ gain: 0.82, lift: 0.01, sat: 0.7, curve: 1.05, shade: 0.16, dyed: 0.45, water: 1.4, light: [0.074, 33], dark: [0.06, 302] });
+const GOLDEN = grade({ gain: 0.97, sat: 0.95, shade: 0.1, dyed: 0.45, water: 0.9, light: [0.052, 75], dark: [0.05, 280] });
+const DUSK = grade({ gain: 0.8, lift: 0.01, sat: 0.76, curve: 1.05, shade: 0.17, dyed: 0.25, water: 1.4, light: [0.075, 40], dark: [0.07, 288] });
 
-/** Sun phase of each keyframe of the day. Noon holds from NOON_FROM to NOON_TO, so the shipped midday is plain noon. */
+/**
+ * Sun phase of each keyframe of the day. Noon holds from NOON_FROM to NOON_TO, so the shipped midday is plain noon.
+ * The small hours deepen from `deepComes` to midnight, hold to `deepEnds`, and are plain night again by `deepLifts`.
+ */
 export const DAY_KEYS = {
-  nightEnds: 0.17, blueDawn: 0.215, sunrise: 0.25, morning: 0.29, noonFrom: 0.36, noonTo: 0.64, golden: 0.705,
+  deepEnds: 0.07, deepLifts: 0.14, deepComes: 0.93, nightEnds: 0.17, blueDawn: 0.215, sunrise: 0.25, morning: 0.29, noonFrom: 0.36, noonTo: 0.64, golden: 0.705,
   sunset: 0.75, blueDusk: 0.785, nightFalls: 0.83,
 } as const;
 
 const K = DAY_KEYS;
 const DAY: readonly (readonly [number, Grade])[] = [
-  [0, NIGHT], [K.nightEnds, NIGHT], [K.blueDawn, BLUE], [K.sunrise, DAWN], [K.morning, MORNING], [K.noonFrom, NOON],
-  [K.noonTo, NOON], [K.golden, GOLDEN], [K.sunset, DUSK], [K.blueDusk, BLUE], [K.nightFalls, NIGHT], [1, NIGHT],
+  [0, DEEP], [K.deepEnds, DEEP], [K.deepLifts, NIGHT], [K.nightEnds, NIGHT], [K.blueDawn, BLUE], [K.sunrise, DAWN], [K.morning, MORNING], [K.noonFrom, NOON],
+  [K.noonTo, NOON], [K.golden, GOLDEN], [K.sunset, DUSK], [K.blueDusk, BLUE], [K.nightFalls, NIGHT], [K.deepComes, NIGHT], [1, DEEP],
 ];
 
 /**
@@ -480,21 +485,23 @@ function gradeAt(time: number): Grade {
   };
 }
 
-/** Mist: a pale, cool blue-grey veil, graded with the light, laid over every colour. */
-const MIST: Lch = [0.935, 0.022, 232];
+/** Mist: a thin pale veil laid over every colour. It is near grey, so the light of the hour tints it: gold, rose or moon-blue. */
+const MIST: Lch = [0.94, 0.012, 240];
 /**
  * At full mist: the share of the way a dark colour goes to the veil, how much further a pale one goes, and the share
- * of its own colour each loses first.
+ * of its own colour each loses first. The veil is thin: the drifting banks (live/mist.ts) carry the mist.
  */
-export const MIST_VEIL = 0.46;
-const MIST_MELT = 0.14;
-const MIST_DRAIN = 0.45;
-/** Mist lies in the cool of the shade: it takes this little of the sun's colour, so a dusk mist is violet-grey, never sepia. */
-const MIST_LIT = 0.25;
+export const MIST_VEIL = 0.15;
+const MIST_MELT = 0.04;
+const MIST_DRAIN = 0.18;
+/** How far the veil is turned to the light: mist glows with the sun or the moon more than it lies in shade. */
+const MIST_LIT = 0.8;
 
-/** The light of one moment: the day's grade, the overcast, and the mist with its veil already graded. */
+/** The light of one moment: the day's grade, the overcast, the mist with its veil already graded, and the direct sun left. */
 interface Light {
   g: Grade;
+  /** 0–1: how much direct sun reaches the land, to cast shadows: 1 on a clear day, little at night, none in mist. */
+  sun: number;
   overcast: number;
   mist: number;
   veil: Lab;
@@ -505,7 +512,9 @@ function lightOf(o: PaletteOptions): Light {
   const overcast = o.overcast < 0 ? 0 : o.overcast > 1 ? 1 : o.overcast;
   const m = o.mist ?? 0;
   const mist = m < 0 ? 0 : m > 1 ? 1 : m;
-  return { g, overcast, mist, veil: applyGrade(lab(MIST), { g, overcast, mist: 0, veil: [0, 0, 0] }, false, MIST_LIT) };
+  const dark = (NOON.gain - g.gain) / (NOON.gain - NIGHT.gain);
+  const sun = (1 - 0.85 * (dark < 0 ? 0 : dark > 1 ? 1 : dark)) * (1 - mist) * (1 - 0.6 * overcast);
+  return { g, sun, overcast, mist, veil: applyGrade(lab(MIST), { g, sun, overcast, mist: 0, veil: [0, 0, 0] }, false, MIST_LIT) };
 }
 
 /**
@@ -514,6 +523,8 @@ function lightOf(o: PaletteOptions): Light {
  */
 const DYED_FROM = 0.02;
 const DYED_SPAN = 0.05;
+/** Of the light's colour it turns away, the share of the shade's colour it takes instead: greens lean to teal. */
+const DYED_COOL = 0.5;
 
 /**
  * A colour in the light: graded, greyed, misted and, unless `cap` is false (the dragon), kept off the reserved hues.
@@ -526,14 +537,15 @@ function applyGrade(c: Lab, light: Light, cap = true, lit?: number, take = 1, wa
   const w = lit ?? smooth((c[0] - 0.35) / 0.5);
   let L = g.lift + g.gain * (g.curve === 1 ? c[0] : Math.pow(c[0], g.curve)) * (1 - g.shade * (1 - w));
   const own = wash && g.dyed !== 1 ? smooth((Math.sqrt(c[1] * c[1] + c[2] * c[2]) - DYED_FROM) / DYED_SPAN) : 0;
-  const wl = w * (1 - (1 - g.dyed) * own) * take, wd = (1 - w) * take;
+  const turned = w * (1 - g.dyed) * own;
+  const wl = (w - turned) * take, wd = (1 - w + turned * DYED_COOL) * take;
   let a = c[1] * g.sat + wl * g.warmA + wd * g.coolA;
   let b = c[2] * g.sat + wl * g.warmB + wd * g.coolB;
   if (overcast > 0) {
-    // Rain light, flat and wet: the lights come down to a grey-green, the darks hold, and colour thins.
-    const pivot = g.lift + g.gain * 0.5;
-    L = pivot + (L - pivot) * (1 - 0.2 * overcast) - 0.04 * overcast * g.gain;
-    const k = 1 - 0.38 * overcast;
+    // Rain light, flat, dim and wet: the lights come well down to a grey-green, the darks hold, and colour thins.
+    const pivot = g.lift + g.gain * 0.45;
+    L = pivot + (L - pivot) * (1 - 0.22 * overcast) - 0.085 * overcast * g.gain;
+    const k = 1 - 0.5 * overcast;
     a = a * k - 0.004 * overcast;
     b = b * k - 0.007 * overcast;
   }
@@ -630,13 +642,14 @@ function ramp(spec: Spec, season: number): Lab[] {
   return out;
 }
 
-function shadowed(c: Lab, depth: number, overcast: number): Lab {
+/** `c` under a cast shadow of `depth`, with `sun` (0–1) of the direct light left to cast it. */
+function shadowed(c: Lab, depth: number, sun: number): Lab {
   if (depth === 0) return c;
   // In the darks the colour stays what it was, a dark teal under trees: the lift leaves a shadow little lightness to darken with.
   const v = smooth((c[0] - 0.3) / 0.25);
   const k = 1 - 0.3 * v;
   const target: Lab = [c[0] * 0.52, c[1] * k + v * SHADOW_VIOLET[1], c[2] * k + v * SHADOW_VIOLET[2]];
-  return mix(c, target, SHADOW_MIX[depth] * (1 - 0.5 * overcast));
+  return mix(c, target, SHADOW_MIX[depth] * sun);
 }
 
 /**
@@ -665,6 +678,16 @@ export function gradeRgb(rgba: number, o: PaletteOptions, lit?: number, take = 1
   return pack(applyGrade(oklabOf(rgba), light, false, lit, take, false));
 }
 
+/**
+ * 0–1: how strongly the hour colours what it lights: none at noon, full at dawn, golden hour and dusk, and most of
+ * it under the moon. Clouds use it to know when their crowns burn.
+ */
+export function lowLight(time: number): number {
+  const g = gradeAt(time);
+  const c = Math.sqrt(g.warmA * g.warmA + g.warmB * g.warmB) / 0.05;
+  return c > 1 ? 1 : c;
+}
+
 /** The paper in the light of `o`, as packed RGBA: what bare paper and the haze fade toward. */
 export function paperIn(o: PaletteOptions): number {
   return pack(applyGrade(lab(PAPER), lightOf(o)));
@@ -673,7 +696,6 @@ export function paperIn(o: PaletteOptions): number {
 export function buildPalette(o: PaletteOptions): Palette {
   const pal = new Uint32Array(256 * 256);
   const light = lightOf(o);
-  const overcast = light.overcast;
   const ink = applyGrade(lab(INK), light);
   const paper = pack(applyGrade(lab(PAPER), light));
   pal.fill(paper);
@@ -685,10 +707,10 @@ export function buildPalette(o: PaletteOptions): Palette {
     // Water keeps its own depth ramp; land darks are lifted once, after shade and shadow have both been laid.
     const land = SPECS[mat].ramp === "land";
     tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c, tone) => {
-      const s = shadowed(c, depth, overcast);
+      const s = shadowed(c, depth, light.sun);
       if (!land) return applyGrade(s, light, true, undefined, light.g.water, false);
       const d = liftDark(s);
-      return applyGrade(d, light, true, LIT_BY_TONE * LIT_TONE[tone] * LIT_SHADOW[depth] + (1 - LIT_BY_TONE) * smooth((d[0] - 0.35) / 0.5));
+      return applyGrade(d, light, true, LIT_BY_TONE * LIT_TONE[tone] * (1 - (1 - LIT_SHADOW[depth]) * light.sun) + (1 - LIT_BY_TONE) * smooth((d[0] - 0.35) / 0.5));
     }));
   }
 

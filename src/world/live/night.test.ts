@@ -142,3 +142,18 @@ test("cloud, rain and mist put the stars out", () => {
     assert.equal(differing(sea.out, before), 0);
   }
 });
+
+test("a quay's bollards carry lanterns, and a roofed house's dark stone does not", () => {
+  // A roofless strip of quay, 9 × 2: pale stone 2.4 high with one dark bollard standing 3.3 at its front.
+  const cells = 9 * 2;
+  const quay: Structure = {
+    x: 200, y: 200, w: 9, h: 2, base: 0,
+    top: new Float32Array(cells).fill(2.4), mat: new Uint8Array(cells).fill(M.stone), tone: new Uint8Array(cells), paint: new Uint8Array(cells),
+    marks: [],
+  };
+  quay.top[9 + 4] = 3.3;
+  quay.mat[9 + 4] = M.stoneDark;
+  assert.equal(nightLights([quay], 1024).posts.key.length, 1);
+  quay.mat[0] = M.roofSlate;
+  assert.equal(nightLights([quay], 1024).posts.key.length, 0);
+});
