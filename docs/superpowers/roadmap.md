@@ -42,6 +42,11 @@ Last updated 2026-11-18.
   `specs/2026-11-18-wonders-and-larger-map-design.md`.
 - **Frame budget met** (2026-11-18, `frame-budget`). /world's p95 at 4× CPU throttle fell from 6.0 to 3.6 ms, with the
   look pinned byte-identical by differential tests.
+- **Sights stay while they are watched** (2026-11-18, `sights-persist`, `live/linger.ts`). A timed sight in view as its
+  time runs out is no longer cut off or faded: the balloon drifts on, the ship sails on (lying to off shoals), the fox
+  trots on into cover, the heron flies on, the monk walks home, the kite comes down with the child, and each wonder's
+  moment plays out or stays where its time left it, until it is out of view. The clocks are unchanged and every
+  visitor's; what lingers is the watcher's own, and never shows twice at once.
 - **Wonders** (2026-11-18). Nine baked wonders after their Ghibli counterparts, redrawn by Cursor at the owner's request
   and polished over three offense/defense critique rounds (Opus critics, Cursor building), each with a live moment
   (`live/moments.ts`), plus the floating garden and the land-ship. A crowded wonder falls back to half the spacing.
@@ -230,6 +235,12 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Sites painted into the land: a lighthouse pad cut down a sea cliff reads as a green box, and a road runs straight
   down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
+
+From the lingering sights (2026-11-18), for the frame-edge work:
+- A rare sight in its window draws only while its candidate spot is 30 px inside the frame, though the balloon drifts
+  up to 119 px from it, the ship 112, the fox 70 and the heron about 255: moving the view can drop one mid-frame. The
+  ship and the fox are culled by their anchor at the frame's edge; the monk shows only while the abbey's whole road
+  box is in frame. In its window the ship still vanishes where its course meets water shallower than tone 5.
 
 From landing (2026-11-18):
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky

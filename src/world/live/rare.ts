@@ -5,13 +5,16 @@
 // Each sight keeps its own clock: one appearance in every stretch of ten to twenty minutes, at a moment the seed
 // picks. While it lasts, the sight shows wherever a candidate point of the world's lattice (also the seed's) lies on
 // land that suits it, so a visitor sees it only by being over the right country at the right time. Everything is drawn
-// in bake space, on the pixel the land itself is drawn on, so nothing needs a depth test and nothing is remembered
-// from frame to frame except which appearance has already been reported.
+// in bake space, on the pixel the land itself is drawn on, so nothing needs a depth test. One being watched as its time
+// runs out lingers (see linger.ts): the balloon drifts on, the ship sails on, the fox trots on, the heron flies on and
+// the monk walks home, until it is out of view. The layer remembers from frame to frame only where the sights it drew
+// stood, and which appearance has already been reported.
 
 import { hash2 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
 import { isBuilt, isCrop, isWater, MATERIAL as M } from "../look/materials.ts";
-import { artSet, blend, frameX, groundRow, modP, ringDelta, smooth01 } from "./art.ts";
+import { artSet, blend, frameX, frameY, groundRow, modP, ringDelta, smooth01 } from "./art.ts";
+import { Lingers } from "./linger.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { worldRowAt, type LiveSprite } from "./sprites.ts";
@@ -67,6 +70,8 @@ export const HERON_LIFT = 34;
 const MONK_X = 72;
 const MONK_Y = 52;
 const MONK_PACE = 3;
+/** Past his time he goes in at his door, fading into the doorway over his last this many steps. */
+const DOOR = 4;
 /**
  * The wake: the flier must be within WAKE_LOW units of the water; foam lasts WAKE_LASTS seconds and trails no more
  * than WAKE_LONG cells, a mark every WAKE_STEP, the two arms WAKE_SPREAD apart for each cell behind.
@@ -129,9 +134,18 @@ export interface RareLayer extends LiveLayer {
   log: RareSeen[] | null;
 }
 
-function easeInOut(at: number, stays: number, ease: number): number {
-  if (at <= 0 || at >= stays) return 0;
-  return smooth01(at / ease) * smooth01((stays - at) / ease);
+/**
+ * Where one sight drawn on the frame stood: its pixel in bake space (wrapped), its seed bits, its veil and appearance,
+ * the monk's abbey, and, once a ship lingering past its time has met shoal water, where it lies to (NaN until then).
+ */
+interface Sighting {
+  bx: number;
+  by: number;
+  hc: number;
+  veil: number;
+  slot: number;
+  abbey: number;
+  lie: number;
 }
 
 /**
@@ -140,6 +154,10 @@ function easeInOut(at: number, stays: number, ease: number): number {
  */
 let veil = 255;
 const VEIL = 12;
+/** Pixels the sight being drawn put on the frame: none means it is out of view. */
+let inked = 0;
+/** The sighting being drawn on past its time, or null. */
+let going: Sighting | null = null;
 
 /** Offsets (dx, dy) on a lattice of 2 within ±rx, ±ry, nearest first. */
 function offsets(rx: number, ry: number, round: boolean): Int16Array {
@@ -172,6 +190,7 @@ function put(f: LiveFrame, s: LiveSprite, sx: number, sy: number, flip: boolean,
       const px = flip ? sx + s.ax - x : sx - s.ax + x;
       if (px < 0 || px >= w) continue;
       const aa = a >= 255 && veil === 255 ? al : (al * (a > 255 ? 255 : a) * veil) / 65025 | 0;
+      if (aa > 0) inked++;
       if (aa >= 255) out[py * w + px] = s.rgba[y * s.w + x];
       else if (aa > 0) blend(out, py * w + px, s.rgba[y * s.w + x], aa);
     }
@@ -339,25 +358,64 @@ export function rareLayer(ctx: LayerContext): RareLayer {
   /** The appearance of each sight last reported. */
   const told = new Float64Array(RARE.length).fill(NaN);
 
+  /** Which kinds linger past their time, and for each kind the sightings on the last frame and on this one. */
+  const lingers = new Lingers(RARE.length);
+  let seenLast: Sighting[][] = RARE.map(() => []);
+  let seenNow: Sighting[][] = RARE.map(() => []);
+  /** How far a kind kept waiting by a lingering one has eased in: set before each kind is drawn in its window. */
+  let ease = 1;
+
   const layer: RareLayer = {
     name: "rare",
     log: null,
     draw(f: LiveFrame): void {
+      lingers.frame(f.t);
+      const last = seenLast;
+      seenLast = seenNow;
+      seenNow = last;
       let synced = false;
       for (let k = 0; k < RARE.length; k++) {
-        const at = rareWindow(seed, k, f.t, forced);
+        seenNow[k].length = 0;
+        const at = lingers.at(k, rareWindow(seed, k, f.t, forced), rareSlot(k, f.t, forced), false);
         if (at < 0) continue;
         if (!synced) {
           art.sync(f.palette);
           synced = true;
         }
-        const slot = rareSlot(k, f.t, forced);
-        if (k === MONK) monk(f, at, slot);
-        else if (forced) centred(f, k, at, slot);
-        else scattered(f, k, at, slot);
+        if (lingers.lingering(k)) linger(f, k, at);
+        else {
+          const slot = lingers.appearance(k);
+          ease = lingers.fade(k, 1);
+          if (k === MONK) monk(f, at, slot);
+          else if (forced) centred(f, k, at, slot);
+          else scattered(f, k, at, slot);
+          ease = 1;
+        }
+        lingers.drawn(k, seenNow[k].length > 0);
       }
     },
   };
+
+  /** Notes a sighting on the frame, so that if its time runs out now it goes on from there. */
+  function keep(f: LiveFrame, k: number, px: number, py: number, hc: number, slot: number, abbey: number): void {
+    seenNow[k].push({ bx: modP(f.rect.x + px, n), by: modP(f.rect.y + py, 0.8 * n), hc, veil, slot, abbey, lie: NaN });
+  }
+
+  /** Kind k's sightings on the last frame, past their time: each goes on from where it stood, kept while it shows. */
+  function linger(f: LiveFrame, k: number, at: number): void {
+    const list = seenLast[k];
+    for (let j = 0; j < list.length; j++) {
+      const s = list[j];
+      veil = s.veil;
+      going = s;
+      const on = k === MONK
+        ? monkAt(f, s.abbey, at, s.slot)
+        : sight(f, k, at, s.slot, frameX(f, s.bx, n >> 1), frameY(f, s.by, (0.8 * n) >> 1), s.hc);
+      going = null;
+      if (on) seenNow[k].push(s);
+    }
+    veil = 255;
+  }
 
   /** Notes a sight for the tests and, once it is in full view, tells the visitor's log: once an appearance. */
   function seen(k: number, slot: number, px: number, py: number, inView: boolean): void {
@@ -427,11 +485,21 @@ export function rareLayer(ctx: LayerContext): RareLayer {
   function show(f: LiveFrame, k: number, at: number, slot: number, i: number, hc: number): void {
     const w = f.rect.w;
     const px = i % w, py = (i - px) / w;
+    const v = veil;
+    veil = Math.round(veil * ease);
+    if (sight(f, k, at, slot, px, py, hc)) keep(f, k, px, py, hc, slot, -1);
+    veil = v;
+  }
+
+  /** Draws sight k standing on frame pixel (px, py), which may lie off the frame; true when some of it is on it. */
+  function sight(f: LiveFrame, k: number, at: number, slot: number, px: number, py: number, hc: number): boolean {
+    inked = 0;
     if (k === WHALE) whale(f, px, py, at, slot, hc);
     else if (k === BALLOON) balloonOver(f, px, py, at, slot, hc);
     else if (k === FOX) fox(f, px, py, at, slot, hc);
     else if (k === HERON) heron(f, px, py, at, slot, hc);
     else sail(f, px, py, at, slot, hc);
+    return inked > 0;
   }
 
   /** The candidates of every tile the frame touches. */
@@ -468,7 +536,10 @@ export function rareLayer(ctx: LayerContext): RareLayer {
   function onWater(f: LiveFrame, px: number, py: number, rgb: number, a: number): void {
     const w = f.rect.w;
     if (px < 0 || px >= w || py < 0 || py >= f.rect.h) return;
-    if (isWater[f.bake[py * w + px] & 255] === 1) blend(f.out, py * w + px, rgb, (a * veil) / 255 | 0);
+    if (isWater[f.bake[py * w + px] & 255] === 0) return;
+    const aa = (a * veil) / 255 | 0;
+    if (aa > 0) inked++;
+    blend(f.out, py * w + px, rgb, aa);
   }
 
   /** Broken water along a body's waterline: `half` pixels either side of (cx, y), flickering. */
@@ -550,9 +621,10 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     const w = f.rect.w;
     const dir = (hc & 1) === 1 ? 1 : -1;
     const lasts = RARE[SHIP].lasts;
-    const x = px + Math.round(dir * 3.2 * (at - lasts / 2));
+    let x = px + Math.round(dir * 3.2 * (at - lasts / 2));
+    if (going !== null) x = lieTo(f, going, px, x, py, dir);
     if (x < 0 || x >= w || !deep(f, x, py, 5)) return;
-    const a = Math.round(255 * easeInOut(at, lasts, 4));
+    const a = Math.round(255 * smooth01(at / 4));
     const y = py + Math.round(0.6 * psin(f.t * 1.3 + (hc & 7)));
     put(f, ship, x, y, dir < 0, a, ship.h);
     // A bow wave and the wake astern.
@@ -565,6 +637,21 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     seen(SHIP, slot, x, py, a > 200 && x >= 8 && x < w - 8 && py >= 10);
   }
 
+  /**
+   * Where a ship sailing on past its time is: at column x of its course from px, unless the water ahead has shoaled,
+   * when it lies to in the last deep water it came through, and stays there.
+   */
+  function lieTo(f: LiveFrame, s: Sighting, px: number, x: number, py: number, dir: number): number {
+    const w = f.rect.w;
+    if (Number.isNaN(s.lie)) {
+      if (x < 0 || x >= w || py < 0 || py >= f.rect.h || deep(f, x, py, 5)) return x;
+      let q = x;
+      while (q >= 0 && q < w && (q - px) * dir > 0 && !deep(f, q, py, 5)) q -= dir;
+      s.lie = modP(f.rect.x + q, n);
+    }
+    return frameX(f, s.lie, n >> 1);
+  }
+
   function balloonOver(f: LiveFrame, px: number, py: number, at: number, slot: number, hc: number): void {
     const w = f.rect.w, h = f.rect.h;
     const lasts = RARE[BALLOON].lasts;
@@ -572,7 +659,8 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     const x = px + Math.round(3.4 * (at - lasts / 2));
     const alt = BALLOON_ALT + Math.round(4 * psin(at * 0.21 + (hc & 7)));
     const y = py - alt;
-    const a = Math.round(255 * easeInOut(at, lasts, 5));
+    // In over its first seconds; past its time it drifts on out of view.
+    const a = Math.round(255 * smooth01(at / 5));
     if (x < -6 || x >= w + 6) return;
     // Its shadow on the hill, down-sun.
     const dark = f.palette[(M.roofSlate << 8) | 1];
@@ -582,7 +670,9 @@ export function rareLayer(ctx: LayerContext): RareLayer {
       for (let dx = -half; dx <= half; dx++) {
         const qx = sx + dx, qy = sy + dy;
         if (qx < 0 || qx >= w || qy < 0 || qy >= h || f.bake[qy * w + qx] === 0) continue;
-        blend(f.out, qy * w + qx, dark, (a * veil * 58) / 65025 | 0);
+        const aa = (a * veil * 58) / 65025 | 0;
+        if (aa > 0) inked++;
+        blend(f.out, qy * w + qx, dark, aa);
       }
     }
     put(f, balloon, x, y, false, a, balloon.h);
@@ -598,9 +688,10 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     const d = at < 9 ? -35 + 5 * at : sitting ? 10 : 10 + 5 * (at - 12);
     const x = px + Math.round(dir * d), y = py + Math.round(slope * d);
     if (x < 5 || x >= w - 5 || y < 4 || y >= h) return;
-    // In a hedge or a ditch it is out of sight.
-    if (isField[f.bake[y * w + x] & 255] === 0) return;
-    const a = Math.round(255 * easeInOut(at, RARE[FOX].lasts, 1));
+    // In a hedge or a ditch it is out of sight; across a road or a track it is not.
+    const under = f.bake[y * w + x] & 255;
+    if (isField[under] === 0 && isRoad[under] === 0) return;
+    const a = Math.round(255 * smooth01(at));
     const sprite = sitting ? foxSit : (Math.floor(at * 6) & 1) === 0 ? foxStretch : foxGather;
     put(f, sprite, x, y, dir < 0, a, sprite.h);
     seen(FOX, slot, x, y, a > 200);
@@ -630,11 +721,9 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     const rise = tau < 3 ? 8 * tau : 24;
     const x = px + Math.round(dir * run), y = py - Math.round(rise + 0.2 * run);
     if (x < -6 || x >= w + 6 || y < -3 || y >= h) return;
-    const left = RARE[HERON].lasts - at;
-    const a = Math.round(255 * smooth01(left / 2));
     const wings = heronFlap[Math.floor(tau * 3) & 3];
-    put(f, wings, x, y, false, a, wings.h);
-    seen(HERON, slot, x, y, a > 200 && x >= 6 && x < w - 6 && y >= 3);
+    put(f, wings, x, y, false, 255, wings.h);
+    seen(HERON, slot, x, y, x >= 6 && x < w - 6 && y >= 3);
   }
 
   /**
@@ -667,61 +756,81 @@ export function rareLayer(ctx: LayerContext): RareLayer {
     return tail;
   }
 
-  /** The monk walks the road out from the abbey and back, on the longest way the road goes within the box round it. */
+  /** The monk walks the road out from each abbey in view and back, on the longest way the road goes in the box round it. */
   function monk(f: LiveFrame, at: number, slot: number): void {
+    veil = Math.round(255 * ease);
+    for (let s = 0; s < abbeys.length; s++) if (monkAt(f, s, at, slot)) keep(f, MONK, 0, 0, 0, slot, s);
+    veil = 255;
+  }
+
+  /**
+   * The monk of abbey s, `at` seconds into his walk; true when some of him is on the frame. Past his time he walks on
+   * until his walk next brings him back to his door, and goes in.
+   */
+  function monkAt(f: LiveFrame, s: number, at: number, slot: number): boolean {
+    inked = 0;
     const w = f.rect.w, h = f.rect.h, bake = f.bake;
-    for (let s = 0; s < abbeys.length; s++) {
-      const ax = frameX(f, abbeys[s].x, 0);
-      if (ax < MONK_X + 2 || ax >= w - MONK_X - 2) continue;
-      // The church hides its own ground: take the row from the first column beside it that shows the ground.
-      let ay = -1;
-      for (let c = 0; c < BESIDE.length && ay < 0; c++) ay = groundRow(f, ax + BESIDE[c], abbeys[s].y);
-      if (ay < MONK_Y + 6 || ay >= h - MONK_Y - 2) continue;
-      const x0 = ax - MONK_X, y0 = ay - MONK_Y;
-      // The biggest stretch of road in the box, and its pixel nearest the abbey.
-      steps.fill(-1);
-      let from = -1, most = 0;
-      for (let ly = 0; ly < BH; ly++) for (let lx = 0; lx < BW; lx++) {
-        const q0 = ly * BW + lx;
-        if (steps[q0] >= 0 || isRoad[bake[(y0 + ly) * w + x0 + lx] & 255] === 0) continue;
-        const size = flood(bake, w, x0, y0, q0);
-        if (size > most) {
-          most = size;
-          from = nearest;
-        }
+    const ax = frameX(f, abbeys[s].x, 0);
+    if (ax < MONK_X + 2 || ax >= w - MONK_X - 2) return false;
+    // The church hides its own ground: take the row from the first column beside it that shows the ground.
+    let ay = -1;
+    for (let c = 0; c < BESIDE.length && ay < 0; c++) ay = groundRow(f, ax + BESIDE[c], abbeys[s].y);
+    if (ay < MONK_Y + 6 || ay >= h - MONK_Y - 2) return false;
+    const x0 = ax - MONK_X, y0 = ay - MONK_Y;
+    // The biggest stretch of road in the box, and its pixel nearest the abbey.
+    steps.fill(-1);
+    let from = -1, most = 0;
+    for (let ly = 0; ly < BH; ly++) for (let lx = 0; lx < BW; lx++) {
+      const q0 = ly * BW + lx;
+      if (steps[q0] >= 0 || isRoad[bake[(y0 + ly) * w + x0 + lx] & 255] === 0) continue;
+      const size = flood(bake, w, x0, y0, q0);
+      if (size > most) {
+        most = size;
+        from = nearest;
       }
-      if (from < 0) continue;
-      // Flood along the road from there; the last pixel reached is the far end of his walk.
-      steps.fill(-1);
-      flood(bake, w, x0, y0, from);
-      const far = last;
-      const len = steps[far];
-      if (len < 12) continue;
-      // Back down the flood from the far end: path[j] is j steps from the abbey.
-      let q = far;
-      for (let j = len; j > 0; j--) {
-        path[j] = q;
-        const qx = q % BW, qy = (q - qx) / BW;
-        for (let c = 0; c < 8; c++) {
-          const nx = qx + NEIGH_X[c], ny = qy + NEIGH_Y[c];
-          if (nx < 0 || nx >= BW || ny < 0 || ny >= BH) continue;
-          if (steps[ny * BW + nx] === j - 1) {
-            q = ny * BW + nx;
-            break;
-          }
-        }
-      }
-      path[0] = from;
-      const walked = Math.floor(MONK_PACE * at) % (2 * len);
-      const j = walked <= len ? walked : 2 * len - walked;
-      const p = path[j];
-      const lx = p % BW, ly = (p - lx) / BW;
-      const x = x0 + lx, y = y0 + ly;
-      const a = Math.round(255 * easeInOut(at, RARE[MONK].lasts, 2));
-      const sprite = (Math.floor(at * 2.5) & 1) === 0 ? monkLeft : monkRight;
-      put(f, sprite, x, y, false, a, sprite.h);
-      seen(MONK, slot, x, y, a > 200);
     }
+    if (from < 0) return false;
+    // Flood along the road from there; the last pixel reached is the far end of his walk.
+    steps.fill(-1);
+    flood(bake, w, x0, y0, from);
+    const far = last;
+    const len = steps[far];
+    if (len < 12) return false;
+    let a = 255 * smooth01(at / 2);
+    const lasts = RARE[MONK].lasts;
+    if (at >= lasts) {
+      // Home is where his walk next comes back to its start; he fades into the doorway over his last steps to it.
+      const end = MONK_PACE * lasts;
+      let home = Math.ceil(end / (2 * len)) * 2 * len;
+      if (home - end < 1) home += 2 * len;
+      const left = home - MONK_PACE * at;
+      if (left <= 0) return false;
+      a *= smooth01(left / Math.min(DOOR, home - end));
+    }
+    // Back down the flood from the far end: path[j] is j steps from the abbey.
+    let q = far;
+    for (let j = len; j > 0; j--) {
+      path[j] = q;
+      const qx = q % BW, qy = (q - qx) / BW;
+      for (let c = 0; c < 8; c++) {
+        const nx = qx + NEIGH_X[c], ny = qy + NEIGH_Y[c];
+        if (nx < 0 || nx >= BW || ny < 0 || ny >= BH) continue;
+        if (steps[ny * BW + nx] === j - 1) {
+          q = ny * BW + nx;
+          break;
+        }
+      }
+    }
+    path[0] = from;
+    const walked = Math.floor(MONK_PACE * at) % (2 * len);
+    const j = walked <= len ? walked : 2 * len - walked;
+    const p = path[j];
+    const lx = p % BW, ly = (p - lx) / BW;
+    const x = x0 + lx, y = y0 + ly;
+    const sprite = (Math.floor(at * 2.5) & 1) === 0 ? monkLeft : monkRight;
+    put(f, sprite, x, y, false, Math.round(a), sprite.h);
+    seen(MONK, slot, x, y, a > 200);
+    return inked > 0;
   }
 
   return layer;
