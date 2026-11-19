@@ -361,3 +361,55 @@ test("gulls already in the air cross the frame's edges whole while the flier tur
   const bad = cuts.filter((c) => c.bad > 0).map((c) => `cut at +${c.ox},+${c.oy}: ${c.bad} px over the flight`);
   assert.equal(bad.length, 0, `cuts draw differently from the view they were cut from:\n${bad.join("\n")}`);
 });
+
+test("a ship lingering past its time sails off across the frame's edge part by part, and is gone once wholly off", () => {
+  const k = RARE.findIndex((r) => r.kind === "ship");
+  const end = begins(k) + RARE[k].lasts;
+  const sea = levelPixel(M.sea, 12, 0), fill = palette[(M.sea << 8) | 9];
+  // A wide view of open sea at the end of the ship's time: pick a ship in it, and which way it sails.
+  const bigAt = (t: number) => levelShot(levelFrame(2000, 1000, t, palette, n, sea, fill, 1280, 512));
+  const ships = (t: number): RareSeen[] => {
+    const look = rareLayer(ctx);
+    look.log = [];
+    look.draw(frameOf(bigAt(t), t));
+    return look.log.filter((s) => s.kind === "ship");
+  };
+  // A frame whose edge the ship is 20 pixels from, sailing towards it, as its time runs out; the wide view holds the
+  // frame, and the ship's way on for the rest of the test.
+  const w = 400, h = 225;
+  let ox = -1, oy = -1;
+  const before = ships(end - 1);
+  for (const now of ships(end - 0.25)) {
+    const was = before.find((s) => Math.abs(s.py - now.py) <= 2 && Math.abs(s.px - now.px) <= 6);
+    if (!was || was.px === now.px) continue;
+    const dir = Math.sign(now.px - was.px);
+    const x = dir > 0 ? now.px + 20 - w : now.px - 20, y = now.py - (h >> 1);
+    if (x < 0 || x + w > 1280 || y < 0 || y + h > 512 || now.px + dir * 100 < 0 || now.px + dir * 100 >= 1280) continue;
+    ox = x;
+    oy = y;
+    break;
+  }
+  assert.ok(ox >= 0, "a ship sails in the wide view as its time runs out, with room to sail on");
+  const wide = rareLayer(ctx), narrow = rareLayer(ctx);
+  let after = 0, gone = -1;
+  for (let t = end - 2; t < end + 18; t += 0.25) {
+    const big = bigAt(t);
+    const ref = frameOf(big, t);
+    wide.draw(ref);
+    const f = frameOf(cut(big, ox, oy, w, h), t);
+    narrow.log = [];
+    narrow.draw(f);
+    let ship = 0, bad = 0;
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+      const v = f.out[r * w + c];
+      if (v !== ref.out[(oy + r) * 1280 + ox + c]) bad++;
+      if (v !== fill) ship++;
+    }
+    assert.equal(bad, 0, `${(t - end).toFixed(2)} s past its time: the frame draws what the wide view draws there`);
+    if (t >= end && ship > 0) after++;
+    if (t >= end && ship === 0 && gone < 0) gone = t;
+    if (gone >= 0) assert.equal(ship, 0, `${(t - end).toFixed(2)} s past its time: once gone, it stays gone`);
+  }
+  assert.ok(after >= 8, `it sails on, on the frame, after its time (${after} frames)`);
+  assert.ok(gone > end, "and goes once it has wholly left");
+});

@@ -3,12 +3,14 @@
 //
 // Each is set by the seed and the clock. The skeins fly straight lines round the world for ever, few enough that one
 // crosses a flight every minute or two. The kite, the nets and the rainbows come and go on their own clocks, easing in
-// and out so nothing pops.
+// and out so nothing pops: the net is hauled in and the bow fades with its shower before their time is up, and a kite
+// watched as its flight ends stays down with the child while the town is in view (see linger.ts).
 
 import { hash2, mix32 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import { artSet, blend, frameX, frameY, groundRow, modP, smooth01, stamp } from "./art.ts";
+import { Lingers } from "./linger.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { bakeAt, drawSprite, worldRowAt } from "./sprites.ts";
@@ -133,6 +135,8 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
     const ang = ((h & 255) / 256) * TAU;
     towns.push({ x: ctx.sites[s].x + 44 * pcos(ang), y: ctx.sites[s].y + 34 * psin(ang), h });
   }
+  /** Each town's kite, which comes down at the end of its flight and stays down with the child while it is watched. */
+  const kiteDown = new Lingers(towns.length);
 
   // The bow, as pixel offsets from the middle of its foot line and the band each is in.
   const bowOff: number[] = [];
@@ -209,10 +213,13 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
   function kites(f: LiveFrame): void {
     const { out, t, palette } = f;
     const w = f.rect.w, h = f.rect.h;
+    kiteDown.frame(t);
     for (let s = 0; s < towns.length; s++) {
       const town = towns[s];
-      const up = easeInOut((t + (town.h >>> 8) % KITE_EVERY) % KITE_EVERY, KITE_UP, 7);
-      if (up === 0) continue;
+      const flown = t + (town.h >>> 8) % KITE_EVERY, into = flown % KITE_EVERY;
+      const at = kiteDown.at(s, into < KITE_UP ? into : -1, Math.floor(flown / KITE_EVERY), true);
+      if (at < 0) continue;
+      const up = easeInOut(at, KITE_UP, 7);
       // The child, the string, the kite and its tail cover 6 pixels left of the child to KITE_LEAN right, and 6 rows
       // under its feet to KITE_RISE above: a child that far past the frame's edge still puts some of it on the frame,
       // so its ground is looked for there too.
@@ -241,6 +248,9 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
         const tx = kx - Math.round(j * 0.8 + swing * j * 0.3), ty = ky + 3 + j;
         if (ty >= 0 && ty < h && tx >= 0 && tx < w) out[ty * w + tx] = palette[(j & 1) === 1 ? (M.river << 8) | 8 : (M.whitewash << 8) | 13];
       }
+      // Watched while some of the child, the string, the kite or its tail is on the frame.
+      const left = Math.min(px - 1, kx - 6), right = Math.max(px, kx + 2), top = ky - 2, bottom = Math.max(gy, ky + 8);
+      kiteDown.drawn(s, left < w && right >= 0 && top < h && bottom >= 0);
       note("kite", kx, ky);
     }
   }
