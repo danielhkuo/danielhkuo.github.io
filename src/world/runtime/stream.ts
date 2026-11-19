@@ -121,6 +121,43 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
   /** Cached pixels for an unwrapped chunk, or null, without counting it as a use. */
   const peek = (cx: number, cy: number): Uint32Array | null => cache.get(keyOf(cx, cy)) ?? null;
 
+  /**
+   * bakeSpace's last few chunks looked up (unwrapped coordinates; null where none was baked), round robin. A layer
+   * reading round all four sides of the frame goes from chunk to chunk; these spare it building a key each time. They
+   * hold while no chunk has arrived or left since (`received`).
+   */
+  const SPACE_SLOTS = 4;
+  const spaceCx = new Float64Array(SPACE_SLOTS).fill(NaN), spaceCy = new Float64Array(SPACE_SLOTS).fill(NaN);
+  const spaceHit: (Uint32Array | null)[] = new Array<Uint32Array | null>(SPACE_SLOTS).fill(null);
+  let spaceAt = -1, spaceNext = 0;
+  /**
+   * The bake pixel at bake-space (bx, by), whole numbers, from the cache (0 where the chunk is not baked): what the
+   * live layers read past the frame's edges. Never counted as a use, so the cache keeps and drops what it did before.
+   */
+  const bakeSpace = (bx: number, by: number): number => {
+    const cx = Math.floor(bx / CHUNK), cy = Math.floor(by / CHUNK);
+    if (spaceAt !== received) {
+      spaceCx.fill(NaN);
+      spaceAt = received;
+    }
+    let hit: Uint32Array | null = null, s = 0;
+    for (; s < SPACE_SLOTS; s++) {
+      if (spaceCx[s] === cx && spaceCy[s] === cy) {
+        hit = spaceHit[s];
+        break;
+      }
+    }
+    if (s === SPACE_SLOTS) {
+      hit = peek(cx, cy);
+      s = spaceNext;
+      spaceNext = (spaceNext + 1) % SPACE_SLOTS;
+      spaceCx[s] = cx;
+      spaceCy[s] = cy;
+      spaceHit[s] = hit;
+    }
+    return hit === null ? 0 : hit[(by - cy * CHUNK) * CHUNK + (bx - cx * CHUNK)];
+  };
+
   const eachChunk = (x: number, y: number, w: number, h: number, fn: (cx: number, cy: number) => void): void => {
     const cx0 = Math.floor(x / CHUNK), cx1 = Math.floor((x + w - 1) / CHUNK);
     const cy0 = Math.floor(y / CHUNK), cy1 = Math.floor((y + h - 1) / CHUNK);
@@ -175,7 +212,7 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
       out.set(land);
       runLayers(
         opts.layers ?? [],
-        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier },
+        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier, bakeSpace },
         disabled,
         opts.onLayerError,
       );

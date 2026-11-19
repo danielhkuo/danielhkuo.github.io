@@ -18,7 +18,7 @@ import type { LiveFrame, LiveLayer } from "./live.ts";
 import { matOf, toneOf } from "./pixel.ts";
 import type { LayerContext } from "./registry.ts";
 import type { Land } from "./routes.ts";
-import { drawSprite, worldRowAt, type LiveSprite } from "./sprites.ts";
+import { bakeAt, bakeBox, drawSprite, worldRowAt, type LiveSprite } from "./sprites.ts";
 
 /** One world hour, in seconds of flight. The town clock strikes at the top of each. */
 export const WORLD_HOUR = 240;
@@ -493,6 +493,8 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
   let sandX = NaN;
   let sandY = NaN;
   let sandRun: Float32Array | null = null;
+  /** Set by onDeep: whether the water it looked at lies on the frame. */
+  let deepOnFrame = false;
 
   const layer: MomentsLayer = {
     name: "moments",
@@ -558,17 +560,12 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     const sx = frameX(f, w.x, 20);
     if (sx < 16 || sx >= f.rect.w - 16) return false;
     const col = sx | 0;
-    const gy = groundRowOf(f, col, w.y);
-    if (gy >= 8 && gy < f.rect.h - 8) return true;
+    const gy = groundRow(f, col, w.y);
+    if (gy !== null && gy >= 8 && gy < f.rect.h - 8) return true;
     const sy = frameY(f, 0.8 * w.y, 8) | 0;
     if (sy < 8 || sy >= f.rect.h - 8) return false;
     const row = worldRowAt(f, col, sy);
     return row > w.y - 3 && row < w.y + 3;
-  }
-
-  function groundRowOf(f: LiveFrame, col: number, y: number): number {
-    if (col < 0 || col >= f.rect.w) return -1;
-    return groundRow(f, col, y);
   }
 
   function watchPlace(i: number, w: ManifestWonder, seeing: boolean, t: number): void {
@@ -637,13 +634,10 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
   function paintOver(f: LiveFrame, s: LiveSprite, x: number, y: number, alt: number, cover: number, kind: string): void {
     if (cover <= 8) return;
     sync(f);
+    // Its anchor's pixel, in [−8, …) while any of it can reach the frame.
     const sx = frameX(f, x, 8);
     const sy = frameY(f, 0.8 * y - alt, 8);
-    const inside = sx >= 1 && sy >= 1 && sx < f.rect.w - 1 && sy < f.rect.h - 1;
-    if (!inside) {
-      drawSprite(f, s, x, y, alt, false, cover);
-      return;
-    }
+    if (sx >= f.rect.w + 8 || sy >= f.rect.h + 8) return;
     const col = sx | 0;
     const row = sy | 0;
     const depth = worldRowAt(f, col, row);
@@ -652,18 +646,22 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
       const front = depth + 0.5;
       drawSprite(f, s, f.rect.x + col, front, 0.8 * front - (f.rect.y + row), false, cover);
     }
-    if (kind) note(kind, col, row);
+    const inside = sx >= 1 && sy >= 1 && sx < f.rect.w - 1 && sy < f.rect.h - 1;
+    if (kind && inside) note(kind, col, row);
   }
 
   function shadow(f: LiveFrame, x: number, y: number, alt: number, cover: number): void {
     if (alt < 3 || cover <= 0) return;
-    const col = frameX(f, x, 8);
-    if (col < 2 || col >= f.rect.w - 2) return;
-    let row = groundRowOf(f, col | 0, y);
-    if (row < 0) row = frameY(f, 0.8 * y, 4) | 0;
-    if (row < 2 || row >= f.rect.h - 2) return;
-    const sx = (col | 0) + Math.round(0.35 * alt);
-    const sy = row + Math.round(0.28 * alt);
+    // The ellipse lies `lean` right of the ground under the thing and `drop` below it: ground that far past the
+    // frame's edge, less the ellipse's own size, can still put some of it on the frame.
+    const lean = Math.round(0.35 * alt), drop = Math.round(0.28 * alt);
+    const col = frameX(f, x, 8 + lean) | 0;
+    if (col + lean - 8 >= f.rect.w) return;
+    let row = groundRow(f, col, y, 4 + drop);
+    if (row === null) row = frameY(f, 0.8 * y, 4 + drop) | 0;
+    if (row + drop + 3 < 0 || row + drop - 3 >= f.rect.h) return;
+    const sx = col + lean;
+    const sy = row + drop;
     const dark = f.palette[(M.roofSlate << 8) | 1];
     const a = (cover * 70) >> 8;
     const rx = 8;
@@ -686,16 +684,16 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
 
   function foam(f: LiveFrame, x: number, y: number, cover: number): void {
     if (cover < 20) return;
-    const sx = frameX(f, x, 6) | 0;
-    if (sx < 1 || sx >= f.rect.w - 1) return;
-    let sy = groundRowOf(f, sx, y);
-    if (sy < 0) sy = frameY(f, 0.8 * y, 4) | 0;
-    if (sy < 1 || sy >= f.rect.h - 1) return;
+    const sx = frameX(f, x, 2) | 0;
+    if (sx >= f.rect.w) return;
+    let sy = groundRow(f, sx, y, 1);
+    if (sy === null) sy = frameY(f, 0.8 * y, 4) | 0;
+    if (sy < 0 || sy >= f.rect.h) return;
+    if (isWater[matOf(bakeAt(f, sx, sy))] !== 1) return;
     const i = sy * f.rect.w + sx;
-    if (isWater[matOf(f.bake[i])] !== 1) return;
     const white = f.palette[(M.whitewash << 8) | 15];
-    blend(f.out, i, white, cover >> 1);
-    if (sx + 1 < f.rect.w) blend(f.out, i + 1, white, cover >> 2);
+    if (sx >= 0) blend(f.out, i, white, cover >> 1);
+    if (sx + 1 >= 0 && sx + 1 < f.rect.w) blend(f.out, i + 1, white, cover >> 2);
   }
 
   function drawBaths(f: LiveFrame, w: ManifestWonder, i: number, t: number): void {
@@ -768,12 +766,12 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
   }
 
   function ripples(f: LiveFrame, x: number, y: number, at: number, cover: number): boolean {
-    const sx = frameX(f, x, 8);
-    if (sx < 2 || sx >= f.rect.w - 2) return false;
+    const sx = frameX(f, x, 21);
+    if (sx >= f.rect.w + 21) return false;
     const col = sx | 0;
-    let sy = groundRowOf(f, col, y);
-    if (sy < 0) sy = frameY(f, 0.8 * y, 4) | 0;
-    if (sy < 2 || sy >= f.rect.h - 2) return false;
+    let sy = groundRow(f, col, y, 14);
+    if (sy === null) sy = frameY(f, 0.8 * y, 14) | 0;
+    if (sy < -13 || sy >= f.rect.h + 13) return false;
     const white = f.palette[(M.whitewash << 8) | 15];
     const a0 = (cover * 160) >> 8;
     const w = f.rect.w;
@@ -866,10 +864,17 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
   }
 
   function tether(f: LiveFrame, x0: number, y0: number, a0: number, x1: number, y1: number, a1: number, cover: number): void {
-    const s0x = frameX(f, x0, 8);
-    const s0y = frameY(f, 0.8 * y0 - a0, 8);
-    const s1x = frameX(f, x1, 8);
-    const s1y = frameY(f, 0.8 * y1 - a1, 8);
+    // A tether that reaches the frame has both ends within TETHER of it, where frameX gives them the frame's own turn of
+    // the torus; past that, the far end is put on the near end's turn, so the line between them is never one that runs
+    // the long way round.
+    const s0x = frameX(f, x0, TETHER);
+    const s0y = frameY(f, 0.8 * y0 - a0, TETHER);
+    let s1x = frameX(f, x1, TETHER);
+    let s1y = frameY(f, 0.8 * y1 - a1, TETHER);
+    if (s1x - s0x > f.n / 2) s1x -= f.n;
+    else if (s0x - s1x > f.n / 2) s1x += f.n;
+    if (s1y - s0y > 0.4 * f.n) s1y -= 0.8 * f.n;
+    else if (s0y - s1y > 0.4 * f.n) s1y += 0.8 * f.n;
     const ink = f.palette[(M.timber << 8) | 4];
     const w = f.rect.w;
     const h = f.rect.h;
@@ -926,19 +931,24 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
       const alt = w.level + 20 + lane * 16 - life * 6;
       const px = frameX(f, wx, 4);
       const py = frameY(f, 0.8 * wy - alt, 4);
-      if (px < 0 || py < 0 || px >= f.rect.w || py >= f.rect.h) continue;
+      // A leaf is two pixels by two: one that hangs a pixel past the frame's top or left edge still shows its other half.
+      if (px < -1 || py < -1 || px >= f.rect.w || py >= f.rect.h) continue;
       const a = Math.round((1 - life * 0.45) * blow * cover);
       if (a < 16) continue;
       const ink = f.palette[(M.broadleafMid << 8) | (12 + (leaf & 3))];
       const px0 = px | 0;
       const py0 = py | 0;
       const fw = f.rect.w;
-      blend(f.out, py0 * fw + px0, ink, a);
-      if (px0 + 1 < fw) blend(f.out, py0 * fw + px0 + 1, ink, a);
-      if (py0 + 1 < f.rect.h) {
-        blend(f.out, (py0 + 1) * fw + px0, ink, a >> 1);
-        if (px0 + 1 < fw) blend(f.out, (py0 + 1) * fw + px0 + 1, ink, a >> 1);
+      const left = px0 >= 0, right = px0 + 1 < fw;
+      if (py0 >= 0) {
+        if (left) blend(f.out, py0 * fw + px0, ink, a);
+        if (right) blend(f.out, py0 * fw + px0 + 1, ink, a);
       }
+      if (py0 + 1 < f.rect.h) {
+        if (left) blend(f.out, (py0 + 1) * fw + px0, ink, a >> 1);
+        if (right) blend(f.out, (py0 + 1) * fw + px0 + 1, ink, a >> 1);
+      }
+      if (px < 0 || py < 0) continue;
       if (!drew) {
         sx = px;
         sy = py;
@@ -969,12 +979,13 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     const cover = Math.round(shown(at, CLOCK_LASTS) * 255);
     for (let s = 0; s < towns.length; s++) {
       const town = towns[s];
-      const gx = frameX(f, town.x, 70);
-      if (gx < -20 || gx >= f.rect.w + 20) continue;
-      const col = gx < 0 ? 0 : gx >= f.rect.w ? f.rect.w - 1 : gx | 0;
-      let gy = groundRowOf(f, col, town.y);
-      if (gy < 0) gy = frameY(f, 0.8 * town.y, 12) | 0;
-      if (gy < 0 || gy >= f.rect.h) continue;
+      // The dial lies within the box round the town's ground (DIAL_X across, DIAL_UP over it and DIAL_DOWN under),
+      // and the figures within FIGURES of the dial: a town that far past the frame's edge can still show them.
+      const col = frameX(f, town.x, DIAL_X + FIGURES) | 0;
+      if (col >= f.rect.w + DIAL_X + FIGURES) continue;
+      let gy = groundRow(f, col, town.y, DIAL_UP + FIGURES);
+      if (gy === null) gy = frameY(f, 0.8 * town.y, DIAL_UP + FIGURES) | 0;
+      if (gy + DIAL_DOWN < 0 || gy - DIAL_UP - FIGURES >= f.rect.h) continue;
       if (!findDial(f, col, gy)) continue;
       const p0 = (at / CLOCK_LASTS) * 1.15;
       let any = false;
@@ -985,12 +996,13 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
         const ang = PI * (0.85 - 0.7 * p);
         const px = dialAt.sx + Math.round(8 * pcos(ang));
         const py = dialAt.sy - Math.round(2 + 7 * psin(ang));
-        if (px < 1 || py < 1 || px >= f.rect.w - 1 || py >= f.rect.h - 1) continue;
+        // A figure covers a pixel either side of its point and the four rows above it.
+        if (px < -1 || py < 0 || px > f.rect.w || py >= f.rect.h + 4) continue;
         const depth = worldRowAt(f, px, py);
         const front = depth + 0.5;
         const fig = ((Math.floor(at * 4) + i) & 1) === 0 ? figA : figB;
         drawSprite(f, fig, f.rect.x + px, front, 0.8 * front - (f.rect.y + py), false, cover);
-        any = true;
+        if (px >= 1 && py >= 1 && px < f.rect.w - 1 && py < f.rect.h - 1) any = true;
       }
       if (!any) continue;
       note("figures", dialAt.sx, dialAt.sy);
@@ -1011,11 +1023,14 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     let x = 0;
     let y = 0;
     let found = false;
+    // Whether the sea under it is on the frame: then it counts as watched once it is well shown, wherever it floats.
+    let under = false;
     if (forced) {
       if (seaInFrame(f)) {
         x = seaHit.x;
         y = seaHit.y;
         found = true;
+        under = true;
       }
     } else if (survey && ctx.land && survey.seaX >= 0) {
       const where = gardenWhere(seed, f.n, ctx.land, t);
@@ -1023,6 +1038,7 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
         x = where.x;
         y = where.y;
         found = true;
+        under = deepOnFrame;
       }
     }
     if (!found) {
@@ -1035,7 +1051,7 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     const ox = 5 * psin(t * 0.17);
     shadow(f, x + ox, y, alt, cover);
     const saw = paint(f, garden, x + ox, y, alt, false, cover, "garden");
-    watchGarden(saw || cover >= 170, t);
+    watchGarden(saw || (under && cover >= 170), t);
   }
 
   function drawShip(f: LiveFrame, t: number): void {
@@ -1046,51 +1062,55 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     }
     const span = momentSpan(seed, "land-ship");
     const u = across(at, span.lasts);
-    let drew = false;
+    let drew = SHIP_NONE;
     if (survey && survey.sands.length >= 4) {
       along(survey.sands, u, f.n);
       drew = putShip(f, alongAt.x, alongAt.y, alongAt.dx, at, span.lasts, u < 0.5);
     }
-    if (!drew) {
+    if (drew === SHIP_NONE) {
       const run = frameSand(f);
       if (run && run.length >= 4) {
         along(run, u, f.n);
         drew = putShip(f, alongAt.x, alongAt.y, alongAt.dx, at, span.lasts, u < 0.5);
       }
     }
-    watchShip(drew, t);
+    watchShip(drew === SHIP_SEEN, t);
   }
 
-  function putShip(f: LiveFrame, x: number, y: number, dx: number, at: number, lasts: number, going: boolean): boolean {
-    const sx = frameX(f, x, 16);
-    if (sx < 2 || sx >= f.rect.w - 2) return false;
+  /**
+   * Draws the land-ship on the sand by world (x, y): SHIP_NONE when it is not drawn, SHIP_DRAWN when it is but its
+   * point lies off the frame (some of it may still show), SHIP_SEEN when its point is on the frame.
+   */
+  function putShip(f: LiveFrame, x: number, y: number, dx: number, at: number, lasts: number, going: boolean): number {
+    // The hull covers 6 pixels either side of its point and the 6 rows up to it; the sand is looked for 8 rows round.
+    const sx = frameX(f, x, 8);
+    if (sx >= f.rect.w + 7) return SHIP_NONE;
     const col = sx | 0;
-    let sy = groundRowOf(f, col, y);
-    if (sy < 0) sy = frameY(f, 0.8 * y, 4) | 0;
-    if (sy < 0 || sy >= f.rect.h) return false;
-    sy = sandNear(f, col, sy);
-    if (sy < 0) return false;
+    let row = groundRow(f, col, y, 15);
+    if (row === null) row = frameY(f, 0.8 * y, 15) | 0;
+    if (row < -10 || row >= f.rect.h + 15) return SHIP_NONE;
+    const sy = sandNear(f, col, row);
+    if (sy === null) return SHIP_NONE;
     const cover = Math.round(shown(at, lasts) * 255);
-    if (cover <= 8) return false;
+    if (cover <= 8) return SHIP_NONE;
     const wy = worldRowAt(f, col, sy);
     const face = (dx >= 0 ? 1 : -1) * (going ? 1 : -1);
     const hull = (Math.floor(at * 6) & 1) === 0 ? shipA : shipB;
     sync(f);
     drawSprite(f, hull, x, wy, 0.45, face < 0, cover);
+    if (col < 2 || col >= f.rect.w - 2 || sy < 0 || sy >= f.rect.h) return SHIP_DRAWN;
     note("land-ship", col, sy);
-    return true;
+    return SHIP_SEEN;
   }
 
-  function sandNear(f: LiveFrame, sx: number, sy: number): number {
-    const w = f.rect.w;
-    const h = f.rect.h;
-    const bake = f.bake;
-    if (sy >= 0 && sy < h && sandPixel(bake[sy * w + sx])) return sy;
+  /** The nearest row within 8 of `sy` where column `sx` is sand, on the frame or past its edge; null when none is. */
+  function sandNear(f: LiveFrame, sx: number, sy: number): number | null {
+    if (sandPixel(bakeAt(f, sx, sy))) return sy;
     for (let d = 1; d <= 8; d++) {
-      if (sy - d >= 0 && sandPixel(bake[(sy - d) * w + sx])) return sy - d;
-      if (sy + d < h && sandPixel(bake[(sy + d) * w + sx])) return sy + d;
+      if (sandPixel(bakeAt(f, sx, sy - d))) return sy - d;
+      if (sandPixel(bakeAt(f, sx, sy + d))) return sy + d;
     }
-    return -1;
+    return null;
   }
 
   function frameSand(f: LiveFrame): Float32Array | null {
@@ -1174,38 +1194,52 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     return false;
   }
 
+  /**
+   * Whether world (x, y) is deep sea, where the garden can show: it and its shadow reach 13 pixels left of the water
+   * under it to 41 right, and 86 rows above it to 25 below, so water that far past the frame's edge is looked at.
+   */
   function onDeep(f: LiveFrame, x: number, y: number): boolean {
-    const sx = frameX(f, x, 4);
-    if (sx < 1 || sx >= f.rect.w - 1) return false;
-    const col = sx | 0;
-    const sy = groundRowOf(f, col, y);
-    if (sy < 1) return false;
-    return deepSea(f.bake[sy * f.rect.w + col]);
+    const col = frameX(f, x, 41) | 0;
+    if (col >= f.rect.w + 13) return false;
+    const sy = groundRow(f, col, y, 86);
+    if (sy === null || sy + 25 < 0) return false;
+    deepOnFrame = col >= 1 && col < f.rect.w - 1 && sy >= 1 && sy < f.rect.h;
+    return deepSea(bakeAt(f, col, sy));
   }
 
   return layer;
 }
 
+/** How far a tether reaches: the airship rides up to 19 pixels off its mast, a few rows up or down. */
+const TETHER = 32;
+
+/** What putShip did. */
+const SHIP_NONE = 0, SHIP_DRAWN = 1, SHIP_SEEN = 2;
+
 const seaHit = { x: 0, y: 0 };
 const dialAt = { sx: 0, sy: 0 };
 
+/** The box round the town's ground the dial is looked for in, and how far the figures reach from the dial. */
+const DIAL_X = 42;
+const DIAL_UP = 46;
+const DIAL_DOWN = 36;
+const FIGURES = 13;
+const dialBox = new Uint32Array((2 * DIAL_X + 1) * (DIAL_UP + DIAL_DOWN + 1));
+
+/** The middle of the dial's pixels in the box round frame pixel (gx, gy), into `dialAt`; false when there are too few. */
 function findDial(f: LiveFrame, gx: number, gy: number): boolean {
-  const w = f.rect.w;
-  const h = f.rect.h;
-  const bake = f.bake;
-  const x0 = gx - 42 < 0 ? 0 : gx - 42;
-  const x1 = gx + 42 >= w ? w - 1 : gx + 42;
-  const y0 = gy - 46 < 0 ? 0 : gy - 46;
-  const y1 = gy + 36 >= h ? h - 1 : gy + 36;
+  const bw = 2 * DIAL_X + 1, bh = DIAL_UP + DIAL_DOWN + 1;
+  const x0 = gx - DIAL_X, y0 = gy - DIAL_UP;
+  bakeBox(f, x0, y0, bw, bh, dialBox);
   let sumX = 0;
   let sumY = 0;
   let n = 0;
-  for (let y = y0; y <= y1; y++) {
-    const row = y * w;
-    for (let x = x0; x <= x1; x++) {
-      if (matOf(bake[row + x]) !== M.dial) continue;
-      sumX += x;
-      sumY += y;
+  for (let y = 0; y < bh; y++) {
+    const row = y * bw;
+    for (let x = 0; x < bw; x++) {
+      if (matOf(dialBox[row + x]) !== M.dial) continue;
+      sumX += x0 + x;
+      sumY += y0 + y;
       n++;
     }
   }
