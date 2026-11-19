@@ -62,6 +62,8 @@ export function buildBells(ctx: Ctx, kit: Kit, master: Master, opts: { hub: Hub;
   const rings: Ring[] = [];
   /** Strikes, and rings fading out to make way: kept only so a mute or a hide can stop them. */
   const others: { source: AudioBufferSourceNode; end: number }[] = [];
+  /** Audio time of the next prune (see prune). */
+  let pruneAt = -Infinity;
 
   const oneShot = (buffer: AudioBuffer, dest: AudioNode, when: number, offset: number, level: number): { source: AudioBufferSourceNode; gain: GainNode } => {
     const source = ctx.createBufferSource();
@@ -139,6 +141,9 @@ export function buildBells(ctx: Ctx, kit: Kit, master: Master, opts: { hub: Hub;
       }
     },
     prune(now) {
+      // Four times a second is enough: a ring kept a moment past its end changes nothing.
+      if (now < pruneAt && now >= pruneAt - 0.25) return;
+      pruneAt = now + 0.25;
       // Forgotten, not disconnected (each leaves the graph when it ends): a timeline scheduled ahead of its render
       // prunes long before the source plays.
       for (let i = rings.length - 1; i >= 0; i--) if (rings[i].end < now) rings.splice(i, 1);

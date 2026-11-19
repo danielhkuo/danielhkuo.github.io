@@ -47,30 +47,53 @@ export function pealTime(seed: number, H: number, i: number, k: number): number 
   return H * HOUR_S + PEAL_AT + PEAL_STAGGER * i + JITTER + k * pealPeriod(seed, i) + jitter;
 }
 
+/** The index of the first cue of `list` (in time order) at or after `t`. */
+export function firstAtOrAfter(list: readonly Cue[], t: number): number {
+  let lo = 0, hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** An hour's strokes, made once and kept for that hour and the next few (frames ask for thin windows of them). */
+const made = new Map<string, Cue[]>();
+
+/** Every stroke of hour H, in time order: the peal's, and the hour's on the tenor. Pure. */
+function hourStrokes(seed: number, H: number): Cue[] {
+  const id = `${seed}:${H}`;
+  const kept = made.get(id);
+  if (kept) return kept;
+  const list: Cue[] = [];
+  const top = H * HOUR_S;
+  for (let i = 0; i < 5; i++) {
+    const n = pealStrokes(seed, i);
+    for (let k = 0; k < n; k++) {
+      // In and out gently: the first two strokes and the last two are down.
+      const edge = Math.min(k, n - 1 - k);
+      const ringDb = edge === 0 ? -6 : edge === 1 ? -3 : 0;
+      list.push({ t: pealTime(seed, H, i, k), kind: "bell", key: `${H}:${i}:${k}`, lasts: RING_S[i], soft: true, H, bell: i, k, take: k & 1, ringDb, strikeDb: k & 1 ? -2 : 2 });
+    }
+  }
+  const count = hourNumber(H);
+  for (let j = 0; j < count; j++) {
+    list.push({ t: top + HOUR_AT + HOUR_GAP * j, kind: "bell", key: `${H}:${HAMMER}:${j}`, lasts: RING_S[TENOR], soft: true, H, bell: HAMMER, k: j, take: j & 1, ringDb: 0, strikeDb: 5 });
+  }
+  // A stable sort: strokes at the same moment keep the order they were made in, as a window's own sort would.
+  list.sort((a, b) => a.t - b.t);
+  if (made.size >= 4) made.delete(made.keys().next().value as string);
+  made.set(id, list);
+  return list;
+}
+
 /** Every stroke that starts in [t0, t1), in time order: the peal's, and the hour's on the tenor. */
 export function bellCues(seed: number, t0: number, t1: number, out: Cue[]): void {
   const first = out.length;
   for (let H = Math.max(0, Math.floor(t0 / HOUR_S)); H * HOUR_S < t1; H++) {
-    const top = H * HOUR_S;
-    if (t1 > top + PEAL_AT && t0 < top + PEAL_AT + PEAL_STAGGER * 4 + PEAL_RINGS_S + 1) {
-      for (let i = 0; i < 5; i++) {
-        const n = pealStrokes(seed, i);
-        for (let k = 0; k < n; k++) {
-          const t = pealTime(seed, H, i, k);
-          if (t < t0 || t >= t1) continue;
-          // In and out gently: the first two strokes and the last two are down.
-          const edge = Math.min(k, n - 1 - k);
-          const ringDb = edge === 0 ? -6 : edge === 1 ? -3 : 0;
-          out.push({ t, kind: "bell", key: `${H}:${i}:${k}`, lasts: RING_S[i], soft: true, H, bell: i, k, take: k & 1, ringDb, strikeDb: k & 1 ? -2 : 2 });
-        }
-      }
-    }
-    const count = hourNumber(H);
-    for (let j = 0; j < count; j++) {
-      const t = top + HOUR_AT + HOUR_GAP * j;
-      if (t < t0 || t >= t1) continue;
-      out.push({ t, kind: "bell", key: `${H}:${HAMMER}:${j}`, lasts: RING_S[TENOR], soft: true, H, bell: HAMMER, k: j, take: j & 1, ringDb: 0, strikeDb: 5 });
-    }
+    const list = hourStrokes(seed, H);
+    for (let i = firstAtOrAfter(list, t0); i < list.length && list[i].t < t1; i++) out.push(list[i]);
   }
   if (out.length - first > 1) {
     const added = out.splice(first);

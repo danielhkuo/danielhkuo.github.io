@@ -384,6 +384,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     return v.steps.length === 0;
   };
 
+  /** World time before which build() is not asked again (it had nothing to do). */
+  let buildIdleUntil = -Infinity;
   /** At most one build step a frame on the page, so no frame pays for a whole graph. */
   const build = (now: number) => {
     if (opts.tone) return;
@@ -700,7 +702,12 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
         look = lookahead;
       }
-      build(now);
+      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second (a voice
+      // that becomes buildable later, a moment come into reach, waits at most that long). Offline renders build at once.
+      if (offline || !(pose.t < buildIdleUntil) || pose.t < buildIdleUntil - 1) {
+        build(now);
+        if (!offline && (work & WORK.build) === 0 && kit.done()) buildIdleUntil = pose.t + 0.5;
+      }
       readLimiter(now);
       if (!live && pending === null) return;
 

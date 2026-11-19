@@ -35,18 +35,25 @@ export interface Ledger {
   readonly size: number;
 }
 
+/** World seconds between ledger prunes. Keys are unique to their event, so one kept a little past its time is harmless. */
+const PRUNE_EVERY = 0.5;
+
 export function createLedger(): Ledger {
   const m = new Map<string, number>();
+  let pruneAt = -Infinity;
   return {
     has: (key) => m.has(key),
     add(key, until) {
       m.set(key, until);
     },
     prune(t) {
+      if (t < pruneAt && t >= pruneAt - PRUNE_EVERY) return;
+      pruneAt = t + PRUNE_EVERY;
       for (const [key, until] of m) if (until < t) m.delete(key);
     },
     clear() {
       m.clear();
+      pruneAt = -Infinity;
     },
     get size() {
       return m.size;
