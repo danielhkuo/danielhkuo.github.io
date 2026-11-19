@@ -86,12 +86,16 @@ on a wide screen it sits a little east, so the landmark shows clear of the Codex
 
 ## The coil
 
-- **Anchor.** The landmark's own structure: the tallest built thing within its pad (the bell tower for the town, the
-  deck for a bridge), read from the core's structures. Without structures, the site's point and a radius by type.
+- **Anchor.** The landmark's own structure: the tallest built thing within its pad (the deck for a bridge), read
+  from the core's structures. Without structures, the site's point and a radius by type. **The town's anchor is its
+  harbour** (the widest dredged basin near it), and the coil lies inside it, on the water: round the bell tower the
+  houses hid all but scraps of the dragon.
 - **Rest radius** `R = clamp(half-diagonal of the anchor + 3, 8, 26)` cells: just clear of the walls. The body is
   about 58 cells long, so a lighthouse gets a full ring and the abbey less than half a ring.
 - **Sweep.** The head turns the way it is already going round the landmark. The sweep ends at the south point and
-  is between 0.9 and 1.9 turns.
+  is between 0.9 and 1.9 turns. Where the view shows nearer land drawn over that point (a wooded bank, a building),
+  it ends instead at the nearest point round the front of the ring, a sixteenth of a turn at a time, where the whole
+  head shows.
 - **Orbit.** The orbit radius starts at the flier's distance, capped at 40. It eases to R by 55 % of the sweep and
   holds R for the rest. The heading aims at the tangent, bent in or out by `atan((r − r*) / 10)`, on top of the turn
   that holds the orbit itself. The turn rate is capped at 3.2 rad/s.

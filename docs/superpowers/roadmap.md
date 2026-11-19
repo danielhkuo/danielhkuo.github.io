@@ -239,7 +239,9 @@ From landing (2026-11-18):
   wound up the tower itself, held by it, would be the better picture there.
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
   could part round a landed site.
-- In the town the coil lies among the houses round the bell tower, and the houses hide some of it.
+- ~~In the town the coil lies among the houses round the bell tower, and the houses hide some of it.~~ The town now
+  lands in its harbour. A landmark close behind trees or a bank can still hide part of the resting body (the head is
+  kept in view).
 - `Flight.tsx` grew with landing (React Doctor's giant-component warning was already there); the page's slim-project
   mapping for the terminal repeats the home page's.
 
