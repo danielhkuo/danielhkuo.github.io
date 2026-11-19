@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { buildCommands, welcomeLines } from "./commands";
 import { HOME, tildePath, type Path } from "./fs";
-import { CommandHistory, complete, execute } from "./shell";
+import { CommandHistory, complete, execute, suggest, type Suggestion } from "./shell";
 import { siteTree } from "./site";
 import type { CommandContext, ScreenProgram, TerminalApi, TerminalLine } from "./types";
 
@@ -22,6 +22,14 @@ export interface Shell {
   setInput(line: string): void;
   /** What completion would add to `input`, drawn as ghost text; "" when nothing completes. */
   suggestion: string;
+  /** Every way to finish the word being typed: what a row of buttons offers in place of Tab. */
+  suggestions: readonly Suggestion[];
+  /** The same for any line, in the directory the shell is in now. */
+  suggestFor(line: string): Suggestion[];
+  /** The names of every command, hidden ones included: what can be run at all. */
+  names: ReadonlySet<string>;
+  /** Run a line as if it had been typed and entered. */
+  run(line: string): void;
   /**
    * A line-editing key at the prompt: Tab, or → at the end of the line,
    * accepts the suggestion; Enter runs the line; ↑ and ↓ walk the history.
@@ -32,6 +40,19 @@ export interface Shell {
   program: ScreenProgram | null;
   /** The program exited: the prompt returns, with whatever it printed. */
   endProgram(output?: TerminalLine[]): void;
+}
+
+/** How a host that is not the pop-up window wants its shell. */
+export interface ShellOptions {
+  /**
+   * The host sets documents and `neofetch` itself: `cat` hands it the file
+   * (a `doc` line) instead of rows of cells laid out to the window.
+   */
+  rich?: boolean;
+  /** Open on Terminal's login line and the hint. Off where the page has printed its own start. */
+  greet?: boolean;
+  /** The commands `suggestions` offers on an empty line, in order. */
+  featured?: readonly string[];
 }
 
 interface Log {
@@ -52,8 +73,9 @@ const cleared = (log: Log): Log => ({ entries: [], nextId: log.nextId });
  * `api`; `exit` closes the window through `onClose`. `cols` is the window's
  * width in cells, which `ls` and `cat` lay their output out to.
  */
-export function useShell(api: TerminalApi, onClose: () => void, cols: number): Shell {
-  const [log, setLog] = useState(() => append({ entries: [], nextId: 0 }, welcomeLines(new Date())));
+export function useShell(api: TerminalApi, onClose: () => void, cols: number, options: ShellOptions = {}): Shell {
+  const { rich = false, greet = true, featured } = options;
+  const [log, setLog] = useState(() => append({ entries: [], nextId: 0 }, greet ? welcomeLines(new Date()) : []));
   const [input, setInput] = useState("");
   // Where the shell is, and where it was before the last `cd` (for `cd -`).
   const [dirs, setDirs] = useState<{ cwd: Path; old: Path }>({ cwd: HOME, old: HOME });
@@ -79,6 +101,8 @@ export function useShell(api: TerminalApi, onClose: () => void, cols: number): S
     [api, root, dirs],
   );
   const completion = useMemo(() => complete(input, commands), [input, commands]);
+  const suggestions = useMemo(() => suggest(input, commands, featured), [input, commands, featured]);
+  const names = useMemo(() => new Set(Object.keys(commands)), [commands]);
   const cwd = tildePath(dirs.cwd);
 
   // Functional updates throughout: a command may print after an await.
@@ -90,6 +114,10 @@ export function useShell(api: TerminalApi, onClose: () => void, cols: number): S
     err: (text) => print({ kind: "err", text }),
     rows: (rows, title) => print({ kind: "rows", rows: [...rows], title }),
     text: (rows) => print({ kind: "text", rows }),
+    ...(rich && {
+      doc: (source: string) => print({ kind: "doc", source }),
+      neofetch: () => print({ kind: "neofetch" }),
+    }),
     cols,
     clear: () => setLog(cleared),
     close: () => window.setTimeout(onClose, 120),
@@ -143,6 +171,10 @@ export function useShell(api: TerminalApi, onClose: () => void, cols: number): S
     input,
     setInput,
     suggestion: completion?.suffix ?? "",
+    suggestions,
+    suggestFor: (line) => suggest(line, commands, featured),
+    names,
+    run,
     key,
     program,
     endProgram,

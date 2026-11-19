@@ -3,9 +3,10 @@
 //
 // Everything is a function of the seed, the place and the clock. Things that stand on the land are placed on a lattice
 // in bake space (which is fixed to the world) and drawn only where the bake pixel under them is the right material;
-// things in the air are placed in world space round the sites. Birds near the flier's track lift and scatter, then
-// settle: how far into that flight a bird is depends only on where the flier is and how it is heading. Boats keep to
-// routes planned round the land (routes.ts), out from the roads off the harbour and home to them.
+// things in the air are placed in world space round the sites. Birds near the flier lift and scatter, then settle: the
+// one thing the layer remembers is which birds are up, since when, and which way they fled, so a bird keeps to its
+// flight whatever the flier does next (see `scares`). Boats keep to routes planned round the land (routes.ts), out from
+// the roads off the harbour and home to them, and float on the water drawn under them.
 
 import { hash2, mix32 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
@@ -14,7 +15,7 @@ import { artSet, blend, frameX, frameY, modP, ringDelta, smooth01 } from "./art.
 import type { Flier, LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { planHarbour, ROUTE_STEP } from "./routes.ts";
-import { drawSprite, worldRowAt } from "./sprites.ts";
+import { bakeAt, drawSprite, worldRowAt } from "./sprites.ts";
 
 // ── Tuning ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -25,12 +26,40 @@ export const REACH = 46;
 export const LOW = 60;
 /** Seconds a startled bird stays up. */
 export const ALOFT = 4.4;
+/** The flier must be going at least this fast (cells a second) to put birds up: one that has landed lets them settle. */
+const STIR = 6;
+/**
+ * Frames further apart than this (seconds), or a flier that has moved further than it could have, start the birds'
+ * memory afresh: as if the flier had come the way it is heading (see `startledFor`).
+ */
+const GAP = 0.5;
 /** Boats turn for home at least this far from the roads off the harbour, by water. */
 const BOAT_FAR = 190;
 /** Smoke rises only from roofs within this many cells of a town. */
 const SMOKE_REACH = 190;
 /** Boats to a town, fanned over the sea its harbour opens on. */
 const BOATS = 12;
+
+// How far from the pixel it stands on each thing can draw: a lattice point is placed (from the land under it, past the
+// frame's edge as on it) whenever its thing can reach the frame, and drawn clipped, so it crosses the edge whole.
+/** A sheep walks up to this many pixels either way along its slope. */
+const SHEEP_WALK = 5;
+/**
+ * A startled gull flies up to FLEE_SIDE pixels either side of its beach, FLEE_UP above it and FLEE_DOWN below (flee's
+ * furthest: 41 cells out, sideways or a little along the track, with 5 of wheeling; 25 units up), wings and all.
+ */
+const FLEE_SIDE = 59;
+const FLEE_UP = 71;
+const FLEE_DOWN = 48;
+/** A boat and its wake: up to this many pixels from the boat's point, either way. */
+const BOAT_REACH = 10;
+/**
+ * Smoke climbs up to 8 pixels to the ridge, rises up to 15 over it and leans up to 8 downwind. A town counts as near the
+ * frame within SMOKE_REACH, the frame's half-diagonal and SMOKE_SLACK cells of its middle.
+ */
+const SMOKE_UP = 24;
+const SMOKE_LEAN = 9;
+const SMOKE_SLACK = 86;
 
 const TAU = 2 * Math.PI;
 
@@ -44,11 +73,19 @@ export const isBeach: Uint8Array = flags([M.sand, M.sandPale, M.shingle]);
 export const isSea: Uint8Array = flags([M.sea, M.seaClear]);
 export const isRoof: Uint8Array = flags([M.roofTile, M.roofSlate]);
 
-/** What the layer drew last frame, for tests: the kind and the frame pixel it stands on. */
+/**
+ * What the layer drew last frame, for tests: the kind, the frame pixel it stands on, which one it is (the same thing
+ * keeps its id from frame to frame, within its kind) and the frame pixel its sprite's anchor was drawn on.
+ */
 export interface Placed {
   kind: "sheep" | "gull-resting" | "gull-startled" | "gull" | "boat" | "smoke";
   px: number;
   py: number;
+  id: number;
+  ax: number;
+  ay: number;
+  /** Whether the sprite was drawn mirrored. */
+  flip: boolean;
 }
 
 export interface LifeLayer extends LiveLayer {
@@ -60,8 +97,8 @@ export interface LifeLayer extends LiveLayer {
 
 /**
  * Seconds since the flier's track came within REACH of a bird at world (x, y), `ground` units up; −1 when it has not,
- * the bird has settled again, or the flier is more than LOW over it. The track is the flier's heading held straight,
- * so the answer needs no memory.
+ * the bird has settled again, or the flier is more than LOW over it. The track is the flier's heading held straight:
+ * the best guess at the past when there is no memory of it (the first frame, or after a jump).
  */
 export function startledFor(fl: Flier | undefined, n: number, x: number, y: number, ground: number): number {
   if (!fl) return -1;
@@ -76,21 +113,187 @@ export function startledFor(fl: Flier | undefined, n: number, x: number, y: numb
   return tau < 0 || tau > ALOFT ? -1 : tau;
 }
 
-/** Where a startled bird is, relative to where it was: filled by `flee`. */
-export const fled = { dx: 0, dy: 0, up: 0 };
+/** The way the flier last asked of mayStartle was heading, and its cosine and sine: the same for a whole frame. */
+const track = { heading: NaN, hx: 0, hy: 0 };
 
-/** The flight of a bird `tau` seconds after it was startled: out to the side of the flier's track and up, then back. */
-export function flee(fl: Flier, n: number, x: number, y: number, tau: number, h: number): void {
-  const a = smooth01(tau / 0.45) * (1 - smooth01((tau - 2.6) / (ALOFT - 2.6)));
-  const hx = pcos(fl.heading), hy = psin(fl.heading);
-  const side = ringDelta(fl.x, x, n) * hy - ringDelta(fl.y, y, n) * hx;
-  const s = side > 0.5 ? 1 : side < -0.5 ? -1 : (h & 1) === 0 ? 1 : -1;
-  const far = 20 + ((h >>> 3) & 15) * 1.4;
-  const along = (((h >>> 8) & 31) - 15) / 22;
-  const turn = tau * 2.6 + ((h >>> 14) & 63) / 10;
-  fled.dx = a * (far * (s * hy + along * hx) + 5 * pcos(turn));
-  fled.dy = a * (far * (-s * hx + along * hy) + 5 * psin(turn));
-  fled.up = a * (13 + ((h >>> 20) & 15) * 0.8);
+/**
+ * Whether a bird anywhere on bake pixels x0…x1 (world columns) by rows by0…by1 could be startled by `fl`
+ * (startledFor ≥ 0), from any ground it could be startled on (within LOW of the flier's height): a cheap test that
+ * reads no land, false only where startledFor is surely −1. A bird's world row is (by + ground) / 0.8, and its distances
+ * across and along the flier's track are linear in its column and row, so their extremes lie at the box's corners.
+ */
+export function mayStartle(fl: Flier, n: number, x0: number, x1: number, by0: number, by1: number): boolean {
+  const dx0 = ringDelta(fl.x, x0, n), dx1 = dx0 + (x1 - x0);
+  const dy0 = ringDelta(fl.y, (by0 + fl.alt - LOW) / 0.8, n), dy1 = dy0 + (by1 - by0 + 2 * LOW) / 0.8;
+  if (fl.heading !== track.heading) {
+    track.heading = fl.heading;
+    track.hx = pcos(fl.heading);
+    track.hy = psin(fl.heading);
+  }
+  const hx = track.hx, hy = track.hy;
+  // Across the track: dx·hy − dy·hx; along it, behind the flier: −(dx·hx + dy·hy).
+  const a = dx0 * hy, b = dx1 * hy, c = dy0 * hx, d = dy1 * hx;
+  const sLo = Math.min(a, b) - Math.max(c, d), sHi = Math.max(a, b) - Math.min(c, d);
+  if (sLo >= REACH || sHi <= -REACH) return false;
+  const e = dx0 * hx, g = dx1 * hx, p = dy0 * hy, q = dy1 * hy;
+  const bLo = -(Math.max(e, g) + Math.max(p, q)), bHi = -(Math.min(e, g) + Math.min(p, q));
+  return bLo <= ALOFT * (fl.speed < 20 ? 20 : fl.speed) && bHi >= -REACH;
+}
+
+/** A bird in the air: when it took off, the flier's heading then, and the side of the flier's way it fled to. */
+interface Up {
+  t0: number;
+  hx: number;
+  hy: number;
+  side: 1 | -1;
+}
+
+/** Where a bird is in its flight, relative to its perch (cells, and units up), and seconds into it: −1 on its perch. */
+export interface Fled {
+  dx: number;
+  dy: number;
+  up: number;
+  tau: number;
+}
+
+export interface Scares {
+  /** Call once a frame, before `bird`: the frame's time and flier. */
+  frame(t: number, flier: Flier | undefined): void;
+  /**
+   * The bird `id` (any number, the same every frame) perched at world (x, y), `ground` units up, with hash `h` for its
+   * own way of flying: fills and returns where it is in its flight this frame.
+   */
+  bird(id: number, x: number, y: number, ground: number, h: number): Fled;
+  /**
+   * Whether any of the birds `id` … `id + count − 1`, perched anywhere on bake pixels x0…x1 (world columns) by rows
+   * by0…by1, can be in the air this frame: one already up, or one the flier could put up now. A cheap test that reads
+   * no land, false only where `bird` would surely leave each of them on its perch.
+   */
+  mayFly(id: number, count: number, x0: number, x1: number, by0: number, by1: number): boolean;
+}
+
+/**
+ * Which birds are up. A bird takes off when the flier, going at STIR or more and within LOW of its height, comes within
+ * REACH of it (looked for along the flier's way since the last frame, so no frame rate lets one slip), and flies for
+ * ALOFT seconds out to the side of the flier's way and back to its perch. Its flight is fixed when it takes off, so the
+ * flier turning, climbing, slowing or landing never moves a bird already up. A frame with no memory behind it (the
+ * first, one after a gap of more than GAP seconds or a time earlier than the last, or one where the flier has moved
+ * further than it could have) starts afresh, the birds up as if the flier had come the way it is heading.
+ */
+export function scares(n: number): Scares {
+  const ups = new Map<number, Up>();
+  const fled: Fled = { dx: 0, dy: 0, up: 0, tau: -1 };
+  let fl: Flier | undefined;
+  let t = 0;
+  let fresh = true;
+  // The flier at the last frame, and its way from there to now relative to it (for take-offs between frames).
+  let had = false, lastT = 0, lastX = 0, lastY = 0, lastAlt = 0, lastSpeed = 0, wayX = 0, wayY = 0;
+
+  const rest = (): Fled => {
+    fled.dx = 0;
+    fled.dy = 0;
+    fled.up = 0;
+    fled.tau = -1;
+    return fled;
+  };
+
+  /** Share of the way since the last frame at which the flier came within REACH of (x, y), or −1 if it did not. */
+  const reached = (x: number, y: number): number => {
+    if (!fl) return -1;
+    // From the bird to the flier at the last frame (a), and along its way since (d).
+    const ax = ringDelta(x, fl.x, n) - wayX, ay = ringDelta(y, fl.y, n) - wayY;
+    const aa = ax * ax + ay * ay;
+    if (aa <= REACH * REACH) return 0;
+    const dd = wayX * wayX + wayY * wayY;
+    if (dd === 0) return -1;
+    const ad = ax * wayX + ay * wayY;
+    const disc = ad * ad - dd * (aa - REACH * REACH);
+    if (disc < 0) return -1;
+    const u = (-ad - Math.sqrt(disc)) / dd;
+    return u >= 0 && u <= 1 ? u : -1;
+  };
+
+  return {
+    mayFly(id, count, x0, x1, by0, by1) {
+      for (let k = 0; k < count; k++) if (ups.has(id + k)) return true;
+      if (!fl || fl.speed < STIR) return false;
+      if (fresh) return mayStartle(fl, n, x0, x1, by0, by1);
+      // Between frames a bird is put up within REACH of the flier's way since the last one (so within REACH and that
+      // way of the flier now), on ground within LOW of the flier's height.
+      const most = REACH + Math.sqrt(wayX * wayX + wayY * wayY);
+      const dx0 = ringDelta(fl.x, x0, n), dx1 = dx0 + (x1 - x0);
+      const dy0 = ringDelta(fl.y, (by0 + fl.alt - LOW) / 0.8, n), dy1 = dy0 + (by1 - by0 + 2 * LOW) / 0.8;
+      const nx = dx0 > 0 ? dx0 : dx1 < 0 ? -dx1 : 0, ny = dy0 > 0 ? dy0 : dy1 < 0 ? -dy1 : 0;
+      return nx * nx + ny * ny <= most * most;
+    },
+    frame(time, flier) {
+      t = time;
+      fl = flier;
+      fresh = true;
+      if (fl && had && t >= lastT && t - lastT <= GAP) {
+        const dt = t - lastT;
+        wayX = ringDelta(lastX, fl.x, n);
+        wayY = ringDelta(lastY, fl.y, n);
+        const most = (fl.speed > lastSpeed ? fl.speed : lastSpeed) * 1.5 * dt + 4;
+        const climb = fl.alt - lastAlt;
+        fresh = wayX * wayX + wayY * wayY > most * most || climb > 45 * dt + 4 || climb < -45 * dt - 4;
+      }
+      if (fresh) {
+        ups.clear();
+        wayX = 0;
+        wayY = 0;
+      } else {
+        for (const [id, up] of ups) if (t - up.t0 >= ALOFT) ups.delete(id);
+      }
+      had = fl !== undefined;
+      if (fl) {
+        lastT = t;
+        lastX = fl.x;
+        lastY = fl.y;
+        lastAlt = fl.alt;
+        lastSpeed = fl.speed;
+      }
+    },
+    bird(id, x, y, ground, h) {
+      let up = ups.get(id);
+      if (up === undefined) {
+        if (!fl || fl.speed < STIR) return rest();
+        let t0: number;
+        if (fresh) {
+          const tau = startledFor(fl, n, x, y, ground);
+          if (tau < 0) return rest();
+          t0 = t - tau;
+        } else {
+          const over = fl.alt - ground;
+          if (over > LOW || over < -LOW) return rest();
+          const u = reached(x, y);
+          if (u < 0) return rest();
+          t0 = t - (t - lastT) * (1 - u);
+        }
+        // Out to the side of the flier's way it was on, as it was when the bird took off.
+        const hx = pcos(fl.heading), hy = psin(fl.heading);
+        const side = ringDelta(fl.x, x, n) * hy - ringDelta(fl.y, y, n) * hx;
+        up = { t0, hx, hy, side: side > 0.5 ? 1 : side < -0.5 ? -1 : (h & 1) === 0 ? 1 : -1 };
+        ups.set(id, up);
+      }
+      const tau = t - up.t0;
+      if (tau < 0 || tau >= ALOFT) {
+        ups.delete(id);
+        return rest();
+      }
+      // Up and out over half a second, wheeling a little, then back down to the perch from 2.6 s.
+      const a = smooth01(tau / 0.45) * (1 - smooth01((tau - 2.6) / (ALOFT - 2.6)));
+      const { hx, hy, side } = up;
+      const far = 20 + ((h >>> 3) & 15) * 1.4;
+      const along = (((h >>> 8) & 31) - 15) / 22;
+      const turn = tau * 2.6 + ((h >>> 14) & 63) / 10;
+      fled.dx = a * (far * (side * hy + along * hx) + 5 * pcos(turn));
+      fled.dy = a * (far * (-side * hx + along * hy) + 5 * psin(turn));
+      fled.up = a * (13 + ((h >>> 20) & 15) * 0.8);
+      fled.tau = tau;
+      return fled;
+    },
+  };
 }
 
 // ── The layer ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -137,7 +340,7 @@ export function wheelersOf(sites: readonly { type: string; x: number; y: number 
   return wheelers;
 }
 
-/** Where a wheeling gull is at time t, before any startle: filled by `wheelerAt`. */
+/** Where a wheeling gull is at time t, on its round (before any startle): filled by `wheelerAt`. */
 export const wheeled = { x: 0, y: 0, alt: 0 };
 export function wheelerAt(g: Wheeler, t: number): void {
   const ang = g.phase + g.turn * t;
@@ -147,28 +350,30 @@ export function wheelerAt(g: Wheeler, t: number): void {
 }
 
 /**
- * The gulls on the beaches round frame pixel (px0, py0), within `reach` pixels: the layer's own lattice and hashes
- * (three to six birds to each 32 × 32 cell, of which those on sand or shingle show). `each` is told every bird that
- * shows: its frame pixel and its hash. What the layer's own loop draws, for those who only need to know where they are.
+ * The gulls resting on the beaches round frame pixel (px0, py0), within `reach` pixels: the layer's own lattice and
+ * hashes (three to six birds to each 32 × 32 cell, of which those on sand or shingle show). `each` is told every bird
+ * that shows inside the frame: its pixel, its hash, and its id (the one the layer gives `scares`). What the layer's
+ * own loop draws at rest, for those who only need to know where the birds are.
  */
 export function eachShoreGull(
   bake: Uint32Array, rect: { x: number; y: number; w: number; h: number }, n: number, seed: number, px0: number, py0: number, reach: number,
-  each: (px: number, py: number, g: number) => void,
+  each: (px: number, py: number, g: number, id: number) => void,
 ): void {
   const w = rect.w, h = rect.h, rx = rect.x, ry = rect.y;
   const perX = n / 32, perY = (n * 0.8) / 32;
   const cx1 = Math.floor((rx + px0 + reach) / 32), cy1 = Math.floor((ry + py0 + reach) / 32);
   for (let cy = Math.floor((ry + py0 - reach) / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx + px0 - reach) / 32) - 1; cx <= cx1; cx++) {
+    const cell = (modP(cy, perY) * perX + modP(cx, perX)) * 8;
     const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x9011);
     const fx = cx * 32 + 8 + ((hc >>> 4) % 16), fy = cy * 32 + 8 + ((hc >>> 10) % 16);
     const count = 3 + ((hc >>> 16) & 3);
     for (let k = 0; k < count; k++) {
       const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
       const px = fx + (g % 15) - 7 - rx, py = fy + ((g >>> 8) % 9) - 4 - ry;
-      if (px < 1 || px >= w - 1 || py < 1 || py >= h) continue;
+      if (px < 0 || px >= w || py < 0 || py >= h) continue;
       const v = bake[py * w + px];
       if (isBeach[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
-      each(px, py, g);
+      each(px, py, g, cell + k);
     }
   }
 }
@@ -255,11 +460,14 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
   }
 
+  const scare = scares(ctx.n);
+
   const layer: LifeLayer = {
     name: "life",
     log: null,
     draw(f: LiveFrame): void {
       art.sync(f.palette);
+      scare.frame(f.t, f.flier);
       smoke(f);
       sheep(f);
       sail(f);
@@ -268,17 +476,20 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     },
   };
 
-  const note = (kind: Placed["kind"], px: number, py: number): void => {
-    if (layer.log) layer.log.push({ kind, px, py });
+  const note = (kind: Placed["kind"], px: number, py: number, id: number, ax = px, ay = py, flip = false): void => {
+    if (layer.log) layer.log.push({ kind, px, py, id, ax, ay, flip });
   };
 
   /** Sheep: flocks of three to five on a 40 × 32 lattice, one cell in four. */
   function sheep(f: LiveFrame): void {
-    const { bake, t, n } = f;
+    const { t, n } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
     const perX = n / 40, perY = (n * 0.8) / 32;
-    const cx1 = Math.floor((rx + w) / 40), cy1 = Math.floor((ry + h) / 32);
-    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor(rx / 40) - 1; cx <= cx1; cx++) {
+    // A sheep covers a pixel left of where it stands to two right, and the row above: with its walk, those on
+    // pixels −2 − SHEEP_WALK … w + SHEEP_WALK and rows 0 … h can show.
+    const xLo = -2 - SHEEP_WALK, xHi = w + SHEEP_WALK;
+    const cx1 = Math.floor((rx + xHi) / 40), cy1 = Math.floor((ry + h) / 32);
+    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx + xLo) / 40) - 1; cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x5eeb);
       if ((hc & 3) !== 0) continue;
       const fx = cx * 40 + 9 + ((hc >>> 4) % 22), fy = cy * 32 + 7 + ((hc >>> 10) % 18);
@@ -286,9 +497,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       for (let k = 0; k < count; k++) {
         const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
         const px = fx + (g % 19) - 9 - rx, py = fy + ((g >>> 8) % 13) - 6 - ry;
-        if (px < 6 || px >= w - 6 || py < 2 || py >= h) continue;
-        const i = py * w + px;
-        const v = bake[i];
+        if (px < xLo || px > xHi || py < 0 || py > h) continue;
+        const v = bakeAt(f, px, py);
         if (isPasture[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
         const row = worldRowAt(f, px, py);
         if (0.8 * row - (ry + py) < UPLAND) continue;
@@ -300,7 +510,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         const want = ph < 0.3 ? 0 : ph < 0.44 ? Math.round((reach * (ph - 0.3)) / 0.14) : ph < 0.8 ? reach : ph < 0.94 ? Math.round(reach * (1 - (ph - 0.8) / 0.14)) : 0;
         let at = 0;
         while (at < want) {
-          const u = bake[i + dir * (at + 1)];
+          const u = bakeAt(f, px + dir * (at + 1), py);
           if (isPasture[u & 255] === 0 || ((u >>> 8) & 255) >= 64 || Math.abs((u >>> 16) - (v >>> 16)) > 12) break;
           at++;
         }
@@ -309,46 +519,63 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         // Head up for a moment now and then; down to the grass otherwise.
         const up = ((t / 7 + ((g >>> 14) & 255) / 256) % 1) < 0.16;
         drawSprite(f, up ? sheepLook : sheepGraze, rx + sx, row, 0.8 * row - (ry + py), going < 0);
-        note("sheep", sx, py);
+        note("sheep", sx, py, (modP(cy, perY) * perX + modP(cx, perX)) * 8 + k);
       }
     }
   }
 
   /** Gulls on the beaches: a group of three to six to each cell of a 32 × 32 lattice, of which those on sand or shingle show. */
   function shoreGulls(f: LiveFrame): void {
-    const { bake, t, n } = f;
+    const { t, n } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
     const perX = n / 32, perY = (n * 0.8) / 32;
-    const cx1 = Math.floor((rx + w) / 32), cy1 = Math.floor((ry + h) / 32);
-    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor(rx / 32) - 1; cx <= cx1; cx++) {
+    // A gull at rest covers the pixels round where it stands; one in the air can be a long way from its beach. With a
+    // flier about, every beach a startled gull could fly into the frame from is looked at.
+    const fl = f.flier;
+    const side = fl ? FLEE_SIDE : 1, above = fl ? FLEE_DOWN : 1, below = fl ? FLEE_UP : 1;
+    const cx1 = Math.floor((rx + w + side) / 32), cy1 = Math.floor((ry + h + below) / 32);
+    for (let cy = Math.floor((ry - above) / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx - side) / 32) - 1; cx <= cx1; cx++) {
+      // The cell's gulls stand on bake pixels cx·32 + 1 … + 30 by cy·32 + 4 … + 27, and are birds id … id + 5. Past
+      // the pixels a resting gull covers, only one in the air can show: one already up, or one the flier can put up
+      // now. A cell with neither is passed over unhashed.
+      const bx0 = cx * 32 + 1, by0 = cy * 32 + 4, cell = (modP(cy, perY) * perX + modP(cx, perX)) * 8;
+      const rests = bx0 + 29 >= rx - 1 && bx0 <= rx + w && by0 + 23 >= ry - 1 && by0 <= ry + h;
+      // A cell wholly within the pixels where gulls rest needs no test: any of its gulls may be drawn.
+      const whole = bx0 >= rx - 1 && bx0 + 29 <= rx + w && by0 >= ry - 1 && by0 + 23 <= ry + h;
+      const may = !whole && fl !== undefined && scare.mayFly(cell, 6, bx0, bx0 + 29, by0, by0 + 23);
+      if (!rests && !may) continue;
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x9011);
       const fx = cx * 32 + 8 + ((hc >>> 4) % 16), fy = cy * 32 + 8 + ((hc >>> 10) % 16);
       const count = 3 + ((hc >>> 16) & 3);
       for (let k = 0; k < count; k++) {
         const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
         const px = fx + (g % 15) - 7 - rx, py = fy + ((g >>> 8) % 9) - 4 - ry;
-        if (px < 1 || px >= w - 1 || py < 1 || py >= h) continue;
-        const v = bake[py * w + px];
+        if (px < -side || px > w + side || py < -above || py > h + below) continue;
+        const resting = px >= -1 && px <= w && py >= -1 && py <= h;
+        if (!resting && !may) continue;
+        const v = bakeAt(f, px, py);
         if (isBeach[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
         const row = worldRowAt(f, px, py);
         const ground = 0.8 * row - (ry + py);
-        const tau = startledFor(f.flier, n, rx + px, row, ground);
-        if (tau < 0 || !f.flier) {
+        const id = cell + k;
+        const fled = scare.bird(id, rx + px, row, ground, g);
+        if (fled.tau < 0) {
+          if (!resting) continue;
           drawSprite(f, gullRest, rx + px, row, ground, (g & 16) !== 0);
-          note("gull-resting", px, py);
+          note("gull-resting", px, py, id);
           continue;
         }
-        flee(f.flier, n, rx + px, row, tau, g);
         const wing = flap[Math.floor(t * 7 + (g & 3)) & 3];
         drawSprite(f, wing, rx + px + fled.dx, row + fled.dy, ground + fled.up, false);
-        note("gull-startled", px, py);
+        const ax = frameX(f, rx + px + fled.dx, 8), ay = frameY(f, 0.8 * (row + fled.dy) - ground - fled.up, 8);
+        note("gull-startled", px, py, id, ax, ay);
       }
     }
   }
 
   /** Gulls wheeling round the town and the lighthouses. */
   function wheel(f: LiveFrame): void {
-    const { t, n } = f;
+    const { t } = f;
     const w = f.rect.w, h = f.rect.h;
     for (let k = 0; k < wheelers.length; k++) {
       const g = wheelers[k];
@@ -359,9 +586,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       let wing = gullUp;
       const beat = (t * 0.21 + (g.h & 255) / 256) % 1;
       if (beat < 0.22) wing = flap[Math.floor(t * 6) & 3];
-      const tau = startledFor(f.flier, n, x, y, alt);
-      if (tau >= 0 && f.flier) {
-        flee(f.flier, n, x, y, tau, g.h);
+      const fled = scare.bird(-1 - k, x, y, alt, g.h);
+      if (fled.tau >= 0) {
         x += fled.dx;
         y += fled.dy;
         alt += fled.up;
@@ -370,7 +596,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       const sx = frameX(f, x, 4), sy = frameY(f, 0.8 * y - alt, 4);
       if (sx >= w + 4 || sy >= h + 4) continue;
       drawSprite(f, wing, x, y, alt, false);
-      note("gull", sx, sy);
+      note("gull", sx, sy, k);
     }
   }
 
@@ -389,13 +615,13 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       const x = where.x, y = where.y;
       const sign = outward ? 1 : -1;
       const dx = sign * where.dx, dy = sign * where.dy;
-      const px = frameX(f, x, 8), py = frameY(f, 0.8 * y, 8);
-      if (px < 5 || px >= w - 5 || py < 6 || py >= h - 1) continue;
+      // Frame pixel of the boat's point, in [−BOAT_REACH, …) when it is in reach: it and its wake can show.
+      const px = frameX(f, x, BOAT_REACH), py = frameY(f, 0.8 * y, BOAT_REACH);
+      if (px >= w + BOAT_REACH || py >= h + BOAT_REACH) continue;
       // Clear water under the whole hull: the routes are planned on a coarse grid, and a rock or a quay may lie on one.
-      const i = py * w + px;
       let clear = true;
       for (let q = -4; q <= 4; q += 2) {
-        const v = bake[i + q];
+        const v = bakeAt(f, px + q, py);
         if (isSea[v & 255] === 0) { clear = false; break; }
       }
       if (!clear) continue;
@@ -412,45 +638,52 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         const tone = j <= 5 ? 0 : 2;
         if (((v >>> 8) & 15) > tone) out[q] = palette[((v & 255) << 8) | tone];
       }
-      drawSprite(f, boatSprite, x, y, 0, dx < 0);
-      note("boat", px, py);
+      // It floats on the water drawn under it: its depth is that water's own row, so the sea it sits on never hides its
+      // keel. (Its route's row can lie up to a row and a half short of it, as the pixel rounds.)
+      const surf = worldRowAt(f, px, py);
+      if (Math.abs(ringDelta(y, surf, f.n)) <= 2.5) drawSprite(f, boatSprite, x, surf, 0.8 * surf - (f.rect.y + py), dx < 0);
+      else drawSprite(f, boatSprite, x, y, 0, dx < 0);
+      note("boat", px, py, k, px, py, dx < 0);
     }
   }
 
   /** Chimney smoke: wisps rising from the top of one roof in three, pale with a cool shade under them, leaning downwind. */
   function smoke(f: LiveFrame): void {
-    const { out, bake, palette, t, n } = f;
+    const { out, palette, t, n } = f;
     if (towns.length === 0) return;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
-    // Only when a town is anywhere near the frame.
+    // Only when a town is near enough the frame for its roofs to smoke into it: SMOKE_REACH, the frame's half-diagonal in
+    // cells, and SMOKE_SLACK for the plumes and for roofs standing high (520 in all for the flight page's frame).
     const midX = rx + w / 2, midY = (ry + h / 2) / 0.8;
+    const reach = SMOKE_REACH + Math.hypot(w / 2, h / 2 / 0.8) + SMOKE_SLACK;
     let near = false;
     for (let s = 0; s < towns.length; s++) {
       const dx = ringDelta(towns[s].x, midX, n), dy = ringDelta(towns[s].y, midY, n);
-      if (dx * dx + dy * dy < 520 * 520) near = true;
+      if (dx * dx + dy * dy < reach * reach) near = true;
     }
     if (!near) return;
     const pale = palette[(M.whitewash << 8) | 15], shade = palette[(M.roofSlate << 8) | 7];
     const perX = n / 20, perY = (n * 0.8) / 16;
-    const cx1 = Math.floor((rx + w) / 20), cy1 = Math.floor((ry + h) / 16);
-    for (let cy = Math.floor(ry / 16); cy <= cy1; cy++) for (let cx = Math.floor(rx / 20); cx <= cx1; cx++) {
+    // A roof SMOKE_LEAN left of the frame, or SMOKE_UP below it, can still smoke into it.
+    const cx1 = Math.floor((rx + w) / 20), cy1 = Math.floor((ry + h + SMOKE_UP) / 16);
+    for (let cy = Math.floor(ry / 16); cy <= cy1; cy++) for (let cx = Math.floor((rx - SMOKE_LEAN) / 20); cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x50c7);
       if ((hc & 1) !== 0) continue;
-      // The first of a few fixed tries in the cell that lands on a roof.
-      let px = -1, py = -1;
+      // The first of a few fixed tries in the cell that lands on a roof: the land's, on the frame or past it.
+      let px = 0, py = 0, found = false;
       for (let k = 0; k < 5; k++) {
         const g = mix32(hc + k);
         const qx = cx * 20 + (g % 20) - rx, qy = cy * 16 + ((g >>> 8) & 15) - ry;
-        if (qx < 0 || qx >= w || qy < 12 || qy >= h) continue;
-        if (isRoof[bake[qy * w + qx] & 255] === 0) continue;
+        if (isRoof[bakeAt(f, qx, qy) & 255] === 0) continue;
         px = qx;
         py = qy;
+        found = true;
         break;
       }
-      if (px < 0) continue;
+      if (!found || px < -SMOKE_LEAN || px >= w + 1 || py < 1 || py >= h + SMOKE_UP) continue;
       // Up to the ridge.
       let climb = 0;
-      while (climb < 8 && py > 0 && isRoof[bake[(py - 1) * w + px] & 255] === 1) { py--; climb++; }
+      while (climb < 8 && isRoof[bakeAt(f, px, py - 1) & 255] === 1) { py--; climb++; }
       const row = worldRowAt(f, px, py);
       let inTown = false;
       for (let s = 0; s < towns.length; s++) {
@@ -458,7 +691,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         if (dx * dx + dy * dy < SMOKE_REACH * SMOKE_REACH) inTown = true;
       }
       if (!inTown) continue;
-      note("smoke", px, py);
+      note("smoke", px, py, modP(cy, perY) * perX + modP(cx, perX));
       // The thread: a pale pixel a row with its shade on the lee side, so it shows on limewash and on trees alike.
       // Its bends travel up it, breaks rise through it to part it into wisps, and it thins as it climbs and leans.
       const bend = t * 1.5 + ((hc >>> 16) & 255) / 40;
@@ -467,13 +700,13 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       for (let j = 1; j <= tall; j++) {
         const qy = py - j;
         if (qy < 0) break;
-        if (j > 2 && (j + gap) % 7 === 0) continue;
+        if (qy >= h || (j > 2 && (j + gap) % 7 === 0)) continue;
         const u = j / tall;
         const qx = px + Math.round(6 * u * u + (0.5 + u) * psin(j * 0.7 - bend));
-        if (qx < 0 || qx >= w - 1) continue;
+        if (qx < -1 || qx >= w) continue;
         const a = Math.round(245 * (1 - u * 0.6));
-        blend(out, qy * w + qx, pale, a);
-        blend(out, qy * w + qx + 1, shade, (a * 5) >> 3);
+        if (qx >= 0) blend(out, qy * w + qx, pale, a);
+        if (qx + 1 < w) blend(out, qy * w + qx + 1, shade, (a * 5) >> 3);
       }
     }
   }

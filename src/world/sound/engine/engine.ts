@@ -19,7 +19,7 @@ import { IR_TAPS } from "../synth/ir.ts";
 import { TAIL_S } from "../synth/probe.ts";
 import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
 import { bind, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
-import { censusStartles } from "../census.ts";
+import { createCensus } from "../census.ts";
 import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
@@ -945,6 +945,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
   let warped = false;
   let kitMs = 0;
   const gullList = opts.gulls ?? [];
+  const census = createCensus(opts.n);
   const startlePool: Startle[] = [];
   let censusAt = NaN;
   return {
@@ -962,7 +963,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
           // The beaches' lattice is walked only where the ear has found beach or shingle in the frame.
           let beach = hearing.surf[0].e > 0 || hearing.surf[1].e > 0;
           for (let i = 0; !beach && i < hearing.shores.length; i++) beach = hearing.shores[i].kind === 1 || hearing.shores[i].kind === 2;
-          censusStartles(beach ? seen : NO_FRAME, pose, opts.n, opts.seed, gullList, hearing.startled, startlePool);
+          census.run(beach ? seen : NO_FRAME, pose, opts.seed, gullList, hearing.startled, startlePool);
         }
       }
       engine.frame(pose, hearing, prefs);

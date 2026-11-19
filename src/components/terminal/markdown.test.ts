@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderMarkdown } from "./markdown.ts";
+import { isSitePath, parse, renderMarkdown, spans } from "./markdown.ts";
 import type { TextRun } from "./types";
 
 /** The rows as plain text. */
@@ -103,12 +103,20 @@ test("a link that wraps is a link on every row it lands on", () => {
   assert.equal(run(rows, "two").href, "mailto:a@b.co");
 });
 
-test("a link to anything but the web or a mailbox is left as plain text", () => {
-  const rows = renderMarkdown("[click](javascript:void) [mail](mailto:a@b.co) [web](HTTPS://b.co)", 60);
+test("a link to anything but the web, a mailbox or a path on this site is left as plain text", () => {
+  const rows = renderMarkdown("[click](javascript:void) [mail](mailto:a@b.co) [web](HTTPS://b.co) [far](//b.co/x)", 60);
   assert.equal(run(rows, "click").href, undefined);
   assert.equal(run(rows, "click").underline, undefined);
+  assert.equal(run(rows, "far").href, undefined);
   assert.equal(run(rows, "mail").href, "mailto:a@b.co");
   assert.equal(run(rows, "web").href, "HTTPS://b.co");
+});
+
+test("a link to a path on this site is a link: the sitemap's pages and the résumé can be followed", () => {
+  const rows = renderMarkdown("- [Flight](/world): fly\n- [Résumé](/Daniel-Kuo-Resume.pdf)", 60);
+  assert.equal(run(rows, "Flight").href, "/world");
+  assert.equal(run(rows, "Flight").underline, true);
+  assert.equal(run(rows, "Résumé").href, "/Daniel-Kuo-Resume.pdf");
 });
 
 test("inline markup works inside list items and headings", () => {
@@ -131,4 +139,51 @@ test("the document stops at 80 columns however wide the window is", () => {
   // 15 words and the 14 spaces between them are 74 cells; a 16th would pass
   // the 76 between the margins.
   assert.equal(widest, 2 + 74);
+});
+
+// ---- parse and spans: what a document view starts from --------------------------
+
+test("a file parses to its headings, paragraphs and lists, in order", () => {
+  assert.deepEqual(parse("# Title\n\nOne\ntwo.\n\n- a\n- b\n  more\n\n## Sub\n"), [
+    { kind: "heading", level: 1, text: "Title" },
+    { kind: "para", text: "One two." },
+    { kind: "list", items: ["a", "b more"] },
+    { kind: "heading", level: 2, text: "Sub" },
+  ]);
+});
+
+test("a line splits into its plain text, code, strong text and links", () => {
+  assert.deepEqual(spans("Run `ls` now, **please**, or see [the repo](https://example.com/x)."), [
+    { kind: "text", text: "Run " },
+    { kind: "code", text: "ls" },
+    { kind: "text", text: " now, " },
+    { kind: "strong", text: "please" },
+    { kind: "text", text: ", or see " },
+    { kind: "link", text: "the repo", href: "https://example.com/x" },
+    { kind: "text", text: "." },
+  ]);
+});
+
+test("a link may go to the web, a mailbox or a path on this site", () => {
+  for (const href of ["https://example.com", "http://example.com", "mailto:a@example.com", "/world", "/resume.pdf", "/"]) {
+    assert.deepEqual(spans(`[x](${href})`), [{ kind: "link", text: "x", href }], href);
+  }
+});
+
+test("any other target leaves the label as plain text", () => {
+  for (const href of ["javascript:void0", "//evil.example/x", "data:text/html,x", "relative/path", "#top"]) {
+    assert.deepEqual(spans(`[x](${href})`), [{ kind: "text", text: "x" }], href);
+  }
+});
+
+test("a site path starts with one slash", () => {
+  assert.equal(isSitePath("/world"), true);
+  assert.equal(isSitePath("/"), true);
+  assert.equal(isSitePath("//example.com"), false);
+  assert.equal(isSitePath("world"), false);
+});
+
+test("plain text is one span, and an empty line none", () => {
+  assert.deepEqual(spans("just words"), [{ kind: "text", text: "just words" }]);
+  assert.deepEqual(spans(""), []);
 });

@@ -7,7 +7,7 @@ import { MATERIAL as M } from "../../look/materials.ts";
 import { advance, cameraAt, easeFocus, land, restShare, takeOff, type Phase, type Target } from "../../sites/landing.ts";
 import { wheelersOf } from "../../live/life.ts";
 import { momentWindow } from "../../live/moments.ts";
-import { censusStartles } from "../census.ts";
+import { createCensus } from "../census.ts";
 import { createEar } from "../ear.ts";
 import { createLanes } from "../engine/lanes.ts";
 import { KEKS, LONG, MEW, YELP } from "../schedule/gulls.ts";
@@ -136,6 +136,7 @@ function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFr
     ear.setWorld({ n: world.n, land: gridOf(world) });
     ear.setWarp(warp);
     const lanes = createLanes({ lanes: touch ? 2 : 4, emitters: touch ? 4 : 8, seed: SEED });
+    const census = createCensus(world.n);
     const out: Hearing[] = [];
     const buffer = new Uint32Array(400 * 225);
     let last: Hearing = QUIET, lastT = NaN;
@@ -144,7 +145,7 @@ function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFr
       if (census) {
         if (k % 2 === 0) {
           const list: Startle[] = [];
-          censusStartles(frameOf(world, pose.x, pose.y - pose.alt / 0.8, buffer), pose, world.n, SEED, [], list, []);
+          census.run(frameOf(world, pose.x, pose.y - pose.alt / 0.8, buffer), pose, SEED, [], list, []);
           startled.push(list);
         } else startled.push(startled[k - 1]);
       }

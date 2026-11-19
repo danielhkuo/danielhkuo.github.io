@@ -16,7 +16,7 @@
 // One-shots are never faded by the picture's `shown`: a moment's opening sounds at full level.
 
 import { torusDelta } from "../../core/torus.ts";
-import { CARRIAGE_BEHIND, ferryAt, flockAt, flockPlace, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, shown, trainAt, trainPlace } from "../../live/moments.ts";
+import { CARRIAGE_BEHIND, ferryAt, flockAt, flockPlace, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, trainAt, trainPlace } from "../../live/moments.ts";
 import { K_CLOCK, K_FERRY, K_FLOCK, K_PLANE, K_TRAIN, TAU } from "../levels.ts";
 import { CHIME, CLACK, RATCHET, THUD, WHIRR, WHIRR_DOWN, WHIRR_END } from "../schedule/chimes.ts";
 import { appearance, CHUFF, CLICK, ferrySpeed, FLAP, HORN_LONG, HORN_SHORT, PLANE_RUNDOWN, planeRpm, POP, RIPPLE, SPLASH, SWELL, trainRun, WHISTLE_LONG, WHISTLE_SHORT } from "../schedule/moments.ts";
@@ -590,8 +590,8 @@ export function buildFerry(ctx: Ctx, o: MomentOptions & { quay: [number, number]
       sends += follow(slot, pose, o.quay[0], y, o.level + 2, o.n, 1, MEDIUM, 0, dt, now, calm);
       const key = Math.round(a.start * 10);
       if ((!engine || engine.key !== key) && slot.sentGain > 1e-4) {
-        // Its engine's thump and its bow wash, for as long as it is in sight: in over half a second, out with the
-        // picture's fade over its last 2.5 s (these are continuous: they do follow `shown` at the end).
+        // Its engine's thump and its bow wash, for the length of its appearance: in over half a second, out over its
+        // last 2.5 s.
         stopRunning(engine, now);
         const S = at(a.start), end = S + a.lasts;
         if (end - now > 0.5) {
@@ -604,8 +604,7 @@ export function buildFerry(ctx: Ctx, o: MomentOptions & { quay: [number, number]
           env.gain.setValueAtTime(0, from);
           env.gain.linearRampToValueAtTime(1, from + 0.5);
           if (end - 2.5 > from + 0.5) env.gain.setValueAtTime(1, end - 2.5);
-          // The picture's own fade, in four straight pieces.
-          for (let i = 1; i <= 4; i++) env.gain.linearRampToValueAtTime(shown(a.lasts - 2.5 + (2.5 * i) / 4, a.lasts), Math.max(from + 0.5, end - 2.5) + ((end - Math.max(from + 0.5, end - 2.5)) * i) / 4);
+          env.gain.linearRampToValueAtTime(0, end);
           beat.connect(thumpGain);
           thumpGain.connect(env);
           purl.connect(wash);

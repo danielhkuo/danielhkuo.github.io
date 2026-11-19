@@ -1,9 +1,10 @@
 // First-flight check: serves the static export in out/, opens /world?stats in
 // headless Chrome, flies a scripted route by key presses, and reports how soon
-// the start view was ready, main-thread ms per frame (and the sky's share), chunks baked a second, and
+// the start view was ready, main-thread ms per frame (and the sky's and the guides' shares), chunks baked a second, and
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
 //   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--sound]
+//                                              [--viewport 1920x1080] [--query pixels=130000] [--phone]
 //                                              [--soundlog <file>]
 //
 // --sound flies with the sound on (the stored choice set to "on", autoplay allowed, the first key press unlocking it)
@@ -22,12 +23,18 @@
 //   --warm 8           seconds to fly before the timed window starts (the kit and the graphs are built by then)
 //   --gc               traces V8's garbage collections on the main thread and counts them (adds overhead: its own runs)
 //
-// The page reports through window.__flight (set only with ?stats).
+// --phone flies as an iPhone 17 in landscape Safari (874×338 at 3×, touch): it takes wing on the first card and flies the
+// same route with the touch stick and the Boost button (mobile spec 8, the phone perf gate). It sets its own viewport.
+//
+// The page reports through window.__flight (set only with ?stats). The frame fills the window, so --viewport sets how
+// many frame pixels are drawn (runtime/fit.ts); --query adds to the page's query: ?pixels= to try another budget, or
+// ?time= and ?weather= to hold the light and the weather still (time=night&weather=rain).
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+import { layoutControls } from "../src/world/mobile/layout.ts";
 import { createReadStream, statSync } from "node:fs";
 import { createServer } from "node:http";
 
@@ -39,13 +46,16 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", sound: false, soundlog: null, arms: null, pairs: 1, rates: null, warm: 0, gc: false, arm: null };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", width: 1600, height: 900, query: "", phone: false, sound: false, soundlog: null, arms: null, pairs: 1, rates: null, warm: 0, gc: false, arm: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
     else if (a === "--seconds") o.seconds = Number(argv[++i]);
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
+    else if (a === "--viewport") [o.width, o.height] = argv[++i].split("x").map(Number);
+    else if (a === "--query") o.query = argv[++i];
+    else if (a === "--phone") o.phone = true;
     else if (a === "--sound") o.sound = true;
     else if (a === "--soundlog") o.soundlog = argv[++i];
     else if (a === "--arms") o.arms = argv[++i].split(",");
@@ -95,9 +105,39 @@ const pct = (xs, p) => {
 /** Key presses: [key, seconds held]. A loop of turns and boosts, then cruise. */
 const ROUTE = [["ArrowUp", 4], [null, 2], ["ArrowRight", 2.5], ["ArrowUp", 3], ["ArrowLeft", 4], [null, 3], ["ArrowDown", 2], ["ArrowRight", 1.5]];
 
+/** The phone: measured in the iOS 26.5 Simulator (iPhone 17, Safari, landscape, one tab). */
+const PHONE = {
+  viewport: { width: 874, height: 338, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: true },
+  ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+  insets: { top: 0, right: 62, bottom: 20, left: 62 },
+};
+/** The keys of ROUTE as a stick direction on screen and Boost. */
+const TOUCH = { ArrowUp: { dx: 0, dy: -1, boost: true }, ArrowDown: { dx: 0, dy: 1, boost: false }, ArrowLeft: { dx: -1, dy: 0, boost: false }, ArrowRight: { dx: 1, dy: 0, boost: false } };
+
+/** Holds the route's step by touch: the stick pushed that way (and Boost for Up) for `held` seconds. */
+async function touchStep(page, layout, key, held) {
+  if (!key) return new Promise((r) => setTimeout(r, held * 1000));
+  const t = TOUCH[key];
+  const sx = Math.round((layout.zone.x0 + layout.zone.x1) / 2);
+  const sy = Math.round((layout.zone.y0 + layout.zone.y1) / 2);
+  const thumb = await page.touchscreen.touchStart(sx, sy);
+  await thumb.move(sx + t.dx * layout.travel, sy + t.dy * layout.travel);
+  const boost = t.boost ? await page.touchscreen.touchStart(Math.round(layout.boost.x), Math.round(layout.boost.y)) : null;
+  await new Promise((r) => setTimeout(r, held * 1000));
+  await boost?.end();
+  await thumb.end();
+}
+
 async function fly(browser, origin, opts, label, rate) {
   const page = await browser.newPage();
-  await page.setViewport({ width: 1600, height: 900 });
+  if (opts.phone) {
+    await page.setUserAgent(PHONE.ua);
+    await page.setViewport(PHONE.viewport);
+    const cdp = await page.createCDPSession();
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: PHONE.insets });
+  } else {
+    await page.setViewport({ width: opts.width, height: opts.height });
+  }
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
@@ -139,10 +179,22 @@ async function fly(browser, origin, opts, label, rate) {
   }
   const t0 = Date.now();
   const pageArm = opts.arm && !["on", "off", "muted"].includes(opts.arm) ? `&soundarm=${opts.arm}` : "";
-  await page.goto(`${origin}world?stats${opts.soundlog ? "&soundlog" : ""}${pageArm}`, { waitUntil: "load" });
+  await page.goto(`${origin}world?stats${opts.soundlog ? "&soundlog" : ""}${pageArm}${opts.query ? `&${opts.query}` : ""}`, { waitUntil: "load" });
+  // Under phone emulation the navigation lands in a fresh renderer that drops the throttle: set it again.
+  if (opts.phone && rate > 1) await page.emulateCPUThrottling(rate);
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
   const boot = await page.evaluate(() => ({ ...window.__flight, frameMs: undefined }));
   if (boot.error) throw new Error(`${label}: page error ${boot.error}`);
+  let layout = null;
+  if (opts.phone) {
+    await page.tap('[data-act="take-wing"]');
+    await page.waitForFunction(() => !document.querySelector("[data-card]"));
+    const v = await page.evaluate(() => {
+      const r = document.querySelector("canvas").getBoundingClientRect();
+      return { w: Math.round(visualViewport.width), h: Math.round(visualViewport.height), frame: { x: r.left, y: r.top, w: r.width, h: r.height } };
+    });
+    layout = layoutControls({ width: v.w, height: v.h, insets: PHONE.insets, platform: "ios", hand: "right", size: 1, frame: v.frame, land: false });
+  }
   const shots = [];
   const shot = async (name) => {
     const file = path.join(opts.out, `${label}-${name}.png`);
@@ -165,6 +217,7 @@ async function fly(browser, origin, opts, label, rate) {
   await page.evaluate(() => {
     window.__flight.frameMs.length = 0;
     window.__flight.skyMs.length = 0;
+    if (window.__flight.guideMs) window.__flight.guideMs.length = 0;
     if (window.__flight.soundMs) window.__flight.soundMs.length = 0;
     if (window.__flight.soundKit) window.__flight.soundKit.length = 0;
     if (window.__flight.soundWork) window.__flight.soundWork.length = 0;
@@ -188,14 +241,20 @@ async function fly(browser, origin, opts, label, rate) {
   let step = warmStep;
   while ((Date.now() - start) / 1000 < opts.seconds) {
     const [key, held] = ROUTE[step++ % ROUTE.length];
-    if (key) await page.keyboard.down(key);
-    await new Promise((r) => setTimeout(r, held * 1000));
-    if (key) await page.keyboard.up(key);
+    if (layout) await touchStep(page, layout, key, held);
+    else {
+      if (key) await page.keyboard.down(key);
+      await new Promise((r) => setTimeout(r, held * 1000));
+      if (key) await page.keyboard.up(key);
+    }
     const t = (Date.now() - start) / 1000;
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
   const res = await page.evaluate(() => ({
+    frame: `${document.querySelector("canvas").width}x${document.querySelector("canvas").height}`,
+    guideMs: [...(window.__flight.guideMs ?? [])],
+    air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])], state: window.__flight.state?.() ?? null,
     frameMs: [...window.__flight.frameMs],
     skyMs: [...window.__flight.skyMs],
     soundMs: window.__flight.soundMs ? [...window.__flight.soundMs] : [],
@@ -238,7 +297,7 @@ async function fly(browser, origin, opts, label, rate) {
   const after = res.soundMs.map((ms, i) => ({ ms, frame: i - unlock, work: res.soundWork[i] ?? 0, kit: res.soundKit[i] ?? 0 })).filter((f) => f.frame > 0);
   const longest = [...after].sort((a, b) => b.ms - a.ms).slice(0, 6).map((f) => ({ ms: Number(f.ms.toFixed(2)), frame: f.frame, work: f.work, kitMs: Number(f.kit.toFixed(2)) }));
   return {
-    label, rate, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
+    label, rate, viewport: `${opts.width}x${opts.height}`, frame: res.frame, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
     frames: res.frames, fps: res.frames / secs,
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
@@ -270,7 +329,10 @@ async function fly(browser, origin, opts, label, rate) {
     soundMsMeanAll: res.soundMs.length ? res.soundMs.reduce((a, b) => a + b, 0) / res.soundMs.length : 0,
     soundMsP95All: pct(res.soundMs, 0.95),
     nullMsP95: pct(res.nullMs, 0.95), nullMsMax: pct(res.nullMs, 1), nullFramesOver1ms: res.nullMs.filter((ms) => ms > 1).length,
+    guideMsP50: pct(res.guideMs, 0.5), guideMsP95: pct(res.guideMs, 0.95), guideMsMax: pct(res.guideMs, 1),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
+    air: res.air, palettes: res.paletteMs.length, paletteMsMax: pct(res.paletteMs, 1),
+    ...(opts.phone ? { workers: res.state?.workers, pacedTo: res.state?.rate } : {}),
   };
 }
 

@@ -7,8 +7,9 @@
   --teal: #2c6b66;
   position: fixed;
   z-index: 30;
-  top: 0.75rem;
-  right: 0.75rem;
+  /* Under the corner that leads to the options (it sits in the top right of the frame), and clear of a phone's notch. */
+  top: max(3.5rem, calc(env(safe-area-inset-top) + 3rem));
+  right: max(0.75rem, env(safe-area-inset-right));
   display: flex;
   align-items: center;
   gap: 0.5rem;

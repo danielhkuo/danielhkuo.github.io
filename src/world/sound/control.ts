@@ -131,7 +131,8 @@ function insideSoundUi(target: EventTarget | null): boolean {
   return !!el && typeof el.closest === "function" && el.closest(`[${SOUND_UI}]`) != null;
 }
 
-export function browserEnv(log = false, arm?: string): ControlEnv {
+/** `reduced` is the page's own reduced-motion option, read each frame beside the system's. */
+export function browserEnv(log = false, arm?: string, reduced?: () => boolean): ControlEnv {
   let storage: PrefStore | null = null;
   try {
     storage = window.localStorage;
@@ -163,7 +164,7 @@ export function browserEnv(log = false, arm?: string): ControlEnv {
     setTimeout: (fn, ms) => window.setTimeout(fn, ms),
     clearTimeout: (id) => window.clearTimeout(id as number),
     touch: window.matchMedia("(pointer: coarse)").matches,
-    calm: () => calm,
+    calm: () => calm || (reduced ? reduced() : false),
     log,
     arm,
   };

@@ -12,16 +12,36 @@ const GLYPHS = [
 /**
  * Close, minimise, zoom. Pass handlers to make them buttons (the live window);
  * without them they are decorative (the header), and still show their glyphs.
+ * `closeHref` makes the red light alone a link, for a window that is a page:
+ * closing it goes somewhere.
  */
 export function Lights({
   onClose,
   onMinimize,
   onZoom,
+  closeHref,
+  closeLabel = "Close",
 }: {
   onClose?: () => void;
   onMinimize?: () => void;
   onZoom?: () => void;
+  closeHref?: string;
+  closeLabel?: string;
 }) {
+  if (closeHref) {
+    return (
+      <div className="lights">
+        <a href={closeHref} aria-label={closeLabel}>
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>{GLYPHS[0]}</svg>
+        </a>
+        {GLYPHS.slice(1).map((g, i) => (
+          <span key={i} aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>{g}</svg>
+          </span>
+        ))}
+      </div>
+    );
+  }
   const actions = [
     { label: "Close", run: onClose },
     { label: "Minimize", run: onMinimize },

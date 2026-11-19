@@ -4,10 +4,11 @@
 //                                                              └→ [send] → reverb
 //   a startle   keks and flaps, one-shots → a pooled chain where the bird took off → life bus
 //
-// A caller's slot follows its bird as it wheels (and as it flees, while it is startled), thirty times a second. Two
+// A caller's slot follows its bird round its wheel, thirty times a second (a bird the flier puts up is up to 25 cells
+// off that round for four seconds: the slot does not follow that). Two
 // callers at most (one on touch): a call that finds no slot free is not played.
 
-import { ALOFT, fled, flee, startledFor, wheeled, wheelerAt } from "../../live/life.ts";
+import { ALOFT, wheeled, wheelerAt } from "../../live/life.ts";
 import { K_GULL } from "../levels.ts";
 import { callNotes, startleNotes, type CallNote, type StartleNote } from "../schedule/gulls.ts";
 import { airCutoff, cutoffCents, dbToGain, distanceGain, offsetTo, panOf, panPair, reverbSend, SMALL, southCutoff, southGain, southOf } from "../space.ts";
@@ -80,7 +81,7 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
     return { in: g, air, pan, send, until: -Infinity, bird: null, x: 0, y: 0, sentGain: NaN, sentHz: 1000, sentPan: 0 };
   };
 
-  /** Where a caller's bird is at world time t, as the picture draws it: wheeling, or fleeing the flier. */
+  /** Where a caller's bird is at world time t, on its round. */
   const place = (c: Caller, pose: Pose, calm: boolean) => {
     let x = c.x, y = c.y, alt = pose.alt;
     if (c.bird) {
@@ -88,13 +89,6 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
       x = wheeled.x;
       y = wheeled.y;
       alt = wheeled.alt;
-      const tau = startledFor(pose, opts.n, x, y, alt);
-      if (tau >= 0) {
-        flee(pose, opts.n, x, y, tau, c.bird.h);
-        x += fled.dx;
-        y += fled.dy;
-        alt += fled.up;
-      }
     }
     const o = offsetTo(pose.x, pose.y, pose.alt, x, y, alt, opts.n);
     const b = southOf(o.dx, o.dy);

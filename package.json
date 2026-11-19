@@ -15,6 +15,8 @@
     "theme:build": "npm run astryx -- theme build src/theme/flexokiTheme.ts --out src/theme/theme.css",
     "favicons": "node scripts/recolor-favicon.mjs",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "test:minimal": "playwright test --project=minimal-phone --project=minimal-desktop",
+    "e2e": "npm run build && playwright test",
     "world:render": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-render.ts",
     "world:clouds": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-clouds.ts",
     "world:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-live.ts",
@@ -23,7 +25,9 @@
     "world:build": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-build.ts",
     "world:map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-map.ts",
     "bench:cbonsai": "node scripts/bench-cbonsai.mjs",
-    "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs"
+    "goldens:cbonsai": "node scripts/cbonsai-goldens.mjs",
+    "world:controls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-controls.ts",
+    "test:mobile": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/world-mobile.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.6.2",
@@ -36,6 +40,7 @@
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.6.2",
+    "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

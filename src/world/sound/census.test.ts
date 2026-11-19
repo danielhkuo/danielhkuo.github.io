@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ALOFT, eachShoreGull, lifeLayer, REACH, startledFor, wheelersOf } from "../live/life.ts";
+import { ALOFT, eachShoreGull, lifeLayer, REACH, scares, wheelersOf } from "../live/life.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import { coastEast, frameOf } from "./bench/land.ts";
-import { censusStartles, FRESH } from "./census.ts";
+import { createCensus, FRESH } from "./census.ts";
 import type { Pose, Startle } from "./types.ts";
 
 const N = 10240, SEED = 3;
@@ -19,34 +19,35 @@ test("the wheelers the sound is told of are the ones the picture draws: nine to 
   assert.equal(typeof lifeLayer, "function");
 });
 
-test("flying low along a beach: each resting gull is reported as it lifts, once in the census's ledger window, where it rested", () => {
+test("flying low along a beach: each resting gull is reported as it lifts, with the take-off the picture's own `scares` gives it", () => {
   const world = coastEast(5040, M.sand);
+  const census = createCensus(N);
   const seen = new Map<number, Startle>();
   const list: Startle[] = [], pool: Startle[] = [];
   let reports = 0;
   for (let k = 0; k < 15 * 6; k++) {
     const t = 100 + k / 15, p = pose(5030, 3000 + 100 * (k / 15), t);
-    const frame = frameOf(world, p.x, p.y - p.alt / 0.8);
-    censusStartles(frame, p, N, SEED, [], list, pool);
+    census.run(frameOf(world, p.x, p.y - p.alt / 0.8), p, SEED, [], list, pool);
     for (const s of list) {
       reports++;
       assert.ok(s.x >= 5040 && s.x < 5052, "on the sand");
       assert.ok(t - s.t0 >= 0 && t - s.t0 < FRESH);
+      // Seen again a moment later: the same bird, the same take-off (its flight is fixed when it lifts).
       const before = seen.get(s.key);
-      // Seen again a moment later: the same bird, the same take-off time (the picture's own, with no memory).
-      if (before) assert.ok(Math.abs(before.t0 - s.t0) < 1e-6 && before.x === s.x);
+      if (before) assert.ok(Math.abs(before.t0 - s.t0) < 1e-9 && before.x === s.x);
       seen.set(s.key, { ...s });
-      // The picture agrees: at that place the flier's track has just come within reach.
-      const tau = startledFor(p, N, s.x, s.y, 0);
-      assert.ok(tau >= 0 && tau < FRESH + 1e-9);
     }
   }
   assert.ok(seen.size >= 8, `${seen.size} birds over 600 cells of beach`);
   assert.ok(reports > seen.size, "each is seen by more than one look");
-  // High up, nothing is startled.
-  censusStartles(frameOf(world, 5030, 3200), { ...pose(5030, 3200, 100), alt: 200 }, N, SEED, [], list, pool);
+  // High up, nothing is startled; nor by a flier that has all but stopped.
+  const high = createCensus(N);
+  for (let k = 0; k < 10; k++) high.run(frameOf(world, 5030, 3200), { ...pose(5030, 3200 + 6 * k, 100 + k / 15), alt: 200 }, SEED, [], list, pool);
   assert.equal(list.length, 0);
-  assert.ok(REACH > 0 && ALOFT > 4);
+  const slow = createCensus(N);
+  for (let k = 0; k < 10; k++) slow.run(frameOf(world, 5030, 3200), { ...pose(5030, 3200 + 0.2 * k, 100 + k / 15), speed: 3 }, SEED, [], list, pool);
+  assert.equal(list.length, 0);
+  assert.ok(REACH > 0 && ALOFT > 4 && typeof scares === "function");
 });
 
 test("the beach gulls the census walks are the ones the layer's lattice holds: on sand only, the same from any frame that shows them", () => {

@@ -1,9 +1,10 @@
 // The site's content as files: the tree the shell starts in. Markdown, so
 // `cat` can lay it out (see markdown.ts for the subset it reads).
 
+import { bareUrl, contactLinks, projectFacts, withScheme } from "../../lib/site-content.ts";
 import { EMAIL, LINKS, PROFILE } from "./content.ts";
 import { HOME, dir, file, type DirNode } from "./fs.ts";
-import type { SiteInfo, SlimProject } from "./types";
+import type { PageLink, SiteInfo, SlimProject } from "./types";
 
 /** "github.com/danielhkuo": an address as its link's label. */
 function bare(url: string): string {
@@ -58,11 +59,53 @@ function readme(p: SlimProject): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** Where the pinned repos are on GitHub: what `open projects` shows. */
+const REPOSITORIES = `${LINKS.github}?tab=repositories`;
+
+/**
+ * projects/README.md: every pinned repo under its name, which links to it:
+ * what it is, then its details as a list (its language, counts and last
+ * update; its homepage). The minimal version prints this as its Projects
+ * section.
+ */
+function projectsIndex(projects: readonly SlimProject[]): string {
+  const lines = ["# Projects", ""];
+  if (!projects.length) lines.push(`The projects are pinned on [${bareUrl(LINKS.github)}](${LINKS.github}).`, "");
+  for (const p of projects) {
+    lines.push(`## [${p.name}](${p.url})`, "");
+    // One line on GitHub, but nothing enforces it.
+    const description = p.description.replace(/\s+/g, " ").trim();
+    if (description) lines.push(description, "");
+    lines.push(`- ${projectFacts(p)}`);
+    if (p.homepageUrl) lines.push(`- [${bareUrl(p.homepageUrl)}](${withScheme(p.homepageUrl)})`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+/** contact.md where the page has no contact form: every way to get in touch, the résumé among them. */
+function contactCard(): string {
+  const links = contactLinks().map((c) => `- **${c.label}** [${c.text}](${c.href})`);
+  return ["# Contact", "", ...links, ""].join("\n");
+}
+
+/** sitemap.md: the site's other pages, each with what it is. */
+function sitemap(pages: readonly PageLink[]): string {
+  const links = pages.map((p) => `- [${p.title}](${p.path}): ${p.summary}`);
+  return ["# Elsewhere on this site", "", ...links, ""].join("\n");
+}
+
 /**
  * The filesystem: /Users/daniel holding the bio, the contact card, the
  * résumé, and a directory per pinned repo. A repo's directory opens the
  * repository and carries its last update as its date; everything else is
  * dated by the build.
+ *
+ * Given the site's other pages (`site.pages`: the minimal version, and the
+ * abbey's terminal in /world), the tree also holds what the minimal version
+ * prints as its sections: projects/README.md, the contact card with the
+ * résumé on it, and ~/sitemap.md. The contact card of the old home page
+ * points at the form at its foot instead.
  */
 export function siteTree(projects: readonly SlimProject[], site: SiteInfo): DirNode {
   const built = site.builtAt;
@@ -73,12 +116,25 @@ export function siteTree(projects: readonly SlimProject[], site: SiteInfo): DirN
   for (const p of projects) {
     if (!latest || Date.parse(p.updatedAt) > Date.parse(latest)) latest = p.updatedAt;
   }
+  const updated = latest || built;
 
+  if (!site.pages) {
+    const home = dir(HOME[1], built, [
+      file("about.md", built, { text: ABOUT }),
+      file("contact.md", built, { text: CONTACT }),
+      dir("projects", updated, repos, REPOSITORIES),
+      file("resume.pdf", built, { size: site.resumeBytes, url: LINKS.resume }),
+    ]);
+    return dir("", built, [dir(HOME[0], built, [home])]);
+  }
+
+  const index = file("README.md", updated, { text: projectsIndex(projects), url: REPOSITORIES });
   const home = dir(HOME[1], built, [
     file("about.md", built, { text: ABOUT }),
-    file("contact.md", built, { text: CONTACT }),
-    dir("projects", latest || built, repos, `${LINKS.github}?tab=repositories`),
+    file("contact.md", built, { text: contactCard() }),
+    dir("projects", updated, [index, ...repos], REPOSITORIES),
     file("resume.pdf", built, { size: site.resumeBytes, url: LINKS.resume }),
+    file("sitemap.md", built, { text: sitemap(site.pages) }),
   ]);
   return dir("", built, [dir(HOME[0], built, [home])]);
 }

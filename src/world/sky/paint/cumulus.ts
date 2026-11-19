@@ -5,7 +5,7 @@
 // no gradient, no stipple.
 
 import type { CloudShape } from "../shapes.ts";
-import type { Painter, Sprite } from "../sprite.ts";
+import { RIM_TONE, type Painter, type Sprite } from "../sprite.ts";
 
 /** A ramp, brightest first, packed RGBA: the rim, then the tones from full sun to deepest shade. */
 export interface Ramp {
@@ -80,7 +80,7 @@ export function cumulusPainter(ramp: Ramp): Painter {
       tone = clean;
     }
 
-    const rgba = new Uint32Array(n), alpha = new Uint8Array(n);
+    const rgba = new Uint32Array(n), alpha = new Uint8Array(n), tones = new Uint8Array(n);
     const rimmed = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
       const k = tone[i];
@@ -92,8 +92,9 @@ export function cumulusPainter(ramp: Ramp): Painter {
         && !(rimmed[i - 1] && rimmed[i - w] && rimmed[i - w - 1]);
       if (rim) rimmed[i] = 1;
       rgba[i] = rim ? ramp.rim : ramp.tones[k];
+      tones[i] = rim ? RIM_TONE : k;
     }
-    return { w, h, rgba, alpha };
+    return { w, h, rgba, alpha, tone: tones };
   };
 }
 
