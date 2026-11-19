@@ -12,20 +12,23 @@ import { waterLayer } from "./water.ts";
 
 const VIEWS = ["start", "sea", "falls", "peak"] as const;
 const TIMES = [0.7, 2.3, 5.1] as const;
-/** sha256 of `out` after the water layer, per view and time, from the version before the speed pass. */
+/**
+ * sha256 of `out` after the water layer, per view and time. Taken before the speed pass; retaken on the 2026-11-18
+ * terrain polish, which repaints the land under the water (snow light, rock beds, upland colours) but not the water.
+ */
 const GOLDEN: Record<string, string> = {
-  "start@0.7": "2d17be0a45a04d25aa71b5236e5a84d167cdf577543a9a8dcea8ab8ff9d08b12",
-  "start@2.3": "c644ed0c9b355cf564e839f3d0d2867d456c0f858196d525f54579e6bd78531e",
-  "start@5.1": "1afa5a6c0a4a35bff53cfe6c94cd91e6f936b8fb275a42a5a0533839975bc25f",
-  "sea@0.7": "aa6d48d8c8bdc0c7c137d131f2eade59b418efad4c4891a1781ef40285aa9f1e",
-  "sea@2.3": "ebe4d0e8b0ca11e62386c02154a9e8532da5dbfaed2967dfc326ad35fe194812",
-  "sea@5.1": "d26ec54b5aa003e5749c0e3a6979f50c7a72fb05ba0ef3a42148936fdb2466b5",
-  "falls@0.7": "7a1daf56897e9f8158a297f81a2f6746f71e0e51f7fa7a4ab51fcf5c165ec213",
-  "falls@2.3": "13fa783234ef6c6c092c8340737ad0fa2c96ffa694f4d79fff59a4ce92141b27",
-  "falls@5.1": "ce6ac4014498b749fb81c1df7e2298453f40ebed72309ca75b682fd539765055",
-  "peak@0.7": "22c79315b7c2ae30ba34f4831739c4daab3305a33ec6f50cd0d940b47da9b511",
-  "peak@2.3": "9e402bd72860bcd89161f39efe2d78adf24552d5c5105bc994925ed15ea19ea1",
-  "peak@5.1": "0905a34a3ca5afa10fb5227b8e610164d06e869df8a234ea354e4631b3794519"
+  "start@0.7": "fc89a5d6f40a349a763e0ecc76d8788a8dd93b994bae4bcbb08ef7f497d63894",
+  "start@2.3": "9cfcbb73843ba4294b43e31f7b1d7e97fb955acbc9b04b8db0b0a439665f328a",
+  "start@5.1": "48473802dd5ded90e9d32e04cf5960decc50d2c0fa6e16b12d2f3142d5327008",
+  "sea@0.7": "4b76683e3c189cbdd9b5ac501740a4f2ca4d4115e81f0265c0f734696ebafce8",
+  "sea@2.3": "45ecac0f7c1991888e343d8c49bad90874c62b5a426e031a6bb839d36463e864",
+  "sea@5.1": "f7c82395b377b63e2f1c2eba144e3a71ce5c580e9bead25b210061d07f304c4a",
+  "falls@0.7": "93a1b315c198999be52beb2cb7f01fca54ee8a6526172cf0379cde86158fdfd2",
+  "falls@2.3": "b57fe9fa43cf867d653986264316422f984b8b913cf75019808305859bf3b705",
+  "falls@5.1": "3f0e270b6ea75edfe491daf8f09d91bec18ada14cc37e1bef767f2e8c800651d",
+  "peak@0.7": "73d55e13e00fd751323e15cbf22cba34bb91742750ce0c2aa93a168a5f05e3cb",
+  "peak@2.3": "c1859466c3649dcbd7014bd5d7e30d8a0e80add4ea53865b5eb039143e3069eb",
+  "peak@5.1": "9e099afd8a580736c377c08251296299533cb8609964ac2954a7978eb0176f26"
 };
 
 interface Fixture { frames: Record<string, LiveFrame>; seed: number }
