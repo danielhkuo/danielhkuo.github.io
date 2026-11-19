@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { LIGHT_INK_SHIFT, LIGHT_SHADOW_SHIFT, type Palette, type PaletteOptions } from "../look/contract.ts";
 import { isVegetation, isWater, MATERIAL as M, MATERIAL_COUNT, MATERIAL_NAMES } from "../look/materials.ts";
+import { PHASES } from "../sky/clock.ts";
 import {
-  buildPalette, FLAT_TONE, lstar, oklabOf, RESERVED, RESERVED_SECTOR, RIVER_GUARD_TONE, RIVER_MARGIN, snowCover, STREAM_TONE, STREAM_TONES,
-  TERRAIN_CHROMA_CAP,
+  buildPalette, darkness, DAY_KEYS, FLAT_TONE, gradeRgb, lstar, MIDDAY, oklabOf, paperIn, RESERVED, RESERVED_SECTOR, RIVER_GUARD_TONE,
+  RIVER_MARGIN, snowCover, STREAM_TONE, STREAM_TONES, TERRAIN_CHROMA_CAP,
 } from "./palette.ts";
 
 const NOON: PaletteOptions = { time: 0.5, season: 0.25, overcast: 0 };
 
-const TIMES = [0, 0.1, 0.19, 0.25, 0.33, 0.5, 0.7, 0.8, 0.86, 0.95];
+const TIMES = [0, 0.1, 0.19, 0.215, 0.25, 0.29, 0.33, 0.5, 0.7, 0.75, 0.78, 0.8, 0.86, 0.95];
 const SEASONS = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
 const SKIES = [0, 0.5, 1];
 
@@ -274,9 +275,9 @@ test("time of day: dusk is warm, night is blue and dark, overcast is grey", () =
     return sum;
   };
   const noon = mean(NOON);
-  const dusk = mean({ ...NOON, time: 0.8 });
-  const night = mean({ ...NOON, time: 0.95 });
-  const morning = mean({ ...NOON, time: 0.25 });
+  const dusk = mean({ ...NOON, time: PHASES.dusk });
+  const night = mean({ ...NOON, time: PHASES.night });
+  const morning = mean({ ...NOON, time: PHASES.morning });
   assert.ok(dusk[1] > noon[1] + 0.008, "dusk is redder");
   assert.ok(dusk[0] < noon[0] && dusk[0] > night[0] + 0.15);
   assert.ok(night[0] < noon[0] * 0.6, `night lightness ${night[0]} against ${noon[0]}`);
@@ -284,13 +285,13 @@ test("time of day: dusk is warm, night is blue and dark, overcast is grey", () =
   assert.ok(night[0] > 0.2, "night is dark, not black");
   assert.ok(Math.abs(morning[0] - noon[0]) < 0.03);
   // Dusk shadows go violet while the light goes warm.
-  const duskPal = buildPalette({ ...NOON, time: 0.8 });
+  const duskPal = buildPalette({ ...NOON, time: PHASES.dusk });
   assert.ok(oklabOf(at(duskPal, M.sand, 15))[2] > oklabOf(at(duskPal, M.sand, 0, 3))[2] + 0.03);
-  for (const time of [0.25, 0.5, 0.8]) {
+  for (const time of [PHASES.morning, 0.5, PHASES.dusk]) {
     assert.ok(chroma({ time, season: 0.25, overcast: 1 }) < chroma({ time, season: 0.25, overcast: 0 }) * 0.75, `overcast at ${time}`);
   }
   // Night has little colour left to lose.
-  assert.ok(chroma({ time: 0.95, season: 0.25, overcast: 1 }) < chroma({ time: 0.95, season: 0.25, overcast: 0 }));
+  assert.ok(chroma({ time: PHASES.night, season: 0.25, overcast: 1 }) < chroma({ time: PHASES.night, season: 0.25, overcast: 0 }));
   // Overcast flattens: less distance between shade and light, softer shadows.
   const clear = buildPalette(NOON);
   const grey = buildPalette({ ...NOON, overcast: 1 });
@@ -412,4 +413,75 @@ test("paper shows where nothing is baked, and past the last material", () => {
   const paper = lch(pal[0]);
   assert.ok(paper[0] > 0.93 && paper[1] < 0.035 && paper[2] > 60 && paper[2] < 110, `paper ${paper}`);
   assert.equal(pal[(200 << 8) | 5], pal[(255 << 8) | 77]);
+});
+
+/** The mean OKLab of every land material's flat tone in palette `o`. */
+function meanLand(o: PaletteOptions): [number, number, number] {
+  const pal = buildPalette(o);
+  const sum: [number, number, number] = [0, 0, 0];
+  for (const mat of LAND) {
+    const c = oklabOf(at(pal, mat, FLAT_TONE));
+    for (let k = 0; k < 3; k++) sum[k] += c[k] / LAND.length;
+  }
+  return sum;
+}
+
+test("the day runs night, blue hour, dawn, day, golden hour, dusk, blue hour, night", () => {
+  const [night, blue, dawn, day, golden, dusk] = [PHASES.night, DAY_KEYS.blueDawn, PHASES.dawn, 0.5, PHASES.golden, PHASES.dusk].map(
+    (time) => meanLand({ ...NOON, time }),
+  );
+  // Lightness climbs out of the night and falls back into it.
+  assert.ok(night[0] < blue[0] && blue[0] < dawn[0] && dawn[0] < day[0], "morning brightens");
+  assert.ok(day[0] > golden[0] && golden[0] > dusk[0] && dusk[0] > night[0], "evening darkens");
+  // Dawn is rose, golden hour gold, dusk red-orange: all warmer than noon; the blue hour is blue.
+  assert.ok(dawn[1] > day[1] + 0.006, "dawn is rosier than noon");
+  assert.ok(golden[2] > day[2] + 0.01, "golden hour is yellower than noon");
+  assert.ok(dusk[1] > day[1] + 0.008, "dusk is redder than noon");
+  assert.ok(blue[2] < day[2] - 0.02 && blue[2] < 0, "the blue hour is blue");
+  // The shipped midday is plain noon, wherever noon is held.
+  assert.deepEqual(buildPalette({ ...NOON, time: DAY_KEYS.noonFrom + 0.01 }), buildPalette(MIDDAY));
+  assert.deepEqual(buildPalette({ ...NOON, time: DAY_KEYS.noonTo - 0.01 }), buildPalette(MIDDAY));
+});
+
+test("darkness is none by day and full at night, rising through the dusk and falling through the dawn", () => {
+  for (let t = DAY_KEYS.noonFrom; t <= DAY_KEYS.noonTo; t += 0.01) assert.equal(darkness(t), 0);
+  for (const t of [0, 0.05, DAY_KEYS.nightEnds, DAY_KEYS.nightFalls, 0.9, 0.99]) assert.equal(darkness(t), 1);
+  let last = 0;
+  for (let t = DAY_KEYS.noonTo; t <= DAY_KEYS.nightFalls; t += 0.005) {
+    const d = darkness(t);
+    assert.ok(d >= last - 1e-12, `dusk at ${t}`);
+    last = d;
+  }
+  assert.ok(darkness(PHASES.dusk) > 0.2 && darkness(PHASES.dusk) < 0.8);
+});
+
+test("mist is a pale veil: darks lift, colour drains, and the light and shade draw together", () => {
+  const clear = buildPalette(NOON);
+  const misty = buildPalette({ ...NOON, mist: 1 });
+  const dark = (pal: Palette): number => lstar(at(pal, M.coniferCool, 0, 3));
+  const range = (pal: Palette): number => lstar(at(pal, M.meadowMid, 15)) - lstar(at(pal, M.meadowMid, 0));
+  assert.ok(dark(misty) > dark(clear) + 8, `darks ${dark(clear)} → ${dark(misty)}`);
+  assert.ok(range(misty) < range(clear) * 0.75);
+  const chroma = (o: PaletteOptions): number => {
+    const pal = buildPalette(o);
+    let sum = 0;
+    for (const mat of LAND) sum += lch(at(pal, mat, FLAT_TONE))[1] / LAND.length;
+    return sum;
+  };
+  assert.ok(chroma({ ...NOON, mist: 1 }) < chroma(NOON) * 0.75);
+  // At night the mist is a dim blue-grey, not a white sheet.
+  assert.ok(lstar(paperIn({ ...NOON, time: PHASES.night, mist: 1 })) < 60);
+  // No mist is no change.
+  assert.deepEqual(buildPalette({ ...NOON, mist: 0 }), clear);
+});
+
+test("colours that are not land take the same light: unchanged at noon, dark and blue at night, the dragon's red kept", () => {
+  const vermilion = 0xff2b3fcf;
+  assert.equal(gradeRgb(vermilion, NOON), vermilion);
+  assert.equal(gradeRgb(0xffd2e8f0, NOON), 0xffd2e8f0);
+  const night = oklabOf(gradeRgb(0xfffafcfd, { ...NOON, time: PHASES.night }));
+  assert.ok(night[0] < 0.6 && night[2] < -0.01, `a white cloud at night ${night}`);
+  // The terrain's cap on the reserved hues does not apply: the dragon stays red at dusk.
+  const [L, a, b] = oklabOf(gradeRgb(vermilion, { ...NOON, time: PHASES.dusk }));
+  assert.ok(Math.sqrt(a * a + b * b) > 0.12 && L > 0.3);
 });

@@ -3,7 +3,9 @@
 // the start view was ready, main-thread ms per frame (and the sky's share), chunks baked a second, and
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
-//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly]
+//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--query time=night&weather=rain]
+//
+// --query is added to the page's address: hold the light or the weather still (?time=, ?season=, ?weather=).
 //
 // The page reports through window.__flight (set only with ?stats).
 
@@ -22,13 +24,14 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly" };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", query: "" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
     else if (a === "--seconds") o.seconds = Number(argv[++i]);
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
+    else if (a === "--query") o.query = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
   return o;
@@ -79,7 +82,7 @@ async function fly(browser, origin, opts, label, rate) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   if (rate > 1) await page.emulateCPUThrottling(rate);
   const t0 = Date.now();
-  await page.goto(`${origin}world?stats`, { waitUntil: "load" });
+  await page.goto(`${origin}world?stats${opts.query ? `&${opts.query}` : ""}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
   const boot = await page.evaluate(() => ({ ...window.__flight, frameMs: undefined }));
   if (boot.error) throw new Error(`${label}: page error ${boot.error}`);
@@ -104,7 +107,7 @@ async function fly(browser, origin, opts, label, rate) {
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
-  const res = await page.evaluate(() => ({ frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked() }));
+  const res = await page.evaluate(() => ({ frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(), air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])] }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
   return {
@@ -113,6 +116,7 @@ async function fly(browser, origin, opts, label, rate) {
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
+    air: res.air, palettes: res.paletteMs.length, paletteMsMax: pct(res.paletteMs, 1),
   };
 }
 

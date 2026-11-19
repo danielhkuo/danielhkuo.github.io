@@ -14,8 +14,11 @@ export interface RegionLand {
   groundHeight(x: number, y: number): number;
   /** The occlusion floor under cell (x, y), from the core. */
   occlusionFloor(x: number, y: number): number;
-  /** The haze for unbaked chunks, from the core's overview: packed RGBA at bake pixel (bx, by), anywhere on the torus. */
-  haze(palette: Palette): (bx: number, by: number) => number;
+  /**
+   * The haze for unbaked chunks, from the core's overview: packed RGBA at bake pixel (bx, by), anywhere on the torus,
+   * its washes faded toward `cream` (the paper in the palette's light; the noon paper when left out).
+   */
+  haze(palette: Palette, cream?: number): (bx: number, by: number) => number;
   /**
    * Fetches and decodes the regions within `reach` cells of (x, y) on the torus that are not loaded or in flight,
    * nearest first; resolves when all of them are loaded. A failed fetch rejects; the region can be wanted again.
@@ -119,8 +122,8 @@ export function createRegionLand(core: Core, fetchRegion: (rx: number, ry: numbe
       const bN = n / block;
       return core.occlusion[wrap(Math.floor(y / block), bN) * bN + wrap(Math.floor(x / block), bN)];
     },
-    haze(palette) {
-      return hazeFromSamples(core.overview, n, palette);
+    haze(palette, cream) {
+      return hazeFromSamples(core.overview, n, palette, cream);
     },
     async want(x, y, reach) {
       const list: { rx: number; ry: number; key: number; d: number }[] = [];

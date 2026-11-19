@@ -16,6 +16,8 @@ export interface Cloud {
   x: number;
   y: number;
   layer: CloudLayer;
+  /** A weather cloud: it shows only once the weather's cloud has built past this (0–1). Absent shows always. */
+  need?: number;
 }
 
 export interface SkyField {
@@ -228,6 +230,28 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
 
   low.sort((a, b) => a.y - b.y || a.x - b.x);
   return { n, clouds: [...low, ...placed], wind };
+}
+
+/** Grid cells across the world in which weather clouds are scattered, per 6400 cells. */
+const WEATHER_COLS_AT_6400 = 30;
+
+/**
+ * The clouds that come with the weather: heaps and puffs scattered over the whole world, each showing once the
+ * cloud has built past its own `need`, so the sky fills as a shower nears and empties as it clears. Low layer, sorted
+ * north to south as the field's own.
+ */
+export function weatherClouds(seed: number, n: number, shapes: readonly CloudShape[]): Cloud[] {
+  const rng = rngFor(seed, "sky-weather");
+  const heaps = indices(shapes, "heap");
+  const puffs = indices(shapes, "puff");
+  const out: Cloud[] = [];
+  if (heaps.length === 0 || puffs.length === 0) return out;
+  scatter(rng, n, Math.max(1, Math.round((WEATHER_COLS_AT_6400 * n) / 6400)), (x, y) => {
+    const roll = rng.float(), need = 0.08 + 0.86 * rng.float();
+    out.push({ shape: pick(rng, roll < 0.45 ? heaps : puffs), x, y, layer: "low", need });
+  });
+  out.sort((a, b) => a.y - b.y || a.x - b.x);
+  return out;
 }
 
 /** Where cloud `c` is at time `t` seconds, wrapped into [0, n): exact however large t is. */

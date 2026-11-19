@@ -9,9 +9,10 @@ import { wrap } from "../core/torus.ts";
 import type { Palette } from "../look/contract.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import type { FlightData } from "../pack/world.ts";
-import { composeArea, paperGrain, type ViewRect } from "../render/compose.ts";
+import { composeArea, CREAM, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
 import { runLayers, type Flier, type LiveLayer } from "../live/live.ts";
+import type { Air } from "../sky/air.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
 import type { RegionLand } from "./regionLand.ts";
 import type { Site, WorldView } from "./view.ts";
@@ -56,6 +57,12 @@ export interface StreamView extends WorldView {
   bakeFrame(): Uint32Array;
   /** Draws the frame; `flier`, when given, is handed to the live layers. */
   frame(out: Uint32Array, time?: number, flier?: Flier): void;
+  /**
+   * Draws the land through `palette` from the next frame on, with `cream` (packed RGBA, the paper in the same light)
+   * showing through the grain and under the haze, and hands `air` to the live layers. A new palette composes the whole
+   * view again; the same one changes nothing.
+   */
+  setLight(palette: Palette, cream: number, air?: Air): void;
 }
 
 function isRegionLand(data: FlightData | RegionLand): data is RegionLand {
@@ -63,7 +70,7 @@ function isRegionLand(data: FlightData | RegionLand): data is RegionLand {
 }
 
 /** n must be a multiple of 320, so the bake wraps on whole chunks both ways. */
-export function createStreamView(data: FlightData | RegionLand, pool: BakePool, palette: Palette, mask: Uint8Array, opts: StreamOptions): StreamView {
+export function createStreamView(data: FlightData | RegionLand, pool: BakePool, initial: Palette, mask: Uint8Array, opts: StreamOptions): StreamView {
   const n = data.n;
   if (n % 320 !== 0) throw new Error("n must be a multiple of 320");
   const width = opts.width, height = opts.height;
@@ -75,7 +82,11 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
   const cache = new Map<string, Uint32Array>();
   let received = 0;
   const rect: ViewRect = { x: -(width >> 1), y: -(height >> 1), w: width, h: height };
-  const haze = isRegionLand(data) ? data.haze(palette) : hazeOf(data, palette);
+  let palette = initial;
+  let cream = CREAM;
+  let air: Air | undefined;
+  const hazeFor = (p: Palette, c: number): ((bx: number, by: number) => number) => (isRegionLand(data) ? data.haze(p, c) : hazeOf(data, p, c));
+  let haze = hazeFor(palette, cream);
   const groundSample = new Float32Array(1);
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
   const bakeBuffer = new Uint32Array(width * height);
@@ -175,11 +186,20 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
       out.set(land);
       runLayers(
         opts.layers ?? [],
-        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier },
+        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier, air },
         disabled,
         opts.onLayerError,
       );
-      if (opts.paper !== false) paperGrain(out, rect, mask);
+      if (opts.paper !== false) paperGrain(out, rect, mask, cream);
+    },
+    setLight(p, c, a) {
+      air = a;
+      if (p === palette && c === cream) return;
+      palette = p;
+      cream = c;
+      haze = hazeFor(p, c);
+      // The kept land was composed through the old palette: compose the whole view again.
+      landWhole = false;
     },
     depthAt(px, py) {
       // The frame just drawn holds the bake pixel under each of its pixels: read it there while the view and the chunks

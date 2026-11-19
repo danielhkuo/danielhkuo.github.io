@@ -3,7 +3,6 @@
 import { IM_Fell_English } from "next/font/google";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { buildPalette, MIDDAY } from "../../world/render/palette";
 import type { FlightInput, FlightState } from "../../world/runtime/flight";
 import { startState, stepFlight } from "../../world/runtime/flight";
 import { fitScale } from "../../world/runtime/fit";
@@ -16,8 +15,12 @@ import { createDragon } from "../../world/dragon/index";
 import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
+import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
+import { dayOfYear, parseSeason, parseTime, seasonOf, sunPhase } from "../../world/sky/clock";
+import { createRain } from "../../world/sky/rain";
 import { createSky } from "../../world/sky/sky";
 import { styleFrom } from "../../world/sky/styles";
+import { parseWeather, weatherAt } from "../../world/sky/weather";
 
 const fell = IM_Fell_English({ weight: "400", subsets: ["latin"] });
 
@@ -38,6 +41,10 @@ function inputFromKeys(keys: Set<string>): FlightInput {
 }
 
 interface FlightProbe {
+  /** The air at the last frame: sun phase, darkness, rain, mist, cloud. */
+  air: Air | null;
+  /** Main-thread ms each palette rebuild took. */
+  paletteMs: number[];
   navStart: number;
   readyAt: number | null;
   frameMs: number[];
@@ -52,6 +59,7 @@ interface FlightProbe {
 
 export default function Flight() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   // CSS pixels per frame pixel: a whole number of device pixels, so the frame stays hard-edged at any display scaling.
   const [scale, setScale] = useState(1);
   const [failed, setFailed] = useState(false);
@@ -66,7 +74,10 @@ export default function Flight() {
     const statsOn = new URLSearchParams(window.location.search).has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? {
+        air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0,
+        baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [],
+      }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     const recomputeScale = () => {
@@ -159,8 +170,30 @@ export default function Flight() {
           if (!readyFrame || (pool && pool.stats().workers === 0)) fail();
         };
 
-        const palette = buildPalette(MIDDAY);
-        view = createStreamView(land, pool, palette, mask, {
+        // The light and weather: the visitor's own clock, the date, and the weather everyone shares at this moment.
+        // ?time=, ?season= and ?weather= hold any of them still, for testing and screenshots.
+        const params = new URLSearchParams(window.location.search);
+        const today = new Date();
+        const fixedTime = parseTime(params.get("time"), dayOfYear(today.getFullYear(), today.getMonth() + 1, today.getDate()));
+        const fixedSeason = parseSeason(params.get("season"));
+        const fixedWeather = parseWeather(params.get("weather"));
+        const seed = loaded.manifest.seed;
+        const airNow = (): Air => {
+          const d = new Date();
+          const doy = dayOfYear(d.getFullYear(), d.getMonth() + 1, d.getDate());
+          const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+          return airOf(fixedTime ?? sunPhase(hour, doy), fixedSeason ?? seasonOf(doy), fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
+        };
+        let builtAir = airNow();
+        let lit = lightFor(builtAir);
+        let lastBuild = 0;
+        // The page round the frame takes the paper's colour in the same light.
+        const paperBehind = (cream: number) => {
+          if (pageRef.current) pageRef.current.style.background = `rgb(${cream & 255}, ${(cream >>> 8) & 255}, ${(cream >>> 16) & 255})`;
+        };
+        paperBehind(lit.cream);
+
+        view = createStreamView(land, pool, lit.palette, mask, {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
@@ -174,10 +207,12 @@ export default function Flight() {
               discoveries.discover(id, label);
             },
             // ?sights=all shows every rare sight at once, to look them over without waiting for them.
-            forceSights: new URLSearchParams(window.location.search).get("sights") === "all",
+            forceSights: params.get("sights") === "all",
+            structures: loaded.core.world.built?.built.structures,
           }),
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
+        view.setLight(lit.palette, lit.cream, builtAir);
         flight = startState(loaded.manifest.start, view);
         worldN = land.n;
         const sky = createSky(
@@ -188,6 +223,7 @@ export default function Flight() {
         );
 
         const dragon = createDragon(worldN);
+        const rain = createRain(seed);
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("2d");
@@ -199,6 +235,21 @@ export default function Flight() {
           const work = performance.now();
           const dt = lastT ? (t - lastT) / 1000 : 0;
           lastT = t;
+
+          // The air this frame. The palette is built again only once the light has moved a visible step.
+          const air = airNow();
+          if (lightMoved(builtAir, air) && t - lastBuild >= 400) {
+            const p0 = performance.now();
+            lit = lightFor(air);
+            builtAir = air;
+            lastBuild = t;
+            paperBehind(lit.cream);
+            if (probe) probe.paletteMs.push(performance.now() - p0);
+          }
+          view.setLight(lit.palette, lit.cream, air);
+          sky.setAir(air);
+          dragon.setAir(air);
+          if (probe) probe.air = air;
 
           flight = stepFlight(flight, inputFromKeys(keys), dt, view, worldN);
           view.setCamera(flight.x, flight.y - flight.alt / 0.8);
@@ -217,6 +268,7 @@ export default function Flight() {
           dragon.draw(frame, view.rect(), flight, view);
           const skyAgain = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "above");
+          rain(frame, view.rect(), t / 1000, air);
           if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);
@@ -302,6 +354,7 @@ export default function Flight() {
 
   return (
     <div
+      ref={pageRef}
       style={{
         minHeight: "100vh",
         display: "flex",

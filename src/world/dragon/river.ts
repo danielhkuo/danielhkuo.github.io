@@ -183,11 +183,18 @@ interface Kit {
   strand: number[];
 }
 
+/** Built kits, most recently used last: a few colourings of the dragon through the day. */
 const kits = new Map<Look, Kit>();
+const KITS = 4;
 
 function kitOf(look: Look): Kit {
   let k = kits.get(look);
+  if (k) {
+    kits.delete(look);
+    kits.set(look, k);
+  }
   if (!k) {
+    if (kits.size >= KITS) kits.delete(kits.keys().next().value as Look);
     const strand: number[] = [];
     for (let i = 0; i < WHISKER_POINTS - 1; i++) strand.push(i < 4 ? look.mane : look.tip);
     k = {

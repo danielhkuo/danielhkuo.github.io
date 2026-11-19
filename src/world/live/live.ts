@@ -3,6 +3,7 @@
 
 import type { Palette } from "../look/contract.ts";
 import type { ViewRect } from "../render/compose.ts";
+import type { Air } from "../sky/air.ts";
 
 /** One frame, as the layers see it. `bake[i]` is the bake pixel under out[i] (see pixel.ts), 0 where haze shows. */
 export interface LiveFrame {
@@ -21,6 +22,8 @@ export interface LiveFrame {
    * under a moved camera is the land from before, shifted: layers that cache work from the land can trust it.
    */
   bakeVersion?: number;
+  /** The light and weather (sky/air.ts): night, rain, mist. Absent is a clear noon. */
+  air?: Air;
 }
 
 /** Where the flier is: world cells, units up, heading in radians (0 east, π/2 south), cells a second. */

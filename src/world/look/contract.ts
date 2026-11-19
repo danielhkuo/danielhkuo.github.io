@@ -113,10 +113,12 @@ export interface Stamp {
 export type Palette = Uint32Array;
 
 export interface PaletteOptions {
-  /** 0–1 through the day: 0.25 morning, 0.5 noon, 0.8 dusk, 0.95 night. */
+  /** Sun phase, 0–1 through the day (sky/clock.ts): 0.25 sunrise, 0.5 noon, 0.75 sunset, 0 and 1 the middle of the night. */
   time: number;
   /** 0 spring, 0.25 summer, 0.5 autumn, 0.75 winter. */
   season: number;
   /** 0 clear … 1 overcast. */
   overcast: number;
+  /** 0 none … 1 thick mist: a pale veil over everything. Absent is none. */
+  mist?: number;
 }

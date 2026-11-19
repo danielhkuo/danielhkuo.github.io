@@ -408,15 +408,38 @@ function grade(gain: number, lift: number, sat: number, warm: readonly [number, 
   };
 }
 
+// The day, in sun phase (sky/clock.ts): 0.25 sunrise, 0.5 noon, 0.75 sunset. Night is moonlit, blue and low;
+// the blue hours either side of it are a deep cool wash; dawn is rose with lavender shade; golden hour warms the
+// light toward buff while the shade stays cool; dusk burns orange-rose over violet.
 const NIGHT = grade(0.4, 0.07, 0.4, [0.03, 255], [0.035, 270]);
-const DAWN = grade(0.8, 0.03, 0.75, [0.028, 20], [0.03, 270]);
+const BLUE = grade(0.58, 0.05, 0.58, [0.022, 250], [0.042, 278]);
+const DAWN = grade(0.82, 0.03, 0.78, [0.03, 22], [0.032, 285]);
 const MORNING = grade(0.985, 0.008, 0.94, [0.012, 70], [0.012, 250]);
 const NOON = grade(1, 0, 1, [0, 0], [0, 0]);
-const DUSK = grade(0.88, 0, 0.9, [0.024, 42], [0.035, 295]);
+const GOLDEN = grade(0.94, 0, 1, [0.04, 72], [0.026, 280]);
+const DUSK = grade(0.8, 0, 0.88, [0.034, 42], [0.042, 295]);
 
+/** Sun phase of each keyframe of the day. Noon holds from NOON_FROM to NOON_TO, so the shipped midday is plain noon. */
+export const DAY_KEYS = {
+  nightEnds: 0.17, blueDawn: 0.215, sunrise: 0.25, morning: 0.29, noonFrom: 0.36, noonTo: 0.64, golden: 0.705,
+  sunset: 0.75, blueDusk: 0.785, nightFalls: 0.83,
+} as const;
+
+const K = DAY_KEYS;
 const DAY: readonly (readonly [number, Grade])[] = [
-  [0, NIGHT], [0.12, NIGHT], [0.19, DAWN], [0.25, MORNING], [0.4, NOON], [0.62, NOON], [0.8, DUSK], [0.92, NIGHT], [1, NIGHT],
+  [0, NIGHT], [K.nightEnds, NIGHT], [K.blueDawn, BLUE], [K.sunrise, DAWN], [K.morning, MORNING], [K.noonFrom, NOON],
+  [K.noonTo, NOON], [K.golden, GOLDEN], [K.sunset, DUSK], [K.blueDusk, BLUE], [K.nightFalls, NIGHT], [1, NIGHT],
 ];
+
+/**
+ * 0–1: how dark the light is at sun phase `time`, from the day's own grades: 0 while the light keeps its full
+ * gain, 1 at night. Lamps, windows and stars come up with it.
+ */
+export function darkness(time: number): number {
+  const g = gradeAt(time);
+  const d = (NOON.gain - g.gain) / (NOON.gain - NIGHT.gain);
+  return d < 0 ? 0 : d > 1 ? 1 : d;
+}
 
 function gradeAt(time: number): Grade {
   const t = wrap01(time);
@@ -433,7 +456,31 @@ function gradeAt(time: number): Grade {
   };
 }
 
-function applyGrade(c: Lab, g: Grade, overcast: number): Lab {
+/** Mist: a pale blue-grey veil, graded with the light, laid over every colour. */
+const MIST: Lch = [0.93, 0.014, 235];
+/** At full mist, the share of the way each colour goes to the veil, and the share of its own colour it then loses. */
+export const MIST_VEIL = 0.42;
+const MIST_DRAIN = 0.3;
+
+/** The light of one moment: the day's grade, the overcast, and the mist with its veil already graded. */
+interface Light {
+  g: Grade;
+  overcast: number;
+  mist: number;
+  veil: Lab;
+}
+
+function lightOf(o: PaletteOptions): Light {
+  const g = gradeAt(o.time);
+  const overcast = o.overcast < 0 ? 0 : o.overcast > 1 ? 1 : o.overcast;
+  const m = o.mist ?? 0;
+  const mist = m < 0 ? 0 : m > 1 ? 1 : m;
+  return { g, overcast, mist, veil: applyGrade(lab(MIST), { g, overcast, mist: 0, veil: [0, 0, 0] }) };
+}
+
+/** A colour in the light: graded, greyed, misted and, unless `cap` is false (the dragon), kept off the reserved hues. */
+function applyGrade(c: Lab, light: Light, cap = true): Lab {
+  const { g, overcast, mist } = light;
   const w = smooth((c[0] - 0.35) / 0.5);
   let L = g.lift + g.gain * c[0];
   let a = c[1] * g.sat + w * g.warmA + (1 - w) * g.coolA;
@@ -446,10 +493,17 @@ function applyGrade(c: Lab, g: Grade, overcast: number): Lab {
     a = a * k - 0.001 * overcast;
     b = b * k - 0.007 * overcast;
   }
+  if (mist > 0) {
+    // The veil: everything goes part of the way to the mist's own colour and loses some of its own.
+    const k = MIST_VEIL * mist, keep = 1 - MIST_DRAIN * mist;
+    L += (light.veil[0] - L) * k;
+    a = (a + (light.veil[1] - a) * k) * keep;
+    b = (b + (light.veil[2] - b) * k) * keep;
+  }
   // Keep terrain clear of the dragon's vermilion and gold: a chroma cap over
   // the reserved hues, feathered out over the 18° to either side.
   const chroma = Math.sqrt(a * a + b * b);
-  if (chroma > TERRAIN_CHROMA_CAP) {
+  if (cap && chroma > TERRAIN_CHROMA_CAP) {
     let hue = Math.atan2(b, a) / RAD;
     if (hue < 0) hue += 360;
     const outside = Math.max(RESERVED_SECTOR[0] - hue, hue - RESERVED_SECTOR[1], 0);
@@ -543,12 +597,30 @@ function shadowed(c: Lab, depth: number, overcast: number): Lab {
 /** The light the world is baked and shown in until time of day lands: midday, early summer, clear. The bake workers and the page must agree on it. */
 export const MIDDAY: PaletteOptions = { time: 0.5, season: 0.25, overcast: 0 };
 
+/**
+ * A colour that is not terrain (a cloud, the dragon) in the light of `o`, as packed RGBA: the same grade, overcast
+ * and mist as the land, without the land's cap on the reserved hues.
+ */
+export function gradeRgb(rgba: number, o: PaletteOptions): number {
+  const light = lightOf(o);
+  // Plain noon light changes nothing: the colour comes back exactly as it went in.
+  const g = light.g;
+  if (g.gain === 1 && g.lift === 0 && g.sat === 1 && g.warmA === 0 && g.warmB === 0 && g.coolA === 0 && g.coolB === 0
+    && light.overcast === 0 && light.mist === 0) return rgba;
+  return pack(applyGrade(oklabOf(rgba), light, false));
+}
+
+/** The paper in the light of `o`, as packed RGBA: what bare paper and the haze fade toward. */
+export function paperIn(o: PaletteOptions): number {
+  return pack(applyGrade(lab(PAPER), lightOf(o)));
+}
+
 export function buildPalette(o: PaletteOptions): Palette {
   const pal = new Uint32Array(256 * 256);
-  const g = gradeAt(o.time);
-  const overcast = o.overcast < 0 ? 0 : o.overcast > 1 ? 1 : o.overcast;
-  const ink = applyGrade(lab(INK), g, overcast);
-  const paper = pack(applyGrade(lab(PAPER), g, overcast));
+  const light = lightOf(o);
+  const overcast = light.overcast;
+  const ink = applyGrade(lab(INK), light);
+  const paper = pack(applyGrade(lab(PAPER), light));
   pal.fill(paper);
 
   // Graded tones per material and shadow depth, before ink.
@@ -559,7 +631,7 @@ export function buildPalette(o: PaletteOptions): Palette {
     const land = SPECS[mat].ramp === "land";
     tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c) => {
       const s = shadowed(c, depth, overcast);
-      return applyGrade(land ? liftDark(s) : s, g, overcast);
+      return applyGrade(land ? liftDark(s) : s, light);
     }));
   }
 
