@@ -14,6 +14,8 @@ export const WORLD_FORMAT = 1;
 export const H_SCALE = 16;
 /** Steps over [0, 1] for the C fields (moisture, wind, exposure, debris) and the region weights. */
 export const FIELD_SCALE = 63;
+/** Steps over [0, 1] for sea-level temperature: finer than the other fields, since the cover reads height off it (half a unit a step). */
+export const TEMP_SCALE = 500;
 /** Steps per cell for river and road vertices (x, y and width). */
 export const XY_SCALE = 16;
 
@@ -66,6 +68,7 @@ const EXPOSURE = "exposure";
 const DEBRIS = "debris";
 const ROCK = "rock";
 const REGIONS = "regions";
+const TEMP = "temp";
 const RIVERS = "rivers";
 const ROADS = "roads";
 const STAMPS = "stamps";
@@ -91,6 +94,8 @@ export interface Meta {
   bars?: boolean;
   built?: boolean;
   roads?: boolean;
+  /** The world has climates: a temp plane on C. Absent: one temperate climate. */
+  temp?: boolean;
   /** Occlusion cell size. Absent when the file has no occlusion section. */
   block?: number;
 }
@@ -687,11 +692,12 @@ function buildMeta(w: BakeWorld, occlusion?: Occlusion): Uint8Array {
   if (w.bars) meta.bars = true;
   if (w.built) meta.built = true;
   if (w.roads) meta.roads = true;
+  if (w.temp) meta.temp = true;
   if (occlusion) meta.block = occlusion.block;
   return textEncoder.encode(JSON.stringify(meta));
 }
 
-export function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads"): boolean {
+export function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads" | "temp"): boolean {
   return meta[key] === true;
 }
 
@@ -732,6 +738,7 @@ export async function encodeWorld(w: BakeWorld, extra?: { occlusion?: Occlusion 
   push(EXPOSURE, encodeHeights(w.exposure, cN, cN, FIELD_SCALE));
   push(DEBRIS, encodeHeights(w.debris, cN, cN, FIELD_SCALE));
   push(ROCK, encodeBytes(w.rock));
+  if (w.temp) push(TEMP, encodeHeights(w.temp, cN, cN, TEMP_SCALE));
 
   const weights = regionWeights(w.regions, cN);
   push(REGIONS, Promise.all([0, 1, 2, 3, 4, 5].map((k) => encodeHeights(weights.subarray(k * c2, (k + 1) * c2), cN, cN, 1))).then(frameChunks));
@@ -809,6 +816,7 @@ async function decodeWorldInner(bin: Uint8Array, verify?: readonly WorldSection[
   if (flagged(meta, "bars")) world.bars = (await decodeValue(await loadRaw(requirePart(parts, BARS)))) as BakeWorld["bars"];
   if (flagged(meta, "built")) world.built = indexBuilt((await decodeValue(await loadRaw(requirePart(parts, BUILT)))) as Built, n);
   if (roads) world.roads = roads;
+  if (flagged(meta, "temp")) world.temp = fromQuantised(await loadHeights(requirePart(parts, TEMP), cN, cN), TEMP_SCALE);
   // The occlusion floor is for the flier on the main thread (decodeFlightData); the bake does not read it.
   return world;
 }

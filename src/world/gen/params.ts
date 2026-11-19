@@ -2,6 +2,8 @@
 // scaled by paramsFor(n); heights are absolute units and never scale.
 // These values set the land's character and are tuned on renders.
 
+import type { ClimateParams } from "./climate.ts";
+
 export const ARCHETYPE = { home: 0, highland: 1, slate: 2, lakes: 3, karst: 4, skerry: 5 } as const;
 export type Archetype = (typeof ARCHETYPE)[keyof typeof ARCHETYPE];
 export const ARCHETYPE_COUNT = 6;
@@ -59,7 +61,7 @@ export interface WorldParams {
   /** S5 talus: repose per rock class (height per cell) and sweeps; land is scaled down uniformly if it rises above `cap`. */
   talus: { repose: readonly [number, number, number]; sweeps: number; cap: number; scree: { shed: number; rate: number; repose: number; wash: number; passes: number; sweeps: number } };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
-  climate: { moistureRadius: number; windReach: number; windDropPerNode: number; windScale: number };
+  climate: ClimateParams;
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
   /** S7 rivers (see gen/rivers.ts RiverParams). Pixel-scale lengths are in cells and never scale. */
   rivers: {
@@ -303,7 +305,25 @@ export function paramsFor(n: number): WorldParams {
     // Rockfall: ground steeper than 0.72 sheds, and the debris lies at 0.55 where the slope eases, unless a stream carries it off.
     talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128, scree: { shed: 0.72 / s, rate: 5 * s, repose: 0.55 / s, wash: 2400 * s * s, passes: 4, sweeps: 24 } },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
-    climate: { moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30 },
+    // The zones (gen/climate.ts): latitude is a share of the world, so they fit a world of any size. The home island
+    // lies at 51° north. Temperature is flat at 0.5 across the temperate belt, φ 0.52–0.66; conifers take the woods by
+    // 0.42, the tree line reaches the sea at 0.27 and the snowline at 0.14 (cover.ts climateShift). The belts are cut
+    // nearer a globe's shares than equal bands: the polar cap is small, the tropics broad.
+    climate: {
+      moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30,
+      zones: {
+        homeLat: 0.57,
+        temp: [[0, 1], [0.11, 0.96], [0.25, 0.86], [0.38, 0.72], [0.5, 0.54], [0.52, 0.5], [0.66, 0.5], [0.73, 0.415], [0.85, 0.27], [0.92, 0.142], [1, 0.02]],
+        rain: [[0, 1.7], [0.09, 1.6], [0.15, 1.1], [0.22, 0.7], [0.28, 0.3], [0.34, 0.3], [0.39, 0.55], [0.45, 0.8], [0.52, 1], [0.66, 1], [0.73, 0.95], [0.85, 0.8], [0.92, 0.6], [1, 0.5]],
+        warp: [[2, 0.035], [5, 0.03], [13, 0.014]],
+        inlandRadius: Math.max(2, Math.round(40 * s)),
+        inlandFrom: 0.45,
+        inlandTemp: 0.06,
+        inlandDry: 0.35,
+        homeNear: 64 * s,
+        homeFar: 1100 * s,
+      },
+    },
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
     // Tuned 2026-11-17 on the 6400 world, where the largest river carries
     // ~14 000 node-rains: 420 makes it 6 px and leaves 92 % of channel nodes

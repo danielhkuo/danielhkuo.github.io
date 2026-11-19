@@ -149,6 +149,8 @@ export async function createTiledBakeHost(
       debris: new Float32Array(c2),
       rock: new Uint8Array(c2),
       regions: new Float32Array(c2 * 6),
+      // A stand-in is temperate: the plateau's own value, so nothing of another climate shows before the region loads.
+      temp: core.world.temp ? new Float32Array(c2).fill(0.5) : undefined,
       stamps: core.world.stamps ? { index: new Uint32Array(0), list: [] } : undefined,
     };
     blanks.set(key, empty);

@@ -654,7 +654,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0, temp: undefined };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cStride * (cWin ? cWin.h : cN);
   const rockW = new Float64Array(3);
@@ -671,7 +671,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     const cu = (wx + 0.5) / 8 - 0.5, cj = Math.floor(cu);
     cI0[x] = wrap(cj - cX0, cN); cI1[x] = wrap(cj + 1 - cX0, cN); cF[x] = cu - cj;
   }
-  const { hand, shore, moisture, wind, exposure, debris, rock, regions } = world;
+  const { hand, shore, moisture, wind, exposure, debris, rock, regions, temp } = world;
   // Shore classes live on the one ring of nodes at the water. Spread two nodes inland and voted by the corners'
   // weights, they bound beaches by the coast's own curve and not by 4-cell blocks.
   let shoreD: Uint8Array | null = null;
@@ -771,6 +771,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.wind = w00 * wind[c00] + w10 * wind[c10] + w01 * wind[c01] + w11 * wind[c11];
       c.exposure = w00 * exposure[c00] + w10 * exposure[c10] + w01 * exposure[c01] + w11 * exposure[c11];
       c.debris = w00 * debris[c00] + w10 * debris[c10] + w01 * debris[c01] + w11 * debris[c11];
+      if (temp !== undefined) {
+        // Four equal corners give their own value, not a sum of weights: the temperate plateau stays the plateau to the bit.
+        const t00 = temp[c00], t10 = temp[c10], t01 = temp[c01], t11 = temp[c11];
+        c.temp = t00 === t10 && t00 === t01 && t00 === t11 ? t00 : w00 * t00 + w10 * t10 + w01 * t01 + w11 * t11;
+      }
       // The cover blends rock kinds where they meet; the flags keep the voted class.
       c.rock = rockW[1] + 2 * rockW[2];
       c.cliffAbove = fields.cliffAbove[i];

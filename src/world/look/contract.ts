@@ -33,6 +33,11 @@ export interface CoverInput {
   rock: number;
   /** Six archetype weights (home, highland, slate, lakes, karst, skerry), summing to 1. */
   region: ArrayLike<number>;
+  /**
+   * Optional: sea-level temperature, 0 at the pole … 1 at the equator, 0.5 on the temperate plateau
+   * (gen/climate.ts). Absent, or exactly 0.5, the cover is the temperate one. The cover cools it with height.
+   */
+  temp?: number;
   /** 0 land, 1 sea, 2 lake, 3 river. */
   water: number;
   /** Shore class from the coast stage: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */

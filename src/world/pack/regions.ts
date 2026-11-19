@@ -21,7 +21,7 @@ import { indexBuilt, type Built } from "../gen/built.ts";
 import type { Stamp as CoastStamp } from "../gen/stamps.ts";
 import { encodeBytes, encodeHeights, readPack, sha256, writePack, type PackSection } from "./codec.ts";
 import {
-  FIELD_SCALE, H_SCALE, WORLD_FORMAT,
+  FIELD_SCALE, H_SCALE, TEMP_SCALE, WORLD_FORMAT,
   asDecodeError, baseResidual, bytesOf, decodeLines, decodeValue, encodeRiverBytes, encodeValue,
   fail, flagged, frameChunks, fromQuantised, handBytes, lakeLevels, loadBytes, loadHeights, loadOcclusion, loadRaw,
   parseMeta, quantised, readFramed, regionWeights, requirePart, storeRaw,
@@ -55,6 +55,8 @@ export interface RegionGrids {
   rock: Uint8Array;
   /** Six planes, plane-major, each (regionCells / 8)². */
   regions: Float32Array;
+  /** Sea-level temperature on C. Absent when the world has one temperate climate. */
+  temp?: Float32Array;
   /** The coast stamps that can reach the region. Absent when the world has none or they were not decoded. */
   stamps?: RegionStamps;
 }
@@ -97,6 +99,7 @@ const EXPOSURE = "exposure";
 const DEBRIS = "debris";
 const ROCK = "rock";
 const REGIONS = "regions";
+const TEMP = "temp";
 const RIVERS = "rivers";
 const ROADS = "roads";
 const STAMPS = "stamps";
@@ -192,6 +195,7 @@ function metaBytes(w: BakeWorld, regionCells: number, occlusion: Occlusion | und
   if (w.bars) meta.bars = true;
   if (w.built) meta.built = true;
   if (w.roads) meta.roads = true;
+  if (w.temp) meta.temp = true;
   if (occlusion) meta.block = occlusion.block;
   return textEncoder.encode(JSON.stringify(meta));
 }
@@ -398,6 +402,7 @@ function regionJobs(w: BakeWorld, prep: Prep, rx: number, ry: number, gS: number
   const c2 = cN * cN;
   const planes = [0, 1, 2, 3, 4, 5].map((k) => encodeHeights(rect(prep.weights.subarray(k * c2, (k + 1) * c2), cN, cx, cy, cS), cS, cS, 1));
   push(REGIONS, Promise.all(planes).then(frameChunks));
+  if (w.temp) push(TEMP, encodeHeights(rect(w.temp, cN, cx, cy, cS), cS, cS, TEMP_SCALE));
   if (prep.stamps) push(STAMPS, storeRaw(encodeStamps(prep.stamps.list, prep.stamps.byRegion[ry * side + rx])));
   return jobs;
 }
@@ -490,6 +495,8 @@ async function decodeCoreInner(bin: Uint8Array): Promise<Core> {
     rock: new Uint8Array(0),
     regions: new Float32Array(0),
   };
+  // The temperature is in the regions; an empty plane says the world has climates.
+  if (flagged(meta, "temp")) world.temp = new Float32Array(0);
   // The stamps are in the regions; an empty list says the world has them.
   if (flagged(meta, "stamps")) world.stamps = [];
   if (flagged(meta, "ponds")) world.ponds = (await decodeValue(await loadRaw(requirePart(parts, PONDS)))) as BakeWorld["ponds"];
@@ -523,7 +530,7 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
   // Every section inflates on its own; start them all at once.
   const heights = (name: string, side: number) => loadHeights(requirePart(parts, name), side, side);
   const planes = readFramed(requirePart(parts, REGIONS), 6);
-  const [groundQ, rq, conformQ, levelQ, waterKind, handRaw, shore, moistureQ, windQ, exposureQ, debrisQ, rock, decoded] = await Promise.all([
+  const [groundQ, rq, conformQ, levelQ, waterKind, handRaw, shore, moistureQ, windQ, exposureQ, debrisQ, rock, decoded, tempQ] = await Promise.all([
     heights(GROUND, gS),
     core.world.base ? heights(BASE, gS) : null,
     core.world.conform ? heights(CONFORM, gS) : null,
@@ -537,6 +544,7 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
     heights(DEBRIS, cS),
     loadBytes(requirePart(parts, ROCK), c2),
     Promise.all(planes.map((q) => loadHeights(q, cS, cS))),
+    core.world.temp ? heights(TEMP, cS) : null,
   ]);
   const ground = fromQuantised(groundQ, H_SCALE);
   let base: Float32Array | undefined;
@@ -558,7 +566,8 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
     const off = k * c2;
     for (let i = 0; i < c2; i++) regions[off + i] = q[i] / FIELD_SCALE;
   }
-  return { ground, base, conform, waterLevel, waterKind, hand, shore, moisture, wind, exposure, debris, rock, regions };
+  const temp = tempQ ? fromQuantised(tempQ, TEMP_SCALE) : undefined;
+  return { ground, base, conform, waterLevel, waterKind, hand, shore, moisture, wind, exposure, debris, rock, regions, temp };
 }
 
 async function decodeRegionInner(bin: Uint8Array, core: Core, withStamps: boolean): Promise<RegionGrids> {
@@ -689,6 +698,7 @@ export function cutFromRegions(core: Core, region: (rx: number, ry: number) => R
   const debris = new Float32Array(cw);
   const rock = new Uint8Array(cw);
   const regions = new Float32Array(cw * 6);
+  const temp = core.world.temp ? new Float32Array(cw) : undefined;
   const plane = cS * cS;
   for (let y = 0; y < c.h; y++) {
     const py = place(c.y0 + y, cN, cS);
@@ -703,6 +713,7 @@ export function cutFromRegions(core: Core, region: (rx: number, ry: number) => R
       exposure[di] = reg.exposure[si];
       debris[di] = reg.debris[si];
       rock[di] = reg.rock[si];
+      if (temp && reg.temp) temp[di] = reg.temp[si];
       const src = reg.regions;
       for (let p = 0; p < 6; p++) regions[p * cw + di] = src[p * plane + si];
     }
@@ -712,7 +723,7 @@ export function cutFromRegions(core: Core, region: (rx: number, ry: number) => R
     gWin: g,
     cWin: c,
     ground, waterLevel, waterKind, hand, shore, base, conform,
-    moisture, wind, exposure, debris, rock, regions,
+    moisture, wind, exposure, debris, rock, regions, temp,
     stamps: core.world.stamps ? stampsFor(core, have, g) : undefined,
   };
 }

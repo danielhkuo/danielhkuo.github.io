@@ -1,14 +1,14 @@
 // The generator's stages, in order. One place that says how a world is made.
 // Stages not built yet are marked; the bake supplies stand-ins for them.
 
-import { type Climate, climateFields } from "./climate.ts";
+import { type Climate, climateFields, type ZoneLayout } from "./climate.ts";
 import { coast, coastContext } from "./coast.ts";
 import { drown } from "./drown.ts";
 import { runSchedule } from "./erode.ts";
 import { formWaters, shapeForms } from "./forms.ts";
 import { type GlacialFeature, glacial, glacialContext } from "./glacial.ts";
 import { type HydroResult, hydrology } from "./hydro.ts";
-import type { WorldParams } from "./params.ts";
+import { ARCHETYPE, type WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
 import { settle, type SettleOptions, type Settlement } from "./settle.ts";
@@ -100,7 +100,7 @@ export interface Terrain {
   hydro: HydroResult;
   /** River vectors, falls, oxbows; `rivers.ground` is the final ground on G. */
   rivers: RiversResult;
-  /** Moisture and wind on C. */
+  /** Moisture, wind and sea-level temperature on C. */
   climate: Climate;
 }
 
@@ -122,12 +122,60 @@ export function settleWorld(t: Terrain, opts: SettleOptions = {}): World {
   return { ...t, settlement: settle(t, { strict: false, ...opts }) };
 }
 
+/**
+ * Where the zones are laid out from: the row of the home island's core, and the home island itself on C, which is
+ * the piece of land the home archetype owns most of (as gen/sites.ts finds it on G).
+ */
+export function zoneLayout(land: Land, seed: number): ZoneLayout {
+  const { p, plan } = land;
+  const n = p.n, gN = p.gN, cN = p.cN, nodes = cN * cN;
+  let homeY = n / 2;
+  for (const core of plan.cores) if (core.archetype === ARCHETYPE.home) { homeY = core.y; break; }
+  // Land on C: a node with any land under it.
+  const isLand = new Uint8Array(nodes);
+  for (let cy = 0; cy < cN; cy++) for (let cx = 0; cx < cN; cx++) {
+    const g = 2 * cy * gN + 2 * cx;
+    if (!land.isSea[g] || !land.isSea[g + 1] || !land.isSea[g + gN] || !land.isSea[g + gN + 1]) isLand[cy * cN + cx] = 1;
+  }
+  // Its pieces, 8-connected on the torus, and the home archetype's nodes in each.
+  const piece = new Int32Array(nodes).fill(-1), stack: number[] = [], votes: number[] = [];
+  const plane = ARCHETYPE.home * nodes;
+  for (let start = 0; start < nodes; start++) {
+    if (isLand[start] === 0 || piece[start] >= 0) continue;
+    const id = votes.length;
+    let vote = 0;
+    piece[start] = id;
+    stack.push(start);
+    while (stack.length > 0) {
+      const i = stack.pop() as number;
+      if (plan.regions[plane + i] > 0.5) vote++;
+      const x = i % cN, y = (i - x) / cN;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const j = ((y + dy + cN) % cN) * cN + ((x + dx + cN) % cN);
+        if (isLand[j] === 1 && piece[j] < 0) { piece[j] = id; stack.push(j); }
+      }
+    }
+    votes.push(vote);
+  }
+  let best = -1;
+  for (let k = 0; k < votes.length; k++) if (votes[k] > 0 && (best < 0 || votes[k] > votes[best])) best = k;
+  if (best < 0) return { n, seed, homeY };
+  const home = new Uint8Array(nodes);
+  for (let i = 0; i < nodes; i++) if (piece[i] === best) home[i] = 1;
+  return { n, seed, homeY, home };
+}
+
+/** S8: the climate of land that is made. Cheap, so a cached terrain's is worked out afresh (cli/worldcache.ts). */
+export function climateOf(land: Land, hydro: HydroResult, rv: RiversResult, seed: number): Climate {
+  return climateFields(rv.ground, hydro.rain, land.isSea, land.p.gN, land.p.climate, zoneLayout(land, seed));
+}
+
 /** The natural land: every stage before siting. */
 export function makeTerrain(p: WorldParams, seed: number): Terrain {
   const land = makeLand(p, seed);
   const gN = p.gN;
   const hydro = hydrology(land.g, gN, land.isSea, p.hydro);
   const rv = rivers({ g: land.g, gN, isSea: land.isSea, hydro }, p.rivers, seed);
-  const climate = climateFields(rv.ground, hydro.rain, land.isSea, gN, p.climate);
-  return { land, hydro, rivers: rv, climate };
+  return { land, hydro, rivers: rv, climate: climateOf(land, hydro, rv, seed) };
 }
