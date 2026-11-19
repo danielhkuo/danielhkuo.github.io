@@ -847,10 +847,10 @@ repeatMax, audioThreadShare }`, each where the scene asks for it.
 
 | Event | Fade |
 | --- | --- |
-| First enable | mute gain 0 → 1, `setTargetAtTime` τ 0.5 s (about 1.5 s) |
+| First enable | mute gain 0 → 1 along a straight line in decibels from −36 dB, 1.5 s (as built; first drafted as `setTargetAtTime` τ 0.5 s, which starts too steeply: §6.9) |
 | Mute | τ 0.04 s to 0; at +250 ms **every one-shot and wave envelope is stopped and all ledgers are cleared**; `suspend()` at +300 ms |
-| Unmute (engine alive) | `resume()`; on `running`, parameters set to their targets (master is at 0); `until = t`; bells and waves rejoin; τ 0.15 s to 1 |
-| Tab hidden / `pagehide` | in the handler, on the audio clock: hold (`cancelAndHoldAtTime`, or cancel + set where missing, as in Firefox), linear ramp to 0 over 200 ms, `stop(now + 0.21)` on every one-shot and envelope, already started or still waiting; ledgers cleared; `setTimeout(suspend, 250)` |
+| Unmute (engine alive) | `resume()`; on `running`, once any fade-out has reached 0: parameters set to their targets (master is at 0); `until = t`; bells and waves rejoin; a straight line in decibels from −26 dB to 1 over 0.9 s (as built; first drafted as τ 0.15 s) |
+| Tab hidden / `pagehide` | in the handler, on the audio clock: hold (cancel + set the value the fade has reached, in every browser: §6.9), linear ramp to 0 over 200 ms, `stop(now + 0.21)` on every one-shot and envelope, already started or still waiting; ledgers cleared; `setTimeout(suspend, 250)` |
 | Tab shown / `pageshow` | as unmute |
 | Stall | none (§6.4) |
 | Dragon jump | world bus τ 0.03 s down, τ 0.13 s back |
@@ -861,7 +861,8 @@ repeatMax, audioThreadShare }`, each where the scene asks for it.
 | Late kit voice coming in | τ 0.5 s |
 | A moment's continuous voices | in over 0.5 s; out with the picture's `shown` over its last 2.5 s. One-shots and the clock ignore `shown` |
 | Bell ring cap | oldest ring τ 0.25 s |
-| Bell or wave rejoin | 30 ms fade-in |
+| Bell or wave rejoin | 30 ms fade-in (`setTargetAtTime` τ 10 ms on the fresh gain: no corner at its end) |
+| Interrupted (`statechange`) | the device is already silent and its clock frozen: mute gain set to 0, everything stopped, ledgers cleared; `running` returns as an unmute |
 | Landing, take-off | no timed fade: `rest` and speed ease in the game |
 
 Because nothing that was started before a suspension survives it, nothing stale can play on return.
@@ -881,6 +882,35 @@ re-arm the gesture listeners and show the hint. `pagehide` with `persisted = fal
   `automationRate` (k-rate requests are ignored, so filters run a-rate and cost more) and `latencyHint` ignored.
 - **Safari**: cannot be driven on this machine without a settings change. It is on the owner's checklist (§10).
 - **iPadOS** reports a Mac user agent: detect it with `maxTouchPoints`.
+
+**The phase 0 spike** (`node scripts/world-sound-spike.mjs`; headless Chrome 148 and headless Firefox 160 on this
+Mac, 2026-11-19). What it found, and what the build does about it:
+
+| Question | Chrome 148 | Firefox 160 | In the build |
+| --- | --- | --- | --- |
+| `OfflineAudioContext.suspend` | yes | **no** | The bench steps in Chrome and renders ahead in Firefox (`mode: "ahead"`); every engine method takes its audio time. |
+| `cancelAndHoldAtTime` | yes, **but a ramp after it starts from a stale value once the earlier `setTargetAtTime` has settled** (the gain fell to 0 at once: 1.00 → 0.00 where 0.75 was due) | **no** | Neither is used. The engine keeps the mute gain's fade as numbers and takes it over with `cancelScheduledValues` + `setValueAtTime(the value the fade has reached)`: one path, right in both, and at any future time. |
+| Gain pair against `StereoPannerNode` | equal to 0.00 dB at seven pans | equal to 0.00 dB | Gain pairs everywhere; StereoPanner stays the documented fallback. |
+| 3000 Hz, six-channel buffer at `playbackRate` 0.1 | accepted; an exact straight line | accepted; within 0.002 of the line, steps 2.5× the ideal (its resampler), smooth | Control signals as designed. |
+| `automationRate = "k-rate"` on `detune` | settable | settable (reads back `k-rate`; the compatibility data says it is ignored) | Set on every filter's `detune` and `frequency`. |
+| `new AudioBuffer({…})` with no context | yes | yes | The kit is not tied to a context. |
+| Limiter (threshold −3, knee 0, ratio 20) on a −20 dBFS tone | +1.71 dB | +1.71 dB | Trim −1.7 dB. The `calibration` scene comes out at −20.00 dBFS. |
+| Limiter delay (an impulse) | 6.0 ms | 6.0 ms | `LIMITER_DELAY_S`; onsets are noted at the time they are heard. |
+| `compressor.reduction` | **reads −12.3 dB 0.1 s after a context starts and settles toward 0 with τ ≈ 0.33 s** (−6.8 at 0.3 s, −1.1 at 0.9 s) while nothing is reduced: its meter, not the audio | not readable mid-render (no stepping); −0.8 dB right after a 1 s render, the same meter | `limiterMinDb` is read only after 3 s of context time, and is null in ahead renders. The true-peak check (≤ −4.5 dBTP, under the −3 dB threshold) is the proof that the limiter stayed idle. |
+| 24 offline renders started at once (2 s each, 32 kHz) | all done in 7 ms | all done in 16 ms | Batched prerenders are safe. |
+| A context made with no gesture | `running` (with the autoplay flag) | `suspended`; `resume()` then runs it | `ctx.state` is what is trusted. |
+| `getOutputTimestamp()` just after a start or a resume | `performanceTime` **0** for the first 50 ms or more, then fresh | fresh at once | The guard (non-zero, within 0.1 s) refuses the zero; the fallback is used until it turns fresh. |
+| What the timestamp says the latency is | 80 ms (`baseLatency` 21 + `outputLatency` 56) | **0**: it is `(currentTime − outputLatency, now − outputLatency)`, a pair on the line through `(currentTime, now)` | With the 25 ms lead, Firefox's sound comes about 47 ms after its frame time where Chrome's comes 25 ms after. Both inside what is taken for in step; not corrected. |
+| `outputLatency` | 0 until running, then 0.056 s | 0 until running, then 0.022 s | Read with each clock sample. |
+
+Two things the build found beyond the spike:
+
+- **Chrome's 4× CPU throttle measures short work badly.** It pauses the main thread in slices, so a span of a few
+  tens of microseconds either misses a pause or holds a whole one. With the clock read every frame, `soundMs` p95
+  at 4× was 0.4 ms though its mean was 0.04 ms. The clock is now sampled ten times a second (eased as the frames
+  it stands for would have); p95 is 0.1 ms.
+- **A fade-in by `setTargetAtTime` starts too steeply in decibels** (+8.4 LU in its first 100 ms from silence,
+  against the 4 LU limit of §9.1). Fade-ins of the whole mix are straight lines in decibels instead (§6.7).
 
 ---
 

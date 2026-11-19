@@ -81,6 +81,25 @@ Boost onset: on top of the eased speed, add a 0.4 s swell on layer C (+4 dB, the
 overshoot by 5 % and settle. Braking: layer A drops fastest (time constant 0.25 s), which is heard as the air "letting
 go".
 
+**As built (phase 1, 2026-11-19; tuned by spectrogram and loudness, not by ear).** Values are in
+`src/world/sound/levels.ts`.
+
+- The rush (B) carries the loudness and the buffet (A) the weight: solo at cruise B reads −28.5 LUFS and A −34. A
+  first balance with A on top read as a wall of noise under 250 Hz, ate the headroom (true peak −6.7 dBTP at boost)
+  and climbed 19 LU from brake to boost. With B on top the three speeds read −34.6 / −27.3 / −20.5 LUFS.
+- A has a 45 Hz high-pass under it (the "below 60 Hz" trap): weight without sub-bass.
+- A's exponent is 1.25, B's 1 (the design's §3.3), not 1.5 and 1.
+- The gust also breathes on B's level (gain × 0.75 + 0.5·gust, about −2.5 … +2 dB) as well as moving its centre
+  ±15 %: with the centre alone a level cruise read as steady noise. Cruise now wanders over about 3 LU (momentary −28.9 … −25.6),
+  and its loudness curve's best match with itself at lags of 3–12 s is r = 0.13: nothing periodic.
+- Control signals are sums of random-phase partials at whole multiples of each loop's frequency (61, 13, 47, 97 s),
+  so they are band-limited and seamless by construction. The squall is the part of each whistle's wind above 0.7,
+  eased at both ends: it sounds 8–35 % of the time, in runs of 0.4–4 s.
+- Whistle level `kD` 0.6 (narrow bands carry little power): at boost their peaks sit about 12 dB under B; at cruise
+  they are 14 dB lower again, which is inaudible.
+- The wind's speed is slew-limited to one e-fold a second (8.7 dB/s on B), counted from 12 % of cruise: without it
+  take-off and touchdown moved the level 2.7 LU per 100 ms.
+
 ### Distance and stereo
 
 Wind is at the listener, so no distance model. Stereo: A is fully decorrelated left to right (a mono buffet is the single
@@ -125,6 +144,10 @@ No one-shots. One extra continuous layer plus modulation of the wind:
   whistle centres by +3 % (outside wing faster).
 - Optional wing-membrane detail for hard reversals (bank sign change within 0.4 s): one short low "whump", a brown
   noise burst through lowpass 180 Hz, attack 25 ms, decay 180 ms, −14 dB. At most one per 0.8 s.
+
+**As built (phase 1).** As above, with the design's gate `smoothstep(0.35, 0.6, |bank|)` in place of the dead
+zone and no "whump". `kW` 0.5: alone, a full turn at cruise peaks at −34.9 LUFS momentary, 8 LU under the cruise wind;
+the taps are digital silence; the balance is 3.0 dB toward the outside wing as seen on screen, heading north and south.
 
 ### Stereo, traps, cost
 

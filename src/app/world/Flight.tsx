@@ -23,8 +23,11 @@ import { styleFrom } from "../../world/sky/styles";
 import { anchorOf, restRadius, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, registerFrom, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
+import { browserEnv, createSoundControl, type SoundControl, type SoundLog } from "../../world/sound/control";
+import type { SoundState } from "../../world/sound/types";
 import Codex, { LandPrompt } from "./Codex";
 import { fell } from "./fonts";
+import SoundToggle from "./SoundToggle";
 
 const FRAME_W = 400;
 const FRAME_H = 225;
@@ -64,6 +67,12 @@ interface FlightProbe {
   frameMs: number[];
   /** Main-thread ms the sky's two passes took, per frame. */
   skyMs: number[];
+  /** Main-thread ms the sound took, per frame (0 while it is off), and the kit's share of it. */
+  soundMs: number[];
+  soundKit: number[];
+  soundState: SoundState;
+  /** The flight as recorded for the sound bench, with ?soundlog. */
+  soundLog: SoundLog | null;
   hazeFrames: number;
   frames: number;
   baked: () => number;
@@ -99,6 +108,8 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   const [landedAt, setLandedAt] = useState<Landmark | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const controls = useRef<Controls | null>(null);
+  // The sound's control, made in the effect; the toggle shows its state.
+  const [sound, setSound] = useState<SoundControl | null>(null);
   // Read by the key handler, which outlives renders.
   const terminalOpenRef = useRef(false);
   const terminalTrigger = useRef<HTMLElement | null>(null);
@@ -139,9 +150,14 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
     const statsOn = params.has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], soundMs: [], soundKit: [], soundState: "off", soundLog: null, hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
+    // Sound: off until asked for; with ?stats&soundlog the flight is recorded for the sound bench.
+    const soundControl = createSoundControl(browserEnv(statsOn && params.has("soundlog")));
+    if (probe) probe.soundLog = soundControl.log();
+    const publishSound = () => setSound(soundControl);
+    publishSound();
     const recomputeScale = () => {
       const dpr = window.devicePixelRatio || 1;
       setScale(fitScale(window.innerWidth * dpr, window.innerHeight * dpr, FRAME_W, FRAME_H) / dpr);
@@ -295,25 +311,28 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
         };
 
         const palette = buildPalette(MIDDAY);
+        const layerContext = {
+          seed: loaded.manifest.seed,
+          n: regions.n,
+          sites: loaded.manifest.sites,
+          land: { gN: regions.n / 8, ground: coast },
+          wonders: wondersOf(loaded.manifest),
+          discover: (id: string, label: string) => {
+            discoveries.discover(id, label);
+          },
+          // ?sights=all shows every rare sight at once, to look them over without waiting for them.
+          forceSights: params.get("sights") === "all",
+        };
         view = createStreamView(regions, pool, palette, mask, {
           width: FRAME_W,
           height: FRAME_H,
           sites: loaded.manifest.sites,
-          layers: makeLayers({
-            seed: loaded.manifest.seed,
-            n: regions.n,
-            sites: loaded.manifest.sites,
-            land: { gN: regions.n / 8, ground: coast },
-            wonders: wondersOf(loaded.manifest),
-            discover: (id, label) => {
-              discoveries.discover(id, label);
-            },
-            // ?sights=all shows every rare sight at once, to look them over without waiting for them.
-            forceSights: params.get("sights") === "all",
-          }),
+          // The ear comes last: it draws nothing, and keeps what the frame saw for the sound.
+          layers: [...makeLayers(layerContext), soundControl.ear],
           onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
         });
         worldN = regions.n;
+        soundControl.world(layerContext, loaded.manifest.worldId);
 
         // The landmarks the build placed, if they belong to this world: each coils round its own building.
         if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
@@ -375,6 +394,12 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
             heading: flight.heading,
             speed: flight.speed,
           });
+          const soundMs = soundControl.frame(t / 1000, flight, restShare(phase));
+          if (probe) {
+            probe.soundMs.push(soundMs);
+            probe.soundKit.push(soundControl.kitMs());
+            probe.soundState = soundControl.state();
+          }
           const skyStart = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "below");
           const skyBelow = performance.now() - skyStart;
@@ -443,6 +468,7 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
       controls.current = null;
       cancelAnimationFrame(raf);
       pool?.dispose();
+      soundControl.dispose();
       window.removeEventListener("resize", recomputeScale);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -492,6 +518,7 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
         position: "relative",
       }}
     >
+      <SoundToggle control={sound} />
       <canvas
         ref={canvasRef}
         width={FRAME_W}

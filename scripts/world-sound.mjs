@@ -4,10 +4,17 @@
 //
 //   npm run build && node scripts/world-sound.mjs [--scene name]... [--rate 48000] [--out .cache/world-sound]
 //   node scripts/world-sound.mjs --origin http://localhost:3000/     (a running dev server instead of out/)
+//   node scripts/world-sound.mjs --mode ahead        (the unstepped render: the whole timeline scheduled, then one render)
+//   node scripts/world-sound.mjs --browser firefox   (headless Firefox; it has no stepped mode, so it renders ahead)
+//   node scripts/world-sound.mjs --set K_WIND.a=0    (calibration: try a level constant, e.g. to solo a layer)
 //
 // The bench page reports through window.__sound:
 //   scenes: { name: string; seconds: number; about: string }[]
-//   render(name, { sampleRate }): Promise<{ wav: string /* base64 WAV */; onsets: number[] /* seconds */ }>
+//   render(name, { sampleRate, mode? }): Promise<{ wav: string /* base64 WAV */; onsets: number[] /* seconds */; stats }>
+//
+// Beside each WAV it writes <scene>.onsets.json, <scene>.about.txt and <scene>.stats.json (the render's stats: the
+// limiter's deepest reduction, the audio thread's share, the scene's marks). A scene that fails to render is reported
+// and the run goes on. Exit code 1 when any scene failed to render or failed a check.
 
 import { execFileSync } from "node:child_process";
 import { createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -25,7 +32,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { scenes: [], rate: 48000, port: 4372, out: ".cache/world-sound", origin: null };
+  const o = { scenes: [], rate: 48000, port: 4372, out: ".cache/world-sound", origin: null, mode: null, browser: "chrome", set: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--scene") o.scenes.push(argv[++i]);
@@ -33,6 +40,13 @@ function parseArgs(argv) {
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
     else if (a === "--origin") o.origin = argv[++i].replace(/\/?$/, "/");
+    else if (a === "--mode") o.mode = argv[++i];
+    else if (a === "--browser") o.browser = argv[++i];
+    else if (a === "--set") {
+      // Calibration: --set K_WIND.a=0 tries a level constant for this run only.
+      const [k, v] = argv[++i].split("=");
+      o.set[k] = Number(v);
+    }
     else throw new Error(`unknown argument ${a}`);
   }
   return o;
@@ -71,7 +85,12 @@ rmSync(opts.out, { recursive: true, force: true });
 mkdirSync(opts.out, { recursive: true });
 const server = opts.origin ? null : await listen(opts.port);
 const origin = opts.origin ?? `http://127.0.0.1:${opts.port}/`;
-const browser = await puppeteer.launch({ headless: "shell" });
+const FIREFOX = "/Applications/Firefox.app/Contents/MacOS/firefox";
+const browser =
+  opts.browser === "firefox"
+    ? await puppeteer.launch({ browser: "firefox", executablePath: process.env.FIREFOX_BIN ?? FIREFOX, headless: true })
+    : await puppeteer.launch({ headless: "shell" });
+let failed = false;
 try {
   const page = await browser.newPage();
   const errors = [];
@@ -87,21 +106,38 @@ try {
     throw new Error(`no such scene: ${opts.scenes.filter((n) => !all.some((s) => s.name === n)).join(", ")}`);
   }
   const rows = [];
+  const broken = [];
   for (const scene of wanted) {
     const t0 = Date.now();
-    const { wav, onsets } = await page.evaluate((name, sampleRate) => window.__sound.render(name, { sampleRate }), scene.name, opts.rate);
+    let result;
+    try {
+      result = await page.evaluate((name, o) => window.__sound.render(name, o), scene.name, { sampleRate: opts.rate, ...(opts.mode ? { mode: opts.mode } : {}), ...(Object.keys(opts.set).length ? { set: opts.set } : {}) });
+    } catch (e) {
+      // One scene failing does not stop the run.
+      failed = true;
+      broken.push({ scene: scene.name, error: e instanceof Error ? e.message : String(e) });
+      console.log(`${scene.name.padEnd(28)} FAILED TO RENDER: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+      continue;
+    }
+    const { wav, onsets, stats } = result;
     const file = path.join(opts.out, `${scene.name}.wav`);
     writeFileSync(file, Buffer.from(wav, "base64"));
     writeFileSync(path.join(opts.out, `${scene.name}.onsets.json`), JSON.stringify(onsets));
     writeFileSync(path.join(opts.out, `${scene.name}.about.txt`), scene.about ?? "");
+    writeFileSync(path.join(opts.out, `${scene.name}.stats.json`), JSON.stringify({ ...(stats ?? {}), browser: opts.browser }, null, 2));
     const row = { ...checkWav(file), renderMs: Date.now() - t0 };
     rows.push(row);
+    if (row.fails.length) failed = true;
     console.log(
       `${scene.name.padEnd(28)} ${String(row.lufs).padStart(6)} LUFS  tp ${String(row.truePeakDb).padStart(6)}  clip ${row.clipped}  ` +
-        `M +${row.loudnessSteps.rise}/−${row.loudnessSteps.fall}  corr ${row.correlation}  clicks ${row.clicks.length}  (${row.renderMs} ms)`,
+        `M +${row.loudnessSteps.rise}/−${row.loudnessSteps.fall}  corr ${row.correlation}  bal ${row.balanceDb}  clicks ${row.clicks.length}  ` +
+        `lim ${row.stats?.limiterMinDb ?? "?"}  (${row.stats?.mode ?? "?"}, ${row.renderMs} ms)${row.fails.length ? `  FAIL: ${row.fails.join("; ")}` : ""}`,
     );
+    for (const m of row.marks ?? []) {
+      console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB`);
+    }
   }
-  writeFileSync(path.join(opts.out, "render.json"), JSON.stringify({ origin, rows: rows.map(({ file, renderMs }) => ({ file, renderMs })), errors }, null, 2));
+  writeFileSync(path.join(opts.out, "render.json"), JSON.stringify({ origin, browser: opts.browser, mode: opts.mode, rows: rows.map(({ file, renderMs }) => ({ file, renderMs })), broken, errors }, null, 2));
   // The contact sheet and report.json: the checker writes them from the WAVs now on disk.
   execFileSync(process.execPath, [fileURLToPath(new URL("./world-sound-check.mjs", import.meta.url)), opts.out], { stdio: "ignore" });
   if (errors.length) console.log(`page errors:\n  ${errors.join("\n  ")}`);
@@ -110,3 +146,4 @@ try {
   await browser.close();
   server?.close();
 }
+if (failed) process.exitCode = 1;

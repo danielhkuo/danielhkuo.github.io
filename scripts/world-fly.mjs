@@ -4,9 +4,13 @@
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
 //   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--sound]
+//                                              [--soundlog <file>]
 //
 // --sound flies with the sound on (the stored choice set to "on", autoplay allowed, the first key press unlocking it)
-// and also reports the main-thread ms the sound took each frame.
+// and also reports the main-thread ms the sound took each frame: over all frames, and with the kit's share (the
+// buffers being adopted in the first seconds) taken out.
+// --soundlog <file> adds &soundlog to the page and writes the flight it records (the unthrottled run's) to <file>, for
+// the sound bench's flight-replay scene (public/world-sound/flight.json).
 //
 // The page reports through window.__flight (set only with ?stats).
 
@@ -25,7 +29,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", sound: false };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", sound: false, soundlog: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
@@ -33,6 +37,7 @@ function parseArgs(argv) {
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
     else if (a === "--sound") o.sound = true;
+    else if (a === "--soundlog") o.soundlog = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
   return o;
@@ -82,6 +87,19 @@ async function fly(browser, origin, opts, label, rate) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   if (rate > 1) await page.emulateCPUThrottling(rate);
+  // Counts the AudioContexts the page makes: with sound off there must be none.
+  await page.evaluateOnNewDocument(() => {
+    window.__audioContexts = 0;
+    const Real = window.AudioContext;
+    if (Real) {
+      window.AudioContext = class extends Real {
+        constructor(...args) {
+          super(...args);
+          window.__audioContexts++;
+        }
+      };
+    }
+  });
   if (opts.sound) {
     await page.evaluateOnNewDocument(() => {
       try {
@@ -92,7 +110,7 @@ async function fly(browser, origin, opts, label, rate) {
     });
   }
   const t0 = Date.now();
-  await page.goto(`${origin}world?stats`, { waitUntil: "load" });
+  await page.goto(`${origin}world?stats${opts.soundlog ? "&soundlog" : ""}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
   const boot = await page.evaluate(() => ({ ...window.__flight, frameMs: undefined }));
   if (boot.error) throw new Error(`${label}: page error ${boot.error}`);
@@ -107,6 +125,7 @@ async function fly(browser, origin, opts, label, rate) {
     window.__flight.frameMs.length = 0;
     window.__flight.skyMs.length = 0;
     if (window.__flight.soundMs) window.__flight.soundMs.length = 0;
+    if (window.__flight.soundKit) window.__flight.soundKit.length = 0;
     window.__flight.hazeFrames = 0;
     window.__flight.frames = 0;
   });
@@ -127,19 +146,35 @@ async function fly(browser, origin, opts, label, rate) {
     frameMs: [...window.__flight.frameMs],
     skyMs: [...window.__flight.skyMs],
     soundMs: window.__flight.soundMs ? [...window.__flight.soundMs] : [],
+    soundKit: window.__flight.soundKit ? [...window.__flight.soundKit] : [],
     soundState: window.__flight.soundState ?? null,
+    audioContexts: window.__audioContexts ?? 0,
     hazeFrames: window.__flight.hazeFrames,
     frames: window.__flight.frames,
     baked: window.__flight.baked(),
   }));
   const secs = (Date.now() - start) / 1000;
+  if (opts.soundlog && rate === 1) {
+    const log = await page.evaluate(() => JSON.stringify(window.__flight.soundLog ?? null));
+    mkdirSync(path.dirname(path.resolve(opts.soundlog)), { recursive: true });
+    writeFileSync(opts.soundlog, log);
+  }
   await page.close();
+  // The sound's ms with the kit's share taken out, frame by frame.
+  const soundNoKit = res.soundMs.map((ms, i) => Math.max(0, ms - (res.soundKit[i] ?? 0)));
   return {
     label, rate, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
     frames: res.frames, fps: res.frames / secs,
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
-    ...(opts.sound ? { soundMsP50: pct(res.soundMs, 0.5), soundMsP95: pct(res.soundMs, 0.95), soundMsMax: pct(res.soundMs, 1), soundState: res.soundState } : {}),
+    ...(opts.sound
+      ? {
+          soundMsP50: pct(res.soundMs, 0.5), soundMsP95: pct(res.soundMs, 0.95), soundMsMax: pct(res.soundMs, 1),
+          soundNoKitMsP50: pct(soundNoKit, 0.5), soundNoKitMsP95: pct(soundNoKit, 0.95), soundNoKitMsMax: pct(soundNoKit, 1),
+          soundKitFrames: res.soundKit.filter((ms) => ms > 0).length,
+        }
+      : { soundMsMax: res.soundMs.length ? Math.max(...res.soundMs) : 0 }),
+    soundState: res.soundState, audioContexts: res.audioContexts,
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
   };
 }
