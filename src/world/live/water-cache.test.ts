@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { namedViews, renderStrip } from "../cli/live.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
 import type { LiveFrame } from "./live.ts";
 import { waterLayer } from "./water.ts";
 
@@ -17,7 +18,7 @@ let memo: Promise<Fixture> | null = null;
 function fixture(): Promise<Fixture> {
   memo ??= (async () => {
     const root = process.cwd();
-    const { world, flight, manifest: shippedManifest } = await readShipped(join(root, "public/world"));
+    const { world, flight, manifest: shippedManifest } = await readShipped(FIXTURE_WORLD);
     const manifest = shippedManifest as unknown as Manifest;
     const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
     const { start } = await namedViews(world, manifest);

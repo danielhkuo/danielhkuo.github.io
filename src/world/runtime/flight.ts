@@ -40,10 +40,12 @@ export interface FlightState {
 }
 
 export interface FlightInput {
-  /** −1 turns left (anticlockwise on screen), 1 right. */
-  turn: -1 | 0 | 1;
+  /** −1 turns left (anticlockwise on screen), 1 right; a stick gives values between. */
+  turn: number;
   boost: boolean;
   brake: boolean;
+  /** Cruising speed as a share of CRUISE (the options' gentle pace); 1 when not given. */
+  pace?: number;
 }
 
 export interface Terrain {
@@ -69,16 +71,17 @@ export function startState(start: Start, terrain: Terrain): FlightState {
 }
 
 /**
- * One step: dt is clamped to [0, DT_MAX]; bank eases toward `turn` and the heading turns by TURN · bank · dt; speed
- * eases toward CRUISE (× BOOST or × BRAKE); the flier moves along its heading and wraps into [0, n); its altitude moves
+ * One step: dt is clamped to [0, DT_MAX]; bank eases toward `turn` (clamped to [−1, 1]) and the heading turns by
+ * TURN · bank · dt; speed eases toward CRUISE × pace (× BOOST or × BRAKE); the flier moves along its heading and wraps into [0, n); its altitude moves
  * toward max(ground + CLEARANCE, occlusionFloor + FLOOR_MARGIN) by at most CLIMB · dt, and never ends below
  * ground + MIN_GAP. Pure: the input state is not changed.
  */
 export function stepFlight(s: FlightState, input: FlightInput, dt: number, terrain: Terrain, n: number): FlightState {
   const step = Math.min(DT_MAX, Math.max(0, dt));
-  const bank = s.bank + (input.turn - s.bank) * Math.min(1, BANK_EASE * step);
+  const turn = Math.max(-1, Math.min(1, input.turn));
+  const bank = s.bank + (turn - s.bank) * Math.min(1, BANK_EASE * step);
   const heading = s.heading + TURN * bank * step;
-  const targetSpeed = CRUISE * (input.boost ? BOOST : input.brake ? BRAKE : 1);
+  const targetSpeed = CRUISE * (input.pace ?? 1) * (input.boost ? BOOST : input.brake ? BRAKE : 1);
   const speed = s.speed + (targetSpeed - s.speed) * Math.min(1, SPEED_EASE * step);
   let x = s.x + Math.cos(heading) * speed * step;
   let y = s.y + Math.sin(heading) * speed * step;

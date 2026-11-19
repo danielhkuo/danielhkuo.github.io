@@ -8,6 +8,7 @@ import { makeLayers } from "../live/registry.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { namedViews, renderStrip } from "./live.ts";
 import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
 import type { BakeWorld } from "../bake/world.ts";
 import type { FlightData } from "../pack/world.ts";
 
@@ -15,7 +16,7 @@ const root = process.cwd();
 let memo: Promise<{ world: BakeWorld; flight: FlightData; manifest: Manifest; mask: Uint8Array }> | null = null;
 function shipped(): Promise<{ world: BakeWorld; flight: FlightData; manifest: Manifest; mask: Uint8Array }> {
   memo ??= (async () => {
-    const s = await readShipped(join(root, "public/world"));
+    const s = await readShipped(FIXTURE_WORLD);
     return {
       world: s.world,
       flight: s.flight,
