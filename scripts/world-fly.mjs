@@ -18,7 +18,10 @@
 //                                           prints the medians. Arms: off (no sound), on, and the page's measuring arms
 //                                           (?soundarm=): noctx (wanted, no context ever), frozen (everything runs, the
 //                                           context suspended once built: no audio thread), earoff (no ear), earlocal (the
-//                                           ear in the frame loop), nosurf (no waves or beds), muted (on, volume 0).
+//                                           ear in the frame loop), nosurf (no waves or beds), muted (on, volume 0),
+//                                           and, each leaving one part of the frame's work out: nosched (the
+//                                           scheduler), nosends (the mix's sends), nowaves (the lanes and the
+//                                           emitters), novoices (the placed voices), nocensus (the census).
 //   --rates 4          which CPU rates to fly at (default 1,<rate>)
 //   --warm 8           seconds to fly before the timed window starts (the kit and the graphs are built by then)
 //   --gc               traces V8's garbage collections on the main thread and counts them (adds overhead: its own runs)

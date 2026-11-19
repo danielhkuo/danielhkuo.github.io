@@ -1582,3 +1582,56 @@ were set against a stalled ear and are not met (+0.2 to +0.4, 118 µs); the fram
 second: the mix, its sends, the moments, the gulls, the falls), now working on real shores. Splitting the mix frame's
 work over more frames is the next step if the 4× margin is wanted back. The 4 ms frame bar at 4× is set by the
 machine's load as much as by the sound: the no-sound arm alone ran 3.7–4.4 ms in this run.
+
+**Spreading the work (the second Opus round, after the merge at `ca60620`).** The bar: sound adds no more than
+0.15 ms to the frame p95 at 4×, with the mean under 100 µs, measured in alternating pairs on a quiet machine (load
+under 4). The baseline so measured (load 2.5–3.7): +0.60 ms (median of the pairs' differences +0.5), mean 91 µs.
+Binning each frame's sound by what it carried showed no single culprit: the mix's frame, the scheduler's (half the
+frames at 120 Hz, 70 µs a look), the waves', the census's each set the tail in turn. Freezing the context (the
+measuring arm `frozen`: every line of code runs, the audio thread does not) cost as much as sound on, so it is the
+page's own work. Changes, all on the page only (offline renders keep the old path and match to one or two float LSB):
+
+- **The mix and the waves in halves.** The mix's first half is the targets, the beds and half the sends; its second
+  the rest of the sends and the placed voices (moments, gulls, falls). The waves' first half is the lanes and the wave
+  starts; their second the emitters' sends and the pruning. A second half waits a frame when that frame will have
+  nothing due (`roomNext`); at 60 Hz it never does, so they run whole there, as before.
+- **The scheduler asks two sources a frame, round the list.** Each source keeps its own window, so it finds what it
+  would asked every frame (a test: the same cues, each once, a fifth of a second ahead or more, through a stall and a
+  hide). The cues it finds are played a few a frame, any due within a tenth of a second at once.
+- **The census runs after the engine's frame**, on a frame without a first half (it waits one at most).
+- **The context's state is read ten times a second** in the frame loop, not every frame (the native read cost more
+  than the rest of the control's frame); every change `check()` handles is read at once.
+- **Measuring arms** that each leave one part out on the page (`nosched`, `nosends`, `nowaves`, `novoices`,
+  `nocensus`; world-fly `--arms`), and work bits for the scheduler, the census and the second halves.
+
+What the arms showed (two rounds at 4×, load 3.7–5.9): no single part sets the 95th percentile. The frame p95 moves
+by ±0.3–0.5 ms from one flight to the next on this machine, more than any one part's effect. Sound's mean is steadier:
+117–119 µs with everything, 82–99 without the scheduler (which there also means without every one-shot it starts:
+the flight always meets the hour's peal, as the world hour begins at page load), 109–144 for each of the others.
+
+### 14.5 Loops that came round: the open sea, the wind, the surf bed
+
+Critics 3 and 4 heard what the rain's loops had done in the older beds too: the open sea's wash came round every
+4.855 s (r = 0.97) and the coast's wind every 5.000 s. Measured across the scenes, every bed loop read plainly
+repeats: the wind's rush and breeze (one pink loop, 5.000 s), its hiss (4.58 s), the surf bed's body, hiss, rumble and
+rattle (4.855 s and the like), the open sea's wash.
+
+- **Tried: the rain's wander** for every bed loop: its pitch on the hub's drifts by up to 30 cents
+  (`LOOP_WANDER_CENTS`), each on one drift or the other and one way or the other (the four wind layers, the surf bed's
+  five loops, the open sea's one). Waveform correlation at any lag from 0.25 to 12 s fell everywhere: `open-sea`
+  0.95 → 0.07, `wind-cruise` 0.96 → 0.06, `cove` 0.97 → 0.03, `surf-far` 0.99 → 0.03, `coast-run` 0.60 → 0.05.
+  Loudness the same to 0.1 LU, clicks 0. The audio thread's share (rendering ahead, best of three): `wind-cruise`
+  0.67 → 0.90 %, `open-sea` 0.71 → 1.01 %, `cove` 3.07 → 3.59 %, `coast-run` 3.67 → 4.38 %, `long-flight`
+  7.65 → 8.46 % (phase 2 played no loop off its rate for this reason).
+- **A/B, blind** (fresh critic; the open sea, the wind alone, the cove, the coast; each before and after, unlabelled;
+  it named the changed versions from the audio): **the beds still audibly repeat.** A wander changes a pass's speed,
+  not its noise: the noise comes back 1–1.5 % early or late, 80 ms windows still match at that shifting lag (0.64–0.84
+  against 0.75–1.00 before; chance about 0.4), and the 0.5–16 Hz envelope still recurs at 0.70–0.93. "To break the
+  loop, each pass needs different noise, not a different speed." It also measured the resampling's toll: the top
+  octave 0.8–3.9 dB down above 8 kHz (0.2–0.4 dB over 3.5–20 kHz) and short bursts of flutter at 12–20 kHz, 25–30 dB
+  under the bed; nothing else changed. Preferences: the open sea, no difference (65 %); **the wind, the changed one
+  by a hair (60 %)**; the cove, no difference (65 %); the coast, no difference (75 %).
+- **Kept** for the wind (the one pair it won); **reverted** for the open sea and the surf bed (renders identical to
+  before). The real fix is fresh noise on every pass (a noise source in an audio worklet, or the kit's worker handing
+  over fresh loops), at a cost to the audio thread or the page: on the roadmap. The rain's wander (§14.2) was judged
+  by waveform correlation only, and may share the limit: its loops are 7.3 s (drops) and 11.3 s (plinks).

@@ -50,6 +50,12 @@ export interface EngineOptions {
   n?: number;
   /** No waves, laps or beds (a measuring arm). */
   noSurf?: boolean;
+  /**
+   * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
+   * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
+   * placed voices). Never set otherwise.
+   */
+  skip?: string;
   /** Only the waves' hiss path sounds (no wind, no beds, no other part of a wave): the repetition check's render. */
   hissOnly?: boolean;
   /** A calibration tone into the master chain: dBFS peak and Hz. */
@@ -713,6 +719,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     mix(pose, hearing, census, prefs, memory, targets);
     lastMix = pose.t;
     tendBeds(pose.t, now);
+    if (opts.skip === "nosends") return;
     if (split) {
       sendsFrom = (bindings.length + 1) >> 1;
       apply(now, prefs.calm, false, 0, sendsFrom);
@@ -721,6 +728,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   /** Its second half: the rest of the sends, and the voices placed by where they are (the moments, the gulls, the falls). */
   const voicesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number) => {
     work |= WORK.voices;
+    if (opts.skip === "novoices") return;
     if (sendsFrom >= 0) {
       apply(now, prefs.calm, false, sendsFrom, Infinity, false);
       sendsFrom = -1;
@@ -745,6 +753,10 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const lanesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, look: number) => {
     lastTurn = 1;
     work |= WORK.lanes;
+    if (opts.skip === "nowaves") {
+      lastWaves = pose.t;
+      return;
+    }
     const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
     lastWaves = pose.t;
     waveStarts.length = 0;
@@ -757,7 +769,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   };
   /** Its second half: the emitters' sends, and what has finished let go. */
   const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
-    if (!surf) return;
+    if (!surf || opts.skip === "nowaves") return;
     work |= WORK.emitters;
     sends += surf.update(pose, lanes.emitters, now, prefs.calm);
     surf.prune(now);
@@ -911,7 +923,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
       // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
       // frame as much as a first half. What it finds is played a few a frame.
-      if (sources.length) {
+      if (sources.length && opts.skip !== "nosched") {
         runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
         schedNext = (schedNext + SCHED_EACH) % scheduler.size;
       }
@@ -1076,7 +1088,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf" });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;
@@ -1099,7 +1111,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
       // The census: which gulls the flier has just put up, fifteen times a second, after the engine's frame and on a
       // frame that carried neither the mix's nor the waves' first half, where it can wait a frame for one. (The birds
       // it finds are voiced by the mix's second half, a frame or two on.)
-      if (gullList.length > 0 || seen.bake) {
+      if ((gullList.length > 0 || seen.bake) && opts.arm !== "nocensus") {
         const since = pose.t - censusAt;
         if (!(since < 1 / 15) && ((engine.work() & (WORK.mix | WORK.lanes)) === 0 || !(since < 1 / 15 + 1 / 30) || since < 0)) {
           censusAt = pose.t;
