@@ -20,18 +20,24 @@ import type { LiveFrame, LiveLayer } from "./live.ts";
 const FW = 512;
 const FH = 256;
 /** The field's lattices: the lumps, the smaller lumps on their flanks, and the scallops of their edges; with weights. */
-const LUMP = [128, 32, 1] as const;
-const FLANK = [64, 8, 0.55] as const;
-const SCALLOP = [16, 8, 0.2] as const;
-/** Of 256 levels, even in area: where a bank's edge starts on land in full mist, and how many levels each step is. */
-const EDGE = 192;
-const STEP = 13;
+const LUMP = [64, 32, 1] as const;
+const FLANK = [32, 16, 0.5] as const;
+const SCALLOP = [16, 8, 0.22] as const;
+/** Of 256 levels, even in area: where a bank's edge starts on land in full mist. */
+const EDGE = 204;
+/** How many levels past the edge each step of tone starts. The last is past any land's reach: only pooled mist has a heart. */
+const STEPS = [0, 12, 26, 42, 64] as const;
 /** The dithered edge is this many levels deep: its cover rises from a sixteenth to whole across it. */
 const SOFT = 8;
 /** Water, marsh and shore are this many levels deeper in mist: the banks pool there, wider and thicker. */
 const POOL = 20;
-/** Of 256: how far a pixel goes to the mist's colour at each step, from the edge to the heart. */
-const TONES = [84, 128, 166, 196, 216] as const;
+/**
+ * Of 256: how far a pixel goes to the mist's colour at each step, from the edge to the heart. The body stops at a
+ * little over half, so the land shows through and a bank never reads as snow; only a heart on water is thicker.
+ */
+const TONES = [50, 84, 114, 141, 178] as const;
+/** Over tree crowns a bank is this many times shallower: it thins to its dithered edge and drifts over the wood. */
+const OVER_CROWNS = 4;
 /** Bake pixels a second the banks drift. */
 export const MIST_DRIFT = 2.5;
 /** The mist's own colour in daylight. It takes WARMTH of the day's light, so it warms and cools but stays pale. */
@@ -42,25 +48,30 @@ const NIGHT_MIST = 0xff6e5040;
 const NIGHT_SHARE = 0.7;
 
 /** The step a pixel `deep` levels into a bank takes: a table, so the frame's loop does not divide. */
-const STEP_OF = Uint8Array.from({ length: 128 }, (_, deep) => Math.min(TONES.length - 1, Math.floor(deep / STEP)));
+const STEP_OF = Uint8Array.from({ length: 128 }, (_, deep) => STEPS.findLastIndex((from) => deep >= from));
 
 /** The 4 × 4 ordered dither, 0–15. */
 const BAYER = Uint8Array.from([0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]);
 
-/** What a bank does to a material: nothing (it stands clear), lies on it, or pools on it (water and wet ground). */
-const CLEAR = 0, LAND = 1, WET = 2;
+/**
+ * What a bank does to a material: nothing (it stands clear), lies on it, pools on it (water and wet ground), or
+ * drifts thinly over it (tree crowns).
+ */
+const CLEAR = 0, LAND = 1, WET = 2, CROWN = 3;
 const KIND = new Uint8Array(256).fill(LAND);
 KIND[M.none] = CLEAR;
 for (let m = 0; m < 256; m++) {
-  if (isCanopy[m] === 1 || isBuilt[m] === 1) KIND[m] = CLEAR;
+  if (isBuilt[m] === 1) KIND[m] = CLEAR;
+  if (isCanopy[m] === 1) KIND[m] = CROWN;
   if (isWater[m] === 1) KIND[m] = WET;
 }
 // The heights stand over the mist: rock, snow, the alpine meadows, the moors and heaths; and so do hedges and walls.
 for (const m of [
   M.snow, M.snowLate, M.rockHard, M.rockSed, M.rockLime, M.rockSlate, M.cliffHard, M.cliffSed, M.cliffLime, M.cliffSlate,
-  M.scree, M.screeSlate, M.screeStone, M.alpineCool, M.alpineMid, M.alpineWarm, M.boulder, M.hedge, M.hedgeCrown, M.wall,
-  M.yew, M.heathCool, M.heathMid, M.heathWarm, M.moorCool, M.moorMid, M.moorWarm, M.bracken, M.gorse, M.quarry,
+  M.scree, M.screeSlate, M.screeStone, M.alpineCool, M.alpineMid, M.alpineWarm, M.boulder, M.wall,
+  M.heathCool, M.heathMid, M.heathWarm, M.moorCool, M.moorMid, M.moorWarm, M.bracken, M.gorse, M.quarry,
 ]) KIND[m] = CLEAR;
+for (const m of [M.hedge, M.hedgeCrown, M.yew]) KIND[m] = CROWN;
 for (const m of [M.marsh, M.reeds, M.saltmarsh, M.saltCreek, M.sand, M.sandPale, M.shingle]) KIND[m] = WET;
 // The quays and harbour walls are built, but low: the mist lies on the cobbles.
 KIND[M.cobble] = LAND;
@@ -201,7 +212,8 @@ export function mistLayer(seed: number): LiveLayer {
               const kind = kindOf[bake[i] & 255];
               if (kind !== LAND) {
                 if (kind === CLEAR) continue;
-                deep += POOL;
+                if (kind === WET) deep += POOL;
+                else if (deep > 0) deep = (deep / OVER_CROWNS) | 0;
               }
               if (deep < 0) continue;
               // The soft edge: fixed to the land, so it does not crawl as the bank drifts.

@@ -563,3 +563,16 @@ test("rain light dims and greys the land", () => {
   const clear = meanLand(NOON), wet = meanLand({ ...NOON, overcast: 0.7 });
   assert.ok(wet[0] < clear[0] * 0.92 && wet[0] > clear[0] * 0.8, `lightness ${clear[0]} → ${wet[0]}`);
 });
+
+test("the sea mirrors a low sky and snow takes the moon: each the brightest plane of its hour", () => {
+  for (const time of [PHASES.dawn, DAY_KEYS.sunset]) {
+    const pal = buildPalette({ ...NOON, time });
+    const sea = oklabOf(at(pal, M.sea, 6));
+    assert.ok(lstar(at(pal, M.sea, 6)) > lstar(at(pal, M.meadowMid, FLAT_TONE)) + 3, `the sea at ${time} is brighter than the fields`);
+    assert.ok(sea[1] > 0 && sea[2] > 0, `the sea at ${time} is warm: ${sea}`);
+  }
+  const night = buildPalette({ ...NOON, time: PHASES.night });
+  for (const mat of LAND) {
+    if (mat !== M.snow && snowCover(mat, NOON.season) === 0) assert.ok(lstar(at(night, M.snow, 15)) > lstar(at(night, mat, 15)) + 8, MATERIAL_NAMES[mat]);
+  }
+});

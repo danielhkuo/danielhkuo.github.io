@@ -49,6 +49,9 @@ const RAIN = 0xfffff6ee;
  * together are over LIGHT_FROM of the rain's own (the sea, low in red, stays on the dark side).
  */
 const INK = 0xff58463a;
+/** Every streak ends in one pixel of this slate at its tail, whatever lies under it, so it reads on sunlit land too. */
+const TAIL = 0xff6e5d4f;
+const TAIL_SHARE = 0.8;
 const INK_SHARE = 0.85;
 const LIGHT_FROM = 0.8;
 /** At night the rain keeps this share of its daylight colour, so it still shows against the dark land. */
@@ -83,15 +86,16 @@ function mixRgb(a: number, b: number, t: number): number {
 }
 
 /** The rain's colour and its ink in this air, kept until the light moves. */
-function rainColours(): (air: Air) => { pale: number; ink: number } {
+function rainColours(): (air: Air) => { pale: number; ink: number; tail: number } {
   let key = -1;
-  const colours = { pale: RAIN, ink: INK };
+  const colours = { pale: RAIN, ink: INK, tail: TAIL };
   return (air) => {
     const k = lightKey(air, 96, 16);
     if (k !== key) {
       key = k;
       colours.pale = mixRgb(gradeRgb(RAIN, paletteOptions(air)), RAIN, NIGHT_SPARE * air.night);
       colours.ink = gradeRgb(INK, paletteOptions(air));
+      colours.tail = gradeRgb(TAIL, paletteOptions(air));
     }
     return colours;
   };
@@ -130,7 +134,7 @@ export function createRain(seed: number): (out: Uint32Array, rect: ViewRect, t: 
     const amount = air.rain;
     if (amount <= 0) return;
     const w = rect.w, h = rect.h;
-    const { pale, ink } = coloursOf(air);
+    const { pale, ink, tail } = coloursOf(air);
     // Ground brighter than this takes the ink.
     const lightFrom = ((pale & 255) + ((pale >>> 8) & 255)) * LIGHT_FROM;
     const count = Math.round(STREAKS * amount);
@@ -161,6 +165,9 @@ export function createRain(seed: number): (out: Uint32Array, rect: ViewRect, t: 
         if ((dst & 255) + ((dst >>> 8) & 255) > lightFrom) blendPx(out, i, ink, (a * INK_SHARE) | 0);
         else blendPx(out, i, pale, a);
       }
+      // The slate tail, one pixel above the stroke.
+      const ty = y - len, tx = x - Math.round(len * lean);
+      if (tx >= 0 && tx < w && ty >= 0 && ty < h) blendPx(out, ty * w + tx, tail, (strong * TAIL_SHARE) | 0);
     }
   };
 }

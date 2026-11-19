@@ -61,27 +61,34 @@ test("thin mist has smaller, fainter banks", () => {
   assert.ok(lift(half.out) < lift(full.out));
 });
 
-test("crowns, roofs, moors and the heights stand clear of the mist, and it pools wider and thicker on water", () => {
+test("roofs, moors and the heights stand clear of the mist; it drifts thin over crowns and pools on water", () => {
   const layer = mistLayer(3);
-  for (const m of [M.broadleafMid, M.coniferCool, M.roofTile, M.whitewash, M.cliffHard, M.snow, M.moorMid, M.heathCool, M.none]) {
+  for (const m of [M.roofTile, M.whitewash, M.cliffHard, M.snow, M.moorMid, M.heathCool, M.none]) {
     const f = frame(m);
     layer.draw({ ...f, air: air("mist") });
     assert.equal(touched(f.out), 0, `material ${m}`);
   }
-  const land = frame(M.meadowMid), sea = frame(M.sea), marsh = frame(M.marsh);
-  for (const f of [land, sea, marsh]) layer.draw({ ...f, air: air("mist") });
-  const sum = (out: Uint32Array) => out.reduce((s, v) => s + (v & 255), 0);
+  const land = frame(M.meadowMid), sea = frame(M.sea), marsh = frame(M.marsh), wood = frame(M.broadleafMid);
+  for (const f of [land, sea, marsh, wood]) layer.draw({ ...f, air: air("mist") });
+  const sum = (out: Uint32Array) => out.reduce((s, v) => s + (v & 255) - (BASE & 255), 0);
+  const most = (out: Uint32Array) => out.reduce((s, v) => Math.max(s, (v & 255) - (BASE & 255)), 0);
   assert.ok(touched(sea.out) > 1.2 * touched(land.out), `${touched(sea.out)} on sea, ${touched(land.out)} on land`);
   assert.ok(touched(sea.out) < 0.42 * W * H);
   assert.ok(sum(sea.out) > sum(land.out));
   assert.deepEqual(marsh.out, sea.out);
+  // Over a wood: the same bank, thinner and more broken, never its body.
+  assert.ok(touched(wood.out) > 0.3 * touched(land.out) && touched(wood.out) < touched(land.out));
+  assert.ok(sum(wood.out) < 0.5 * sum(land.out) && most(wood.out) < most(land.out));
+  // The land shows through: on land a bank goes no more than 56% of the way to the mist; only water has a heart.
+  const full = 0xf0 - (BASE & 255);
+  assert.ok(most(land.out) < 0.56 * full && most(sea.out) > most(land.out), `${most(land.out)} of ${full}`);
 });
 
 test("a bank is flat steps with a soft edge: few tones, and no checkerboard", () => {
   const f = frame(M.meadowMid);
   mistLayer(3).draw({ ...f, air: air("mist") });
   const tones = new Set(f.out);
-  assert.ok(tones.size >= 4 && tones.size <= 7, `${tones.size} colours`);
+  assert.ok(tones.size >= 4 && tones.size <= 6, `${tones.size} colours`);
   // A checker is a pixel drawn with all four neighbours bare, its diagonals drawn. Count 2 × 2 blocks that are one.
   let checker = 0, edge = 0;
   const on = (x: number, y: number) => f.out[y * W + x] !== BASE;

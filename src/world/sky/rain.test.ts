@@ -27,7 +27,7 @@ test("no rain draws nothing; full rain draws thin streaks over a small share of 
   const wet = new Uint32Array(base);
   rain(wet, rect, 4, RAIN);
   const n = changed(wet, base);
-  assert.ok(n > STREAKS && n < W * H * 0.03, `${n} pixels of rain`);
+  assert.ok(n > STREAKS && n < W * H * 0.035, `${n} pixels of rain`);
   // The same time draws the same rain, and the rain falls.
   const again = new Uint32Array(base);
   createRain(3)(again, rect, 4, RAIN);
@@ -105,7 +105,7 @@ test("the rain comes in gusts: never an even hatch, and never a curtain", () => 
     thickest = Math.max(thickest, changed(wet, base) / wet.length);
   }
   assert.ok(thinnest < 0.5, `the thinnest band has ${thinnest} of the thickest`);
-  assert.ok(thickest < 0.03, `at most ${thickest} of the frame is rain`);
+  assert.ok(thickest < 0.035, `at most ${thickest} of the frame is rain`);
 });
 
 test("a splash keeps its place on the land while the camera moves", () => {
@@ -125,4 +125,17 @@ test("a splash keeps its place on the land while the camera moves", () => {
     if (b[(y - 2) * W + x - 3] === a[y * W + x]) kept++;
   }
   assert.ok(drawn > 100 && kept > drawn * 0.95, `${kept} of ${drawn}`);
+});
+
+test("every streak ends in a slate tail pixel, so it reads on sunlit land", () => {
+  // Mid-green land: too dark for the ink, too light for a pale stroke to stand out on its own.
+  const base = new Uint32Array(W * H).fill(0xff6aa87a);
+  const wet = new Uint32Array(base);
+  createRain(3)(wet, rect, 2, RAIN);
+  let darker = 0, lighter = 0;
+  for (let i = 0; i < wet.length; i++) {
+    if (((wet[i] >>> 8) & 255) < 0xa8 - 16) darker++;
+    if (((wet[i] >>> 8) & 255) > 0xa8 + 16) lighter++;
+  }
+  assert.ok(lighter > STREAKS * 0.5 && darker > STREAKS * 0.3 && darker < lighter, `${darker} slate, ${lighter} pale`);
 });

@@ -199,9 +199,9 @@ const BAYER: readonly (readonly number[])[] = [[0, 8, 2, 10], [12, 4, 14, 6], [3
 const GATHER_STEPS = 32;
 
 /** Before rain the clouds go grey: the storm ramp each tone of the midday one goes toward, rim first. */
-const STORM: readonly number[] = [0xffdcd4cc, 0xffe6e0da, 0xffc8bcb2, 0xffa8988c, 0xff8c7a6e, 0xff746052];
+const STORM: readonly number[] = [0xffcec6c0, 0xffcecac6, 0xffb4a8a0, 0xff9a8a80, 0xff84726a, 0xff685648];
 /** How far toward the storm ramp a fully built sky goes. */
-const STORM_SHARE = 0.85;
+const STORM_SHARE = 1;
 
 function mixRgb(a: number, b: number, t: number): number {
   const r = (a & 255) + ((b & 255) - (a & 255)) * t;
@@ -213,9 +213,12 @@ function mixRgb(a: number, b: number, t: number): number {
 /**
  * How far each tone of the ramp is turned to the light, crown to underside; the rim is fully in it. A low sun reaches
  * well under a cloud, so only its deepest underside (about a quarter of it) is left to the shade's colour: the rest
- * burns gold or rose, and under the moon is pale.
+ * burns gold or rose. The moon stands high: it lights the rim and the crown, and the body below is a dark mass.
  */
 const TONE_LIT: readonly number[] = [1, 0.95, 0.85, 0.6, 0.28];
+const MOON_LIT: readonly number[] = [0.85, 0.4, 0.12, 0, 0];
+/** At full dark, the share of its lightness a tone the moon does not reach loses: a night cloud is darker than paper. */
+const NIGHT_BODY = 0.22;
 /** A cloud takes more of the light's colour than the land does, and most on its rim: a low sun burns there. */
 const CATCH = 0.8;
 /** Its undersides are blue-violet already: they take only this share of the shade's colour. */
@@ -232,13 +235,16 @@ export function rampIn(air: Air): Ramp {
   const k = STORM_SHARE * air.cloud;
   // Under a built sky little direct light is left to catch.
   const open = 1 - 0.7 * air.cloud;
-  const glow = GLOW * lowLight(air.time) * open;
+  const glow = GLOW * lowLight(air.time) * open * (1 - air.night);
   const one = (c: number, storm: number, lit: number): number => {
-    const base = glow > 0 ? mixRgb(c, MIDDAY_RAMP.tones[0], glow * lit) : c;
-    return gradeRgb(k > 0 ? mixRgb(base, storm, k) : base, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + CATCH * open) * lit);
+    let base = glow > 0 ? mixRgb(c, MIDDAY_RAMP.tones[0], glow * lit) : c;
+    if (k > 0) base = mixRgb(base, storm, k);
+    if (air.night > 0) base = mixRgb(base, 0xff000000, NIGHT_BODY * air.night * (1 - lit));
+    return gradeRgb(base, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + CATCH * open) * lit);
   };
+  const lit = (i: number): number => TONE_LIT[i] + (MOON_LIT[i] - TONE_LIT[i]) * air.night;
   return {
-    rim: one(MIDDAY_RAMP.rim, STORM[0], 1), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1], TONE_LIT[i])), cuts: MIDDAY_RAMP.cuts,
+    rim: one(MIDDAY_RAMP.rim, STORM[0], 1), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1], lit(i))), cuts: MIDDAY_RAMP.cuts,
   };
 }
 

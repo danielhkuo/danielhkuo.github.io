@@ -401,6 +401,13 @@ interface Grade {
   dyed: number;
   /** How much of the sky's colour water takes, against the land's 1. */
   water: number;
+  /** How far open water goes to the sky it mirrors, and that sky as OKLab: at dawn and dusk the sea is the brightest plane. */
+  mirror: number;
+  skyL: number;
+  skyA: number;
+  skyB: number;
+  /** Lightness the moon adds to snow, the brightest land of a night. */
+  snow: number;
   /** OKLab a, b added to faces in the light and to faces in shade. */
   warmA: number;
   warmB: number;
@@ -416,6 +423,10 @@ interface GradeSpec {
   shade?: number;
   dyed?: number;
   water?: number;
+  /** The share open water goes to the sky, and the sky as OKLCH. */
+  mirror?: number;
+  sky?: Lch;
+  snow?: number;
   /** The light's colour and the shade's, each as OKLCH chroma and hue. */
   light: readonly [number, number];
   dark: readonly [number, number];
@@ -424,6 +435,8 @@ interface GradeSpec {
 function grade(s: GradeSpec): Grade {
   return {
     gain: s.gain, lift: s.lift ?? 0, sat: s.sat, curve: s.curve ?? 1, shade: s.shade ?? 0, dyed: s.dyed ?? 1, water: s.water ?? 1,
+    mirror: s.mirror ?? 0, skyL: s.sky ? s.sky[0] : 0, skyA: s.sky ? s.sky[1] * Math.cos(s.sky[2] * RAD) : 0,
+    skyB: s.sky ? s.sky[1] * Math.sin(s.sky[2] * RAD) : 0, snow: s.snow ?? 0,
     warmA: s.light[0] * Math.cos(s.light[1] * RAD), warmB: s.light[0] * Math.sin(s.light[1] * RAD),
     coolA: s.dark[0] * Math.cos(s.dark[1] * RAD), coolB: s.dark[0] * Math.sin(s.dark[1] * RAD),
   };
@@ -434,15 +447,22 @@ function grade(s: GradeSpec): Grade {
 // at low chroma (roofs plum, woods teal, fields sage), paler where the moon falls and indigo in the shade, and the
 // curve keeps roads, fields and snow pale over dark woods. The small hours are deeper and cooler still. The blue
 // hours are one deep blue wash. Dawn is rose over blue-lavender. Golden hour is buff-gold over blue-violet. Dusk is
-// peach over deepening violet. In a low sun, greens lean to teal with the shade, not to olive with the light.
-const DEEP = grade({ gain: 0.34, lift: 0.125, sat: 0.34, curve: 1.45, shade: 0.08, light: [0.03, 246], dark: [0.046, 272] });
-const NIGHT = grade({ gain: 0.43, lift: 0.135, sat: 0.42, curve: 1.4, shade: 0.1, water: 1.1, light: [0.034, 236], dark: [0.046, 270] });
-const BLUE = grade({ gain: 0.62, lift: 0.07, sat: 0.3, curve: 1.2, shade: 0.08, water: 1.2, light: [0.042, 250], dark: [0.064, 274] });
-const DAWN = grade({ gain: 0.86, lift: 0.055, sat: 0.8, shade: 0.08, dyed: 0.25, water: 1.3, light: [0.056, 20], dark: [0.056, 262] });
+// peach over deepening violet. In a low sun, greens lean to teal with the shade, not to olive with the light, and
+// the sea mirrors the sky: pale gold-rose at dawn, peach at dusk, the brightest plane of the picture.
+const DEEP = grade({ gain: 0.34, lift: 0.125, sat: 0.34, curve: 1.45, shade: 0.08, snow: 0.14, light: [0.03, 246], dark: [0.046, 272] });
+const NIGHT = grade({ gain: 0.43, lift: 0.135, sat: 0.42, curve: 1.4, shade: 0.1, water: 1.1, snow: 0.2, light: [0.034, 236], dark: [0.046, 270] });
+const BLUE = grade({ gain: 0.62, lift: 0.07, sat: 0.3, curve: 1.2, shade: 0.08, water: 1.2, snow: 0.08, light: [0.042, 250], dark: [0.064, 274] });
+const DAWN = grade({
+  gain: 0.88, lift: 0.025, sat: 0.9, curve: 1.08, shade: 0.1, dyed: 0.25, water: 1, mirror: 0.62, sky: [0.92, 0.05, 72], light: [0.056, 20], dark: [0.042, 262],
+});
 const MORNING = grade({ gain: 0.985, lift: 0.008, sat: 0.94, light: [0.014, 70], dark: [0.014, 255] });
 const NOON = grade({ gain: 1, sat: 1, light: [0, 0], dark: [0, 0] });
-const GOLDEN = grade({ gain: 0.97, sat: 0.95, shade: 0.1, dyed: 0.45, water: 0.9, light: [0.052, 75], dark: [0.05, 280] });
-const DUSK = grade({ gain: 0.8, lift: 0.01, sat: 0.76, curve: 1.05, shade: 0.17, dyed: 0.25, water: 1.4, light: [0.075, 40], dark: [0.07, 288] });
+const GOLDEN = grade({
+  gain: 0.97, sat: 0.95, shade: 0.1, dyed: 0.45, water: 0.9, mirror: 0.22, sky: [0.92, 0.05, 82], light: [0.052, 75], dark: [0.05, 280],
+});
+const DUSK = grade({
+  gain: 0.84, sat: 0.86, curve: 1.15, shade: 0.2, dyed: 0.25, water: 1, mirror: 0.72, sky: [0.84, 0.09, 50], light: [0.075, 40], dark: [0.052, 288],
+});
 
 /**
  * Sun phase of each keyframe of the day. Noon holds from NOON_FROM to NOON_TO, so the shipped midday is plain noon.
@@ -480,6 +500,7 @@ function gradeAt(time: number): Grade {
   return {
     gain: l(g0.gain, g1.gain), lift: l(g0.lift, g1.lift), sat: l(g0.sat, g1.sat),
     curve: l(g0.curve, g1.curve), shade: l(g0.shade, g1.shade), dyed: l(g0.dyed, g1.dyed), water: l(g0.water, g1.water),
+    mirror: l(g0.mirror, g1.mirror), skyL: l(g0.skyL, g1.skyL), skyA: l(g0.skyA, g1.skyA), skyB: l(g0.skyB, g1.skyB), snow: l(g0.snow, g1.snow),
     warmA: l(g0.warmA, g1.warmA), warmB: l(g0.warmB, g1.warmB),
     coolA: l(g0.coolA, g1.coolA), coolB: l(g0.coolB, g1.coolB),
   };
@@ -531,8 +552,9 @@ const DYED_COOL = 0.5;
  * `lit` is how far the face is turned to the light, 0 shade to 1 full light; without it the colour's own lightness
  * stands in (pale things catch the light). `take` is how much of the light's colour it takes, against the land's 1.
  * `wash` is false for what is no wash of pigment: water and cloud take the light whatever their colour.
+ * `mirror` is the share open water goes to the sky's colour, and `snow` the lightness the moon adds to snow.
  */
-function applyGrade(c: Lab, light: Light, cap = true, lit?: number, take = 1, wash = true): Lab {
+function applyGrade(c: Lab, light: Light, cap = true, lit?: number, take = 1, wash = true, mirror = 0, snow = 0): Lab {
   const { g, overcast, mist } = light;
   const w = lit ?? smooth((c[0] - 0.35) / 0.5);
   let L = g.lift + g.gain * (g.curve === 1 ? c[0] : Math.pow(c[0], g.curve)) * (1 - g.shade * (1 - w));
@@ -541,6 +563,14 @@ function applyGrade(c: Lab, light: Light, cap = true, lit?: number, take = 1, wa
   const wl = (w - turned) * take, wd = (1 - w + turned * DYED_COOL) * take;
   let a = c[1] * g.sat + wl * g.warmA + wd * g.coolA;
   let b = c[2] * g.sat + wl * g.warmB + wd * g.coolB;
+  if (mirror > 0) {
+    // Open water mirrors the sky: the shallows nearly whole, the deeps half as far, so the ramp keeps its depth.
+    const m = mirror * (0.5 + 0.5 * w) * (1 - 0.6 * overcast);
+    L += (g.skyL - L) * m;
+    a += (g.skyA - a) * m;
+    b += (g.skyB - b) * m;
+  }
+  if (snow > 0) L += snow * w;
   if (overcast > 0) {
     // Rain light, flat, dim and wet: the lights come well down to a grey-green, the darks hold, and colour thins.
     const pivot = g.lift + g.gain * 0.45;
@@ -706,11 +736,15 @@ export function buildPalette(o: PaletteOptions): Palette {
     const r = ramp(SPECS[mat], o.season);
     // Water keeps its own depth ramp; land darks are lifted once, after shade and shadow have both been laid.
     const land = SPECS[mat].ramp === "land";
+    // The sea and the lakes mirror the sky; a river in its valley does not. Snow takes the moon.
+    const open = SPECS[mat].ramp === "depth";
+    const snowy = light.g.snow > 0 ? light.g.snow * snowCover(mat, o.season) : 0;
     tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c, tone) => {
       const s = shadowed(c, depth, light.sun);
-      if (!land) return applyGrade(s, light, true, undefined, light.g.water, false);
+      if (!land) return applyGrade(s, light, true, undefined, light.g.water, false, open ? light.g.mirror : 0);
       const d = liftDark(s);
-      return applyGrade(d, light, true, LIT_BY_TONE * LIT_TONE[tone] * (1 - (1 - LIT_SHADOW[depth]) * light.sun) + (1 - LIT_BY_TONE) * smooth((d[0] - 0.35) / 0.5));
+      const lit = LIT_BY_TONE * LIT_TONE[tone] * (1 - (1 - LIT_SHADOW[depth]) * light.sun) + (1 - LIT_BY_TONE) * smooth((d[0] - 0.35) / 0.5);
+      return applyGrade(d, light, true, lit, 1, true, 0, snowy);
     }));
   }
 

@@ -13,7 +13,7 @@
 // short broken reflection in water that lies just under a light. The quays' bollards carry lanterns, and so do some
 // jetties and moored boats; nobody marked those, so they are found here from the shape of what was built.
 //
-// Everything is drawn in flat steps and ordered dither, as the rest of the page is: no soft gradients.
+// Everything is drawn in flat steps, as the rest of the page is: no soft gradients.
 
 import type { Structure } from "../gen/built.ts";
 import { hash2, mix32 } from "../core/hash.ts";
@@ -51,23 +51,24 @@ const LIT_SHARE = 0.76 * 65536;
 const ALL_NIGHT = 0.16 * 65536;
 const EARLY = 0.3 * 65536;
 
-/** Lighthouse beams: seconds a turn, world cells long, and how fast they widen (pixels a pixel: 12 across at 80 out). */
+/** Lighthouse beams: seconds a turn, world cells long, and how fast they widen (pixels a pixel: 2 across at the lamp, 16 at the tip). */
 const BEAM_TURN = 14;
-const BEAM_LENGTH = 170;
-const BEAM_SPREAD = 0.07;
-/** The beam's light: warm, so what it crosses brightens toward gold and never greys. And the lamp's own. */
-const BEAM = 0xffe196;
+const BEAM_LENGTH = 160;
+const BEAM_SPREAD = 0.044;
+/** The lamp's halo and the lamp's own light. */
+const BEAM = 0xfff1c4;
 const HALO = 0xffd27a;
 const LAMP_WHITE = 0xfff6d8;
 /**
- * A beam is lit pixels or none, never a thin wash: its light thins out along its length and toward its edges as an
- * ordered dither, and the pixels it does light take the beam's colour at one of these strengths (of 256), by how far
- * out they are: the ends of the three stretches as shares of the length.
+ * A beam is a wedge of flat bands, laid over what is under it: four stretches along its length (their ends as shares
+ * of it), each a step fainter than the last, and outside the middle BEAM_CORE of its width one step fainter again.
+ * Five steps in all: the strength of each (of 256) and its colour, which deepens from pale cream to gold as it thins,
+ * so that a faint band over dark sea still reads as warm light and not as grey.
  */
-const BAND_END = [0.16, 0.45] as const;
-const BAND_ALPHA = [196, 158, 124] as const;
-/** The 4 × 4 ordered dither, fixed to the world, so a beam sweeps over it and nothing crawls. */
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5] as const;
+const BAND_END = [0.13, 0.36, 0.66] as const;
+const BAND_ALPHA = [204, 160, 122, 92, 66] as const;
+const BAND_RGB = [0xfff1c4, 0xffeab2, 0xffe09c, 0xffd688, 0xffcc78] as const;
+const BEAM_CORE = 0.5;
 
 /**
  * Stars on the water: about one in this many bake pixels, on a tile of STAR_TILE² that repeats over the world. They
@@ -424,13 +425,13 @@ function crossing(cy: number, x1: number, y1: number, x2: number, y2: number): n
   return x1 + ((cy - y1) / (y2 - y1)) * (x2 - x1);
 }
 
-/** This frame, of 256: the strengths of a beam's three stretches, and (of 16) how dense its dither is at the lamp. */
+/** This frame, of 256: the strengths of a beam's five steps. */
 const bandNow = new Int32Array(BAND_ALPHA.length);
-let beamDensity = 0;
 
 /**
- * One beam from the frame point (ox, oy) along world heading `a`: a wedge of warm light, solid at the lamp and down
- * its middle, thinning into an ordered dither toward its edges and its far end.
+ * One beam from the frame point (ox, oy) along world heading `a`: a wedge of warm light in flat steps, brightest on
+ * its axis at the lamp, a step down at each stretch along it and one more outside its middle. Nothing in it is
+ * dithered, so nothing shimmers as it turns.
  */
 function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
   const { out, rect } = f;
@@ -440,11 +441,11 @@ function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
   const len = Math.sqrt(vx * vx + vy * vy);
   const ux = vx / len, uy = vy / len, qx = -uy, qy = ux;
   const L = BEAM_LENGTH * len;
-  const end = 0.5 + BEAM_SPREAD * L;
+  const end = 1 + BEAM_SPREAD * L;
   const ax = ox + ux * L + qx * end, ay = oy + uy * L + qy * end;
   const bx = ox + ux * L - qx * end, by = oy + uy * L - qy * end;
-  const y0 = Math.max(0, Math.floor(Math.min(oy, ay, by))), y1 = Math.min(h - 1, Math.ceil(Math.max(oy, ay, by)));
-  const e0 = BAND_END[0] * L, e1 = BAND_END[1] * L;
+  const y0 = Math.max(0, Math.floor(Math.min(oy, ay, by)) - 1), y1 = Math.min(h - 1, Math.ceil(Math.max(oy, ay, by)) + 1);
+  const e0 = BAND_END[0] * L, e1 = BAND_END[1] * L, e2 = BAND_END[2] * L;
   for (let y = y0; y <= y1; y++) {
     const cy = y + 0.5;
     let lo = Infinity, hi = -Infinity;
@@ -458,19 +459,17 @@ function drawBeam(f: LiveFrame, ox: number, oy: number, a: number): void {
     if (x < lo) lo = x;
     if (x > hi) hi = x;
     if (lo > hi) continue;
-    const c0 = Math.max(0, Math.ceil(lo - 0.5)), c1 = Math.min(w - 1, Math.floor(hi - 0.5));
+    // A pixel wider than the triangle each side: the wedge is 2 across at the lamp, not a point.
+    const c0 = Math.max(0, Math.ceil(lo - 2.5)), c1 = Math.min(w - 1, Math.floor(hi + 1.5));
     const py = cy - oy;
     let s = (c0 + 0.5 - ox) * ux + py * uy, d = (c0 + 0.5 - ox) * qx + py * qy;
-    const ditherRow = ((rect.y + y) & 3) * 4, row = y * w;
+    const row = y * w;
     for (let c = c0; c <= c1; c++, s += ux, d += qx) {
       if (s <= 0 || s >= L) continue;
-      const half = 0.5 + BEAM_SPREAD * s, off = d < 0 ? -d : d;
+      const half = 1 + BEAM_SPREAD * s, off = d < 0 ? -d : d;
       if (off >= half) continue;
-      // How much light is here: all of it at the lamp and on the axis, none at the tip and the edges.
-      const along = 1 - s / L, across = off / half;
-      const light = beamDensity * along * (1.25 - across * across);
-      if (light <= BAYER[ditherRow + ((rect.x + c) & 3)]) continue;
-      tint(out, row + c, BEAM, bandNow[s < e0 ? 0 : s < e1 ? 1 : 2]);
+      const step = (s < e0 ? 0 : s < e1 ? 1 : s < e2 ? 2 : 3) + (off > BEAM_CORE * half ? 1 : 0);
+      tint(out, row + c, BAND_RGB[step], bandNow[step]);
     }
   }
 }
@@ -481,9 +480,8 @@ function drawLamps(f: LiveFrame, lamps: readonly Lamp[], dark: number, mist: num
   const w = rect.w, h = rect.h;
   const strength = clamp01((dark - 0.18) / 0.3);
   if (strength === 0) return;
-  // A beam is fewer lit pixels in the half-light, not paler ones; mist shows it up.
-  for (let k = 0; k < bandNow.length; k++) bandNow[k] = Math.min(236, Math.round(BAND_ALPHA[k] * (0.7 + 0.3 * strength) * (1 + 0.2 * mist)));
-  beamDensity = 21 * strength * (1 + 0.3 * mist);
+  // Mist shows a beam up.
+  for (let k = 0; k < bandNow.length; k++) bandNow[k] = Math.min(236, Math.round(BAND_ALPHA[k] * strength * (1 + 0.2 * mist)));
   const reach = BEAM_LENGTH + 4;
   for (let i = 0; i < lamps.length; i++) {
     const lamp = lamps[i];
