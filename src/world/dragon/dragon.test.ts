@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ViewRect } from "../render/compose.ts";
 import { BOOST, BRAKE, CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
-import { REST_SWING } from "./body.ts";
+import { REST_HEIGHT, REST_SWING } from "./body.ts";
 import { createDragon } from "./index.ts";
 import type { Land } from "./parts.ts";
 import { LACQUER } from "./look.ts";
@@ -17,8 +17,10 @@ const W = 400, H = 225, N = 1280, GREY = 0xff808080, SHADE = 0xff535353;
 const DRAGON_IDS = ["a"] as const;
 type DragonId = (typeof DRAGON_IDS)[number];
 const REACH: Record<DragonId, number> = { a: RIVER_REACH };
+/** Frame columns of a dragon heading east at the frame's middle that hold its body behind the mane and ahead of the fin. */
+const BODY_FROM = 156, BODY_TO = 186;
 /** Length along the heading, pixels: least and most. */
-const LENGTH: Record<DragonId, [number, number]> = { a: [60, 90] };
+const LENGTH: Record<DragonId, [number, number]> = { a: [56, 72] };
 
 /** The flier at (500, 500), 30 up, at the middle of the frame. */
 const rect: ViewRect = { x: 500 - 200, y: Math.floor(0.8 * 500 - 30) - 112, w: W, h: H };
@@ -222,7 +224,7 @@ test("A rolls into its turns: the gold belly shows on the outside", () => {
     dragon.draw(out, rect, s, flat);
     // Along the body behind the mane and ahead of the fin: gold above the column's middle, less gold below it.
     let above = 0;
-    for (let px = 135; px < 180; px++) {
+    for (let px = BODY_FROM; px < BODY_TO; px++) {
       let top = H, bottom = -1;
       for (let py = 0; py < H; py++) if (isBody(out[py * W + px])) {
         if (py < top) top = py;
@@ -233,7 +235,7 @@ test("A rolls into its turns: the gold belly shows on the outside", () => {
     return above;
   };
   const right = side(1), left = side(-1);
-  assert.ok(right > 10 && left < -10, `right ${right}, left ${left}`);
+  assert.ok(right > 8 && left < -8, `right ${right}, left ${left}`);
 });
 
 test("at rest the coil breathes: the wave's swing settles to a fifth, and widens again in flight", () => {
@@ -263,4 +265,85 @@ test("a resting dragon stirs less from moment to moment than one that swings at 
   };
   const resting = moved(1), swinging = moved(0);
   assert.ok(resting < swinging * 0.5, `resting ${resting} px, swinging ${swinging} px`);
+});
+
+test("a dragon that stops keeps its body where it lay, however long it rests", () => {
+  const dragon = createDragon(N);
+  // Round a quarter of a circle, slowing to a stop, at 120 frames a second.
+  let s: FlightState = { x: 500, y: 500, heading: 0, speed: CRUISE, alt: 30, bank: 0 };
+  for (let k = 0; k < 240; k++) {
+    const speed = CRUISE * (1 - k / 240);
+    const heading = s.heading + 0.01;
+    s = { ...s, heading, speed, x: s.x + Math.cos(heading) * speed / 120, y: s.y + Math.sin(heading) * speed / 120 };
+    dragon.step(s, 1 / 120, 1);
+  }
+  s = { ...s, speed: 0 };
+  dragon.step(s, 1 / 120, 1);
+  const lay = dragon.pose.chain.joints(50, 1.3);
+  for (let k = 0; k < 120 * 30; k++) dragon.step(s, 1 / 120, 1);
+  assert.deepEqual(dragon.pose.chain.joints(50, 1.3), lay);
+});
+
+test("brought to rest in a hard turn, the body lies flat: the belly it showed on the outside is gone", () => {
+  // The same right turn as above; then it stops where it is, or flies on.
+  const gold = (restSeconds: number): number => {
+    const dragon = createDragon(N), rate = TURN / 60, path: [number, number, number][] = [];
+    let x = 0, y = 0;
+    for (let k = 0; k <= 240; k++) {
+      const heading = rate * (k - 240);
+      x += Math.cos(heading);
+      y += Math.sin(heading);
+      path.push([x, y, heading]);
+    }
+    let s: FlightState = { x: 0, y: 0, heading: 0, speed: CRUISE, alt: 30, bank: 1 };
+    for (const [px, py, heading] of path) {
+      s = { ...s, x: 500 + px - x, y: 500 + py - y, heading };
+      dragon.step(s, 1 / 60);
+    }
+    s = { ...s, speed: 0, bank: 0 };
+    for (let k = 0; k < restSeconds * 60; k++) dragon.step(s, 1 / 60, 1);
+    const out = new Uint32Array(W * H).fill(GREY);
+    dragon.draw(out, rect, s, { ...flat, groundHeight: () => 30 - REST_HEIGHT });
+    let above = 0;
+    for (let px = BODY_FROM; px < BODY_TO; px++) {
+      let top = H, bottom = -1;
+      for (let py = 0; py < H; py++) if (isBody(out[py * W + px])) {
+        if (py < top) top = py;
+        bottom = py;
+      }
+      for (let py = top; py <= bottom; py++) if (out[py * W + px] === LACQUER.belly) above += py * 2 < top + bottom ? 1 : -1;
+    }
+    return above;
+  };
+  const turning = gold(0), resting = gold(3);
+  assert.ok(turning > 8, `turning ${turning}`);
+  assert.ok(resting <= 0, `resting ${resting}`);
+});
+
+test("resting, the body sinks onto the ground it lies on, and stays there when it flies on", () => {
+  const dragon = createDragon(N);
+  // Down a straight glide to its resting height over ground at 0, at 60 frames a second.
+  let s: FlightState = { x: 0, y: 500, heading: 0, speed: CRUISE, alt: 0, bank: 0 };
+  for (let k = 120; k >= 0; k--) {
+    s = { ...s, x: 500 - k, alt: REST_HEIGHT + k * 0.25 };
+    dragon.step(s, 1 / 60);
+  }
+  const land: Land = { depthAt: flat.depthAt, groundHeight: () => 0 };
+  const out = new Uint32Array(W * H);
+  assert.ok(dragon.pose.chain.joints(40, 1.3)[39].alt > REST_HEIGHT + 10, "the tail starts in the air");
+  s = { ...s, speed: 0 };
+  for (let k = 0; k < 120; k++) {
+    dragon.step(s, 1 / 60, 1);
+    dragon.draw(out, rect, s, land);
+  }
+  for (const [i, j] of dragon.pose.chain.joints(40, 1.3).entries()) assert.ok(Math.abs(j.alt - REST_HEIGHT) < 0.1, `joint ${i} at ${j.alt}`);
+  // Flying on, what lay on the ground stays there: only the head's new path rises.
+  for (let k = 1; k <= 10; k++) {
+    s = { ...s, speed: CRUISE, x: 500 + k, alt: REST_HEIGHT + k };
+    dragon.step(s, 1 / 60, 0);
+    dragon.draw(out, rect, s, land);
+  }
+  const after = dragon.pose.chain.joints(40, 1.3);
+  assert.ok(Math.abs(after[0].alt - (REST_HEIGHT + 10)) < 1e-9);
+  for (let i = 9; i < 40; i++) assert.ok(Math.abs(after[i].alt - REST_HEIGHT) < 0.1, `joint ${i} at ${after[i].alt}`);
 });

@@ -1,9 +1,8 @@
-/* The Codex and the landing prompt: game layer, Ink & Glyph. Cream paper with a faint grain, inked double rules with
+/* The Codex: game layer, Ink & Glyph. Cream paper with a faint grain, inked double rules with
    flourished corners, IM Fell English, vermilion and gold for ornament, teal for links. Nothing here is shared with the
    Recruiter page. */
 
-.codex,
-.prompt {
+.codex {
   --ink: #2e2a24;
   --ink-soft: #5a5246;
   --paper: #f0e8d2;
@@ -216,8 +215,7 @@
 }
 
 .links a:focus-visible,
-.button:focus-visible,
-.prompt:focus-visible {
+.button:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
 }
@@ -289,8 +287,7 @@
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-.codex kbd,
-.prompt kbd {
+.codex kbd {
   padding: 0 0.32em;
   font-family: inherit;
   font-size: 0.82em;
@@ -332,61 +329,15 @@
   }
 }
 
-/* ---- The prompt ---- */
-
-.prompt {
-  position: fixed;
-  z-index: 15;
-  bottom: 3.3rem;
-  left: 50%;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  max-width: calc(100vw - 1.5rem);
-  padding: 0.42rem 0.95rem;
-  font-size: 1.02rem;
-  white-space: nowrap;
-  background-color: var(--paper);
-  background-image: var(--grain);
-  border: 3px double var(--ink);
-  box-shadow: 0 4px 14px rgb(46 42 36 / 0.24);
-  transform: translateX(-50%);
-  cursor: pointer;
-  animation: prompt-in 240ms ease-out both;
-}
-
-.prompt em {
-  color: var(--vermilion);
-}
-
-.prompt:hover {
-  color: var(--vermilion);
-}
-
-.promptMark {
-  width: 0.95rem;
-  height: 0.95rem;
-  flex: none;
-}
-
-@keyframes prompt-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(6px);
-  }
-}
-
-/* Touch screens have no keys to name. */
-@media (hover: none) and (pointer: coarse) {
-  .codex kbd,
-  .prompt kbd {
+/* Touch screens have no keys to name; on a wide screen the dragon names the key itself, beside it in the world. */
+@media (hover: none) and (pointer: coarse), (min-width: 761px) {
+  .codex kbd {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .codex,
-  .prompt {
+  .codex {
     animation: none;
   }
 }
