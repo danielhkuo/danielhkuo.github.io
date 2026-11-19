@@ -265,7 +265,9 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 - **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
   the way, each for its own A/B: the open sea's wash repeats every 4.855 s (r = 0.97; the rain's pitch wander would
-  break it) and `coast-run` every 5.000 s (r = 0.48); the river's brook loop (9.7 s) should get the same loop test.
+  break it) and the coast's wind every 5.000 s (r ≈ 0.5); the river's brook loop (9.7 s) should get the same loop
+  test. Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  shower; spec §14.2).
   The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
   rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
   moments (the airship, the marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12).

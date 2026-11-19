@@ -193,11 +193,12 @@ export const BED_OFF_S = 2;
 // ── Rain (§13) ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The rain bed's shape (§14.2). The drops (synth/drops.ts) and the brook's bubbles (read `plinkRate` times fast) are
+ * The rain bed's shape (§14.2). The drops (synth/drops.ts) and the plinks (read `plinkRate` times their speed) are
  * each read three times, `across`: at its rate (a share of the layer's), set at its place (pan), its pitch wandering
- * on drift channel `drift` by `cents` × `wanderCents` (the drift runs −1 … 1: two of the three never wander together).
- * The brook's three reads take their rates from `plinkSpread` instead (the middle one an octave under the two at the
- * sides, so the plinks are not all of one pitch, and the sides alike, so the water leans neither way). The sheet: pink noise through a wide band-pass and a low-pass. The water's
+ * on drift channel `drift` by `cents` × `wanderCents` (the drift runs −1 … 1: two of the three never wander together);
+ * the plinks by `plinkCents`.
+ * The plinks (synth/bubbles.ts, `RAIN_PLINKS`: their sizes give them their range of pitch) are read near their own
+ * speed, `plinkSpread`, so each read comes round only every 11 s or so. The sheet: pink noise through a wide band-pass and a low-pass. The water's
  * fizz: white noise above `fizzHz`, its top
  * shelved, a share `fizzShare` of the bubbles' level. Q is linear for the band-passes. `landFloor`: the drops' share
  * over open sea (on the dragon and the waves).
@@ -208,9 +209,9 @@ export const RAIN = {
     { rate: 1.137, pan: 0, drift: 1, cents: 1 },
     { rate: 0.883, pan: 0.8, drift: 0, cents: -1 },
   ],
-  wanderCents: 30,
+  wanderCents: 30, plinkCents: 60,
   sheetHz: 2000, sheetQ: 0.5, sheetTopHz: 4500,
-  plinkHz: 3000, plinkQ: 0.8, plinkRate: 2, plinkSpread: [1.4, 0.72, 1.33], fizzHz: 5000, fizzShare: 0.2,
+  plinkHz: 2400, plinkQ: 0.6, plinkRate: 1, plinkSpread: [1.06, 0.95, 1.0], fizzHz: 5000, fizzShare: 0.2,
   topHz: 7000, topDb: -9,
   landFloor: 0.25,
 };

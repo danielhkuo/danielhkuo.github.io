@@ -1437,23 +1437,25 @@ without it: it must add, not mask. Every A/B is recorded here.
 
 - **The bed** (`engine/rain.ts`). Made when a shower is falling and let go two seconds after it has passed (a demand
   bed, as the surf's and the river's), on the water bus, so mist and the bells' duck reach it. Three layers:
-  - **Drops on land**: a 7.3 s loop made by the kit (`synth/drops.ts`): 14 drops a second, each a tick of noise rung
+  - **Drops on land**: a 7.3 s loop made by the kit (`synth/drops.ts`): 7 drops a second, each a tick of noise rung
     through a resonance (1.1–4.2 kHz, bigger drops lower, longer and a little louder), coming up over 8 ms and dying
-    over 5–14 ms, over a hiss in their own band at 0.15 of their level. Read three times (`RAIN.across`): at rates
-    1, 1.137 and 0.883, set left (−0.8), middle and right (+0.8).
+    over 5–14 ms, no drop's peak more than 6 dB over the middle drop's, over a hiss in their own band at 0.15 of their
+    level. Read three times (`RAIN.across`): at rates 1, 1.137 and 0.883, set left (−0.8), middle and right (+0.8).
   - **The sheet**, a heavy shower's hiss: pink noise through a band-pass at 2 kHz (Q 0.5) and a low-pass at 4.5 kHz.
-  - **Drops on water**: the brook's bubbles read fast (plinks), three times across as the drops are, at 2.8, 1.44 and
-    2.66 times (`plinkSpread`: the middle an octave under the sides), through a band-pass at 3 kHz; and a fizz of
-    white noise above 5 kHz, shelved 9 dB above 7 kHz, at 0.2 of the plinks.
-  - **No loop comes round the same.** Every read's pitch wanders on one of the hub's drifts (0.07 and 0.11 Hz) by up
-    to 30 cents, two of the three drop reads against each other, so each pass of a loop is played a little faster or
-    slower than the last; and the reads of a layer run at rates that share no period.
+  - **Drops on water**: rain's own bubbles, an 11.3 s loop (`RAIN_PLINKS`: 0.8–2.7 mm, Minnaert 1.2–4 kHz, the small
+    ones started a little louder as they ring out sooner), read three times across as the drops are, near their own
+    speed (`plinkSpread` 1.06, 0.95, 1.0), through a band-pass at 2.4 kHz (Q 0.6); and a fizz of white noise above
+    5 kHz, shelved 9 dB above 7 kHz, at 0.2 of the plinks.
+  - **No loop comes round the same.** Every read's pitch wanders on one of the hub's drifts (0.07 and 0.11 Hz), the
+    drops' by up to 30 cents and the plinks' by 60, two of the three reads against each other, so each pass of a loop
+    is played a little faster or slower than the last; and the reads of a layer run at rates that share no period.
 - **Targets** (`mix.ts`, unit-tested): drops on land `K_RAIN.patter · rain`, a quarter of it over open sea; the
   sheet `K_RAIN.sheet · rain²` (a light shower has almost none); drops on water `K_RAIN.fizz · rain · sea`.
   `K_RAIN = { patter: 0.24, sheet: 0.021, fizz: 0.1 }`: a full shower alone is −26.4 LUFS over land (true peak
-  −7.1 dBTP) and −32.8 over open sea; over the coast it adds about 1 LU.
+  −6.8 dBTP) and −32.4 over open sea; over the coast it adds 1.0 LU.
 
-How it got there: four versions, each judged blind by a fresh critic against the same flight without the shower
+How it got there: five versions, the first four judged blind by a fresh critic against the same flight without the
+shower
 (`shower-pass` against `coast-run`), with the two solos (`rain-land`, `rain-sea`).
 
 1. **First version**: the patter as white noise let through in grains (the surf's grain loop, squared), two reads of
@@ -1474,20 +1476,38 @@ How it got there: four versions, each judged blind by a fresh critic against the
    changes: the drops 9 dB up and the bed under them 3 dB down (simulated: 85 % of the drops through, +1.0 LU, the
    surf's swing 1.8 dB less at 2–4 kHz); the plinks over at least 0.6 octave.
 4. **Fourth version**: the drops come up over 8 ms over a hiss at 0.15 (a slower edge lets them stand further out of
-   it unflagged), the patter 0.24 and the sheet 0.021, the plinks' reads an octave apart. The table measures every
-   version alike (the rain alone is the shower's render less the dry one; "survive": a drop of the rain alone, 8 dB
-   over its own surroundings, that lifts some band of 1–2, 2–4 or 4–8 kHz of the coast mix by 6 dB):
+   it unflagged), the patter 0.24 and the sheet 0.021, the plinks' reads an octave apart. Critic 4: it only adds
+   (+1.0 LU), the level **about right** (keep it within ±1 dB: at −3 dB almost no drop is heard, at +3 dB the surf
+   suffers), the wind untouched, the surf keeps 90 % of its swing at 4–8 kHz (at 2–4 kHz, where the rain equals the
+   scene, about half); patter on land (about 24 drops a second, 12.6 dB over the floor between them), plinks on water
+   from 1.07 to 2.7 kHz; no clicks, steps, resonances or pumping; true peak within the bar; no loop to 33.7 s. But at the
+   coast only 3.7 drops a second stand 6 dB over the scene and the rain's own floor, the plinks are lost there, and
+   about 9 % of the plinks come once more 3.4–3.7 s later (the brook's loop read fast). Accept with changes: half as
+   many drops, each 3 dB louder, capped (simulated: twice the drops heard, the same +1.0 LU, the surf unchanged; the
+   land's true peak fails the bar without the cap); the shower to come and go by density rather than level.
+5. **Fifth version**: half as many drops at the same power (so each 3 dB up), no drop over 6 dB above the middle one;
+   the plinks from rain's own 11.3 s bubble bed read near its own speed, their wander doubled. The density fade is not
+   done (it needs the drops' rate to follow the rain; three reads can only fade in turn: roadmap).
 
-| | Second | Third | Fourth |
-| --- | --- | --- | --- |
-| Loops: largest correlation at any lag from 0.25 to 12 s (land, sea, coast; three bands) | 0.32–0.80 | ≤ 0.07 | ≤ 0.08 |
-| The surf breaks' swing lost, 1.5–6 / 4–8 / 6–12 / 8–16 kHz | 14 / 20 / 26 / 33 % | 16 / 5 / 4 / 3 % | 8 / 14 / 7 / 6 % |
-| Rain against the coast, below 700 Hz / 2–4 kHz / 8–16 kHz | −25 / −7.1 / −2.4 dB | −21 / −7.6 / −14.9 dB | −14.5 / −1.3 / −11.0 dB |
-| Land: kurtosis; drops a second 6 / 10 / 15 dB out of their surroundings (2–6 kHz, a channel) | 4.2; 1.1 / 0 / 0 | 10.4; 17 / 6.4 / 0.3 | 14.1; 21 / 16 / 7.4 |
-| Sea: plinks a second 6 / 10 dB out (1–4 kHz, a channel); balance | 20 / 9.2; −0.2 dB | 18 / 5.0; +0.5 dB | 19 / 6.9; +0.15 dB |
-| Coast mix: drops that survive; 5 ms windows a second the shower lifts by 6 dB (1.6–2.5 kHz) | —; 0.8 | 12 %; 3.1 | 73 %; 25 |
-| Left/right correlation, rain alone over land | 0.00 | 0.52 | 0.54 |
-| Clicks (`rain-land`, `rain-sea`, `shower-pass`) | 0 | 0 | 0 |
+The table measures every version alike (the rain alone is the shower's render less the dry one; "survive": a drop of
+the rain alone, 8 dB over its own surroundings, that lifts some band of 1–2, 2–4 or 4–8 kHz of the coast mix by 6 dB;
+"heard": a drop 6 dB over the scene and the rain's own floor together, 2–4 kHz):
+
+| | Second | Third | Fourth | Fifth |
+| --- | --- | --- | --- | --- |
+| Loops: largest correlation at any lag from 0.25 to 12 s (land, sea, coast; three bands) | 0.32–0.80 | ≤ 0.07 | ≤ 0.08 | ≤ 0.08 |
+| Plinks coming again: the drops' envelope against itself, at any lag to 12.5 s (left / right) | — | — | 0.29 / 0.24 (at 3.4 / 3.7 s) | 0.10 / 0.13 (at 8–12 s) |
+| The surf breaks' swing lost, 1.5–6 / 4–8 / 6–12 / 8–16 kHz | 14 / 20 / 26 / 33 % | 16 / 5 / 4 / 3 % | 8 / 14 / 7 / 6 % | (grows 7) / 9 / 6 / 6 % |
+| Rain against the coast, below 700 Hz / 2–4 kHz / 8–16 kHz | −25 / −7.1 / −2.4 dB | −21 / −7.6 / −14.9 dB | −14.5 / −1.3 / −11.0 dB | −14.8 / −1.1 / −10.9 dB |
+| Land: kurtosis; drops a second 6 / 10 / 15 dB out of their surroundings (2–6 kHz, a channel) | 4.2; 1.1 / 0 / 0 | 10.4; 17 / 6.4 / 0.3 | 14.1; 21 / 16 / 7.4 | 26.9; 15 / 13 / 11 |
+| Sea: plinks a second 6 / 10 dB out (1–4 kHz, a channel); their pitch's middle half; balance | 20 / 9.2; —; −0.2 dB | 18 / 5.0; —; +0.5 dB | 19 / 6.9; 0.26 octave; +0.15 dB | 28 / 14; 0.58 octave; +0.06 dB |
+| Coast mix: drops that survive; drops heard a second; windows a second the shower lifts by 6 dB (1.6–2.5 kHz) | —; 0; 0.8 | 12 %; 0.1; 3.1 | 73 %; 6.7; 25 | 70 %; 7.9; 21 |
+| Left/right correlation, rain alone over land | 0.00 | 0.52 | 0.54 | 0.54 |
+| Clicks (`rain-land`, `rain-sea`, `shower-pass`); land's true peak | 0; — | 0; −15.8 dBTP | 0; −7.1 dBTP | 0; −6.8 dBTP |
+
+The fifth is not put to a fifth critic: it is the fourth with that critic's tested change, and every measure the
+critics used moved the way the change was meant to, or held. (By this script's measure the fourth's heard drops are
+6.7 a second where the critic counted 3.7; the step from the fourth to the fifth is the comparison that holds.)
 
 - **What keeps a drop from being a click.** A drop over silence is an edge: the first drops loop (no hiss under it,
   2 ms rises) gave 172 clicks in `rain-land`. The checker flags a sample whose prediction error stands about 16 dB over
@@ -1496,10 +1516,11 @@ How it got there: four versions, each judged blind by a fresh critic against the
   level; at 8 ms, 0.15 is enough, so the drops stand far further out. None is flagged at a light or a full shower. A
   change to the checker (a click must stand alone beyond the predictor's reach) was tried and dropped: with real clicks
   injected into eight files it found fewer of them (at −40 dBFS in `gulls-lowpass`, 11 of 30 against 18).
-- **Firefox** (rendering ahead): `rain-land`, `rain-sea`, `shower-pass` within 0.1 LU of Chrome; 0 clicks.
-- **Found on the way** (not rain, not changed): critic 3 measured the open sea's wash repeating every 4.855 s
-  (r = 0.97: the pink loop under it, read plainly) and `coast-run` repeating every 5.000 s (r = 0.48). The rain's
-  wander would serve the wash as it serves the rain; it is Fable's bed, so it waits for its own A/B (roadmap).
+- **Firefox** (rendering ahead), the fifth version: `rain-land`, `rain-sea`, `shower-pass` the same loudness as in Chrome
+  to 0.1 LU; 0 clicks.
+- **Found on the way** (not rain, not changed): critics 3 and 4 measured the open sea's wash repeating every 4.855 s
+  (r = 0.97: the pink loop under it, read plainly) and the coast's wind every 5.000 s (r ≈ 0.5–0.6). The rain's
+  wander would serve them as it serves the rain; they are Fable's beds, so they wait for their own A/B (roadmap).
 
 ### 14.3 The whole mix, measured on a real flight
 

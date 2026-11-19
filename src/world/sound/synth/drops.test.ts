@@ -38,5 +38,6 @@ test("the drops loop: seeded, at the bubble beds' level, seamless, and drops sta
     if (e[b] - median >= 10) out10++;
   }
   const per = (k: number) => k / DROPS.seconds;
-  assert.ok(per(out10) > 0.5 * DROPS.rate && per(out10) <= DROPS.rate, `${per(out10).toFixed(1)} drops a second 10 dB out of the hiss`);
+  // (A long drop can peak twice in 5 ms windows, so the count may run a little over the rate.)
+  assert.ok(per(out10) > 0.5 * DROPS.rate && per(out10) <= 1.5 * DROPS.rate, `${per(out10).toFixed(1)} drops a second 10 dB out of the hiss`);
 });

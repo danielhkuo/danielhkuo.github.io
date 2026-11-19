@@ -3,7 +3,7 @@
 //
 //   patter: the drops loop, read three times (each at its own rate, set at its own place across) → gain   drops on land
 //   sheet:  pink noise → band-pass, wide → low-pass → gain                                                a heavy shower
-//   water:  the brook's bubbles read fast, three times across, an octave apart → band-pass ┐
+//   water:  rain's own bubbles (plinks), read three times across → band-pass ┐
 //           white noise → high-pass → shelf → (a share) ──────────────────── ┴→ gain                       drops on water
 //
 // No read comes round the same: every loop's pitch wanders slowly on one of the hub's drifts (a few tens of cents, so
@@ -37,20 +37,20 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
     v.sources.push(s);
     return s;
   };
-  /** Three reads of a mono loop, at RAIN.across's wanders and places and `rates`, summed into one stereo merger. */
-  const across = (name: string, rate: number, rates: readonly number[]): ChannelMergerNode => {
+  /** Three reads of a mono loop, at RAIN.across's places and `rates`, wandering by up to `cents`, in one stereo merger. */
+  const across = (name: string, rate: number, rates: readonly number[], cents: number): ChannelMergerNode => {
     const merger = keep(ctx.createChannelMerger(2));
     RAIN.across.forEach((r, i) => {
       const p = panner(ctx, r.pan, merger);
       keep(p.left);
       keep(p.right);
-      intoPan(read(name, rate * rates[i], r.drift, r.cents * RAIN.wanderCents), p);
+      intoPan(read(name, rate * rates[i], r.drift, r.cents * cents), p);
     });
     return merger;
   };
   v.steps.push(() => {
     const patter = keep(gain(ctx, 0));
-    across("drops", 1, RAIN.across.map((r) => r.rate)).connect(patter);
+    across("drops", 1, RAIN.across.map((r) => r.rate), RAIN.wanderCents).connect(patter);
     patter.connect(out);
     v.bindings.push(bind(T.RAIN_PATTER, [patter.gain]));
   });
@@ -65,9 +65,9 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
     v.bindings.push(bind(T.RAIN_SHEET, [sheet.gain]));
   });
   v.steps.push(() => {
-    // Drops on water: the brook's bubbles, read fast so they ring higher and closer together, and a fizz above them.
+    // Drops on water: the bubbles each drop leaves, and a fizz above them.
     const plinks = keep(bandpass(ctx, RAIN.plinkHz, RAIN.plinkQ));
-    across("brook", RAIN.plinkRate, RAIN.plinkSpread).connect(plinks);
+    across("plinks", RAIN.plinkRate, RAIN.plinkSpread, RAIN.plinkCents).connect(plinks);
     const fizzBand = keep(highpass(ctx, RAIN.fizzHz));
     const fizzTop = keep(highshelf(ctx, RAIN.topHz, RAIN.topDb));
     const fizzLevel = keep(gain(ctx, RAIN.fizzShare));

@@ -6,8 +6,9 @@
 // it is an edge to the ear and to the checker (as the shingle's bumps were): the checker flags a sample that stands
 // more than about 16 dB over what is around it, and the first loop of drops gave 172 in 30 s. Coming up over 8 ms,
 // out of a hiss in their own band at 0.15 of their level, none are flagged at a light or a full shower, and they stand
-// far enough out to carry over the wind and the surf (a blind critic asked for the drops up, the bed under them down).
-// Their sizes are kept to a narrow range for the same reason.
+// far enough out to carry over the wind and the surf (blind critics asked for the drops up and the bed under them
+// down, then for fewer and louder drops). Their sizes are kept to a narrow range, and no drop's peak stands more than
+// `capDb` over the middle drop's, so the loudest few do not set the rain's true peak.
 
 import type { Rng } from "../../core/rng.ts";
 import { gaussianInto } from "./noise.ts";
@@ -29,14 +30,16 @@ export interface DropOptions {
   clamp: number;
   /** How much louder the biggest drop is than the smallest, as ± a share about 1. */
   sizeSpread: number;
+  /** The most a drop's peak may stand over the middle (median) drop's, dB. */
+  capDb: number;
   /** The hiss under the drops, as a share of their rms, and the resonances it rings, Hz. */
   floor: number;
   floorHz: readonly number[];
 }
 
 export const DROPS: DropOptions = {
-  seconds: 7.3, rate: 14, loHz: 1100, hiHz: 4200, rise: 0.008, tauLo: 0.005, tauHi: 0.014,
-  spreadDb: 3, clamp: 1.5, sizeSpread: 0.3, floor: 0.15, floorHz: [1300, 2000, 3000, 4000],
+  seconds: 7.3, rate: 7, loHz: 1100, hiHz: 4200, rise: 0.008, tauLo: 0.005, tauHi: 0.014,
+  spreadDb: 3, clamp: 1.5, sizeSpread: 0.3, capDb: 6, floor: 0.15, floorHz: [1300, 2000, 3000, 4000],
 };
 
 /** A two-pole resonator's coefficients at `hz`, its pole radius 1 − w/`k` (k 6: Q about 3; k 3: about 1.5). */
@@ -51,6 +54,8 @@ export function drops(o: DropOptions, sampleRate: number, rng: Rng): Float32Arra
   const count = Math.round(o.seconds * o.rate);
   const riseN = Math.max(1, Math.round(o.rise * sampleRate));
   const g = new Float32Array(2);
+  // Each drop is made on its own first, so the loudest can be held to the cap.
+  const made: { at: number; y: Float32Array; peak: number }[] = [];
   for (let k = 0; k < count; k++) {
     const at = rng.int(n);
     const size = rng.float();
@@ -63,14 +68,25 @@ export function drops(o: DropOptions, sampleRate: number, rng: Rng): Float32Arra
     const len = Math.min(n, riseN + Math.ceil(6.9 * tau));
     const { r, a1, a2 } = resonator(hz, sampleRate, 6);
     let y1 = 0, y2 = 0;
-    const noise = gaussianInto(new Float32Array(len), rng);
+    const y = gaussianInto(new Float32Array(len), rng);
+    let peak = 0;
     for (let i = 0; i < len; i++) {
       const env = (i < riseN ? 0.5 - 0.5 * Math.cos((Math.PI * i) / riseN) : 1) * Math.exp(-Math.max(0, i - riseN) / tau);
-      const y = noise[i] * env * (1 - r) + a1 * y1 + a2 * y2;
+      const v = y[i] * env * (1 - r) + a1 * y1 + a2 * y2;
       y2 = y1;
-      y1 = y;
-      const j = at + i;
-      out[j < n ? j : j - n] += amp * y;
+      y1 = v;
+      y[i] = amp * v;
+      peak = Math.max(peak, Math.abs(y[i]));
+    }
+    made.push({ at, y, peak });
+  }
+  const peaks = made.map((d) => d.peak).sort((a, b) => a - b);
+  const cap = (peaks[peaks.length >> 1] ?? 0) * Math.pow(10, o.capDb / 20);
+  for (const d of made) {
+    const k = d.peak > cap ? cap / d.peak : 1;
+    for (let i = 0; i < d.y.length; i++) {
+      const j = d.at + i;
+      out[j < n ? j : j - n] += k * d.y[i];
     }
   }
   let d2 = 0;
