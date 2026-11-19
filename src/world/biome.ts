@@ -50,3 +50,43 @@ export function climateShift(temp: number, x: number, y: number, n: number): num
 export function heatOf(temp: number): number {
   return temp <= TEMPERATE ? 0 : (temp - TEMPERATE) / (1 - TEMPERATE);
 }
+
+/** Units of height to one point of heat: a tropical mountain is out of the hot country some 70 units up. */
+export const HEAT_LAPSE = 150;
+/** The local heat from which hot country's own cover replaces the temperate table's: the near edge of the dry belt. */
+export const HOT_EDGE = 0.4;
+/** Rain under which hot ground is desert, and under which it is thin steppe and thorn. */
+export const DESERT_RAIN = 0.2;
+export const STEPPE_RAIN = 0.34;
+
+const ERG_SEED = 0xe46;
+
+/**
+ * 0–1: how far a cell lies inside a sand sea. Ergs are lobes a few hundred cells across, with the gravel plain
+ * between them: the desert's sand is in seas, never spread evenly. The cover lays sand where this is above 0, and the
+ * bake raises its dunes by it, so the dunes die away at a sand sea's edge.
+ */
+export function ergAt(x: number, y: number, n: number): number {
+  const v = softNoise(x, y, n, 520, ERG_SEED) + 0.5 * softNoise(x, y, n, 170, ERG_SEED + 1) + 0.2 * softNoise(x, y, n, 50, ERG_SEED + 2) + 0.06;
+  return v <= 0 ? 0 : v >= 0.2 ? 1 : v / 0.2;
+}
+
+/** The greatest height of a dune, in units. */
+export const DUNE_HEIGHT = 3.2;
+
+/**
+ * The height of the dunes at a cell of a sand sea, 0–1 of DUNE_HEIGHT: long crests across the south-west wind some
+ * 20 cells apart, gentle to windward and steep in the lee, that branch and die out along their length.
+ */
+export function duneAt(x: number, y: number, n: number): number {
+  const p = Math.max(1, Math.round(n / 80));
+  // Along the wind (south-west to north-east) the crests come four to a lattice step; across it they run long.
+  const u = ((x - y + 0.5) * p) / n, v = ((x + y + 0.5) * p) / n;
+  const bend = 0.35 * softNoise(x, y, n, 90, ERG_SEED + 3);
+  const t = 4 * u + bend + 0.6 * gradNoise(u, 2 * v, p, ERG_SEED + 4);
+  const f = t - Math.floor(t);
+  // A sawtooth: a long rise from the south-west, a short slip face to the north-east.
+  const ridge = f < 0.72 ? f / 0.72 : (1 - f) / 0.28;
+  const size = 0.55 + 0.45 * gradNoise(u * 2 + 7, v * 3, p, ERG_SEED + 5);
+  return ridge * ridge * (size < 0.15 ? 0.15 : size);
+}

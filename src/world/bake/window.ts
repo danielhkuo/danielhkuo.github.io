@@ -15,13 +15,15 @@ export type { GridWindow };
 /** A function that returns a world whose grids hold just these G and C windows (see cutWindow). */
 export type WindowCutter = (g: GridWindow, c: GridWindow) => BakeWorld;
 
-// A 256-cell tile whose north-west cell is T reads cells [T−65, T+283). That is G nodes [T/4−19, T/4+73] and C nodes
-// [T/8−2, T/8+33]; the same reach on y, which runs further south than north because the tile itself extends south and
-// tall ground projects up. A node or two of slack past the measured reach, still inside 128² G nodes and 64² C nodes.
+// A 256-cell tile whose north-west cell is T reads cells [T−65, T+283). That is G nodes [T/4−19, T/4+73]; the same
+// reach on y, which runs further south than north because the tile itself extends south and tall ground projects up.
+// The cover reads C nodes [T/8−2, T/8+33], and the climate is read at the C node nearest every cell of the window
+// (dunes, dry streams), which is [T/8−9, T/8+35]. A node or two of slack past the measured reach, still inside 128² G
+// nodes and 64² C nodes, and never past the G window's own cells, so no tile reads a region for C alone.
 const G_BEFORE = 21;
 const G_SPAN = 96;
-const C_BEFORE = 4;
-const C_SPAN = 40;
+const C_BEFORE = 10;
+const C_SPAN = 47;
 
 function placed(x0: number, y0: number, span: number, n: number): GridWindow {
   // A window wider than the grid would alias under the read formula; the whole grid covers every node.

@@ -132,7 +132,12 @@ export function coverOverview(t: Terrain, step: number, mask: Uint8Array, climat
     c.water = sea[i] ? 1 : lake[i] >= 0 ? 2 : river[py * size + px] ? 3 : 0;
     c.shore = t.land.shoreClass[i];
     c.temp = temp ? temp[ci] : undefined;
-    const m = cover(c, mask, n);
+    let m = cover(c, mask, n);
+    // A wood is seen from above as its crowns, not its floor.
+    const hsh = Math.imul(px + 1, 0x27d4eb2d) ^ Math.imul(py + 1, 0x165667b1);
+    if (m === M.floorJungle) m = M.jungleCool + ((hsh >>> 9) % 3);
+    else if (m === M.floorConifer) m = (temp && temp[ci] < 0.45 ? M.spruceCool : M.coniferCool) + ((hsh >>> 9) % 3);
+    else if (m === M.floorBroadleaf) m = temp && temp[ci] > 0.56 ? M.maquis : M.broadleafCool + ((hsh >>> 9) % 3);
     let tone: number;
     if (isWater[m]) {
       const depth = sea[i] ? -e : 3;

@@ -4,7 +4,7 @@
 // come from a hash of the cell, which hides the mask's 256-cell period.
 // Blue noise has no clumps and no rows, so woods never look planted.
 
-import { climateShift, isTemperate, softNoise } from "./biome.ts";
+import { climateShift, heatOf, isTemperate, softNoise } from "./biome.ts";
 import { hash2 } from "./core/hash.ts";
 import { gradNoise } from "./core/noise.ts";
 import { HUE_CLASS, hueField, WORLD_N } from "./cover.ts";
@@ -43,6 +43,21 @@ export const DENSITY = {
   bogTree: 0.012,
   /** Dwarf birch and willow on the tundra, where they gather in thickets. */
   dwarf: 0.012,
+  /** Jungle: crown on crown, no ground between. */
+  jungle: 0.27,
+  /** Acacias on the savanna stand apart and evenly: from a few to a wood's edge as the rain rises. */
+  acacia: 0.02,
+  /** Thorn on steppe and gravel, in thickets; and in the dark bands of tiger bush, close. */
+  thorn: 0.022,
+  tigerBush: 0.3,
+  mangrove: 0.3,
+  /** Palms over an oasis's plots, and along the back of a tropical beach. */
+  oasisPalm: 0.1,
+  beachPalm: 0.04,
+  garrigue: 0.03,
+  /** Cypress spires on Mediterranean hillsides, a few together. */
+  cypress: 0.012,
+  mound: 0.006,
 } as const;
 
 /** One world height unit is one screen row and a world row is 0.8 of one, so a crown of height h hides 1.25 h cells to its north. */
@@ -109,6 +124,13 @@ export function treeDensity(c: CoverInput, groundMat: number, shift: number = 0)
   if (groundMat === M.floorLichen) return DENSITY.lichenWood * vigour(c) * (1 - 0.5 * altitude(c, shift));
   if (groundMat === M.bog || groundMat === M.bogRed) return DENSITY.bogTree;
   if (inTriple(groundMat, M.tundraCool)) return DENSITY.dwarf;
+  // The warm climates' own ground.
+  if (groundMat === M.floorJungle) return DENSITY.jungle;
+  if (inTriple(groundMat, M.savannaCool)) return DENSITY.acacia * (0.12 + 0.88 * clamp01((c.moisture - 0.32) / 0.3));
+  if (inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale) return DENSITY.thorn * (groundMat === M.reg ? 0.4 : 1);
+  if (groundMat === M.tigerBush) return DENSITY.tigerBush;
+  if (groundMat === M.garrigue) return DENSITY.garrigue;
+  if (groundMat === M.mud) return DENSITY.mangrove;
   // Lone trees are a lowland thing: on the hill they are rare, and none stand near the tree line.
   const lone = c.region[0] > 0.5 ? 1 : UPLAND_LONE * (1 - altitude(c, shift));
   if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c) * lone;
@@ -201,6 +223,8 @@ export function scatterAt(
   const north = riverDist ? riverDist.north : Infinity;
   const south = riverDist ? riverDist.south : Infinity;
   const shift = isTemperate(c.temp) ? 0 : climateShift(c.temp as number, x, y, n);
+  /** Heat, 0 in the temperate climate and the cold … 1 at the equator. */
+  const heat = shift < 0 ? heatOf(c.temp as number) : 0;
 
   const treeRoll = maskAt(mask, x, y, TREE_OX, TREE_OY);
 
@@ -220,6 +244,13 @@ export function scatterAt(
     const hp = Math.max(1, Math.round(n / 28));
     if (gradNoise(((x + 0.5) * hp) / n, ((y + 0.5) * hp) / n, hp, HEDGE_SEED) < -0.22) return null;
     const tree = u4 > 0.93;
+    // In the Mediterranean a field's edge is a windbreak of cypress, a spire every few cells.
+    if (heat > 0 && heat > 0.1 + 0.1 * softNoise(x, y, n, 60, SPRUCE_SEED + 2)) {
+      if (u4 < 0.55) return null;
+      const cr = 0.75 + 0.2 * u1, chh = 5 + 2 * u3;
+      if (north < northReach(cr, chh, 1) || south - cr < 1) return null;
+      return { x: cx, y: cy, r: cr, h: chh, mat: M.cypress, shape: 1 };
+    }
     const r = tree ? 1.6 + 0.7 * u1 : 0.9 + 0.5 * u1;
     const h = tree ? 1.2 * r + 1.5 : 1.3 + u3;
     if (north < northReach(r, h, 0) || south - r < 1) return null;
@@ -227,11 +258,20 @@ export function scatterAt(
   }
 
   let density = treeDensity(c, groundMat, shift);
+  if (heat > 0) {
+    // Palms: over the plots of an oasis, and along the back of a tropical beach. Cypress: on the dry sward of the Mediterranean.
+    if (groundMat === M.ley && heat > 0.36 && c.moisture < 0.36) density = DENSITY.oasisPalm;
+    else if (groundMat === M.sandPale && heat > 0.58 && c.e > 0.7) density = DENSITY.beachPalm * clamp01((c.moisture - 0.3) / 0.3);
+    else if (heat < 0.5 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.steppeCool)) && u4 > 0.72) density = DENSITY.cypress * clamp01(heat / 0.15);
+  }
   // Sparse trees and bushes are gathered: a spinney's or a thicket's cells are dense, the sward between has next to none.
   if (density > 0 && density <= SPARSE) {
     density *= groundMat === M.marsh
       ? clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0)
-      : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.tundraCool)
+      : groundMat === M.ley || groundMat === M.sandPale || inTriple(groundMat, M.savannaCool)
+        // Palms and acacias stand apart, evenly: that evenness is what a savanna and a palm grove are.
+        ? 1
+        : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.tundraCool) || inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale
         ? gathered(x, y, n, THICKET_CELLS, 0.14, THICKET_PEAK, 0, 0.41)
         : gathered(x, y, n, SPINNEY_CELLS, 0.3, SPINNEY_PEAK, c.region[0] > 0.5 ? SPINNEY_FLOOR : 0, 0.17);
   }
@@ -258,6 +298,76 @@ export function scatterAt(
       r = 0.8 + 0.6 * u1;
       h = 0.5 + 0.5 * u4;
       mat = M.dwarfBirch;
+    } else if (groundMat === M.floorJungle) {
+      // Jungle: large lumpy crowns in greens far apart; one in a dozen stands over the rest, lime-topped; a rare one is in flower.
+      const v = hueField(x, y, HUE_CLASS.broadleaf, n) + (u4 - 0.5) * 1.5;
+      if (u3 > 0.925) {
+        r = 3.4 + 1.1 * u1;
+        h = 7 + 1.2 * u2;
+        mat = M.jungleBright;
+      } else {
+        r = 2.1 + 2 * u1 * u1;
+        h = 0.9 * r + 2.3;
+        mat = u3 < 0.008 ? M.jungleBloom : M.jungleCool + (v < 0.8 ? 0 : v < 1.6 ? 1 : 2);
+      }
+    } else if (inTriple(groundMat, M.savannaCool)) {
+      // An acacia: wider than tall, flat. One tree in eight is a termite mound instead, a small red cone.
+      if (u3 > 0.875) {
+        r = 0.6 + 0.3 * u1;
+        h = 1.6 + 1.2 * u4;
+        mat = M.mound;
+        shape = 1;
+      } else {
+        r = 2.2 + 1.1 * u1;
+        h = 2 + 0.7 * u4;
+        mat = M.acacia;
+      }
+    } else if (groundMat === M.tigerBush || groundMat === M.reg || groundMat === M.earthPale || inTriple(groundMat, M.steppeCool)) {
+      if (heat < 0.5 && (inTriple(groundMat, M.steppeCool)) && u4 > 0.72) {
+        r = 0.75 + 0.2 * u1;
+        h = 5 + 2 * u3;
+        mat = M.cypress;
+        shape = 1;
+      } else {
+        r = 0.8 + 0.6 * u1;
+        h = 0.9 + 0.7 * u4;
+        mat = M.thorn;
+      }
+    } else if (groundMat === M.garrigue) {
+      r = 0.8 + 0.5 * u1;
+      h = 0.8 + 0.6 * u4;
+      mat = u3 > 0.6 ? M.thorn : M.shrub;
+    } else if (groundMat === M.mud) {
+      r = 1.3 + 0.8 * u1;
+      h = 1.7 + 0.8 * u4;
+      mat = M.mangrove;
+    } else if (heat > 0 && (groundMat === M.ley || groundMat === M.sandPale)) {
+      r = 1.3 + 0.5 * u1;
+      h = 3.4 + 1.4 * u4;
+      mat = M.palm;
+    } else if (heat > 0 && inTriple(groundMat, M.scrubCool) && (u4 > 0.72 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
+      // The Mediterranean's dry sward: a cypress spire here and there, and olives where the temperate sward has bushes.
+      if (u4 > 0.72 && heat < 0.5) {
+        r = 0.75 + 0.2 * u1;
+        h = 5 + 2 * u3;
+        mat = M.cypress;
+        shape = 1;
+      } else {
+        r = 1 + 0.5 * u1;
+        h = r + 0.8;
+        mat = M.olive;
+      }
+    } else if (heat > 0 && groundMat === M.floorBroadleaf && heat > 0.07 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 4) + 0.12 * (u3 - 0.5)) {
+      // The warm wood is evergreen: dark maquis and holm oak, with umbrella pines standing over it.
+      if (u2 > 0.78) {
+        r = 1.8 + 0.8 * u1;
+        h = 1.3 * r + 2.6;
+        mat = M.pine;
+      } else {
+        r = 1.1 + 0.9 * u1;
+        h = r + 1.2;
+        mat = M.maquis;
+      }
     } else if (shift > 0 && groundMat === M.floorBroadleaf && shift > 5 + 8 * softNoise(x, y, n, 40, SPRUCE_SEED + 1) + 6 * (u3 - 0.5)) {
       // The cold's broadleaf is birch: small pale crowns, taller than wide.
       r = 1.1 + 0.9 * u1 * u1;

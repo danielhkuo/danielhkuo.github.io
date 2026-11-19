@@ -3,7 +3,7 @@
 // material, light and cast shadows. Every output is a pure function of the
 // wrapped cell position, so any window equals the same crop of any other.
 
-import { TEMPERATE } from "../biome.ts";
+import { DESERT_RAIN, DUNE_HEIGHT, duneAt, ergAt, HEAT_LAPSE, heatOf, HOT_EDGE, softNoise, TEMPERATE } from "../biome.ts";
 import { hash2 } from "../core/hash.ts";
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
@@ -46,6 +46,8 @@ export interface Look {
   apronRock?: number;
   /** Per material id: 1 for built things, which keep their own tones: no wash is laid on them. Optional: none when absent. */
   isBuilt?: Uint8Array;
+  /** Per material id: 1 for what a river's line is drawn in: water, and the ice and dry beds a climate makes of it. Optional: isWater when absent. */
+  isChannel?: Uint8Array;
 }
 
 /**
@@ -408,6 +410,41 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
     for (let i = 0; i < count; i++) if (cut[i] > 0) ground[i] = Math.floor((ground[i] - cut[i]) * 64 + 0.5) / 64;
   }
+  // Dunes: a desert's sand seas stand in real relief, so they are lit, shade and cast shadow like any hill. A pure
+  // function of the cell, the smooth ground and the climate at the C node nearest it; nothing where no sand lies.
+  const climate = world.temp;
+  if (climate !== undefined) {
+    let rise: Float32Array | null = null;
+    for (let y = 1; y < H - 1; y++) {
+      const Y = wrap(wy0 + y, n);
+      const cRow = wrap((Y >> 3) - cY0, cN) * cStride, gRow = wrap((Y >> 2) - gY0, gN) * gStride;
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x, e = ground[i];
+        if (e <= 1.2) continue;
+        const X = wrap(wx0 + x, n);
+        const ci = cRow + wrap((X >> 3) - cX0, cN);
+        const t = climate[ci];
+        if (!(t > TEMPERATE)) continue;
+        const hl = heatOf(t) - e / HEAT_LAPSE - (HOT_EDGE - 0.02);
+        if (hl <= 0) continue;
+        const dry = DESERT_RAIN + 0.03 - world.moisture[ci];
+        if (dry <= 0) continue;
+        const sand = ergAt(X, Y, n);
+        if (sand <= 0) continue;
+        const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
+        const s2 = dx * dx + dy * dy;
+        if (s2 >= 0.09) continue;
+        // Not on a river's or a lake's own level: the water keeps its bed.
+        const hd = world.hand[gRow + wrap((X >> 2) - gX0, gN)];
+        if (hd <= 0.5) continue;
+        const s = Math.sqrt(s2);
+        const k = sand * (s < 0.15 ? 1 : (0.3 - s) / 0.15) * (dry > 0.06 ? 1 : dry / 0.06) * (hl > 0.06 ? 1 : hl / 0.06) * (e < 3 ? (e - 1.2) / 1.8 : 1) * (hd > 2 ? 1 : (hd - 0.5) / 1.5);
+        if (!rise) rise = new Float32Array(count);
+        rise[i] = DUNE_HEIGHT * k * duneAt(X, Y, n);
+      }
+    }
+    if (rise) for (let i = 0; i < count; i++) if (rise[i] > 0) ground[i] = Math.floor((ground[i] + rise[i]) * 64 + 0.5) / 64;
+  }
 
   // Pads, street terraces and the harbour, cut at cell size.
   const bi = world.built;
@@ -553,6 +590,14 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const k = cy * W + cx;
       const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
       if (sx * sx + sy * sy > STREAM_MAX_SLOPE * STREAM_MAX_SLOPE) return;
+      // The land's channels were cut by a temperate rain. In true desert most streams are not there at all (the rest
+      // are dry beds, the cover's wadis), by stretches of country a hundred cells across, or the sand would be a net of lines.
+      if (climate !== undefined) {
+        const X = wrap(wx0 + cx, n), Y = wrap(wy0 + cy, n);
+        const ci = wrap((Y >> 3) - cY0, cN) * cStride + wrap((X >> 3) - cX0, cN);
+        const t = climate[ci];
+        if (t > TEMPERATE && heatOf(t) > 0.36 && world.moisture[ci] < DESERT_RAIN && softNoise(X, Y, n, 130, 0xd4a7) < 0.22) return;
+      }
     }
     // A wide river's bank is cut at sub-cell precision: a cell the bank passes through is water when the share of it
     // inside the bank beats the blue noise there, so a slanting bank is a soft, broken edge and not a staircase.

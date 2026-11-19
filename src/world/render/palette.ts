@@ -392,6 +392,50 @@ function buildSpecs(): Spec[] {
   set(M.firn, all([0.905, 0.03, 238]), SNOWY);
   set(M.crevasse, all([0.6, 0.06, 232]), LINE);
 
+  // Steppe: khaki to straw, between the Mediterranean's sage and the savanna's gold.
+  // Dry grass greys a little in winter, and is never lighter in shade than the palest field of its season.
+  const dryGrass = (c: Lch): Seasons => [c, c, [c[0] > 0.78 ? 0.78 : c[0], c[1], c[2] - 2], [c[0] > 0.77 ? 0.77 : c[0] - 0.01, c[1] - 0.012, c[2] - 4]];
+  set(M.steppeCool, dryGrass([0.74, 0.052, 104]), LAND);
+  set(M.steppeMid, dryGrass([0.78, 0.058, 98]), LAND);
+  set(M.steppeWarm, dryGrass([0.805, 0.06, 93]), LAND);
+  set(M.garrigue, [[0.72, 0.03, 310], [0.725, 0.024, 300], [0.71, 0.03, 90], [0.7, 0.025, 95]], UPLAND);
+  // Bare earths. Sand, salt and gravel shade warm, as a dune does: a violet shade is stone's.
+  const DUNE = { drop: 0.27, rise: 0.4, cool: 0.03, coolHue: 300, warm: 0.045, ramp: "land" } as const;
+  set(M.earthPale, all([0.84, 0.036, 80]), DUNE);
+  set(M.earthRed, all([0.6, 0.085, 40]), DUNE);
+  set(M.desertSand, all([0.865, 0.064, 78]), DUNE);
+  set(M.desertSandDeep, all([0.83, 0.072, 70]), DUNE);
+  set(M.reg, all([0.77, 0.05, 68]), DUNE);
+  set(M.salt, all([0.95, 0.01, 100]), PALE);
+  set(M.wadi, all([0.9, 0.03, 84]), LINE);
+  set(M.rockDesert, all([0.7, 0.075, 58]), STONE);
+  set(M.cliffDesert, all([0.62, 0.084, 46]), STONE);
+  set(M.tigerBush, evergreen([0.5, 0.045, 115]), LAND);
+  // Savanna: gold, clear of the reserved gold by its chroma.
+  set(M.savannaCool, dryGrass([0.78, 0.078, 98]), LAND);
+  set(M.savannaMid, dryGrass([0.795, 0.084, 90]), LAND);
+  set(M.savannaWarm, dryGrass([0.755, 0.08, 80]), LAND);
+  set(M.floorJungle, evergreen([0.38, 0.06, 158]), LAND);
+  set(M.mud, all([0.6, 0.045, 75]), LINE);
+  // Plants of the warm climates: all evergreen.
+  set(M.thorn, evergreen([0.5, 0.042, 118]), CANOPY);
+  set(M.cypress, evergreen([0.3, 0.04, 165]), CANOPY);
+  set(M.pine, evergreen([0.42, 0.06, 148]), CANOPY);
+  set(M.olive, evergreen([0.62, 0.035, 135]), CANOPY);
+  set(M.maquis, evergreen([0.45, 0.06, 142]), CANOPY);
+  set(M.acacia, evergreen([0.5, 0.058, 122]), CANOPY);
+  // Jungle: deeper and more saturated than any temperate wood, in greens far enough apart that the canopy is lumpy.
+  set(M.jungleCool, evergreen([0.36, 0.072, 160]), CANOPY);
+  set(M.jungleMid, evergreen([0.44, 0.098, 150]), CANOPY);
+  set(M.jungleWarm, evergreen([0.5, 0.108, 141]), CANOPY);
+  set(M.jungleBright, evergreen([0.58, 0.118, 131]), CANOPY);
+  set(M.jungleBloom, all([0.78, 0.045, 355]), CANOPY);
+  set(M.palm, evergreen([0.52, 0.092, 138]), CANOPY);
+  set(M.mangrove, evergreen([0.43, 0.075, 146]), CANOPY);
+  set(M.cactus, evergreen([0.55, 0.06, 158]), CANOPY);
+  set(M.trunk, all([0.56, 0.04, 62]), LINE);
+  set(M.mound, all([0.58, 0.082, 40]), DUNE);
+
   return s;
 }
 

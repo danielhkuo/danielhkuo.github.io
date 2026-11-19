@@ -368,7 +368,7 @@ export function bareFlags(look: Look): Uint8Array {
 /** The finished bake pixels of the window [x0, x0 + w) × [r0, r0 + h) of bake space. */
 export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles: TileSource, x0: number, r0: number, w: number, h: number): Uint32Array {
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
-  drawRivers(world, tiles, p, look.isWater);
+  drawRivers(world, tiles, p, look.isChannel ?? look.isWater);
   drawRoads(world, tiles, p);
   drawMarks(world, p);
   drawFalls(p, look, mask);
