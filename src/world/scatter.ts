@@ -366,6 +366,12 @@ export function scatterAt(
         h = 5 + 2 * u3;
         mat = M.cypress;
         shape = 1;
+      } else if (u2 > 0.82 && heat < 0.5) {
+        // An umbrella pine, alone on the open sward.
+        r = 2;
+        h = 4 + Math.floor(3 * u1);
+        mat = M.pine;
+        shape = SHAPE.pine;
       } else {
         r = 1 + 0.5 * u1;
         h = r + 0.8;
@@ -373,17 +379,12 @@ export function scatterAt(
       }
     } else if (heat > 0 && groundMat === M.floorBroadleaf && heat > 0.07 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 4) + 0.12 * (u3 - 0.5)) {
       // The warm wood is evergreen. In the tropics, on a mountain above the jungle, it is cloud forest: the jungle's own
-      // crowns, a size smaller. Short of them it is dark maquis and holm oak, with an umbrella pine standing over it here and there.
+      // crowns, a size smaller. Short of them it is dark maquis and holm oak. (The umbrella pine stands in the open, on the sward: a crown on a stem drawn over a closed wood reads as a pin stuck in it.)
       if (heat > 0.5 + 0.1 * softNoise(x, y, n, 60, SPRUCE_SEED + 5)) {
         const v = hueField(x, y, HUE_CLASS.broadleaf, n) + (u4 - 0.5) * 1.5;
         r = 1.8 + 1.4 * u1 * u1;
         h = 0.9 * r + 2;
         mat = M.jungleCool + (v < 1 ? 0 : 1);
-      } else if (u2 > 0.94) {
-        r = 2;
-        h = 4 + Math.floor(3 * u1);
-        mat = M.pine;
-        shape = SHAPE.pine;
       } else {
         r = 1.1 + 0.9 * u1;
         h = r + 1.2;

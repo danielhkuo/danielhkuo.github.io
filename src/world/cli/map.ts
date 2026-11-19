@@ -29,6 +29,12 @@ const SITE_RGB: Record<string, [number, number, number]> = {
   cathedral: [120, 40, 160],
   windmill: [230, 220, 60],
   yew: [20, 90, 30],
+  hospice: [90, 200, 255],
+  stave: [60, 30, 10],
+  hermitage: [255, 120, 200],
+  monastery: [255, 60, 0],
+  roundchurch: [0, 0, 0],
+  chapel: [255, 0, 255],
 };
 
 /** The overview's RGBA pixels, `size` a side, one pixel per `step` cells. */

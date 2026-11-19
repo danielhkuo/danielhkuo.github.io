@@ -51,7 +51,10 @@ export interface RepoLike {
   updatedAt: string;
 }
 
-const TYPES: readonly LandmarkType[] = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"];
+const TYPES: readonly LandmarkType[] = [
+  "abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew",
+  "hospice", "stave", "hermitage", "monastery", "roundchurch", "chapel",
+];
 
 function isLandmarkType(t: string): t is LandmarkType {
   return (TYPES as readonly string[]).includes(t);
@@ -147,6 +150,12 @@ const KIND_NAMES: Record<LandmarkType, string> = {
   bridge: "bridge",
   cathedral: "ruined cathedral",
   yew: "churchyard yew",
+  hospice: "hospice on the pass",
+  stave: "stave church",
+  hermitage: "hermitage on the rock",
+  monastery: "monastery in the sands",
+  roundchurch: "round church",
+  chapel: "river chapel",
 };
 
 /** The landmark's kind as the page names it. */

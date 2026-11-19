@@ -177,7 +177,7 @@ const HOME_OPEN = 0.06;
 /** Karst farmland keeps to ground this close to the valley floor; the rest is scrub. */
 const KARST_FARM_HAND = 7;
 
-/** No field lies where the cold score passes this: the plough stops in the southern taiga. */
+/** No field lies where the cold score passes this: the plough stops in the southern taiga. (At the plateau's edge the limit stands a tenth higher, above every field the temperate table lays, and comes down over a shift of 15.) */
 const FIELD_COLD = 0.3;
 /** From this shift a lowland field is walled grass, not hedged corn. */
 const WALLS_SHIFT = 8;
@@ -462,7 +462,7 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
   const heat = heatOf(temp);
   if (c.water !== 0) {
     // The clear sea of the tropics, turquoise over its shelves. Its edge lies in lobes hundreds of cells across.
-    if (m === M.sea) return heat > 0.5 + 0.3 * soft(x, y, n, 420, WARM_SEED) + 0.14 * soft(x, y, n, 130, WARM_SEED + 1) + 0.16 * ruleJitter(mask, x, y, RULE.sea) ? M.seaClear : m;
+    if (m === M.sea) return heat > 0.15 && heat > 0.5 + 0.3 * soft(x, y, n, 420, WARM_SEED) + 0.14 * soft(x, y, n, 130, WARM_SEED + 1) + 0.16 * ruleJitter(mask, x, y, RULE.sea) ? M.seaClear : m;
     // A stream is dry where the land is.
     if (m === M.river && c.stream === 1 && heat > 0.4 && c.moisture < WADI_RAIN + 0.05 * soft(x, y, n, 80, WARM_SEED + 4)) return M.wadi;
     return m;
@@ -499,10 +499,13 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
     if (!zonal(m)) return m;
     return hotGround(c, x, y, mask, n, heat, hl, wet, st, near);
   }
-  if (!zonal(m)) return m;
-  // The Mediterranean: how dry the cell is, 0 temperate … 1 and over at the dry belt's edge.
-  const dry = hl / HOT_EDGE + 0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
-    (hand < 4 ? 0.25 * (1 - hand / 4) : 0) - 0.3 * near - 0.9 * (c.moisture - 0.5) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j;
+  if (!zonal(m) || hl <= 0) return m;
+  // The Mediterranean: how dry the cell is, 0 temperate … 1 and over at the dry belt's edge. The lie of the land and
+  // the rain count for nothing at the plateau's edge and for all they are worth a little way past it, so the dress
+  // comes on from nothing: no line shows where the temperate climate ends.
+  const on = hl >= 0.12 ? 1 : hl / 0.12;
+  const dry = hl / HOT_EDGE + on * (0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
+    (hand < 4 ? 0.25 * (1 - hand / 4) : 0) - 0.3 * near - 0.9 * (c.moisture - 0.5) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j);
   if (dry < 0.26) return m;
   // A field keeps its crop, and its ploughland is red earth; but nobody farms the driest ground, and toward the dry
   // belt the fields are given up, in patches, to the sward round them.
@@ -1015,7 +1018,7 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   const uplandW = 0.9 * slate + 0.75 * region[3] + 0.55 * region[1];
   // In the cold no field is ploughed past FIELD_COLD, a line that wanders; and well short of it the hedged corn of
   // the lowland has given way to walled grass.
-  if (e > 1.2 && c.wind < 0.7 + j * 4 * PER_CELL.wind && (shift <= 0 || cold < FIELD_COLD + 0.1 * soft(x, y, n, 90, WOOD_SEED + 5))) {
+  if (e > 1.2 && c.wind < 0.7 + j * 4 * PER_CELL.wind && (shift <= 0 || cold < FIELD_COLD + (shift < 15 ? 0.1 * (1 - shift / 15) : 0) + 0.1 * soft(x, y, n, 90, WOOD_SEED + 5))) {
     if (lowlandW > 0.5 + dW) {
       if (lie < (stray < FIELD_SURE - LOWLAND_SLOPE ? FIELD_SURE : LOWLAND_SLOPE + stray) + j * PER_CELL.slope && hand < LOWLAND_HAND + j * 4 * PER_CELL.hand) {
         ruledField = true;

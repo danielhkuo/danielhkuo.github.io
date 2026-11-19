@@ -17,7 +17,7 @@ import { sortIndicesBy } from "../core/heap.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Conform, Structure } from "./built.ts";
-import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext } from "./sites.ts";
+import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext, tempAt } from "./sites.ts";
 import { boat, put, sculpt } from "./structures.ts";
 import * as W from "./wonderworks.ts";
 
@@ -975,6 +975,23 @@ const OBSERVATORY: Kind = {
   },
 };
 
+/**
+ * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
+ * score: the great oak and the bridge town in temperate or Mediterranean country, the drowned church in a lake that
+ * is not frozen, the marsh house off the tundra and the jungle; the baths lean to the cold and the hotel to the warm.
+ */
+const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
+  "great-oak": { lo: 0.44, hi: 0.7 },
+  "bridge-town": { lo: 0.44, hi: 0.7 },
+  "drowned-church": { lo: 0.32, hi: 1 },
+  "marsh-house": { lo: 0.3, hi: 0.75 },
+  baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
+  "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
+  railway: { lo: 0, hi: 1 },
+  "airship-mast": { lo: 0, hi: 1 },
+  observatory: { lo: 0, hi: 1 },
+};
+
 const KINDS: Record<WonderType, Kind> = {
   baths: BATHS, railway: RAILWAY, "drowned-church": CHURCH, "cove-hotel": HOTEL,
   "marsh-house": MARSH, "airship-mast": MAST, "bridge-town": BRIDGE_TOWN, "great-oak": OAK, observatory: OBSERVATORY,
@@ -1006,9 +1023,19 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
   const wonders: PlacedWonder[] = [], skipped: string[] = [];
   for (const type of WONDER_ORDER) {
     if (opts.only && !opts.only.includes(type)) continue;
-    const kind = KINDS[type], names = kind.rules(rules);
+    const kind = KINDS[type], climate = WONDER_CLIMATE[type], bounded = climate.lo > 0 || climate.hi < 1;
+    const inClimate = `in its climate (temperature ${climate.lo}–${climate.hi})`;
+    const names = bounded ? [...kind.rules(rules), inClimate] : kind.rules(rules);
     const tally = new Tally(names);
-    const cands = kind.candidates(land, rules, tally);
+    const found = kind.candidates(land, rules, tally);
+    // Each keeps to its climate, and leans to the one it likes best.
+    const cands: Cand[] = [];
+    for (const q of found) {
+      const t = tempAt(c, q.x, q.y);
+      if (t < climate.lo || t > climate.hi) continue;
+      if (bounded) tally.pass(inClimate);
+      cands.push(climate.lean ? { ...q, score: q.score + climate.lean(t) } : q);
+    }
     // Best first; ties keep the order the land was scanned in, so the order is the same on every run.
     const order = sortIndicesBy(Float64Array.from(cands, (q) => -q.score));
     let why = { spacing: 0, free: 0, seen: 0, cap: 0 };

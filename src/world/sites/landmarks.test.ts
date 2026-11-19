@@ -144,4 +144,10 @@ test("every kind of landmark has a name to show", () => {
   assert.equal(kindName("cathedral"), "ruined cathedral");
   assert.equal(kindName("yew"), "churchyard yew");
   for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge"] as const) assert.equal(kindName(t), t);
+  assert.equal(kindName("hospice"), "hospice on the pass");
+  assert.equal(kindName("stave"), "stave church");
+  assert.equal(kindName("hermitage"), "hermitage on the rock");
+  assert.equal(kindName("monastery"), "monastery in the sands");
+  assert.equal(kindName("roundchurch"), "round church");
+  assert.equal(kindName("chapel"), "river chapel");
 });

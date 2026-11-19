@@ -4,7 +4,9 @@
 import { hashString } from "../core/hash.ts";
 import { torusDist } from "../core/torus.ts";
 
-export type LandmarkType = "abbey" | "town" | "lighthouse" | "windmill" | "bridge" | "cathedral" | "yew";
+export type LandmarkType =
+  | "abbey" | "town" | "lighthouse" | "windmill" | "bridge" | "cathedral" | "yew"
+  | "hospice" | "stave" | "hermitage" | "monastery" | "roundchurch" | "chapel";
 export type FeatureKind = "wayside-cross" | "sheepfold" | "jetty";
 
 export interface Site {
@@ -29,20 +31,32 @@ const NON_ABBEY_TYPE_ORDER: readonly LandmarkType[] = [
   "bridge",
   "cathedral",
   "yew",
+  "hospice",
+  "stave",
+  "hermitage",
+  "monastery",
+  "roundchurch",
+  "chapel",
 ];
 
-/** Feature for an unoccupied site: jetty on lighthouse/town/bridge sites, sheepfold on windmill/yew, a wayside cross elsewhere. */
+/** Feature for an unoccupied site: jetty on lighthouse/town/bridge/chapel sites, sheepfold on windmill/yew/round church, a wayside cross elsewhere. */
 export function featureFor(type: LandmarkType): FeatureKind {
   switch (type) {
     case "lighthouse":
     case "town":
     case "bridge":
+    case "chapel":
       return "jetty";
     case "windmill":
     case "yew":
+    case "roundchurch":
       return "sheepfold";
     case "cathedral":
     case "abbey":
+    case "hospice":
+    case "stave":
+    case "hermitage":
+    case "monastery":
       return "wayside-cross";
   }
 }

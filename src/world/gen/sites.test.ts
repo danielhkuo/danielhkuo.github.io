@@ -15,6 +15,11 @@ interface Shape {
   beach?: boolean;
   reaches?: SiteReach[];
   stacks?: { x: number; y: number; r: number; top: number }[];
+  /** The climate, uniform: sea-level temperature (absent: no climates) and moisture. */
+  temp?: number;
+  moisture?: number;
+  /** The region plane that holds the land (0, the home archetype, by default). */
+  plane?: number;
 }
 
 /** A hand-built world: ground from a function of the cell, sea wherever it is not above 0. */
@@ -33,12 +38,13 @@ function fields(s: Shape): SiteFields {
       if (!isSea[i] && isSea[((gy + 1) % GN) * GN + gx]) shoreClass[i] = 1;
     }
   }
-  const regions = new Float32Array(6 * CN * CN);
-  regions.fill(1, 0, CN * CN);
+  const regions = new Float32Array(6 * CN * CN), plane = s.plane ?? 0;
+  regions.fill(1, plane * CN * CN, (plane + 1) * CN * CN);
   return {
     n: N, gN: GN, h, isSea, lakeId: new Int32Array(GN * GN).fill(-1), hand, exposure, shoreClass,
     debris: new Float32Array(GN * GN), rock: new Uint8Array(GN * GN).fill(1),
-    moisture: new Float32Array(CN * CN).fill(0.3), wind: new Float32Array(CN * CN).fill(s.wind ?? 0.8), regions,
+    moisture: new Float32Array(CN * CN).fill(s.moisture ?? 0.3), wind: new Float32Array(CN * CN).fill(s.wind ?? 0.8), regions,
+    temp: s.temp === undefined ? undefined : new Float32Array(CN * CN).fill(s.temp),
     reaches: s.reaches ?? [], stacks: s.stacks ?? [],
   };
 }
@@ -46,7 +52,11 @@ function fields(s: Shape): SiteFields {
 /** The spec's rules with only the given types wanted, and spacing that suits a small fixture. */
 function only(counts: Partial<Record<LandmarkType, number>>, patch: Partial<SiteRules> = {}): SiteRules {
   const r = siteRules(N);
-  return { ...r, counts: { abbey: 0, town: 0, lighthouse: 0, bridge: 0, cathedral: 0, windmill: 0, yew: 0, ...counts }, ...patch };
+  const none: Record<LandmarkType, number> = {
+    abbey: 0, town: 0, lighthouse: 0, bridge: 0, cathedral: 0, windmill: 0, yew: 0,
+    hospice: 0, stave: 0, hermitage: 0, monastery: 0, roundchurch: 0, chapel: 0,
+  };
+  return { ...r, counts: { ...none, ...counts }, ...patch };
 }
 
 /** A reach running south down x from y0 to y1. */
@@ -259,4 +269,65 @@ test("the rules: one site of each kind, spacing and the home river scale with th
 test("siting is deterministic", () => {
   const f = () => fields({ height: (x, y) => Math.max(knoll(302, 402)(x, y), knoll(702, 602)(x, y)) });
   assert.deepEqual(placeSites(f(), only({ yew: 2 }, { spacing: 200 })), placeSites(f(), only({ yew: 2 }, { spacing: 200 })));
+});
+
+// The six kinds of the climates: each finds its place in its own climate, and none in temperate country.
+
+/** Places one site of `type` on the fixture, returning it; or throws the siting failure. */
+const one = (type: LandmarkType, shape: Shape) => {
+  const res = placeSites(fields(shape), only({ [type]: 1 }));
+  assert.equal(res.sites.length, 1);
+  assert.equal(res.sites[0].type, type);
+  return res.sites[0];
+};
+
+test("hospice: a gentle floor between higher ground in the ice; none in temperate country", () => {
+  const pass = (x: number) => 30 + Math.min(30, Math.max(0, Math.abs(x - 500) - 40) * 0.5);
+  const s = one("hospice", { height: pass, temp: 0.15 });
+  assert.ok(Math.abs(s.x - 500) <= 40, `on the floor: ${s.x}`);
+  assert.deepEqual(s.pad, { w: BOX.hospice.w, d: BOX.hospice.d, round: false });
+  assert.match(failure(() => placeSites(fields({ height: pass }), only({ hospice: 1 }))).message, /hospice: ice or tundra/);
+  assert.match(failure(() => placeSites(fields({ height: () => 30, temp: 0.15 }), only({ hospice: 1 }))).message, /hospice: ground 12 higher/);
+});
+
+test("stave church: level ground in the taiga's forest, back from a river; none in temperate country", () => {
+  const taiga: Shape = { height: () => 10, hand: () => 5, temp: 0.35, moisture: 0.8, wind: 0.3, plane: 2, reaches: [reachDown(0, 402, 2, 1022, 1, 9)] };
+  const s = one("stave", taiga);
+  const away = Math.abs(s.x - 402);
+  assert.ok(away >= 30 && away <= 220, `river ${away} away`);
+  assert.match(failure(() => placeSites(fields({ ...taiga, temp: undefined }), only({ stave: 1 }))).message, /stave: taiga/);
+  // Bare tundra round it: no forest.
+  assert.match(failure(() => placeSites(fields({ ...taiga, plane: 0, wind: 0.8 }), only({ stave: 1 }))).message, /stave: forest on 0.4/);
+});
+
+test("hermitage: the lighthouse's islet, in the Mediterranean only", () => {
+  const s = one("hermitage", { height: islet(20), exposure: 0.9, temp: 0.65 });
+  assert.ok(Math.abs(s.x - 500) < 24 && Math.abs(s.y - 500) < 24);
+  assert.match(failure(() => placeSites(fields({ height: islet(20), exposure: 0.9 }), only({ hermitage: 1 }))).message, /hermitage: temperature 0.56–0.74/);
+});
+
+test("monastery: level ground back from a river in the desert; none where it rains or in temperate country", () => {
+  const desert: Shape = { height: () => 10, hand: () => 5, temp: 0.85, moisture: 0.15, reaches: [reachDown(0, 402, 2, 1022, 2, 9)] };
+  const s = one("monastery", desert);
+  const away = Math.abs(s.x - 402);
+  assert.ok(away >= 24 && away <= 180, `river ${away} away`);
+  assert.match(failure(() => placeSites(fields({ ...desert, temp: undefined }), only({ monastery: 1 }))).message, /monastery: desert/);
+  assert.match(failure(() => placeSites(fields({ ...desert, moisture: 0.5 }), only({ monastery: 1 }))).message, /monastery: desert/);
+  // A stream is not enough.
+  assert.match(failure(() => placeSites(fields({ ...desert, reaches: [reachDown(0, 402, 2, 1022, 1, 9)] }), only({ monastery: 1 }))).message, /monastery: a river of w ≥ 2/);
+});
+
+test("round church: a knoll or open level ground in savanna grass; none in temperate country", () => {
+  const s = one("roundchurch", { height: knoll(402, 402), temp: 0.8, moisture: 0.45 });
+  assert.equal(s.pad.round, true);
+  assert.match(failure(() => placeSites(fields({ height: knoll(402, 402), moisture: 0.45 }), only({ roundchurch: 1 }))).message, /roundchurch: temperature ≥ 0.72/);
+});
+
+test("river chapel: level ground on a jungle river's bank, the river noted; none in temperate country", () => {
+  const jungle: Shape = { height: () => 10, hand: () => 5, temp: 0.85, moisture: 0.7, reaches: [reachDown(0, 402, 2, 1022, 2, 9)] };
+  const s = one("chapel", jungle);
+  const away = Math.abs(s.x - 402);
+  assert.ok(away >= 12 && away <= 40, `river ${away} away`);
+  assert.ok(s.river && Math.abs(s.river.x - 402) <= 4);
+  assert.match(failure(() => placeSites(fields({ ...jungle, temp: undefined }), only({ chapel: 1 }))).message, /chapel: jungle/);
 });

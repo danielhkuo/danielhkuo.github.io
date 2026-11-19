@@ -227,7 +227,7 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
     return;
   }
   if (site.stack) {
-    w.structures.push(S.standAt(occupied ? S.lighthouse() : S.waysideCross(), x, y, level));
+    w.structures.push(S.standAt(occupied ? (site.type === "hermitage" ? S.hermitage() : S.lighthouse()) : S.waysideCross(), x, y, level));
     return;
   }
   if (!occupied) {
@@ -309,9 +309,71 @@ function standLandmark(w: Work, site: PlacedSite, occupied: boolean): void {
     case "town":
       standTown(w, site);
       break;
+    case "hospice":
+      standChurch(w, site, S.hospice(), 10, 7, level, 6);
+      break;
+    case "stave":
+      // A clearing in the wood, wider to the south so no crown stands in front of the church.
+      standChurch(w, site, S.staveChurch(), 11, 8, level, 6, false, 8);
+      break;
+    case "hermitage":
+      standChurch(w, site, S.hermitage(), 6, 6, level, 5, true);
+      break;
+    case "monastery":
+      standChurch(w, site, S.monastery(), 15, 11, level, 8);
+      break;
+    case "roundchurch":
+      standChurch(w, site, S.roundChurch(), 8, 8, level, 6, true);
+      break;
+    case "chapel":
+      standChurch(w, site, S.riverChapel(), 7, 5.5, level, 6, false, 8);
+      standStage(w, site, level);
+      break;
     default:
       break;
   }
+}
+
+/**
+ * One of the climates' churches on its pad of half-sizes (rx, ry), the path from where the lane arrives to its door
+ * or gate. `south` cells more of the pad are cleared south of it, where the camera looks in over the ground.
+ */
+function standChurch(w: Work, site: PlacedSite, s: Structure, rx: number, ry: number, level: number, skirt: number, round = false, south = 0): void {
+  const { x, y } = site;
+  addConform(w, flat(x, y + south / 2, rx, ry + south / 2, round, level, skirt));
+  block(w, x, y, rx, ry);
+  const st = S.standAt(s, x, y, level);
+  w.structures.push(st);
+  const gate = S.gateOf(st);
+  if (gate) spur(w, site.approach.x, site.approach.y, st.x + gate[0] + 0.5, st.y + gate[1] + 1.5);
+}
+
+/** The river chapel's landing stage: from the bank nearest the chapel a few cells out over its river. */
+function standStage(w: Work, site: PlacedSite, level: number): void {
+  const r = site.river;
+  if (!r) return;
+  const dx = torusDelta(site.x, r.x, w.c.n), dy = torusDelta(site.y, r.y, w.c.n), len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+  const ux = dx / len, uy = dy / len;
+  // The bank: the last dry cell walking from the chapel's wall to the river.
+  let bank = -1;
+  for (let t = 6; t <= len + 4; t++) {
+    if (!dry(w, site.x + ux * t, site.y + uy * t)) break;
+    bank = t;
+  }
+  if (bank < 0) return;
+  // Out to the channel itself: the node the bank ends at is wider than the water drawn in it.
+  const t0 = Math.max(6, bank - 4), t1 = Math.max(bank + 3, Math.min(len + 3, bank + 11));
+  const ax = site.x + ux * t0, ay = site.y + uy * t0;
+  // The bank is cleared of trees round the stage's foot (a pad that moves no ground), so the stage is seen.
+  addConform(w, flat(site.x + ux * bank, site.y + uy * bank + 2, 6, 6, true, groundAt(w, site.x + ux * bank, site.y + uy * bank), 3, 0));
+  const deckA = Math.max(0, Math.min(groundAt(w, ax, ay), level) - r.level) + 0.5;
+  const st = S.riverStage(ux * (t1 - t0), uy * (t1 - t0), deckA, 1);
+  st.x += Math.floor(ax);
+  st.y += Math.floor(ay);
+  st.base = r.level;
+  w.structures.push(st);
+  spur(w, site.x, site.y + 5, ax, ay);
 }
 
 const FLAT6 = new Float32Array(6);
@@ -990,7 +1052,7 @@ interface Stop {
   x: number;
   y: number;
   island: number;
-  /** 2 a road end (town, abbey, hamlet, bridge), 1 a path end (lighthouse, windmill, yew, cathedral). */
+  /** 2 a road end (town, abbey, hamlet, bridge), 1 a path end (every other landmark). */
   width: number;
   /** Bridge abutments carry their bridge's id; the lane between the two is the deck. */
   pair: number;
@@ -1398,7 +1460,10 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   }
 
   const stops: Stop[] = [];
-  const wide: Record<LandmarkType, number> = { abbey: 2, town: 2, bridge: 2, lighthouse: 1, windmill: 1, cathedral: 1, yew: 1 };
+  const wide: Record<LandmarkType, number> = {
+    abbey: 2, town: 2, bridge: 2, lighthouse: 1, windmill: 1, cathedral: 1, yew: 1,
+    hospice: 1, stave: 1, hermitage: 1, monastery: 1, roundchurch: 1, chapel: 1,
+  };
   placed.sites.forEach((s, k) => {
     if (!s.approach.road) return;
     const island = c.island[node(c, s.approach.x, s.approach.y)];

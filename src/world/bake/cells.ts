@@ -419,9 +419,20 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
     for (let i = 0; i < count; i++) if (cut[i] > 0) ground[i] = Math.floor((ground[i] - cut[i]) * 64 + 0.5) / 64;
   }
+  // The climate of the window. Where every C node the window can read is on the temperate plateau, the window is
+  // built as a world with no climates is: the same cells to the bit (that is what the plateau means), at no cost.
+  let climate = world.temp;
+  if (climate !== undefined) {
+    const cx0 = Math.floor(wx0 / 8) - 1, cy0 = Math.floor(wy0 / 8) - 1, cx1 = Math.floor((wx0 + W) / 8) + 1, cy1 = Math.floor((wy0 + H) / 8) + 1;
+    let foreign = false;
+    for (let cy = cy0; cy <= cy1 && !foreign; cy++) {
+      const row = wrap(cy - cY0, cN) * cStride;
+      for (let cx = cx0; cx <= cx1; cx++) if (climate[row + wrap(cx - cX0, cN)] !== TEMPERATE) { foreign = true; break; }
+    }
+    if (!foreign) climate = undefined;
+  }
   // Dunes: a desert's sand seas stand in real relief, so they are lit, shade and cast shadow like any hill. A pure
   // function of the cell, the smooth ground and the climate at the C node nearest it; nothing where no sand lies.
-  const climate = world.temp;
   if (climate !== undefined) {
     let rise: Float32Array | null = null;
     for (let y = 1; y < H - 1; y++) {
@@ -730,7 +741,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     const cu = (wx + 0.5) / 8 - 0.5, cj = Math.floor(cu);
     cI0[x] = wrap(cj - cX0, cN); cI1[x] = wrap(cj + 1 - cX0, cN); cF[x] = cu - cj;
   }
-  const { hand, shore, moisture, wind, exposure, debris, rock, regions, temp } = world;
+  const { hand, shore, moisture, wind, exposure, debris, rock, regions } = world;
+  const temp = climate;
   // Shore classes live on the one ring of nodes at the water. Spread two nodes inland and voted by the corners'
   // weights, they bound beaches by the coast's own curve and not by 4-cell blocks.
   let shoreD: Uint8Array | null = null;
