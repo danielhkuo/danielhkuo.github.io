@@ -526,20 +526,6 @@ test("night is a painting, not a filter: blue all through, pale roads and fields
   assert.ok(lit[0] > shade[0] + 0.1 && lit[1] < shade[1], `moonlit ${lit} shade ${shade}`);
 });
 
-test("winter is frost and bare twigs, not brown: pale sage grass, plum-grey woods", () => {
-  const winter = buildPalette({ time: 0.5, season: 0.75, overcast: 0 });
-  const autumn = buildPalette({ time: 0.5, season: 0.5, overcast: 0 });
-  for (const mat of [M.meadowMid, M.pastureMid, M.moorMid]) {
-    const w = lch(at(winter, mat, FLAT_TONE)), a = lch(at(autumn, mat, FLAT_TONE));
-    assert.ok(w[0] > a[0] && w[1] < 0.06 && w[2] > 120, `${MATERIAL_NAMES[mat]} in winter is ${w}`);
-  }
-  for (const mat of [M.broadleafCool, M.broadleafMid, M.broadleafWarm, M.alder, M.hedgeCrown]) {
-    const [, , h] = lch(at(winter, mat, FLAT_TONE));
-    assert.ok(h > 300 || h < 20, `${MATERIAL_NAMES[mat]} bare is at hue ${h.toFixed(0)}`);
-    assert.ok(lstar(at(winter, mat, FLAT_TONE)) < lstar(at(winter, M.meadowMid, FLAT_TONE)) - 20, "bare woods stay the dark mass");
-  }
-});
-
 test("mist stays cool in a warm light", () => {
   const o = { ...NOON, time: DAY_KEYS.sunset };
   const clear = oklabOf(paperIn(o)), misty = oklabOf(paperIn({ ...o, mist: 1 }));

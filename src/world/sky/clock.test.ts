@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dayOfYear, daylight, LONGEST_DAY, parseSeason, parseTime, PHASES, SEASONS, seasonOf, SHORTEST_DAY, SOLAR_NOON, sunPhase } from "./clock.ts";
+import { dayOfYear, daylight, LONGEST_DAY, parseSeason, parseTime, PHASES, SEASONS, SHORTEST_DAY, SOLAR_NOON, sunPhase } from "./clock.ts";
 
 const JUNE = dayOfYear(2026, 6, 21);
 const DECEMBER = dayOfYear(2026, 12, 21);
@@ -52,15 +52,6 @@ test("a summer evening at eight is still day; a winter one is night", () => {
   assert.ok(sunPhase(7, JUNE) > 0.25);
 });
 
-test("seasons follow the date: spring in April, summer in July, autumn in October, winter in January", () => {
-  const at = (m: number, d: number): number => seasonOf(dayOfYear(2026, m, d));
-  assert.ok(Math.abs(at(4, 15) - SEASONS.spring) < 0.01 || Math.abs(at(4, 15) - 1) < 0.01);
-  assert.ok(Math.abs(at(7, 15) - SEASONS.summer) < 0.01);
-  assert.ok(Math.abs(at(10, 14) - SEASONS.autumn) < 0.01);
-  assert.ok(Math.abs(at(1, 13) - SEASONS.winter) < 0.01);
-  for (let doy = 1; doy <= 366; doy++) assert.ok(seasonOf(doy) >= 0 && seasonOf(doy) < 1);
-});
-
 test("?time= takes a name, a clock time or a phase, and nothing else", () => {
   assert.equal(parseTime("dusk", MARCH), PHASES.dusk);
   assert.equal(parseTime(" Night ", MARCH), PHASES.night);
@@ -72,7 +63,7 @@ test("?time= takes a name, a clock time or a phase, and nothing else", () => {
   for (const bad of [null, "", "teatime", "25:00", "12:75", "1.5", "-0.2"]) assert.equal(parseTime(bad, MARCH), null, `${bad}`);
 });
 
-test("?season= takes a name or a number from 0 to 1", () => {
+test("--season takes a name or a number from 0 to 1", () => {
   assert.equal(parseSeason("winter"), SEASONS.winter);
   assert.equal(parseSeason("0.4"), 0.4);
   for (const bad of [null, "", "monsoon", "2"]) assert.equal(parseSeason(bad), null);

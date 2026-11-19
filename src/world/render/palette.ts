@@ -167,13 +167,13 @@ function all(c: Lch): Seasons {
   return [c, c, c, c];
 }
 
-/** Grass through the year from its summer colour: fresh in spring, tawny in autumn, a pale frosted sage in winter. */
+/** Grass through the year from its summer colour: fresh in spring, tawny in autumn, bleached in winter. */
 function grass(c: Lch): Seasons {
   return [
     [c[0] + 0.012, c[1] + 0.012, c[2] + 1],
     c,
     [c[0] - 0.012, c[1] - 0.022, c[2] - 15],
-    [c[0] + 0.01, c[1] - 0.058, c[2] + 12],
+    [c[0] - 0.045, c[1] - 0.045, c[2] - 24],
   ];
 }
 
@@ -258,17 +258,16 @@ function buildSpecs(): Spec[] {
 
   // Woods.
   // Floors sit between the crowns' shade and open grass, so a floor cell with no tree on it is not a dark tick.
-  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.5, 0.075, 147], [0.5, 0.06, 85], [0.6, 0.026, 75]], LAND);
+  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.5, 0.075, 147], [0.5, 0.06, 85], [0.5, 0.03, 60]], LAND);
   set(M.floorConifer, evergreen([0.44, 0.055, 160]), LAND);
-  // Woods are the dark mass of a lowland view; meadows and corn the light one. Bare in winter they are a plum-grey
-  // haze of twigs over pale litter, cool against the frosted grass: never a brown.
-  set(M.broadleafCool, [[0.57, 0.095, 146], [0.46, 0.08, 156], [0.6, 0.085, 112], [0.44, 0.03, 335]], CANOPY);
-  set(M.broadleafMid, [[0.61, 0.11, 135], [0.51, 0.092, 142], [0.66, 0.095, 88], [0.47, 0.03, 348]], CANOPY);
-  set(M.broadleafWarm, [[0.65, 0.115, 126], [0.56, 0.098, 128], [0.56, 0.095, 52], [0.5, 0.032, 5]], CANOPY);
+  // Woods are the dark mass of a lowland view; meadows and corn the light one.
+  set(M.broadleafCool, [[0.57, 0.095, 146], [0.46, 0.08, 156], [0.6, 0.085, 112], [0.5, 0.022, 25]], CANOPY);
+  set(M.broadleafMid, [[0.61, 0.11, 135], [0.51, 0.092, 142], [0.66, 0.095, 88], [0.52, 0.028, 50]], CANOPY);
+  set(M.broadleafWarm, [[0.65, 0.115, 126], [0.56, 0.098, 128], [0.56, 0.095, 52], [0.54, 0.032, 65]], CANOPY);
   set(M.coniferCool, evergreen([0.37, 0.05, 178]), CANOPY);
   set(M.coniferMid, evergreen([0.39, 0.055, 165]), CANOPY);
   set(M.coniferWarm, evergreen([0.42, 0.06, 152]), CANOPY);
-  set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.46, 0.028, 340]], CANOPY);
+  set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.5, 0.02, 30]], CANOPY);
   set(M.shrub, evergreen([0.46, 0.07, 141]), CANOPY);
 
   // Crops ripen and are cut; ploughland shows in winter.
@@ -308,7 +307,7 @@ function buildSpecs(): Spec[] {
   for (let v = 0; v < 3; v++) {
     set(M.meadowCool + v, grass(meadow[v]), LAND);
     set(M.pastureCool + v, grass(pasture[v]), LAND);
-    set(M.scrubCool + v, [scrub[v], scrub[v], [scrub[v][0], scrub[v][1], scrub[v][2] - 8], [scrub[v][0], scrub[v][1] - 0.04, scrub[v][2] + 8]], LAND);
+    set(M.scrubCool + v, [scrub[v], scrub[v], [scrub[v][0], scrub[v][1], scrub[v][2] - 8], [scrub[v][0] - 0.02, scrub[v][1] - 0.015, scrub[v][2] - 10]], LAND);
   }
 
   // Flowers are out in spring and summer; afterwards the cell is meadow again.
@@ -325,7 +324,7 @@ function buildSpecs(): Spec[] {
   set(M.bracken, [[0.63, 0.075, 98], [0.67, 0.092, 122], [0.63, 0.095, 58], [0.57, 0.06, 55]], LAND);
   // Gorse blooms gold in spring and keeps a little of it all summer.
   set(M.gorse, [[0.66, 0.105, 100], [0.6, 0.09, 108], [0.55, 0.07, 122], [0.53, 0.06, 125]], LAND);
-  set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.45, 0.03, 345]], CANOPY);
+  set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
   set(M.wall, all([0.69, 0.012, 265]), LINE);
 
   // Built things. Walls are seen from the south, in soft shade: their own tone carries that, so the flat colour is the lit one.

@@ -14,8 +14,6 @@ export const LONGEST_DAY = 15.5;
 export const SHORTEST_DAY = 8.5;
 /** Clock hour of noon, a middle way between standard and summer time. */
 export const SOLAR_NOON = 12.5;
-/** Day of the year (15 April) where spring is at its height: the palette's season 0. */
-const SPRING = 105;
 
 /** Named moments for `?time=`, as sun phase. */
 export const PHASES = {
@@ -30,7 +28,7 @@ export const PHASES = {
   dusk: 0.76,
 } as const;
 
-/** Named seasons for `?season=`, as the palette's season. */
+/** Named seasons for the tools' `--season`, as the palette's season. The page always flies in summer. */
 export const SEASONS = { spring: 0, summer: 0.25, autumn: 0.5, winter: 0.75 } as const;
 
 function wrap01(v: number): number {
@@ -66,15 +64,6 @@ export function sunPhase(hour: number, doy: number): number {
 }
 
 /**
- * The palette's season on day `doy`: 0 in mid-April, 0.25 mid-July, 0.5 mid-October, 0.75 mid-January. Not used by
- * the page yet: whether seasons follow the date or the place is the owner's call (2026-11-18); until then it flies
- * in summer.
- */
-export function seasonOf(doy: number): number {
-  return wrap01((doy - SPRING) / YEAR);
-}
-
-/**
  * A `?time=` value as sun phase on day `doy`, or null when it names nothing: a name from PHASES, a clock time `HH:MM`
  * (or `HH`), or a phase from 0 to 1 (`0.75`).
  */
@@ -94,7 +83,7 @@ export function parseTime(query: string | null, doy: number): number | null {
   return null;
 }
 
-/** A `?season=` value as the palette's season, or null: a name from SEASONS or a number from 0 to 1. */
+/** A `--season` value as the palette's season, or null: a name from SEASONS or a number from 0 to 1. */
 export function parseSeason(query: string | null): number | null {
   if (query === null) return null;
   const q = query.trim().toLowerCase();
