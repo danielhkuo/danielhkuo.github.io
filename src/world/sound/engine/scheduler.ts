@@ -64,9 +64,13 @@ export function createLedger(): Ledger {
 export interface Scheduler {
   /**
    * One pass at world time `t`, `dt` after the last frame: appends to `due` every cue to start now. Call every frame
-   * while sound is running.
+   * while sound is running. With `first` and `count`, only those sources are asked this time (round the list): each
+   * keeps its own window, so a source asked every few frames finds just what it would have found asked every frame,
+   * as long as it is asked well within the lookahead.
    */
-  pass(t: number, dt: number, lookahead: number, due: Due[]): void;
+  pass(t: number, dt: number, lookahead: number, due: Due[], first?: number, count?: number): void;
+  /** How many sources it asks in all. */
+  readonly size: number;
   /** Everything that was started has been stopped (a mute, a hide): forget it, and rejoin on the next pass. */
   clear(): void;
   readonly ledger: Ledger;
@@ -75,10 +79,13 @@ export interface Scheduler {
 export function createScheduler(sources: readonly CueSource[]): Scheduler {
   const ledger = createLedger();
   const scratch: Cue[] = [];
-  /** Sources that have had a pass. One that joins later (its buffers arrived) is treated as after a gap, for itself alone. */
-  const known = new Set<CueSource>();
-  let until = NaN;
-  let gap = true;
+  /**
+   * Each source's window: asked up to `untilOf[i]` (undefined until its first pass: one that joins later, its buffers
+   * arrived, is treated as after a gap, for itself alone); `rejoinOf[i]`, a gap or a stall it has not yet had a pass
+   * since.
+   */
+  const untilOf: number[] = [];
+  const rejoinOf: boolean[] = [];
 
   const take = (kind: string, cue: Cue, rejoin: boolean, due: Due[]) => {
     const key = `${kind}:${cue.key}`;
@@ -90,33 +97,38 @@ export function createScheduler(sources: readonly CueSource[]): Scheduler {
 
   return {
     ledger,
-    pass(t, dt, lookahead, due) {
-      const stalled = dt > STALL;
-      const rejoin = gap || stalled || until !== until;
-      if (rejoin) until = t;
-      gap = false;
+    get size() {
+      return sources.length;
+    },
+    pass(t, dt, lookahead, due, first = 0, count = sources.length) {
+      // A stall is a gap for every source, had at its next pass.
+      if (dt > STALL) rejoinOf.fill(true);
       const t1 = t + lookahead;
-      for (const src of sources) {
-        const fresh = !known.has(src);
-        if (fresh) known.add(src);
-        if ((rejoin || fresh) && src.lookBack > 0) {
+      const k = Math.min(count, sources.length);
+      for (let j = 0; j < k; j++) {
+        const i = (first + j) % sources.length;
+        const src = sources[i];
+        const was = untilOf[i];
+        const rejoin = rejoinOf[i] === true || was === undefined || was !== was;
+        rejoinOf[i] = false;
+        if (rejoin && src.lookBack > 0) {
           scratch.length = 0;
           src.cues(t - src.lookBack, t, scratch);
           for (const cue of scratch) if (cue.t + (cue.lasts ?? 0) > t + WORTH) take(src.kind, cue, true, due);
         }
-        const from = fresh ? t : until;
+        const from = rejoin ? t : was;
         if (t1 > from) {
           scratch.length = 0;
           src.cues(from, t1, scratch);
           for (const cue of scratch) take(src.kind, cue, false, due);
         }
+        untilOf[i] = t1 > from ? t1 : from;
       }
-      if (t1 > until) until = t1;
       ledger.prune(t);
     },
     clear() {
       ledger.clear();
-      gap = true;
+      rejoinOf.fill(true);
     },
   };
 }

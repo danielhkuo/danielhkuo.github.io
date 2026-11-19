@@ -294,7 +294,8 @@ async function fly(browser, origin, opts, label, rate) {
   // The sound's ms with the kit's share taken out, frame by frame.
   const soundNoKit = res.soundMs.map((ms, i) => Math.max(0, ms - (res.soundKit[i] ?? 0)));
   // The unlock frame is the first in which the sound did anything; the longest frames after it, with what they did
-  // (bits: 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample).
+  // (bits: 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample, 128 the lanes,
+  // 256 the scheduler, 512 the census, 1024 the mix's second half, 2048 the waves' second half).
   const unlock = res.soundMs.findIndex((ms, i) => ms > 0 || (res.soundWork[i] ?? 0) !== 0);
   const after = res.soundMs.map((ms, i) => ({ ms, frame: i - unlock, work: res.soundWork[i] ?? 0, kit: res.soundKit[i] ?? 0 })).filter((f) => f.frame > 0);
   const longest = [...after].sort((a, b) => b.ms - a.ms).slice(0, 6).map((f) => ({ ms: Number(f.ms.toFixed(2)), frame: f.frame, work: f.work, kitMs: Number(f.kit.toFixed(2)) }));
