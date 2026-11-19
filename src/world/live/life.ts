@@ -45,7 +45,10 @@ const FLEE_UP = 71;
 const FLEE_DOWN = 48;
 /** A boat and its wake: up to this many pixels from the boat's point, either way. */
 const BOAT_REACH = 10;
-/** Smoke climbs up to 8 pixels to the ridge, rises up to 15 over it and leans up to 8 downwind. */
+/**
+ * Smoke climbs up to 8 pixels to the ridge, rises up to 15 over it and leans up to 8 downwind. A town counts as near the
+ * frame within SMOKE_REACH, the frame's half-diagonal and SMOKE_SLACK cells of its middle.
+ */
 const SMOKE_UP = 24;
 const SMOKE_LEAN = 9;
 const SMOKE_SLACK = 86;
