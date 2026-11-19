@@ -82,6 +82,10 @@ Last updated 2026-11-18.
   `specs/2026-11-18-teaching-the-controls-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
+- **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
+  landing coil and resting no longer make them jump across the sky or hang in the air; boats float on the water drawn
+  under them, so their keels no longer blink under the sea; the flier's wake stays on the water it was laid on and
+  fades, rather than vanishing the moment the flier crosses the shore. Pinned frame by frame in `live/coast.test.ts`.
 
 ## Next: the world comes alive
 
