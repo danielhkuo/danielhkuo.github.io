@@ -6,14 +6,15 @@
 
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { MINIMAL_PAGE } from "../../components/title/phone/copy";
 import { INK_SOFT, text, VERMILION } from "../../world/controls/glyphs";
 import type { Card } from "../../world/mobile/lifecycle";
 import { cardPlate, phoneTurn, titleFoil } from "../../world/mobile/art";
 import styles from "./card.module.css";
 import PixelGlyph from "./PixelGlyph";
 
-/** Where "read the short version" goes: the whole site on one plain page. */
-export const SHORT_VERSION = "/recruiter";
+/** Where "read the short version" goes: the minimal version, through the phone title's one constant. */
+export const SHORT_VERSION = MINIMAL_PAGE;
 
 export interface FlightCardProps {
   card: Card;

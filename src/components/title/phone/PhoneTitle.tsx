@@ -1,6 +1,6 @@
 // The phone's own title screen (mobile spec 2): "a page of an illuminated book". A small rose window heads the page,
-// then the name, an inked rule, and the ways in as a short contents page. The Recruiter, the whole site on one plain
-// page, leads and is preselected, so a phone gets the short version first; flying is the second choice. Plain links,
+// then the name, an inked rule, and the ways in as a short contents page. The minimal version, the whole site as plain
+// text on one page, leads and is preselected, so a phone gets it first; flying is the second choice. Plain links,
 // so it reads as a list to a screen reader and works without JavaScript. Game layer: hand-drawn SVG and CSS, not
 // Astryx.
 
@@ -28,7 +28,7 @@ export interface PhoneTitleProps {
   entries: readonly PhoneEntry[];
   /** Shown under the name. */
   tagline: string;
-  /** The entry selected as the page opens: the Recruiter. */
+  /** The entry selected as the page opens: the minimal version. */
   selected: string;
 }
 

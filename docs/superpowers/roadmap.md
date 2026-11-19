@@ -114,7 +114,7 @@ Last updated 2026-11-18.
   the page, a blur, a stall, Back or a lost fullscreen pauses; Fly on resumes. Nothing zooms, scrolls, refreshes or
   selects on `/world`. Phones bake with two workers and step down to 30 fps when frames run long. Hand, size, fade, one
   thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (14 flows, real multi-touch in
-  phone emulation). The phone's own title screen (a rose-window contents page, the Recruiter first) is built at the
+  phone emulation). The phone's own title screen (a rose-window contents page, the minimal version first) is built at the
   noindex bench `/phone-title`, to be mounted on `/` together with the desktop title.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.

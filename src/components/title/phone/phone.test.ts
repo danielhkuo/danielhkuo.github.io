@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { PHONE_QUERY } from "./phone.ts";
-import { phoneEntries, TERMINAL_PAGE } from "./copy.ts";
+import { MINIMAL_PAGE, PHONE_DEFAULT, phoneEntries, TERMINAL_PAGE } from "./copy.ts";
 
 test("the switch's CSS uses the phone query, and hides the other side with display: none", () => {
   const css = readFileSync(new URL("./PhoneSwitch.module.css", import.meta.url), "utf8");
@@ -14,14 +14,17 @@ test("the switch's CSS uses the phone query, and hides the other side with displ
   assert.match(css, /\.desk \{\s*display: contents;/);
 });
 
-test("the Recruiter leads the phone's ways in, and flying comes second, sideways", () => {
+test("the minimal version leads the phone's ways in and opens preselected; flying comes second, sideways", () => {
   const e = phoneEntries(1.5);
-  assert.deepEqual(e.map((x) => x.id), ["recruiter", "wayfarer", "artificer", "herald"]);
-  assert.equal(e[0].href, "/recruiter");
+  assert.deepEqual(e.map((x) => x.label), ["Minimal version", "Enter world", "agents.md"]);
+  assert.equal(e[0].href, MINIMAL_PAGE);
   assert.equal(e[0].lead, true);
+  assert.equal(PHONE_DEFAULT, e[0].id);
   assert.equal(e[1].href, "/world");
   assert.equal(e[1].sideways, true);
   assert.match(e[1].meta ?? "", /about 1\.5 MB/);
   assert.equal(phoneEntries(0)[1].meta, "turn sideways");
-  assert.equal(e[2].href, TERMINAL_PAGE);
+  assert.equal(e[2].href, "/agents.md");
+  // The terminal is folded into the minimal version: no way in of its own.
+  assert.ok(e.every((x) => x.href !== TERMINAL_PAGE));
 });

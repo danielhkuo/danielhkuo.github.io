@@ -731,15 +731,19 @@ the build departs from the sections above:
   world to have sound.
 - **The phone title (§2).** Built in `src/components/title/phone/` (`PhoneTitle`, its own `copy.ts`) and shown only
   at the noindex bench route `/phone-title`, where Fable judged it.
+- **Its entries (coordinator, 2026-11-19).** The terminal is folded into the minimal version, so the ways in are
+  "Minimal version" (preselected), "Enter world" and "agents.md". The minimal version's route is one constant,
+  `MINIMAL_PAGE` in `title/phone/copy.ts`, which the world's "Read the short version" link also reads.
 - **Not yet the front door (coordinator, 2026-11-19).** The owner is picking the desktop title after all, so the two
   are to be mounted on `/` together. `PhoneSwitch` is ready for it: one wrapper with the phone title on one side and
   the desktop page on the other. CSS chooses on the title's phone query (`phone.ts`, held to the CSS by a test). The
   desktop side sits in a `display: contents` box, so it lays out as if unwrapped, and the hidden side is
   `display: none`, out of the accessibility tree. A trial mount (commit `9b608f4`, reverted afterwards) checked this
   element by element against the base build at 700, 1280 and 1600 px, and axe passed the phone side. The desktop
-  title's `copy.ts` and `title/phone/copy.ts` name the same four ways in, so they should become one list when mounted.
-- **Links into other branches.** "Read the short version" goes to `/recruiter` (on `feat/dragon-world`), and on a phone
-  the abbey's terminal opens `/artificer#terminal`, which exists only once the title-menu work lands.
+  title's `copy.ts` and `title/phone/copy.ts` name the ways in separately, so they should become one list when mounted.
+- **Links into other branches.** "Read the short version" goes to `MINIMAL_PAGE`, for now `/recruiter` (on
+  `feat/dragon-world`), and on a phone the abbey's terminal opens `/artificer#terminal`, which exists only once the
+  title-menu work lands.
 
 Tests, as §9 asks:
 - **Unit, `npm test`.** `controls/{stick,steer,touch,options-touch,guides}`; `mobile/{layout,turned,lifecycle,perf,tilt,art}`.
