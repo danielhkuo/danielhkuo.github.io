@@ -129,7 +129,7 @@ export function treeDensity(c: CoverInput, groundMat: number, shift: number = 0)
   // No acacia on a steep bank or a sharp crest: a flat crown belongs to level ground.
   if (inTriple(groundMat, M.savannaCool)) return (c.steep === undefined ? c.slope : c.steep) > 0.26 || (c.curve !== undefined && c.curve > 1.2) ? 0 : DENSITY.acacia * (0.12 + 0.88 * clamp01((c.moisture - 0.32) / 0.3));
   // The cold steppe is grass: a third of the bushes the hot country's thin steppe has.
-  if (inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale) return DENSITY.thorn * (groundMat === M.reg ? 0.15 : groundMat === M.earthPale ? 0.3 : shift >= 0 ? 0.35 : 1);
+  if (inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale) return DENSITY.thorn * (groundMat === M.reg ? 0.05 : groundMat === M.earthPale ? 0.1 : shift >= 0 ? 0.15 : 1);
   if (groundMat === M.tigerBush) return DENSITY.tigerBush;
   if (groundMat === M.garrigue) return DENSITY.garrigue;
   if (groundMat === M.mud) return DENSITY.mangrove;
@@ -139,7 +139,7 @@ export function treeDensity(c: CoverInput, groundMat: number, shift: number = 0)
   if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c) * lone;
   if (groundMat === M.marsh) return DENSITY.marshTree;
   if (groundMat === M.hedge) return DENSITY.hedge;
-  if (inTriple(groundMat, M.scrubCool)) return DENSITY.shrub * (0.5 + 0.5 * clamp01(c.moisture / 0.3));
+  if (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool)) return DENSITY.shrub * (0.5 + 0.5 * clamp01(c.moisture / 0.3));
   return 0;
 }
 
@@ -229,6 +229,8 @@ export function scatterAt(
   const heat = shift < 0 ? heatOf(c.temp as number) : 0;
   /** The dry side of the world (CoverInput.arid): olives, cypress and pines are its trees, never the wet side's. */
   const dryside = c.arid !== undefined && c.arid > 0.5;
+  /** Ground of the wet side's warm forest that carries palms: its clearings' grass, and its shore's sand above the tide. */
+  const warmPalm = !dryside && heat > 0.12 && (inTriple(groundMat, M.pastureCool) || inTriple(groundMat, M.meadowCool) || (groundMat === M.sand && c.e > 0.7));
 
   const treeRoll = maskAt(mask, x, y, TREE_OX, TREE_OY);
 
@@ -266,20 +268,22 @@ export function scatterAt(
     // Palms: over the plots of an oasis, and along the back of a tropical beach. Cypress: on the dry sward of the Mediterranean.
     if (inTriple(groundMat, M.pastureCool) && heat > 0.36 && c.moisture < 0.36) density = DENSITY.oasisPalm;
     else if (groundMat === M.sandPale && heat > 0.58 && c.e > 0.7) density = DENSITY.beachPalm * clamp01((c.moisture - 0.3) / 0.3);
-    else if (dryside && heat < 0.5 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.steppeCool)) && u4 > 0.9) density = DENSITY.cypress * clamp01(heat / 0.15);
+    else if (dryside && heat < 0.5 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool) || inTriple(groundMat, M.steppeCool)) && u4 > 0.9) density = DENSITY.cypress * clamp01(heat / 0.15);
+    // The warm forest of the wet side: palms stand in its clearings and along its shores, more of them toward the tropics.
+    else if (warmPalm) density = Math.max(density, (groundMat === M.sand ? DENSITY.beachPalm : 0.034) * clamp01((heat - 0.12) / 0.14));
   }
   // Sparse trees and bushes are gathered: a spinney's or a thicket's cells are dense, the sward between has next to none.
   if (density > 0 && density <= SPARSE) {
     density *= groundMat === M.marsh
       ? clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0)
-      : heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))
+      : (heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))) || (warmPalm && groundMat === M.sand)
         // Palms stand apart, evenly: that evenness is what a palm grove is.
         ? 1
         : inTriple(groundMat, M.savannaCool)
           // Acacias stand in open parkland: loose groves a hundred cells across, each tree apart from the next, and
           // wide grass between the groves with a lone tree here and there.
           ? 0.06 + 1.5 * clamp01(2.2 * (softNoise(x, y, n, 110, CLUMP_SEED + 2) + 0.35 * softNoise(x, y, n, 30, CLUMP_SEED + 3) + 0.12))
-        : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.tundraCool) || inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale
+        : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool) || inTriple(groundMat, M.tundraCool) || inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale
         ? gathered(x, y, n, THICKET_CELLS, 0.14, THICKET_PEAK, 0, 0.41)
         : gathered(x, y, n, SPINNEY_CELLS, 0.3, SPINNEY_PEAK, c.region[0] > 0.5 ? SPINNEY_FLOOR : 0, 0.17);
   }
@@ -359,12 +363,12 @@ export function scatterAt(
       r = 1.3 + 0.8 * u1;
       h = 1.7 + 0.8 * u4;
       mat = M.mangrove;
-    } else if (heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))) {
+    } else if ((heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))) || (warmPalm && (groundMat === M.sand || u2 < clamp01((heat - 0.1) / 0.16)))) {
       r = 2;
       h = 5 + Math.floor(3 * u4);
       mat = M.palm;
       shape = SHAPE.palm;
-    } else if (dryside && heat > 0 && inTriple(groundMat, M.scrubCool) && (u4 > 0.9 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
+    } else if (dryside && heat > 0 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool)) && (u4 > 0.9 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
       // The Mediterranean's dry sward: a cypress spire here and there, and olives where the temperate sward has bushes.
       if (u4 > 0.9 && heat < 0.5) {
         r = 0.75 + 0.2 * u1;
@@ -413,7 +417,7 @@ export function scatterAt(
       r = 1.1 + 0.9 * u1 * u1;
       h = 1.6 * r + 1.5;
       mat = M.birch;
-    } else if (inTriple(groundMat, M.scrubCool)) {
+    } else if (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool)) {
       r = 0.8 + 0.6 * u1;
       h = 1 + u4;
       mat = M.shrub;

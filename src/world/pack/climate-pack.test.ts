@@ -111,7 +111,7 @@ test("a core of a world with climates carries the haze's washes beside its overv
   assert.equal(wash[(cN - 1) * cN], MATERIAL.desertSand);
   // The row nearest the plateau is left to the height.
   const mid = Math.round((cN - 1) / 2);
-  assert.ok(wash[mid * cN] === MATERIAL.scrubMid || wash[mid * cN] === MATERIAL.steppeMid);
+  assert.ok(wash[mid * cN] === MATERIAL.sageMid || wash[mid * cN] === MATERIAL.steppeMid);
   // The same world on the wet side: no sand at the equator, and the plateau's row left to the height.
   world.arid = undefined;
   const wet = (await decodeCore((await encodeTiled(world, { regionCells: 128 })).core.bin)).overviewWash as Uint8Array;

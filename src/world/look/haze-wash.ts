@@ -27,7 +27,7 @@ export function hazeWashAt(h: number, temp: number, rain: number, arid: number =
   if (h <= 0) return heat > 0.55 ? M.seaClear : 0;
   const hl = heat - h / HEAT_LAPSE;
   if (!dryside) return hl > 0.5 ? M.jungleMid : 0;
-  if (hl <= HOT_EDGE) return hl > 0.2 ? M.steppeMid : M.scrubMid;
+  if (hl <= HOT_EDGE) return hl > 0.3 ? M.steppeMid : M.sageMid;
   if (rain < DESERT_RAIN) return M.desertSand;
   if (rain < STEPPE_RAIN) return M.steppeMid;
   const belt = hl >= 0.9 ? 0 : hl < 0.68 ? (hl - 0.5) / 0.18 : (0.9 - hl) / 0.22;

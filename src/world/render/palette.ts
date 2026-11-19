@@ -390,7 +390,7 @@ function buildSpecs(): Spec[] {
   set(M.glacier, all([0.82, 0.055, 218]), SNOWY);
   set(M.berg, all([0.93, 0.022, 226]), SNOWY);
   set(M.firn, all([0.905, 0.03, 238]), SNOWY);
-  set(M.crevasse, all([0.6, 0.06, 232]), LINE);
+  set(M.crevasse, all([0.74, 0.04, 232]), LINE);
 
   // Steppe: khaki to straw, between the Mediterranean's sage and the savanna's gold.
   // Dry grass greys a little in winter, and is never lighter in shade than the palest field of its season.
@@ -399,8 +399,12 @@ function buildSpecs(): Spec[] {
   set(M.steppeMid, dryGrass([0.78, 0.058, 98]), LAND);
   set(M.steppeWarm, dryGrass([0.805, 0.06, 93]), LAND);
   set(M.garrigue, [[0.73, 0.024, 310], [0.735, 0.018, 300], [0.72, 0.03, 90], [0.71, 0.025, 95]], UPLAND);
+  // Sage: the Mediterranean's sward, greyer and paler than any temperate green and greener than the steppe's khaki.
+  set(M.sageCool, dryGrass([0.725, 0.036, 132]), LAND);
+  set(M.sageMid, dryGrass([0.76, 0.04, 124]), LAND);
+  set(M.sageWarm, dryGrass([0.79, 0.044, 114]), LAND);
   // Bare earths. Sand, salt and gravel shade warm, as a dune does: a violet shade is stone's.
-  const DUNE = { drop: 0.27, rise: 0.4, cool: 0.03, coolHue: 300, warm: 0.045, ramp: "land" } as const;
+  const DUNE = { drop: 0.27, rise: 0.4, cool: 0.014, coolHue: 340, warm: 0.045, ramp: "land" } as const;
   set(M.earthPale, all([0.84, 0.036, 80]), DUNE);
   set(M.earthRed, all([0.64, 0.068, 44]), DUNE);
   set(M.desertSand, all([0.865, 0.064, 78]), DUNE);
@@ -425,7 +429,7 @@ function buildSpecs(): Spec[] {
   set(M.cypress, evergreen([0.3, 0.04, 165]), CANOPY);
   set(M.pine, evergreen([0.42, 0.06, 148]), CANOPY);
   set(M.olive, evergreen([0.62, 0.035, 135]), CANOPY);
-  set(M.maquis, evergreen([0.45, 0.06, 142]), CANOPY);
+  set(M.maquis, evergreen([0.5, 0.05, 132]), CANOPY);
   set(M.acacia, evergreen([0.5, 0.058, 122]), CANOPY);
   // Jungle: deeper and more saturated than any temperate wood, in greens far enough apart that the canopy is lumpy.
   set(M.jungleCool, evergreen([0.36, 0.072, 160]), CANOPY);

@@ -26,13 +26,13 @@ export const BENCH_STEP = 11;
 const BENCH_TREAD = 0.985;
 const BENCH_RISE = 0.14;
 /** Dune ridges: the greatest height in units, and cells from crest to crest along the wind. */
-export const RIDGE_HEIGHT = 8;
-const RIDGE_CELLS = 58;
+export const RIDGE_HEIGHT = 6.5;
+const RIDGE_CELLS = 40;
 /** The ice sheet fills hollows toward the land's surface smoothed over this many G nodes, by this share. */
 const ICE_RADIUS = 10;
 const ICE_FILL = 0.75;
 /** Karst towers: one to a lattice square of this many cells with this chance; radius in cells and height in units. */
-const TOWER = { cells: 34, chance: 0.6, r0: 7, r1: 12, h0: 12, h1: 22 };
+const TOWER = { cells: 34, chance: 0.6, r0: 7, r1: 11, h0: 14, h1: 25 };
 /** Rock domes of the savanna. */
 const DOME = { cells: 240, chance: 0.42, r0: 20, r1: 36, h0: 12, h1: 24 };
 
@@ -78,7 +78,7 @@ export function ridgeAt(x: number, y: number, n: number): number {
   const crests = Math.max(1, Math.round(n / (RIDGE_CELLS * 1.4142)));
   const t = ((x - y + 0.5) * crests) / n + 0.6 * softNoise(x, y, n, 260, SEED + 11) + 0.3 * softNoise(x, y, n, 90, SEED + 12);
   const f = t - Math.floor(t);
-  const ridge = f < 0.6 ? f / 0.6 : (1 - f) / 0.4;
+  const ridge = f < 0.68 ? f / 0.68 : (1 - f) / 0.32;
   const along = 0.5 + 0.9 * softNoise(x, y, n, 150, SEED + 13);
   return ridge * ridge * (3 - 2 * ridge) * (along < 0.15 ? 0.15 : along > 1 ? 1 : along);
 }

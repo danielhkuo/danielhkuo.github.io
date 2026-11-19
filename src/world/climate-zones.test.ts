@@ -307,7 +307,7 @@ for (const [label, region] of [["lakes", LAKES], ["skerry", SKERRY]] as const) {
 // 5. Each climate once a lap: what is the wet side's is not the dry side's.
 
 const SAND = set([M.desertSand, M.desertSandDeep, M.reg, M.salt]);
-const DRY_ONLY = set([...SAND, ...GRASS_HOT, M.garrigue, M.earthPale]);
+const DRY_ONLY = set([...SAND, ...GRASS_HOT, M.garrigue, M.earthPale, M.sageCool, M.sageMid, M.sageWarm]);
 const TAIGA_FLOOR = set([M.floorLichen, M.bog, M.bogRed, M.sedge]);
 
 test("the wet side has no sand, steppe, savanna or garrigue at any temperature, rain shadows included", () => {

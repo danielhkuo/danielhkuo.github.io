@@ -416,7 +416,7 @@ export function coverAtNode(c: SiteContext, gx: number, gy: number): number {
 export function isOpenCover(m: number): boolean {
   return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.wheatRow && m <= M.stubbleRow) ||
     // The open ground of the other climates: tundra, steppe and savanna grass, garrigue, worn earth.
-    (m >= M.tundraCool && m <= M.sedge) || (m >= M.steppeCool && m <= M.steppeWarm) || (m >= M.savannaCool && m <= M.savannaWarm) || m === M.garrigue || m === M.earthPale;
+    (m >= M.tundraCool && m <= M.sedge) || (m >= M.steppeCool && m <= M.steppeWarm) || (m >= M.savannaCool && m <= M.savannaWarm) || (m >= M.sageCool && m <= M.sageWarm) || m === M.garrigue || m === M.earthPale;
 }
 
 /** Ground a plough could work: meadow, pasture or crops; never heath, moor, scrub or wood. */
@@ -1069,7 +1069,7 @@ export interface SiteClimate {
 /**
  * Each kind in a climate that suits it, so that the seven are told apart by their ground as well as their shape:
  * the lighthouse on the cold coast by the pack ice, the yew in temperate country on another island than home, the
- * ruined cathedral in the jungle, the old bridge in the Mediterranean and the windmill on the steppe. The abbey
+ * ruined cathedral in the jungle, the windmill in the Mediterranean and the old bridge on the steppe. The abbey
  * and the town are on the home island, which is temperate by rule.
  */
 export const SITE_CLIMATE: Readonly<Record<LandmarkType, SiteClimate>> = {
@@ -1077,8 +1077,8 @@ export const SITE_CLIMATE: Readonly<Record<LandmarkType, SiteClimate>> = {
   lighthouse: { temp: [0.18, 0.42] },
   yew: { temp: [0.47, 0.53], side: "wet", away: true },
   cathedral: { temp: [0.82, 1] },
-  bridge: { temp: [0.52, 0.7], side: "dry" },
-  windmill: { temp: [0.3, 0.5], side: "dry" },
+  bridge: { temp: [0.3, 0.49], side: "dry" },
+  windmill: { temp: [0.53, 0.72], side: "dry" },
 };
 
 /** How far each end of a kind's temperatures is let out when its own climate has no ground that passes its rule. */

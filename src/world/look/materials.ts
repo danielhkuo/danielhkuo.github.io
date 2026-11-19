@@ -294,11 +294,15 @@ export const MATERIAL = {
   thatch: 162,
   /** A turf roof of the far north. */
   turf: 163,
+  /** Sage sward: the pale grey-olive ground of the Mediterranean, the three on consecutive ids. */
+  sageCool: 164,
+  sageMid: 165,
+  sageWarm: 166,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 164;
+export const MATERIAL_COUNT = 167;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -352,7 +356,7 @@ export const isVegetation: Uint8Array = flags([
   ...triple(M.tundraCool), M.sedge, M.bog, M.bogRed, ...triple(M.spruceCool), M.birch, M.dwarfBirch,
   M.garrigue, M.tigerBush, M.floorJungle, M.thorn, M.cypress, M.pine, M.olive, M.maquis, M.acacia,
   ...triple(M.jungleCool), M.jungleBright, M.jungleBloom, M.palm, M.mangrove, M.cactus,
-  ...triple(M.steppeCool), ...triple(M.savannaCool),
+  ...triple(M.steppeCool), ...triple(M.savannaCool), ...triple(M.sageCool),
 ]);
 
 /** Made things: buildings, walls and paving. */
@@ -369,5 +373,5 @@ export const isGrass: Uint8Array = flags([
   M.wheat, M.barley, M.ley, M.hay, M.reeds,
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow,
   ...triple(M.meadowCool), ...triple(M.pastureCool), M.duneGrass,
-  M.sedge, ...triple(M.steppeCool), ...triple(M.savannaCool),
+  M.sedge, ...triple(M.steppeCool), ...triple(M.savannaCool), ...triple(M.sageCool),
 ]);
