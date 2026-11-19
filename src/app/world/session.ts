@@ -119,6 +119,10 @@ interface FlightProbe {
   baked: () => number;
   error: string | null;
   workerErrors: string[];
+  /** Where the flight is, for the end-to-end tests: position, heading, speed and phase. */
+  state?: () => { x: number; y: number; heading: number; speed: number; phase: string };
+  /** The landmarks the build placed, and what each holds, for the end-to-end tests. */
+  landmarks?: { id: string; holds: string; name: string | null }[];
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -165,6 +169,14 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     }
     : null;
   if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
+  if (probe) {
+    probe.state = () => ({ x: flight?.x ?? 0, y: flight?.y ?? 0, heading: flight?.heading ?? 0, speed: flight?.speed ?? 0, phase: phase.kind });
+    probe.landmarks = (landmarks?.landmarks ?? []).map((l) => ({
+      id: l.id,
+      holds: l.holds.kind,
+      name: l.holds.kind === "project" ? l.holds.project.name : null,
+    }));
+  }
 
   let flight: FlightState | null = null;
   let worldN = 0;
