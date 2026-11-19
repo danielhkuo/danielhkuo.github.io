@@ -121,7 +121,8 @@ Last updated 2026-11-19.
   scrollback is the whole site as static HTML (profile, projects, contact, the other pages), with a live prompt as
   its last line. Every command can be typed or tapped. On a phone the document itself scrolls and nothing is pinned,
   which is what keeps the prompt on Safari's keyboard bar; measured in the iOS Simulator. `/recruiter` forwards to
-  it. Checks: `npm run test:minimal` (Playwright, WebKit) and `npm run a11y`. Design:
+  it. Checks: `npm run test:minimal` (its two WebKit projects in the end-to-end suite, `e2e/minimal/`) and
+  `npm run a11y`. The abbey's terminal in `/world` reads the same files (`site.pages`). Design:
   `specs/2026-11-19-minimal-terminal-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
@@ -147,7 +148,8 @@ Last updated 2026-11-19.
   frame filling the window), keyboard flight, the lesson, the options, landing and the Codex, the abbey's terminal, a
   broken world file, and the other pages. WebKit drew the options panel's labels above their choices; that is fixed,
   as is the Codex's name, which its illuminated initial split ("E mpty-state-repo"). Notes, and what still needs a real
-  Safari or iPhone: `research/2026-11-19-webkit-pass.md`.
+  Safari or iPhone: `research/2026-11-19-webkit-pass.md`. The minimal version's WebKit tests are two more projects of
+  it (`minimal-phone`, `minimal-desktop`, in `e2e/minimal/`), on the one Playwright (1.65.1).
 
 ## Next: the world comes alive
 
@@ -388,5 +390,8 @@ From the first-flight review:
   `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.
 - Owner: open `/minimal` on a real iPhone and type at its prompt. The keyboard behaviour is measured in the iOS 26.5
   Simulator only, with synthesised touches, and not on iOS 27.
+- Owner: in desktop Safari, on `/minimal`, click `cat`, then `projects/`, then `README.md`. The page should rest at
+  the top of the projects, with the prompt below the fold and still holding the keys. WebKit scrolls to a focused
+  field whose value a script changes; the fix is checked in Playwright's WebKit only.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
   `PAGES` list once it passes.

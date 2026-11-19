@@ -241,15 +241,16 @@ new output is simply below the fold.
   - `src/components/minimal/`: `Banner` (neofetch), `Doc` (a markdown file as a document), `Lines` (one line of
     output as HTML), `Session` (the live end: output, the command row, the prompt, programs), `transcript.ts` (the
     opening commands, run on the real shell; the one-line summaries) and `reveal.ts` (the scroll arithmetic).
-  - `scripts/minimal-e2e.mjs` (`npm run test:minimal`) and `scripts/serve-export.mjs`, the export server it shares
-    with `run-axe.mjs`.
+  - `e2e/minimal/`: the WebKit tests, as two projects (`minimal-phone`, `minimal-desktop`) of the end-to-end suite
+    in `playwright.config.ts`. `npm run test:minimal` runs them alone; `npm run e2e` runs them with the rest.
 - **Reused unchanged:** `ScreenView`, the three programs, `fs.ts`, `shell.ts`'s tokenizer, history and completion,
   `tty/`, the Terminal and neofetch styles in `globals.css`.
 - **Extended, without changing what the old terminal does:**
   - `types.ts`: two more kinds of output line (`doc`, `neofetch`), a `run` hint on a text run, two optional methods
     on the command context, `pages` on the site info.
   - `commands.ts`: `cat`, `open` and `neofetch` use those methods when the host has them.
-  - `site.ts`: the new files, in the tree only where the shell is the whole page.
+  - `site.ts`: the new files, in the tree only for a page that gives the site's other pages: this one, and the
+    abbey's terminal in `/world`.
   - `ls.ts`: each listed name carries the command that looks inside it.
   - `markdown.ts`: `parse` and `spans`, the model a document view starts from.
   - `shell.ts`: `suggest()`, the list the command row shows.
@@ -258,14 +259,22 @@ new output is simply below the fold.
 - **Styles** live in `src/app/minimal/minimal.css` under the `mt-` prefix, not in `globals.css`. The page is the
   terminal replica, hand-written like the header and the old window; Astryx does not govern it. The forward at
   `/recruiter` is ordinary page chrome and uses Astryx.
-- **Not touched:** `src/app/page.tsx`, `src/app/layout.tsx`, the title menu, `/world`.
+- **Not touched:** `src/app/page.tsx`, `src/app/layout.tsx`, the title menu.
+- **`/world`, one line:** its page gives the abbey's terminal the site's other pages (`otherPages` in
+  `src/lib/site-content.ts`, which this page uses too). Its contact card no longer points at a form that page does
+  not have, and it gains `~/sitemap.md` and `projects/README.md`. With that comes the one change to what the old
+  window does: its renderer (`markdown.ts`) links a path on this site as well as the web, so the sitemap's pages and
+  the résumé can be followed there. They open in a new tab, like its other links.
 
 ## 7. Tests
 
-- **Unit (`npm test`), 72 new:** the new files and what they print; the opening commands; the one-line summaries;
+- **Unit (`npm test`), 74 new:** the new files and what they print; the opening commands; the one-line summaries;
   the document model and which link targets it allows; `suggest()`; the commands that `ls` names carry; the scroll
-  arithmetic, pinned to the Simulator's numbers; the page list, the JSON-LD and the agent files.
-- **WebKit (`npm run test:minimal`), 41:** Playwright against the static export, at phone and desktop sizes.
+  arithmetic, pinned to the Simulator's numbers; the page list, a page's list of the others, the JSON-LD and the
+  agent files.
+- **WebKit (`npm run test:minimal`), 46:** the `minimal-phone` and `minimal-desktop` projects of the end-to-end
+  suite (`e2e/minimal/`), against the static export. Like every test in that suite, each also fails on any console
+  error or uncaught exception.
   - With JavaScript off, every heading, profile fact and link is present, and no dead control is offered.
   - No sideways scroll at 320, 375 and 390 px, before or after commands print.
   - The document is the only scroller. The prompt row is the last thing in it. Its text is 16 px. Zoom is not
@@ -274,7 +283,10 @@ new output is simply below the fold.
   - Taps: the jump button, a command, a command that needs a file, names in `ls`, commands in `help`, `clear`.
   - Keys: Return, Tab, Shift+Tab, the arrow keys, ⌘K, Escape. A mouse click leaves the keys with the prompt.
   - A program takes the prompt's place, whole on screen, and gives it back.
+  - The start plays once in a tab and leaves the page finished.
   - The old address forwards here.
+  - Where output comes to rest is read once the page has stopped moving. WebKit scrolls to a focused field a moment
+    after a script changes its value; a test that read at once missed it (research doc, "Building the page").
 - **`npm run a11y`:** axe on `/minimal`, no violations, phone and desktop, light and dark.
 - **The iOS Simulator, by hand:** the keyboard cases Playwright cannot show (its WebKit has no on-screen keyboard).
   Run on the final build; screenshots are with the session notes.

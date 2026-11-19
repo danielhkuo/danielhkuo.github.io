@@ -295,6 +295,16 @@ After the sections above were written, the page was built to the in-flow layout 
 >
 > Needs confirming on a real iPhone and on iOS 27.
 
+One more fault is a desktop one, found when the page's tests moved into the end-to-end suite and began to wait for the page to stop moving before reading where output rests.
+
+> **Measured in Playwright's WebKit 27.2 (the desktop build), on the built page, 1280 × 520.**
+>
+> | What the page did | What happened | What fixed it |
+> |---|---|---|
+> | Ran a command from a button clicked with a mouse while the prompt held text (`cat projects/` on the prompt, its last word clicked), and gave the prompt focus back at once, as the design asks for a mouse. Running a line empties the prompt | The page scrolled to the top of the output, as designed. About 25 ms later WebKit scrolled again, to the focused prompt at the foot of the page, with no `scrollBy`, `scrollTo` or `scrollIntoView` call from any script. Emptying a focused field by script while it was off screen scrolled to it every time. A prompt that was already empty did not, since its value did not change. It is not scroll anchoring: content added above a focused prompt moved nothing, and `overflow-anchor: none` changed nothing. Chromium did not scroll | Giving the prompt focus back a frame later, with `preventScroll`, once it has been emptied. Given back in the same task, before or after it was emptied, the page still scrolled |
+>
+> Not checked in Safari itself. The earlier test read the position at once, 25 ms too early to see it.
+
 Some of these extend findings above. The first shows that the viewport's reported position is no better for working out a scroll than for pinning a bar: the probe had already logged `window.scrollY` at 310 while `pageTop` still read 0. The rows on the hidden input agree with the source reading that `preventScroll` suppresses Safari's reveal, and add two things: with the reveal suppressed nothing else moves the page, and the reveal comes back at the first key typed if the field is out of view. That the click handler mattered fits a known rule, that iOS sends a click only to an element it counts as clickable (recalled; React sets an empty click handler on such elements for this reason), but the link to the keyboard is inference. The `<hr>` fault has no source, and no WebKit bug was searched for. The lesson for a hidden input is the same as for a visible one: Safari places a field it can see, and fights a page over one it cannot.
 
 With the fixes in, the final build was taken through each case again: reading, the jump to the prompt, focus, a typed command, a command tapped with the keyboard closed and with it open, a line completed by tapping, and two full-screen programs, one of them taking typed input. In each case the prompt, or the program's input, rested on the bottom of the visible area, directly above Safari's bar when the keyboard was open, and nothing moved once it had settled. Screenshots are in `minimal-terminal-shots/final/` in the session notes.
