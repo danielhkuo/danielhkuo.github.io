@@ -5,6 +5,7 @@
 import type { ViewRect } from "../render/compose.ts";
 import { CRUISE, TURN, type FlightState } from "../runtime/flight.ts";
 import { skinOf, smooth, waveRate, RING_STEP, type Pose } from "./body.ts";
+import { STACK_SHADOW_KEEP } from "../runtime/stack.ts";
 import { LACQUER, type Look } from "./look.ts";
 import { castShadow, drawGroup, drawStrand, figure, pieceOf, place, type Land, type Piece } from "./parts.ts";
 import { ball, filled, limb, put, vox } from "./vox.ts";
@@ -253,7 +254,9 @@ function turned(a: number, b: number): number {
  * either side by a wave of phase pose.wave, and each ring rolls into the turn the head was making when it passed
  * there (s.bank at the head). Above cruising speed the wind of the boost is drawn under the body. Every pixel is depth-tested against the land.
  */
-export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, pose: Pose, look: Look = LACQUER): void {
+export function drawRiver(
+  out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, pose: Pose, look: Look = LACQUER, shadowKeep = STACK_SHADOW_KEEP,
+): void {
   const kit = kitOf(look), n = pose.n;
   const windy = windAmount(s.speed) > 0;
   const joints = pose.chain.joints(windy ? WIND_JOINTS : JOINTS, FINE);
@@ -313,7 +316,7 @@ export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view
   const body = fig.count;
   place(fig, kit.head, s.x, s.y, s.alt - 3, s.heading);
 
-  castShadow(out, rect, view, fig, n);
+  castShadow(out, rect, view, fig, n, shadowKeep);
   // The wind of a boost lies under the body, so the streaks peel out from behind its outline.
   if (windy) {
     drawWind(out, rect, view, s, joints, FINE, n, pose.time, pose.wave, waveRate(s.speed), k, sway, RIVER_REACH - 1);

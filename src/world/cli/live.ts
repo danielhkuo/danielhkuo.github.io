@@ -192,12 +192,13 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
     view.frame(out, time, { x: kite.x, y: kite.y, alt: kite.alt, heading: kite.heading, speed: kite.speed });
     const rect = view.rect();
     sky?.setAir(lit);
+    // The rain falls under the clouds and the flier, as on the page.
+    rain(out, rect, time, lit);
     if (sky) sky.draw(out, rect, time, "below");
     const dragon = flownDragon(o.manifest.n, kite, time);
     dragon.setAir(lit);
     dragon.draw(out, rect, kite, view);
     if (sky) sky.draw(out, rect, time, "above");
-    rain(out, rect, time, lit);
     frames.push(new Uint32Array(out));
   }
   return frames;

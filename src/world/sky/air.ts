@@ -34,6 +34,14 @@ export function airOf(time: number, season: number, weather: Weather = CLEAR_WEA
   };
 }
 
+/**
+ * 0–1: how much direct sun reaches the land in this air, for the shadows things cast: full on a clear day, a little
+ * while the clouds gather, little in rain or mist, faint by moonlight.
+ */
+export function sunOn(air: Air): number {
+  return (1 - 0.75 * air.rain) * (1 - 0.85 * air.night) * (1 - air.mist) * (1 - 0.35 * air.overcast);
+}
+
 /** The palette's options for this air. */
 export function paletteOptions(air: Air): PaletteOptions {
   return air.mist > 0 ? { time: air.time, season: air.season, overcast: air.overcast, mist: air.mist } : { time: air.time, season: air.season, overcast: air.overcast };

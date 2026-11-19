@@ -5,7 +5,8 @@ import type { ViewRect } from "../render/compose.ts";
 import { gradeRgb } from "../render/palette.ts";
 import { createChain } from "../runtime/chain.ts";
 import { CRUISE, type FlightState } from "../runtime/flight.ts";
-import type { Air } from "../sky/air.ts";
+import { sunOn, type Air } from "../sky/air.ts";
+import { STACK_SHADOW_KEEP } from "../runtime/stack.ts";
 import { WAVE_PERIOD, waveRate, type Pose } from "./body.ts";
 import { LACQUER, type Look } from "./look.ts";
 import { imageOn, type Land } from "./parts.ts";
@@ -96,10 +97,13 @@ export function createDragon(n: number): Dragon {
   let look: Look = LACQUER;
   let lookKey = -1;
   let night = 0;
+  let shadowKeep = STACK_SHADOW_KEEP;
   return {
     pose,
     setAir(air) {
       night = air.night;
+      // Its shadow needs the sun, as a cloud's does: gone in rain and mist, faint by moonlight.
+      shadowKeep = Math.round(256 - (256 - STACK_SHADOW_KEEP) * sunOn(air));
       // The light in steps, as a number (cheaper each frame than a string); cloud and rain do not colour the dragon.
       const key = ((Math.round(air.time * STEPS) * 9 + Math.round(air.season * 8)) * 9 + Math.round(air.overcast * 8)) * 9 + Math.round(air.mist * 8);
       if (key === lookKey) return;
@@ -115,7 +119,7 @@ export function createDragon(n: number): Dragon {
     },
     draw(out, rect, s, view) {
       if (night > 0) drawPool(out, rect, s, view, n, night);
-      drawRiver(out, rect, s, view, pose, look);
+      drawRiver(out, rect, s, view, pose, look, shadowKeep);
     },
   };
 }

@@ -1,5 +1,5 @@
-// Rain: streaks falling aslant over the whole frame, drawn last, over the clouds and the flier; and the splashes it
-// makes on water and ground, drawn by a live layer under the flier.
+// Rain: streaks falling aslant over the land, drawn under the clouds and the flier (they hide it, never it them); and
+// the splashes it makes on water and ground, drawn by a live layer.
 //
 // The streaks are inked strokes, one pixel wide, in three depths: many short faint ones far off, fewer longer ones
 // nearer, and a handful of long bright ones close to the eye. They lean with the wind, fall through a space fixed to

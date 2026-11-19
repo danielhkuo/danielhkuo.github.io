@@ -270,13 +270,14 @@ export default function Flight() {
             speed: flight.speed,
           });
           const skyStart = performance.now();
+          // The rain falls under the clouds and the flier: they hide it, never it them.
+          rain(frame, view.rect(), t / 1000, air);
           sky.draw(frame, view.rect(), t / 1000, "below");
           const skyBelow = performance.now() - skyStart;
           dragon.step(flight, Math.min(dt, 0.1));
           dragon.draw(frame, view.rect(), flight, view);
           const skyAgain = performance.now();
           sky.draw(frame, view.rect(), t / 1000, "above");
-          rain(frame, view.rect(), t / 1000, air);
           if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
           buffer.set(frame);
           ctx.putImageData(imageData, 0, 0);

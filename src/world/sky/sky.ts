@@ -4,7 +4,7 @@
 
 import type { ViewRect } from "../render/compose.ts";
 import { gradeRgb } from "../render/palette.ts";
-import { lightKey, type Air } from "./air.ts";
+import { lightKey, sunOn, type Air } from "./air.ts";
 import { ALT, makeField, weatherClouds, type CloudLayer, type Opening, type SkyField } from "./field.ts";
 import { MIDDAY_RAMP, type Ramp } from "./paint/cumulus.ts";
 import { makeShapes, SHADOW_SLOPE, SHAPE_COUNTS, type CloudShape } from "./shapes.ts";
@@ -77,12 +77,13 @@ export function drawClouds(
   for (let i = 0; i < clouds.length; i++) {
     const c = clouds[i];
     if (c.layer !== layer) continue;
-    // A weather cloud shows once the weather has built past its need, condensing over a short span.
-    let cover = scale;
+    // A weather cloud shows once the weather has built past its need, condensing over a short span: its pixels come
+    // in by an ordered dither fixed to the cloud, each one whole, never a see-through ghost of the cloud.
+    let condense = 16;
     if (c.need !== undefined) {
       if (cloudiness <= c.need) continue;
-      const k = (cloudiness - c.need) / CONDENSE;
-      if (k < 1) cover = scale * k * k * (3 - 2 * k);
+      condense = Math.floor(((cloudiness - c.need) / CONDENSE) * 16);
+      if (condense <= 0) continue;
     }
     const sprite = sprites[c.shape];
     const sw = sprite.w;
@@ -106,13 +107,15 @@ export function drawClouds(
     for (let py = y0; py < y1; py++) {
       const di0 = (sy + py) * fw + sx;
       const si = py * sw;
+      const order = BAYER[py & 3];
       for (let px = x0; px < x1; px++) {
         const sp = si + px;
         const a8 = alpha[sp];
         if (a8 === 0) continue;
+        if (condense < 16 && order[px & 3] >= condense) continue;
         const di = di0 + px;
         const src = rgba[sp];
-        const a = a8 * cover;
+        const a = a8 * scale;
         if (a >= 1) {
           out[di] = (src & 0x00ffffff) | 0xff000000;
           continue;
@@ -190,6 +193,8 @@ export function drawShadows(
 const CONDENSE = 0.12;
 /** Of 256: a cloud shadow that keeps at least this much of each channel is too faint to see, and is not drawn. */
 const FAINT = 246;
+/** A 4 × 4 ordered dither: the order in which a condensing cloud's pixels come in. */
+const BAYER: readonly (readonly number[])[] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 /** Steps of cloudiness at which the list of weather clouds that can show is made again. */
 const GATHER_STEPS = 32;
 
@@ -274,8 +279,9 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
         gatheredTo = reach;
         gathered = reach === 0 ? low : { ...field, clouds: [...low.clouds, ...weather.filter((c) => (c.need ?? 0) < reach)].sort((a, b) => a.y - b.y || a.x - b.x) };
       }
-      // Shadows soften as the sky greys over and as the light goes.
-      const soft = (1 - 0.85 * Math.max(air.overcast, air.cloud)) * (1 - 0.8 * air.night);
+      // A cloud's shadow needs the sun on the land round it: it holds while the clouds gather, and fades in the rain,
+      // in mist (whose light comes from everywhere), under a grey sky and as the light goes.
+      const soft = sunOn(air);
       const sk = style.shadowKeep;
       keep = [Math.round(256 - (256 - sk[0]) * soft), Math.round(256 - (256 - sk[1]) * soft), Math.round(256 - (256 - sk[2]) * soft)];
       const key = lightKey(air, TIME_STEPS, WEATHER_STEPS);
