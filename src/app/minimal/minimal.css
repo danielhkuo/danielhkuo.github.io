@@ -1,0 +1,889 @@
+/* =========================================================================
+   The minimal version — the whole site as one Terminal session.
+
+   The page is the macOS Terminal replica the site already has (globals.css,
+   "Terminal" and "neofetch header"): its title bar, lights, colours and type
+   come from there, and `neofetch` is set on the header's own `.nf-*` rules.
+   What is new is under `mt-`. Like the rest of the replica it is hand-written
+   and takes nothing from the Astryx theme.
+
+   The layout rules that matter are the ones a phone's keyboard depends on.
+   They are measured, not guessed
+   (docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md):
+
+     1. The document scrolls. No inner scroller, no locked body.
+     2. The prompt row is the last thing in the document, so Safari itself
+        rests it on the bottom of the visible area when the keyboard opens.
+     3. Nothing is fixed or sticky at the bottom while the prompt has focus.
+     4. The prompt's text is 16px: Safari zooms the page for anything less.
+
+   Phone first; the desktop window is the block at the end.
+   ========================================================================= */
+
+/* On a phone the page IS the terminal, edge to edge, and the page behind it
+   is the same ink. Safari tints its own bars from the page, the area behind
+   its keyboard bar shows the page through, and the overscroll bounce shows
+   the root: all of it has to be ink, in both site themes, or the prompt
+   reads as floating over a strip of paper. */
+@media (max-width: 639px) {
+  :root:has(.mt-page),
+  :root:has(.mt-page) body {
+    background: var(--panel-ink);
+    color-scheme: dark;
+  }
+}
+
+.mt-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+/* For a screen reader, and for nothing else. */
+.mt-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mt-skip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  padding: 10px 14px;
+  background: var(--panel-on);
+  color: var(--panel-ink);
+  font-family: var(--font-mono-family);
+  font-size: 14px;
+  transform: translateY(-120%);
+}
+.mt-skip:focus {
+  transform: none;
+}
+
+/* ---- The window --------------------------------------------------------- */
+
+.mt-win {
+  /* Terminal.app's built-in ANSI palette, as on .term-win and .nf-frame. */
+  --term-ansi-0: #000000;
+  --term-ansi-1: #c23621;
+  --term-ansi-2: #25bc24;
+  --term-ansi-3: #adad27;
+  --term-ansi-4: #492ee1;
+  --term-ansi-5: #d338d3;
+  --term-ansi-6: #33bbc8;
+  --term-ansi-7: #cbcccd;
+  --term-ansi-8: #818383;
+  --term-ansi-9: #fc391f;
+  --term-ansi-10: #31e722;
+  --term-ansi-11: #eaec23;
+  --term-ansi-12: #5833ff;
+  --term-ansi-13: #f935f8;
+  --term-ansi-14: #14f0f0;
+  --term-ansi-15: #e9ebeb;
+
+  /* glow's dark style, which `cat` sets a file in (markdown.ts): the title
+     bar, headings, links and code. Each clears 4.5:1 on its ground. */
+  --mt-title-fg: #ffff87;
+  --mt-title-bg: #5f5fd7;
+  --mt-heading: #00afff;
+  --mt-link: #00af5f;
+  --mt-code-fg: #ff5f5f;
+  --mt-code-bg: #262626;
+
+  --mt-cursor: #9d9d9d;
+  --mt-focus: var(--nf-title);
+  --mt-pad: 16px;
+  --mt-bar: 32px;
+  /* A blank line of the terminal: the gap between one block and the next. */
+  --mt-line: 1.6em;
+
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-ink);
+  color: var(--panel-on);
+  font-family: var(--font-mono-family);
+  font-size: 15px;
+  line-height: 1.6;
+  font-variant-ligatures: none;
+  /* A phone on its side would otherwise inflate some lines and not others. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* The theme's reset paints `:where(p)` and headings from its own tokens;
+     point them at the terminal's (as .ink-panel and .nf-body do). */
+  --color-text-primary: var(--panel-on);
+  --color-text-secondary: var(--panel-on);
+  --font-family-body: var(--font-mono-family);
+  --font-family-heading: var(--font-mono-family);
+}
+.mt-win ::selection {
+  background: #3f638b;
+  color: var(--panel-on);
+}
+.mt-win :focus-visible {
+  outline: 2px solid var(--mt-focus);
+  outline-offset: 2px;
+}
+
+/* The title bar: .term-bar from the Terminal replica, stuck to the top. It
+   hangs off the layout viewport, so with a phone's keyboard up it is simply
+   off screen, above the visible area. */
+.mt-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-sizing: content-box;
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(11px, env(safe-area-inset-left));
+}
+/* The red light closes the window. It is 14pt, as on a Mac; a finger gets
+   44pt around it. The other two are decoration and take no presses. */
+.mt-bar .lights a {
+  display: block;
+}
+.mt-bar .lights a::after {
+  content: "";
+  position: absolute;
+  inset: -15px;
+}
+.mt-bar .lights a:hover svg,
+.mt-bar .lights a:focus-visible svg {
+  opacity: 1;
+}
+
+.mt-body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 10px max(var(--mt-pad), env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom))
+    max(var(--mt-pad), env(safe-area-inset-left));
+}
+/* No specificity, so every rule below, and the header's own for neofetch,
+   still sets its margins. */
+:where(.mt-body) :where(p, h1, h2, h3) {
+  margin: 0;
+  text-wrap: wrap;
+}
+/* Anchors and the prompt stop clear of the stuck title bar. */
+.mt-body [id] {
+  scroll-margin-top: calc(var(--mt-bar) + env(safe-area-inset-top) + 12px);
+}
+
+/* ---- Shell lines -------------------------------------------------------- */
+
+.mt-login,
+.mt-cmd,
+.mt-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* zsh's default prompt in the plain foreground. Not selectable: copying a
+   command takes the command alone. */
+.mt-ps {
+  white-space: pre;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* A phone drops user@host: the whole prompt leaves sixteen characters to
+   type in. It drops the tty from the login line too, which would wrap. */
+@media (max-width: 639px) {
+  .mt-ps-host,
+  .mt-login-tty {
+    display: none;
+  }
+}
+
+/* Listings (`ls`): rows the command laid out in columns. They were fitted
+   to the window when printed; narrower, they wrap where a terminal would. */
+.mt-text-row {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1lh;
+}
+.mt-text .tb {
+  font-weight: 700;
+}
+.mt-text .tu {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mt-text a {
+  color: inherit;
+}
+
+/* Something in the output that runs a command when pressed: a file `ls`
+   listed, a command in `help`, a command quoted in a file. */
+.mt-run {
+  position: relative;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+/* Pressed, it turns to inverse video, as a selected row does in a text
+   interface. Hover only where a pointer can hover: on a touch screen
+   `:hover` stays on the last thing tapped. */
+.mt-run:active {
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+@media (hover: hover) {
+  .mt-run:hover {
+    background: var(--panel-on);
+    color: var(--panel-ink);
+  }
+}
+/* A finger gets a taller target than the line of text. */
+@media (pointer: coarse) {
+  .mt-live .mt-text-row {
+    line-height: 2.3;
+  }
+  .mt-run::after {
+    content: "";
+    position: absolute;
+    inset: -8px -6px;
+  }
+}
+
+/* `help`: each command, then what it does. Side by side where there is
+   room; on a phone the description goes under its command. */
+.mt-help {
+  margin-bottom: var(--mt-line);
+}
+.mt-help-title {
+  color: var(--panel-meta);
+  text-transform: uppercase;
+}
+.mt-help dl {
+  margin: 0;
+}
+.mt-help dt {
+  font-weight: 700;
+}
+.mt-help dd {
+  margin: 0 0 6px 2ch;
+  color: var(--term-ansi-7);
+}
+.mt-help code,
+.mt-line code {
+  font: inherit;
+  font-weight: 700;
+}
+.mt-line .mt-run,
+.mt-help dd .mt-run {
+  font-weight: 700;
+}
+@media (pointer: coarse) {
+  .mt-help dt {
+    padding-top: 6px;
+  }
+}
+
+/* A finished character grid (what cbonsai leaves behind). It keeps the
+   Terminal cell so the drawing holds together. */
+.mt-grid {
+  --term-cell: 7px;
+  --term-line: 14px;
+  margin: 0 0 var(--mt-line);
+  max-width: 100%;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: var(--term-line);
+  letter-spacing: calc(var(--term-cell) - 1ch);
+}
+
+/* ---- neofetch ----------------------------------------------------------- */
+
+/* The header's own rules do the layout: two columns from 640px, stacked
+   below. Here only what differs on this page. */
+.mt-nf {
+  margin-top: 14px;
+  margin-bottom: var(--mt-line);
+}
+.mt-nf .mt-name {
+  font: inherit;
+  letter-spacing: inherit;
+}
+/* The rule under user@host, as the header's .nf-rule draws it. */
+.mt-nf .nf-host {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--panel-ink-2);
+}
+.mt-nf .nf-face-path {
+  font-size: 0.8em;
+}
+@media (max-width: 639px) {
+  .mt-nf .nf-host {
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+  }
+  /* Each link on its own line, with room for a thumb. */
+  .mt-nf-contact a {
+    display: block;
+    width: fit-content;
+    padding-block: 9px;
+  }
+  .mt-nf-contact a:first-child {
+    padding-top: 4px;
+  }
+  .mt-nf-contact span {
+    display: none;
+  }
+}
+
+/* ---- Files (`cat`), after glow ------------------------------------------ */
+
+/* glow sets a file inside a two-cell margin, with a blank line around every
+   block; the title is a bar, a heading keeps its hashes, links are green. */
+.mt-doc {
+  margin-block: var(--mt-line);
+  padding-left: 2ch;
+  max-width: 82ch;
+}
+.mt-doc > * + * {
+  margin-top: var(--mt-line);
+}
+.mt-doc h2,
+.mt-doc h3 {
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+}
+.mt-doc-title span {
+  padding: 0 1ch;
+  background: var(--mt-title-bg);
+  color: var(--mt-title-fg);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.mt-doc-heading {
+  color: var(--mt-heading);
+}
+.mt-doc a {
+  color: var(--mt-link);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+/* A heading that is a link keeps the heading's colour; the underline says link. */
+.mt-doc .mt-doc-title a,
+.mt-doc .mt-doc-heading a {
+  color: inherit;
+}
+.mt-doc a:hover {
+  color: var(--panel-on);
+}
+.mt-doc ul {
+  margin-bottom: 0;
+  padding-left: 2ch;
+  list-style: "• ";
+}
+/* Under a sub-heading, what follows is that one item: its paragraph sits
+   close under its name, and its list is its details (a project's language,
+   counts and homepage), set close, dim and without bullets. The marker is
+   an empty string, not `none`, which would make Safari stop calling it a
+   list. */
+.mt-doc-heading + p {
+  margin-top: 2px;
+}
+.mt-doc-heading + ul,
+.mt-doc-heading + p + ul {
+  margin-top: 2px;
+  padding-left: 0;
+  list-style-type: "";
+  color: var(--panel-meta);
+}
+.mt-doc code {
+  padding: 0 1ch;
+  background: var(--mt-code-bg);
+  color: var(--mt-code-fg);
+  font: inherit;
+}
+.mt-doc .mt-run {
+  padding: 0 1ch;
+  background: var(--mt-code-bg);
+  color: var(--mt-code-fg);
+}
+.mt-doc .mt-run:active {
+  background: var(--mt-code-fg);
+  color: var(--panel-ink);
+}
+@media (hover: hover) {
+  .mt-doc .mt-run:hover {
+    background: var(--mt-code-fg);
+    color: var(--panel-ink);
+  }
+}
+@media (pointer: coarse) {
+  /* A list of links is a list of things to press. */
+  .mt-doc li + li {
+    margin-top: 10px;
+  }
+  .mt-doc-heading + ul li + li,
+  .mt-doc-heading + p + ul li + li {
+    margin-top: 6px;
+  }
+}
+
+/* ---- The live end: output, suggestions, prompt --------------------------- */
+
+.mt-session {
+  /* Takes what height is left on a short page, so the page's ink reaches the
+     bottom of the screen; the prompt still follows the last output. */
+  flex: 1 0 auto;
+}
+
+/* The row of commands above the prompt: what Tab would offer. Keys, in the
+   way a text interface draws them: a ruled cell each. */
+.mt-offers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-bottom: 4px;
+}
+.mt-offer {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 1.25ch;
+  border: 1px solid var(--panel-ink-2);
+  border-radius: 0;
+  background: none;
+  color: var(--panel-on);
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: pre;
+  cursor: pointer;
+}
+.mt-offer:active {
+  border-color: var(--panel-on);
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+@media (hover: hover) {
+  .mt-offer:hover {
+    border-color: var(--panel-on);
+    background: var(--panel-on);
+    color: var(--panel-ink);
+  }
+}
+
+/* The prompt. The row is the last thing in the document (rule 2) and its
+   text is 16px wherever a finger types (rule 4). */
+.mt-form {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 16px;
+  cursor: text;
+}
+/* The prompt is the field's label: a press on it focuses the field. It is
+   as tall as the row, so the whole of the row's left end takes the press. */
+.mt-label {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  cursor: text;
+}
+.mt-inputwrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.mt-input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--panel-on);
+  font: inherit;
+  letter-spacing: inherit;
+  appearance: none;
+  /* The block cursor is drawn by .mt-cursor; the native caret would sit beside it. */
+  caret-color: transparent;
+}
+/* The block cursor is the focus indicator, as in a terminal: solid with
+   focus, hollow without. */
+.mt-win .mt-input:focus-visible {
+  outline: none;
+}
+.mt-ghost {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  color: var(--panel-meta);
+  white-space: pre;
+  pointer-events: none;
+}
+.mt-typed {
+  color: transparent;
+}
+.mt-tabhint {
+  margin-left: 1ch;
+  font-size: 0.75em;
+}
+/* A phone has no Tab; the row of suggestions is its Tab. */
+@media (pointer: coarse) {
+  .mt-tabhint {
+    display: none;
+  }
+}
+.mt-cursor {
+  position: relative;
+  z-index: 3;
+  background: var(--mt-cursor);
+  color: var(--panel-ink);
+}
+.mt-form:not(:focus-within) .mt-cursor {
+  background: transparent;
+  color: var(--panel-meta);
+  box-shadow: inset 0 0 0 1px var(--mt-cursor);
+}
+/* A line longer than the row scrolls inside the input, where the drawn
+   cursor cannot follow: the native caret takes over. */
+.mt-long .mt-ghost {
+  display: none;
+}
+.mt-long .mt-input {
+  caret-color: auto;
+}
+.mt-enter {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--panel-meta);
+  font: inherit;
+  cursor: pointer;
+}
+.mt-enter[hidden] {
+  display: none;
+}
+.mt-enter:active {
+  color: var(--panel-on);
+}
+@media (hover: hover) {
+  .mt-enter:hover {
+    color: var(--panel-on);
+  }
+}
+/* The line that stands in for the prompt without JavaScript. */
+.mt-note {
+  margin-top: var(--mt-line);
+  color: var(--panel-meta);
+}
+
+/* Where a mouse types, the prompt is the size of the text around it. */
+@media (min-width: 640px) and (pointer: fine) {
+  .mt-form {
+    min-height: var(--mt-line);
+    font-size: inherit;
+  }
+  .mt-input,
+  .mt-enter {
+    height: var(--mt-line);
+  }
+  .mt-offer {
+    min-width: 0;
+    min-height: 30px;
+  }
+}
+
+/* ---- A full-screen program, in the prompt's place ------------------------ */
+
+/* The grid ScreenView draws on is Terminal's own cell, as in the old window.
+   On a phone it is as tall as the visible area (--mt-vvh, the visual
+   viewport's height, set while a program runs): only its height follows the
+   keyboard, never where it is. */
+.mt-screen {
+  --term-cell: 7px;
+  --term-line: 14px;
+  --bg: var(--panel-ink);
+  --fg: var(--panel-on);
+  --ansi-0: var(--term-ansi-0);
+  --ansi-1: var(--term-ansi-1);
+  --ansi-2: var(--term-ansi-2);
+  --ansi-3: var(--term-ansi-3);
+  --ansi-4: var(--term-ansi-4);
+  --ansi-5: var(--term-ansi-5);
+  --ansi-6: var(--term-ansi-6);
+  --ansi-7: var(--term-ansi-7);
+  --ansi-8: var(--term-ansi-8);
+  --ansi-9: var(--term-ansi-9);
+  --ansi-10: var(--term-ansi-10);
+  --ansi-11: var(--term-ansi-11);
+  --ansi-12: var(--term-ansi-12);
+  --ansi-13: var(--term-ansi-13);
+  --ansi-14: var(--term-ansi-14);
+  --ansi-15: var(--term-ansi-15);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* The visible area, less the title bar and a little air: the whole pane
+     is on screen at once. */
+  height: calc(var(--mt-vvh, 100svh) - var(--mt-bar) - env(safe-area-inset-top) - 24px);
+  min-height: 160px;
+  /* Under it, while a phone's keyboard is up: as much page as the keyboard
+     covers (--mt-keyboard, set with --mt-vvh), so the pane can be scrolled
+     up clear of it. */
+  margin: var(--mt-line) calc(10px - var(--mt-pad)) var(--mt-keyboard, 0px);
+  font-size: 11px;
+  line-height: var(--term-line);
+  letter-spacing: calc(var(--term-cell) - 1ch);
+}
+/* The hidden field a program types through sits at the top of the pane
+   here, where it is on screen whether or not the keyboard is up. At the
+   foot, where the old window keeps it, the first key typed made Safari pan
+   the page to it. */
+.mt-screen .term-hidden-input {
+  top: 0;
+  bottom: auto;
+}
+/* The pane's own line, ruled off above: what is running, and quit. */
+.mt-screen-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2ch;
+  height: 34px;
+  padding: 0 10px;
+  border-top: 1px solid var(--panel-ink-2);
+  color: var(--panel-meta);
+  font: 12px var(--font-mono-family);
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.mt-quit {
+  flex: none;
+  min-width: 44px;
+  height: 28px;
+  padding: 0 1.25ch;
+  border: 1px solid var(--panel-ink-2);
+  border-radius: 0;
+  background: none;
+  color: var(--panel-on);
+  font: inherit;
+  cursor: pointer;
+}
+.mt-quit:active {
+  border-color: var(--panel-on);
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+@media (hover: hover) {
+  .mt-quit:hover {
+    border-color: var(--panel-on);
+    background: var(--panel-on);
+    color: var(--panel-ink);
+  }
+}
+
+/* ---- The jump button ----------------------------------------------------- */
+
+/* .term-launch, the old terminal's launcher, now a link to the prompt at the
+   end of the page. It is the only fixed thing on the page, and it is gone
+   while the prompt has focus (rule 3) and while the prompt is on screen. */
+.mt-jump {
+  text-decoration: none;
+}
+/* The launcher's key hint is set in the hint grey, which is short of 4.5:1
+   at this size; the muted grey clears it in both themes. */
+.mt-jump .kbd {
+  color: var(--muted);
+}
+/* On a phone it floats over the terminal, so it is cut from the window's
+   own chrome, not from the paper. */
+@media (max-width: 639px) {
+  .mt-jump {
+    border-color: var(--panel-ink-2);
+    background: var(--term-chrome);
+    color: var(--panel-on);
+    box-shadow:
+      inset 0 0.5px 0 var(--term-chrome-rim),
+      0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+  .mt-jump .glyph {
+    color: var(--panel-on);
+  }
+}
+.mt-jump[hidden],
+.mt-page:has(.mt-input:focus) .mt-jump,
+.mt-page:has(.mt-screen) .mt-jump {
+  display: none;
+}
+
+/* ---- The desktop window -------------------------------------------------- */
+
+@media (min-width: 640px) {
+  .mt-page {
+    padding: clamp(24px, 6vh, 64px) 32px 96px;
+  }
+  .mt-win {
+    --mt-pad: 40px;
+    flex: none;
+    width: 100%;
+    max-width: 896px;
+    margin: 0 auto;
+    font-size: 14px;
+    /* A Terminal window like the header's and the old live one: the same
+       corners and a resting window's shadow. `clip`, not `hidden`, so the
+       title bar can still stick to the top of the page. */
+    border-radius: var(--term-radius);
+    corner-shape: var(--term-corner);
+    overflow: hidden;
+    overflow: clip;
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.28),
+      0 12px 24px rgba(0, 0, 0, 0.12),
+      0 28px 76px rgba(0, 0, 0, 0.18);
+  }
+  .mt-bar {
+    padding-left: 9px;
+  }
+  .mt-body {
+    padding: 26px var(--mt-pad) 30px;
+  }
+  .mt-nf {
+    margin-top: 18px;
+  }
+  /* One key column for every group, wide enough for the longest usage, so
+     the descriptions share a left edge down the whole listing. */
+  .mt-help dl {
+    display: grid;
+    grid-template-columns: minmax(25ch, max-content) 1fr;
+    gap: 0 2ch;
+  }
+  .mt-help dl > div {
+    display: contents;
+  }
+  .mt-help dd {
+    margin: 0;
+  }
+  /* Twenty-four rows under the pane's line, as a new Terminal window has. */
+  .mt-screen {
+    height: min(calc(24 * var(--term-line) + 17px + 34px), calc(var(--mt-vvh, 100svh) - 96px));
+    margin-inline: -10px;
+  }
+}
+
+/* ---- The start ------------------------------------------------------------ */
+
+/* On the first load in a tab the page opens as a session starting: `neofetch`
+   is typed, its output prints row by row, and then the rest of the page is
+   there. It is the old header's intro (globals.css, "Intro") and uses its
+   keyframes and its print order (--nf-i).
+
+   Everything is in the document from the first frame and is its final size:
+   rows are held back with `visibility`, the command is uncovered by a clip.
+   So nothing moves, a screen reader and a crawler get the whole page at once,
+   and without the attribute (no JavaScript, a later load, reduced motion) the
+   page is simply finished. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-mt-intro] .mt-win {
+    --mt-type-at: 0.35s;
+    --mt-stroke: 55ms; /* per keystroke */
+    --mt-return: calc(var(--mt-type-at) + 8 * var(--mt-stroke) + 0.2s);
+    --mt-row: 40ms; /* per printed row */
+  }
+  /* `neofetch` is eight cells of a monospace face: one is uncovered per keystroke. */
+  html[data-mt-intro] .mt-entry:first-of-type .mt-typed-cmd {
+    display: inline-block;
+    animation: nf-type calc(8 * var(--mt-stroke)) steps(8, end) var(--mt-type-at) backwards;
+  }
+  html[data-mt-intro] .mt-nf :is(.nf-face, .nf-host, .nf-table > *, .nf-swatches) {
+    animation: nf-held 1ms linear calc(var(--mt-return) + var(--nf-i, 0) * var(--mt-row)) backwards;
+  }
+  /* Then the next prompt, and with it everything the session went on to print. */
+  html[data-mt-intro] .mt-entry ~ .mt-entry,
+  html[data-mt-intro] .mt-session {
+    animation: nf-held 1ms linear calc(var(--mt-return) + 13 * var(--mt-row)) backwards;
+  }
+}
+
+/* ---- Other media ---------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .mt-skip {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .mt-nf .nf-swatches span,
+  .mt-bar .lights > * {
+    forced-color-adjust: none;
+  }
+  .mt-win .mt-input:focus-visible {
+    outline: 2px solid;
+  }
+  .mt-cursor {
+    forced-color-adjust: none;
+  }
+}
+
+/* On paper: black on white, and only what can be read. */
+@media print {
+  .mt-page {
+    padding: 0;
+  }
+  .mt-win {
+    background: none;
+    color: #000;
+    box-shadow: none;
+    border-radius: 0;
+    --panel-on: #000;
+    --panel-meta: #444;
+    --nf-key: #444;
+    --nf-title: #000;
+    --panel-accent: #000;
+    --panel-ink-2: #999;
+    --mt-heading: #000;
+    --mt-link: #000;
+    --mt-title-fg: #000;
+    --mt-title-bg: transparent;
+  }
+  .mt-bar,
+  .mt-session,
+  .mt-skip {
+    display: none;
+  }
+  .mt-doc-title span {
+    padding: 0;
+  }
+}

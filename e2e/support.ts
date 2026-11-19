@@ -30,10 +30,10 @@ export const WORLD = "/world?stats&time=noon&weather=clear";
 
 /**
  * Pages linked before they exist on this branch. Their 404s, from a visit or from a link's prefetch, are not counted as
- * errors; pages.spec.ts fails once one of them exists, so it comes off this list. `/recruiter` is the minimal page,
- * linked from the phone's first card.
+ * errors; pages.spec.ts fails once one of them exists, so it comes off this list. None is missing now: the minimal
+ * page, linked from the phone's first card, is at `/minimal`, and `/recruiter` forwards to it.
  */
-export const NOT_YET = ["/recruiter"];
+export const NOT_YET: string[] = [];
 
 /** True for the console's report of a 404 for a page in NOT_YET. */
 function notYet(text: string, url: string): boolean {

@@ -413,3 +413,54 @@ test("the welcome points a newcomer at ls and help", () => {
   assert.match(hint, /`ls`/);
   assert.match(hint, /`help`/);
 });
+
+// ---- a host that sets documents itself -------------------------------------------
+
+/** Run a line where the host has `doc` and `neofetch`: what it was handed, by kind. */
+function rich(line: string) {
+  const { commands } = shell();
+  const kinds: string[] = [];
+  const docs: string[] = [];
+  const ctx: CommandContext = {
+    out: () => kinds.push("out"),
+    ok: () => kinds.push("ok"),
+    err: () => kinds.push("err"),
+    rows: () => kinds.push("rows"),
+    text: () => kinds.push("text"),
+    doc: (source) => {
+      kinds.push("doc");
+      docs.push(source);
+    },
+    neofetch: () => kinds.push("neofetch"),
+    clear: () => undefined,
+    close: () => undefined,
+    program: () => undefined,
+    cols: 80,
+  };
+  execute(line, commands, ctx);
+  return { kinds, docs };
+}
+
+test("cat hands such a host the file itself, not rows of cells", () => {
+  const { kinds, docs } = rich("cat about.md");
+  assert.deepEqual(kinds, ["doc"]);
+  assert.match(docs[0], /^# Daniel Kuo$/m);
+});
+
+test("cat of several files hands over each, in order", () => {
+  const { docs } = rich("cat about.md contact.md");
+  assert.equal(docs.length, 2);
+  assert.match(docs[1], /^# Contact$/m);
+});
+
+test("open of a text file with nothing behind it does the same", () => {
+  assert.deepEqual(rich("open about.md").kinds, ["doc"]);
+});
+
+test("neofetch is left to such a host to draw", () => {
+  assert.deepEqual(rich("neofetch").kinds, ["neofetch"]);
+});
+
+test("ls still arrives as rows: a listing is columns of cells in any host", () => {
+  assert.deepEqual(rich("ls").kinds, ["text"]);
+});

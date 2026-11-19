@@ -148,3 +148,55 @@ test("about.md is readable: it renders to text under a title bar", () => {
   assert.ok(title, "no title bar");
   assert.ok(rows.length > 4);
 });
+
+// ---- where the shell is the whole page ------------------------------------------
+
+const PAGES = [
+  { title: "Title menu", path: "/", summary: "The front door." },
+  { title: "Flight", path: "/world", summary: "Fly a dragon." },
+];
+
+const WHOLE = siteTree(REPOS, { ...SITE, pages: PAGES });
+
+function wholeSource(path: string): string {
+  const node = at(path, WHOLE);
+  return (node.kind === "file" && node.text) || "";
+}
+
+test("where the shell is the whole page, home also holds the sitemap", () => {
+  assert.deepEqual(names("~", WHOLE), ["about.md", "contact.md", "projects", "resume.pdf", "sitemap.md"]);
+});
+
+test("there, projects holds an index of the repos beside their directories", () => {
+  assert.deepEqual(names("projects", WHOLE), ["Alpha", "README.md", "zeta-tool"]);
+  assert.match(wholeSource("projects/README.md"), /^## \[zeta-tool\]\(https:\/\/github\.com\/danielhkuo\/zeta-tool\)$/m);
+});
+
+test("the index opens the pinned repos on GitHub and is dated by the newest of them", () => {
+  const index = at("projects/README.md", WHOLE);
+  assert.equal(index.url, `${LINKS.github}?tab=repositories`);
+  assert.equal(index.mtime, "2026-09-08T12:00:00Z");
+});
+
+test("there, the contact card lists the résumé and says nothing of a form", () => {
+  const card = wholeSource("contact.md");
+  assert.match(card, /\*\*Résumé\*\* \[Daniel-Kuo-Resume\.pdf\]\(\/Daniel-Kuo-Resume\.pdf\)/);
+  assert.doesNotMatch(card, /form/);
+});
+
+test("the old home page's contact card still points at its form", () => {
+  assert.match(source("contact.md"), /form at the foot of the page/);
+});
+
+test("the sitemap lists each page with its path and what it is", () => {
+  assert.equal(
+    wholeSource("sitemap.md"),
+    "# Elsewhere on this site\n\n- [Title menu](/): The front door.\n- [Flight](/world): Fly a dragon.\n",
+  );
+});
+
+test("every file of the whole-page tree still renders in cells, for a host that has only those", () => {
+  for (const path of ["projects/README.md", "contact.md", "sitemap.md"]) {
+    assert.ok(renderMarkdown(wholeSource(path), 40).length > 2, path);
+  }
+});

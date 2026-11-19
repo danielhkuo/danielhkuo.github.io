@@ -1,7 +1,7 @@
 // The shell's pure parts — no React, no DOM: the prompt, word splitting,
 // completion and history. useShell.ts wires them to state.
 
-import type { CommandContext, CommandMap } from "./types";
+import type { Command, CommandContext, CommandMap } from "./types";
 
 /**
  * zsh's default prompt, `%n@%m %1~ %# `, for a cwd written the way `%~`
@@ -50,6 +50,56 @@ export function complete(input: string, commands: CommandMap): Completion | null
   });
   if (!option) return null;
   return { suffix: option.slice(typed.length), line: input.slice(0, input.length - typed.length) + option };
+}
+
+/** One offer in the command row: a command, or the next word of the line. */
+export interface Suggestion {
+  /** What its button shows: the command, or a file's own name. */
+  label: string;
+  /** The line it makes. */
+  line: string;
+  /**
+   * Whether that line is ready to run. A command that needs a file, and a
+   * directory to look inside, go on the prompt for the next word instead.
+   */
+  run: boolean;
+}
+
+/** A command whose usage opens with a required operand: `cat <file>`. */
+function needsOperand(command: Command): boolean {
+  return command.usage?.startsWith("<") ?? false;
+}
+
+/**
+ * What the command row offers for the line at the prompt: every way Tab
+ * could finish the word being typed, so a phone, which has no Tab, can still
+ * complete. On an empty line that is the `featured` commands in their order;
+ * while a command is typed, the commands that still match; after it, its
+ * arguments, a path one component at a time.
+ */
+export function suggest(input: string, commands: CommandMap, featured: readonly string[] = []): Suggestion[] {
+  const words = input.replace(/^\s+/, "").split(/\s+/);
+
+  if (words.length === 1) {
+    const typed = words[0].toLowerCase();
+    const names = typed
+      ? Object.keys(commands).filter((n) => !commands[n].hidden && n.startsWith(typed))
+      : featured.filter((n) => Object.hasOwn(commands, n));
+    return names.map((n) => {
+      const more = needsOperand(commands[n]);
+      return { label: n, line: more ? `${n} ` : n, run: !more };
+    });
+  }
+
+  const args = commands[words[0].toLowerCase()]?.args;
+  if (!args) return [];
+  const typed = words[words.length - 1];
+  const needle = typed.toLowerCase();
+  const options = (typeof args === "function" ? args(typed) : args).filter((o) => o.toLowerCase().startsWith(needle));
+  const stem = input.slice(0, input.length - typed.length);
+  // A path's options repeat the directories already typed; the button shows the new part.
+  const cut = typed.lastIndexOf("/") + 1;
+  return options.map((o) => ({ label: o.slice(cut), line: stem + o, run: !o.endsWith("/") }));
 }
 
 /** Earlier command lines, recalled with ↑ and ↓ the way a line editor does. */

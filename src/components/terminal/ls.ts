@@ -25,6 +25,25 @@ interface Flags {
 interface Entry {
   label: string;
   node: FsNode;
+  /** How the prompt would name it from the working directory. */
+  path: string;
+}
+
+/** `dir` and the name of something in it, as one path: "projects" + "Alpha" is "projects/Alpha". */
+function join(dir: string, name: string): string {
+  if (dir === ".") return name;
+  return dir.endsWith("/") ? dir + name : `${dir}/${name}`;
+}
+
+/**
+ * The command that looks inside an entry: `ls` for a directory, `cat` for a
+ * file with text, `open` for anything else. A host with buttons runs it when
+ * the name is pressed.
+ */
+function inspect(entry: Entry): string {
+  const path = /[\s'"\\]/.test(entry.path) ? `'${entry.path.replace(/'/g, "'\\''")}'` : entry.path;
+  if (entry.node.kind === "dir") return `ls ${path}`;
+  return entry.node.text === undefined ? `open ${path}` : `cat ${path}`;
 }
 
 // -G would use ANSI blue, which Terminal's Basic profile makes #492ee1 —
@@ -35,7 +54,8 @@ const DIR_FG = 39;
 const SIX_MONTHS_MS = 182 * 86_400_000;
 
 function name(entry: Entry): TextRun {
-  return entry.node.kind === "dir" ? { text: `${entry.label}/`, fg: DIR_FG } : { text: entry.label };
+  const run = inspect(entry);
+  return entry.node.kind === "dir" ? { text: `${entry.label}/`, fg: DIR_FG, run } : { text: entry.label, run };
 }
 
 /** What an APFS volume reports: a directory links to itself, its parent and each entry. */
@@ -151,7 +171,7 @@ export function ls(args: readonly string[], env: LsEnv): { rows: TextRun[][]; er
     const found = lookup(env.root, env.cwd, operand);
     if ("errno" in found) errors.push(`ls: ${operand}: ${strerror(found.errno)}`);
     else if (found.node.kind === "dir") dirs.push({ label: operand, node: found.node, path: found.path });
-    else files.push({ label: operand, node: found.node });
+    else files.push({ label: operand, node: found.node, path: operand });
   }
 
   const format = (entries: readonly Entry[]) =>
@@ -160,10 +180,13 @@ export function ls(args: readonly string[], env: LsEnv): { rows: TextRun[][]; er
   const rows: TextRun[][] = [];
   if (files.length) rows.push(...format(files));
   for (const d of dirs) {
-    const entries: Entry[] = d.node.children.map((node) => ({ label: node.name, node }));
+    const entries: Entry[] = d.node.children.map((node) => ({ label: node.name, node, path: join(d.label, node.name) }));
     if (flags.all) {
       const parent = lookup(env.root, d.path, "..");
-      entries.unshift({ label: ".", node: d.node }, { label: "..", node: "errno" in parent ? d.node : parent.node });
+      entries.unshift(
+        { label: ".", node: d.node, path: d.label },
+        { label: "..", node: "errno" in parent ? d.node : parent.node, path: join(d.label, "..") },
+      );
     }
     if (rows.length) rows.push([]);
     if (operands.length > 1) rows.push([{ text: `${d.label}:` }]);

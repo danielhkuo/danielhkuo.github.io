@@ -155,3 +155,54 @@ test("-- ends the options", () => {
   const result = ls(["--", "-l"], env());
   assert.deepEqual(result.errors, ["ls: -l: No such file or directory"]);
 });
+
+// ---- what a press on a listed name runs -----------------------------------------
+
+/** The command each listed name carries, by the name as listed. */
+function runs(args: string[], over: Partial<LsEnv> = {}): Record<string, string | undefined> {
+  const result = ls(args, env(over));
+  return Object.fromEntries(result.rows.flat().filter((r) => r.text.trim()).map((r) => [r.text, r.run]));
+}
+
+const READABLE: DirNode = dir("", RECENT, [
+  dir("Users", RECENT, [
+    dir("daniel", RECENT, [
+      file("about.md", RECENT, { text: "# About\n" }),
+      dir("my projects", RECENT, [file("README.md", RECENT, { text: "# Readme\n" })]),
+      file("resume.pdf", OLD, { size: 145439 }),
+    ]),
+  ]),
+]);
+
+test("a listed directory is listed in turn, a text file is read, anything else is opened", () => {
+  assert.deepEqual(runs([], { root: READABLE }), {
+    "about.md": "cat about.md",
+    "my projects/": "ls 'my projects'",
+    "resume.pdf": "open resume.pdf",
+  });
+});
+
+test("a name inside a listed directory is reached through that directory, as it was typed", () => {
+  assert.deepEqual(runs(["projects"]), { "Beta/": "ls projects/Beta", "alpha/": "ls projects/alpha" });
+  assert.deepEqual(runs(["~/projects/"], { cwd: [] }), { "Beta/": "ls ~/projects/Beta", "alpha/": "ls ~/projects/alpha" });
+});
+
+test("a file named on the line keeps the path it was named by", () => {
+  assert.deepEqual(runs(["../about.md"], { cwd: [...HOME, "projects"] }), { "../about.md": "open ../about.md" });
+});
+
+test(". and .. list the directory itself and the one above", () => {
+  const all = runs(["-a", "projects"]);
+  assert.equal(all["./"], "ls projects");
+  assert.equal(all["../"], "ls projects/..");
+});
+
+test("the long listing carries the command on the name, not on the columns before it", () => {
+  // The first row is the `total` line.
+  const rows = ls(["-l"], env()).rows.slice(1);
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    assert.equal(row[0].run, undefined);
+    assert.ok(row[row.length - 1].run);
+  }
+});

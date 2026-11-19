@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { TEXT_PAGE } from "../../../lib/site-content.ts";
 import { PHONE_QUERY } from "./phone.ts";
 import { MINIMAL_PAGE, PHONE_DEFAULT, phoneEntries } from "./copy.ts";
 
@@ -18,6 +19,8 @@ test("the minimal version leads the phone's ways in and opens preselected; flyin
   const e = phoneEntries(1.5);
   assert.deepEqual(e.map((x) => x.label), ["Minimal version", "Enter world", "agents.md"]);
   assert.equal(e[0].href, MINIMAL_PAGE);
+  // The page itself, not the old address that forwards to it.
+  assert.equal(MINIMAL_PAGE, TEXT_PAGE);
   assert.equal(e[0].lead, true);
   assert.equal(PHONE_DEFAULT, e[0].id);
   assert.equal(e[1].href, "/world");

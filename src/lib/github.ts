@@ -1,6 +1,5 @@
 import { graphql } from "@octokit/graphql";
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_USERNAME = process.env.GITHUB_USERNAME || "danielhkuo";
 
 // Types for GitHub API responses
@@ -142,18 +141,34 @@ function getMockRepos(): PinnedRepo[] {
 }
 
 /**
+ * The pinned repos and where they came from: "github" when the fetch worked,
+ * "sample" when there was no token or the fetch failed and the mock data
+ * stood in. Mock data keeps a tokenless build working; `source` lets a page
+ * decide not to publish it.
+ */
+export interface PinnedRepos {
+  repos: PinnedRepo[];
+  source: "github" | "sample";
+}
+
+/**
  * Fetch pinned repositories from GitHub using GraphQL API
  */
 export async function fetchPinnedRepos(): Promise<PinnedRepo[]> {
-  if (!GITHUB_TOKEN) {
+  return (await loadPinnedRepos()).repos;
+}
+
+/** Fetch the pinned repos, saying whether they are real or the mock data. */
+export async function loadPinnedRepos(token = process.env.GITHUB_TOKEN): Promise<PinnedRepos> {
+  if (!token) {
     console.warn("No GITHUB_TOKEN found, using mock data");
-    return getMockRepos();
+    return { repos: getMockRepos(), source: "sample" };
   }
 
   try {
     const graphqlWithAuth = graphql.defaults({
       headers: {
-        authorization: `token ${GITHUB_TOKEN}`,
+        authorization: `token ${token}`,
       },
     });
 
@@ -166,7 +181,7 @@ export async function fetchPinnedRepos(): Promise<PinnedRepo[]> {
     );
 
     // Process language data to calculate percentages
-    return response.user.pinnedItems.nodes.map((repo) => {
+    const repos = response.user.pinnedItems.nodes.map((repo) => {
       const totalSize = repo.languages.totalSize;
       const languages = repo.languages.edges.map((edge) => ({
         name: edge.node.name,
@@ -192,8 +207,9 @@ export async function fetchPinnedRepos(): Promise<PinnedRepo[]> {
         owner: repo.owner,
       };
     });
+    return { repos, source: "github" };
   } catch (error) {
     console.error("Error fetching pinned repos:", error);
-    return getMockRepos();
+    return { repos: getMockRepos(), source: "sample" };
   }
 }
