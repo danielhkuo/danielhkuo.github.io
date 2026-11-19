@@ -2,14 +2,15 @@
 // has its own copy file; when the two are mounted together they should read one list (see the mobile design,
 // "As built"). Where each way goes is the site's: the minimal version, the world and the agent file.
 
+import { TEXT_PAGE } from "../../../lib/site-content.ts";
 import type { PhoneEntry } from "./PhoneTitle";
 
 /**
  * The minimal version: the whole site as readable text on one terminal-style page, with the terminal folded in. Its
- * route is not fixed yet: change it here, and the phone title, the world's "short version" link and the abbey's
- * terminal on a phone follow.
+ * address is the site's `TEXT_PAGE` (lib/site-content.ts), the one place it is set: the phone title, the world's
+ * "short version" link and the abbey's terminal on a phone follow it, as the page list and the agent files do.
  */
-export const MINIMAL_PAGE = "/recruiter";
+export const MINIMAL_PAGE = TEXT_PAGE;
 
 export const PHONE_TAGLINE = "a portfolio you can fly through";
 

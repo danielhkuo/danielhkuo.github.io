@@ -230,7 +230,8 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   upkeep. It touches `src/lib/github.ts` and every page that reads it, so it is its own task.
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
-- **Minimal version: what's left.** The title menu's link to it; removing the old pop-up terminal and home page once
+- **Minimal version: what's left.** The desktop title menu's link to it (the phone title, the flight card's short
+  version and the abbey's terminal on a phone open it already); removing the old pop-up terminal and home page once
   the title menu takes `/`; a pass on a real iPhone and on iOS 27.
 - **Seasons**: not from the clock (settled 2026-11-18), and the lore that laid the months out as places is set aside.
   If they come back, the palette already carries the four, and `world:live --season` previews them.
