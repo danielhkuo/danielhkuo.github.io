@@ -4,6 +4,7 @@
 // head's path, so it is left lying in a coil. The sweep ends at the landmark's south point, so the head rests in
 // front of the building, facing across the camera. Pure: nothing passed in is changed.
 
+import { patan2, pcos, PI, psin } from "../core/psin.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { CLIMB, DT_MAX, MIN_GAP, stepFlight, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
 
@@ -41,7 +42,7 @@ export const FOCUS_RATE = 1.4;
 const SPEED_EASE = 3;
 const BANK_EASE = 6;
 
-const TAU = 2 * Math.PI;
+const TAU = 2 * PI;
 
 /** A landmark the dragon can land at: the centre of its building and the radius its coil rests at. */
 export interface Target {
@@ -91,9 +92,15 @@ function smooth(u: number): number {
 /** a − b as an angle in (−π, π]. */
 function turned(a: number, b: number): number {
   let d = (a - b) % TAU;
-  if (d > Math.PI) d -= TAU;
-  else if (d <= -Math.PI) d += TAU;
+  if (d > PI) d -= TAU;
+  else if (d <= -PI) d += TAU;
   return d;
+}
+
+/** Distance between two points on the torus, cells. */
+function dist(ax: number, ay: number, bx: number, by: number, n: number): number {
+  const dx = torusDelta(ax, bx, n), dy = torusDelta(ay, by, n);
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 /** The nearest target within `within` cells of (x, y) on the torus, leaving out `skip`; null when none is. */
@@ -102,7 +109,7 @@ export function nearest(x: number, y: number, targets: readonly Target[], n: num
   let bestD = Infinity;
   for (const t of targets) {
     if (t.id === skip) continue;
-    const d = Math.hypot(torusDelta(x, t.x, n), torusDelta(y, t.y, n));
+    const d = dist(x, y, t.x, t.y, n);
     if (d <= within && d < bestD) {
       best = t;
       bestD = d;
@@ -122,11 +129,11 @@ export function offered(phase: Phase, x: number, y: number, targets: readonly Ta
  */
 export function beginLanding(s: FlightState, target: Target, n: number): Approach {
   const dx = torusDelta(target.x, s.x, n), dy = torusDelta(target.y, s.y, n);
-  const r = Math.hypot(dx, dy);
-  const phi = r > 1e-9 ? Math.atan2(dy, dx) : s.heading - Math.PI / 2;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const phi = r > 1e-9 ? patan2(dy, dx) : s.heading - PI / 2;
   // Going round clockwise on screen, the way ahead at angle φ is (−sin φ, cos φ).
-  const dir: 1 | -1 = -Math.cos(s.heading) * Math.sin(phi) + Math.sin(s.heading) * Math.cos(phi) >= 0 ? 1 : -1;
-  let sweep = (((dir * (Math.PI / 2 - phi)) % TAU) + TAU) % TAU;
+  const dir: 1 | -1 = -pcos(s.heading) * psin(phi) + psin(s.heading) * pcos(phi) >= 0 ? 1 : -1;
+  let sweep = (((dir * (PI / 2 - phi)) % TAU) + TAU) % TAU;
   if (sweep < SWEEP_MIN * TAU) sweep += TAU;
   return {
     id: target.id,
@@ -154,13 +161,13 @@ export function beginLanding(s: FlightState, target: Target, n: number): Approac
 function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain, n: number): { s: FlightState; a: Approach; done: boolean } {
   const step = clamp(dt, 0, DT_MAX);
   const dx = torusDelta(a.cx, s.x, n), dy = torusDelta(a.cy, s.y, n);
-  const r = Math.hypot(dx, dy);
-  const phi = r > 1e-9 ? Math.atan2(dy, dx) : a.phi;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const phi = r > 1e-9 ? patan2(dy, dx) : a.phi;
   const swept = a.swept + a.dir * turned(phi, a.phi);
   const u = clamp(swept / a.sweep, 0, 1);
 
   const rStar = a.radius + (a.r0 - a.radius) * (1 - smooth(u / SHRINK_END));
-  const want = phi + a.dir * (Math.PI / 2 + Math.atan((r - rStar) / LOOK));
+  const want = phi + a.dir * (PI / 2 + patan2(r - rStar, LOOK));
   const err = turned(want, s.heading);
   // The turn that holds an orbit of radius r at this speed, plus a correction toward the heading it wants: without the
   // first, the correction lags the orbit by enough to cancel the bend in, and the coil never closes.
@@ -168,13 +175,13 @@ function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain,
   const heading = s.heading + rate * step;
   const bank = s.bank + (clamp(rate / MAX_TURN, -1, 1) - s.bank) * Math.min(1, BANK_EASE * step);
 
-  let vStar = Math.min(a.v0, ORBIT_RATE * Math.max(r, a.radius)) * (0.4 + 0.6 * Math.max(0, Math.cos(err)));
+  let vStar = Math.min(a.v0, ORBIT_RATE * Math.max(r, a.radius)) * (0.4 + 0.6 * Math.max(0, pcos(err)));
   if (u > 1 - REST_PART) vStar *= (1 - u) / REST_PART;
   vStar = Math.max(CRAWL, vStar);
   const speed = s.speed + (vStar - s.speed) * Math.min(1, SPEED_EASE * step);
 
-  const x = wrap(s.x + Math.cos(heading) * speed * step, n);
-  const y = wrap(s.y + Math.sin(heading) * speed * step, n);
+  const x = wrap(s.x + pcos(heading) * speed * step, n);
+  const y = wrap(s.y + psin(heading) * speed * step, n);
   const ground = terrain.groundHeight(x, y);
   const altStar = a.alt0 + (ground + REST_LIFT - a.alt0) * smooth(u / SINK_END);
   const alt = Math.max(s.alt + clamp(altStar - s.alt, -CLIMB * step, CLIMB * step), ground + MIN_GAP);
@@ -216,7 +223,7 @@ export function advance(
     const next = stepFlight(s, input, dt, terrain, n);
     if (phase.quiet === null) return { phase, s: next, landed: null };
     const left = targets.find((t) => t.id === phase.quiet);
-    const far = !left || Math.hypot(torusDelta(next.x, left.x, n), torusDelta(next.y, left.y, n)) > NEAR * QUIET_FACTOR;
+    const far = !left || dist(next.x, next.y, left.x, left.y, n) > NEAR * QUIET_FACTOR;
     return { phase: far ? { kind: "flying", quiet: null } : phase, s: next, landed: null };
   }
   if (phase.kind === "landing") {

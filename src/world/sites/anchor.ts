@@ -54,7 +54,7 @@ export function anchorOf(site: { x: number; y: number; type: LandmarkType }, str
     if (Math.abs(dx) > reach || Math.abs(dy) > reach) continue;
     let height = 0;
     for (let i = 0; i < s.top.length; i++) if (s.top[i] > height) height = s.top[i];
-    const d = Math.hypot(dx, dy);
+    const d = Math.sqrt(dx * dx + dy * dy);
     if (best && (height < best.height || (height === best.height && d >= bestD))) continue;
     best = { x: wrap(site.x + dx, n), y: wrap(site.y + dy, n), halfW: s.w / 2, halfD: s.h / 2, height };
     bestD = d;
@@ -64,6 +64,6 @@ export function anchorOf(site: { x: number; y: number; type: LandmarkType }, str
 
 /** Where the coil comes to rest: the building's half-diagonal plus the body's width, within [REST_MIN, REST_MAX]. */
 export function restRadius(anchor: Anchor | null, type: LandmarkType): number {
-  const r = anchor ? Math.hypot(anchor.halfW, anchor.halfD) + CLEAR : FALLBACK[type];
+  const r = anchor ? Math.sqrt(anchor.halfW * anchor.halfW + anchor.halfD * anchor.halfD) + CLEAR : FALLBACK[type];
   return Math.min(REST_MAX, Math.max(REST_MIN, r));
 }

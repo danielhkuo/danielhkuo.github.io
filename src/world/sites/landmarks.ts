@@ -1,6 +1,7 @@
 // The landmarks the flight page offers to land at, worked out at build time: which site holds which pinned project,
 // kept sticky by a committed file (design 5.6), and the register that points from any landmark to the others.
 
+import { patan2, PI } from "../core/psin.ts";
 import { torusDelta } from "../core/torus.ts";
 import { CRUISE } from "../runtime/flight.ts";
 import { assignSites, type Assignments, type LandmarkType } from "./assign.ts";
@@ -56,6 +57,21 @@ function isLandmarkType(t: string): t is LandmarkType {
   return (TYPES as readonly string[]).includes(t);
 }
 
+/** A copy of `items` in `order`, stable: an insertion sort (Array.prototype.sort is not the same in every engine). */
+function sortedBy<T>(items: readonly T[], order: (a: T, b: T) => number): T[] {
+  const out = items.slice();
+  for (let i = 1; i < out.length; i++) {
+    const v = out[i];
+    let j = i - 1;
+    while (j >= 0 && order(out[j], v) > 0) {
+      out[j + 1] = out[j];
+      j--;
+    }
+    out[j + 1] = v;
+  }
+  return out;
+}
+
 /** A repository as the Codex shows it. GitHub reports "no homepage" as an empty string as well as null. */
 export function entryOf(r: RepoLike): ProjectEntry {
   return {
@@ -87,7 +103,7 @@ export function stickyFrom(file: unknown, worldId: string): Assignments | null {
 /** The sticky file's text for `bySite`: sites in code-unit order, so a change shows as a small diff. */
 export function stickyText(worldId: string, bySite: Readonly<Record<string, string>>): string {
   const sorted: Record<string, string> = {};
-  for (const site of Object.keys(bySite).sort()) sorted[site] = bySite[site];
+  for (const site of sortedBy(Object.keys(bySite), (a, b) => (a < b ? -1 : a > b ? 1 : 0))) sorted[site] = bySite[site];
   return `${JSON.stringify({ worldId, bySite: sorted }, null, 2)}\n`;
 }
 
@@ -167,12 +183,11 @@ export function registerFrom(here: { id: string; x: number; y: number }, set: La
   for (const l of set.landmarks) {
     if (l.id === here.id || l.holds.kind === "none") continue;
     const dx = torusDelta(here.x, l.x, set.n), dy = torusDelta(here.y, l.y, set.n);
-    const d = Math.hypot(dx, dy);
+    const d = Math.sqrt(dx * dx + dy * dy);
     // y grows southward, so the angle runs clockwise from east, as COMPASS does.
-    const sector = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8;
+    const sector = ((Math.round(patan2(dy, dx) / (PI / 4)) % 8) + 8) % 8;
     const title = l.holds.kind === "project" ? l.holds.project.name : "About me";
     lines.push({ line: { id: l.id, type: l.type, title, compass: COMPASS[sector], seconds: Math.round(d / CRUISE) }, d });
   }
-  lines.sort((a, b) => a.d - b.d || (a.line.id < b.line.id ? -1 : 1));
-  return lines.map((l) => l.line);
+  return sortedBy(lines, (a, b) => a.d - b.d || (a.line.id < b.line.id ? -1 : 1)).map((l) => l.line);
 }
