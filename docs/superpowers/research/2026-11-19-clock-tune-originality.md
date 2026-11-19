@@ -77,7 +77,33 @@ Earlier, from memory (design §4.8 and the `tune` unit test): the opening and ev
 with the Westminster and Whittington chimes, Carol of the Bells, Greensleeves, Scarborough Fair, Drunken Sailor, the
 Skye Boat Song, Frère Jacques, Swallowtail, Morrison's, The Butterfly and Sumer is icumen in. None matched.
 
-## Still to run
+## Musipedia, 2026-11-19 (run by the owner)
+
+The owner ran Musipedia's contour search on the whole Parsons code in their own browser (Musipedia counts 11,446
+classical, 2,457 popular, 17,085 folk, 142 hymn and 121 anthem melodies). The ten nearest, in order: Morley, *April
+is in my mistress' face* (soprano); Jagger–Richards, *Fool to Cry* (organ); Honegger, *Chant de Nigamon* (3rd theme);
+Bryant, *Bye Bye Love*; Mozart, K. 545 (1st movement, 2nd theme); Paul Simon, *Bridge Over Troubled Water*;
+Beethoven, op. 135 (4th movement); Vaughan Williams, Symphony 8 (4th movement, 2nd theme); Sibelius, Symphony 7 (5th
+theme); Haydn, Symphony 52 (menuetto). A scattered list of short incipits from every period: no family of tunes.
+
+The top three, note by note (intervals in semitones):
+- **Morley, soprano** (from the open LilyPond edition at victoria.uma.es: `D5 C5 B♭4 C5 D5 B♭4 C5 A4 | D5 …`, 4/4). It
+  shares the opening contour for five steps (down, down, up, up, down: a turn), which is why it ranks first, but not the
+  intervals: ours −2 −3 +2 +1 −3, Morley's −2 −2 +2 +2 −4. Over the whole soprano line the tune is 25 edits of 42 away
+  (the opening's 16 intervals: 9). The longest stretches of identical intervals anywhere are 6 notes, twice, both in
+  other places and rhythms: our closing B A G F♯ G F♯ against Morley's cadence D C B♭ A B♭ A (bars 21–23: the stock
+  fall to the leading note and back), and a falling-thirds figure in our bars 8–10 against Morley's bars 1–3 across a
+  rest.
+- **Fool to Cry** (G held, F E F E C G): 1 of its 6 intervals agrees with ours from the start; the longest identical
+  run anywhere is 4 intervals.
+- **Chant de Nigamon** (read from the screenshot: A♭ G A C♭ A G | F C♭ D D C): its contour follows ours a note later,
+  but 2 of 10 intervals agree; the longest identical run anywhere is 3 intervals.
+
+**Verdict: original.** Nothing tracks the tune past a common six-note figure, and the corpus check's nearest of 13,367
+folk, fiddle and chorale tunes needs 18 of 42 intervals changed. FolkTuneFinder was not searched (the owner's browser
+check was used up); the corpus check covers its ground (Irish, Scottish and English fiddle tunes, the Essen songs).
+
+## Still to run (superseded)
 
 The two real indexes need a person to pass Cloudflare's check once in the Claude desktop app's browser pane (its
 profile keeps the clearance): `https://www.musipedia.org/contour/DDUUDDDUURDDDUDDDUUUUDDDDDUDUDUUUDDDDUDUDD` and

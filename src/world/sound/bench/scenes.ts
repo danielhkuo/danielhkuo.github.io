@@ -467,6 +467,30 @@ export const SCENES: Scene[] = [
     at: heard(coastOfKinds(5040, [M.sand, M.shingle, M.cliffHard], 3000, 900), 45, alongCoast(45, 100)),
   }),
   scene({
+    name: "rain-land",
+    set: NO_WIND,
+    seconds: 30,
+    about: "Still over meadows while a shower comes in (4–12 s), falls (12–24 s) and eases (24–30 s): a patter of drops, and a soft sheet of hiss at its heaviest.",
+    marks: [{ name: "clear", t0: 0.5, t1: 3.5 }, { name: "full", t0: 14, t1: 22 }],
+    at: aired(hover(30, 100, 5000, 5000), (t) => ({ rain: rise(t, 4, 12) * (1 - rise(t, 24, 32)) })),
+  }),
+  scene({
+    name: "rain-sea",
+    set: NO_WIND,
+    seconds: 30,
+    about: "The same shower far offshore: drops on the water, a fizz and soft plinks, over the sea's own wash.",
+    marks: [{ name: "clear", t0: 0.5, t1: 3.5 }, { name: "full", t0: 14, t1: 22 }],
+    at: aired(heard(OPEN_SEA, 30, hover(30, 100, 5000, 5000)), (t) => ({ rain: rise(t, 4, 12) * (1 - rise(t, 24, 32)) })),
+  }),
+  scene({
+    name: "shower-pass",
+    seconds: 45,
+    about: "The coast run under a passing shower (in over 5–15 s, full 15–30 s, out 30–40 s): the rain adds to the wind and the surf and covers neither; set beside coast-run.",
+    beds: true,
+    marks: [{ name: "clear", t0: 2, t1: 5 }, { name: "full", t0: 17, t1: 28 }],
+    at: aired(heard(coastOfKinds(5040, [M.sand, M.shingle, M.cliffHard], 3000, 900), 45, alongCoast(45, 100)), (t) => ({ rain: rise(t, 5, 15) * (1 - rise(t, 30, 40)) })),
+  }),
+  scene({
     name: "mist-muffle",
     seconds: 45,
     about: "The coast run while a mist comes in (8–20 s), lies (20–30 s) and thins (30–42 s): the surf and the world go soft and dull and a little further off; the wind at the ears does not.",
@@ -840,16 +864,21 @@ export function isSoundLog(x: unknown): x is SoundLog {
 }
 
 /** The scene that replays a recorded flight through the real mix and engine: the game as flown. */
-export function replayScene(log: SoundLog, seconds = 30): Scene {
+export function replayScene(
+  log: SoundLog,
+  seconds = 30,
+  name = "flight-replay",
+  about = "The recorded world-fly route, fed to the real mix and engine: the game as flown.",
+): Scene {
   const rows = log.frames;
   const start = rows[0]?.[0] ?? 0;
   const length = Math.min(seconds, rows.length ? rows[rows.length - 1][0] - start : 0);
   let i = 0;
   const frame: SceneFrame = { pose: { t: 0, dt: 0, x: 0, y: 0, alt: 0, heading: 0, speed: 0, bank: 0, rest: 0 }, hearing: QUIET };
   return {
-    name: "flight-replay",
+    name,
     seconds: Math.max(1, Math.floor(length)),
-    about: "The recorded world-fly route, fed to the real mix and engine: the game as flown.",
+    about,
     places: log.places,
     prefs: { ...BENCH_PREFS, calm: log.prefs?.calm === true, touch: log.prefs?.touch === true },
     t0: start,

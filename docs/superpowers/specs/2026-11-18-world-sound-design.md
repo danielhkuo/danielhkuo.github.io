@@ -1398,6 +1398,37 @@ everything.
   frame p95 3.20 ms with sound against 3.10 without (+0.10, bar +0.15; off runs 2.6–3.6), `soundMs` mean 49 µs (bar
   100), p95 0.4; at 1×, frame p95 2.50 against 2.60 (−0.10), `soundMs` p95 0.1 ms, mean 40 µs. The 1× mean is over the
   25 µs set in phase 2 (it was 14 then): the merged world's gulls along the coast and the census at 15 Hz. To profile
-  in the Fable round; the brief's 0.3 ms is met.
-- **Waiting for Fable** (after its limit): the rain bed (spec §6.1's world-bus place is ready; `pose.rain` is in) and the
-  re-pin of every level against the whole mix (phase 7's `busiest` and `long-flight`).
+  in the Fable round; the brief's 0.3 ms is met. (These figures were taken while the live ear was stalled: see §14.)
+- The rain bed and the re-pin against the whole mix, first left for Fable, were done by Opus: §14.
+
+## 14. The Opus round: the ear, the rain, the whole mix (2026-11-19)
+
+The owner's rule for this round: nothing Fable made may get worse. Before changing anything Fable accepted, the same
+scenes are rendered before and after, compared on loudness, spectrum and clicks, and judged blind by a fresh critic;
+the old version stays wherever the new one is not at least as good. New work (the rain) is judged against the scene
+without it: it must add, not mask. Every A/B is recorded here.
+
+### 14.1 The ear was deaf after the first two seconds (fixed)
+
+- **What.** In the live page the ear's worker received seven passes and then none: the last Hearing was at 1.87 s and
+  the frame loop went on (probe: the page's posts to the worker, counted). From then on everything the ear drives (the
+  surf's lanes and bed, the rivers, falls and streams, the shore points, the census's walk of the beaches) stayed as
+  heard at take-off, wherever the dragon flew. The bench never showed it: its scenes hand the engine their Hearings.
+- **Why.** The two lattice buffers that take turns were sized to the frame's lattice exactly, and a frame with an odd
+  side has a row or a column more or less by the parity of its first bake pixel (1600 × 900 gives a 400 × 225 frame:
+  112 or 113 rows), which changes each time the camera crosses a bake row. A buffer of the other size was dropped and,
+  with two already made, never replaced: two crossings into the flight, the ear had none.
+- **Fix.** Buffers are made with room for either count (`latticeRoom`), and one too small (the window has grown) is
+  replaced. The local ear's own buffer likewise. `engine/listener.test.ts` flies ten seconds north across rows with a
+  stand-in worker: 10 passes before the fix, 91 after (a pass takes seven frames of a sixtieth more often than six).
+  Live probe after: a Hearing about nine times a second for the whole flight, the surf's energy following the coast.
+- **The recorded flights.** `flight.json` held one Hearing in 30 s: the log kept a Hearing only when its object
+  changed, and the ear fills one object in place (now: when its time changes; a test pins it). So `flight-replay` had
+  replayed the flight over the land as heard at t = 0. Both logs re-recorded on the fixed build by day in clear air
+  (`world-fly --sound --rates 1 --query "time=day&weather=clear" --soundlog …`, 30 s and `--seconds 120`): 293 and
+  1,131 Hearings (the long one: land, a river, the coast, open sea, the coast again). Numbers are rounded to four
+  decimals as they are written.
+- **The idle build** (the 40 µs round, §13: `build()` asked twice a second once it has nothing to do) let a bed made by
+  `tendBeds` (a river come into earshot, the rain, the surf bed coming back) wait up to half a second for its graph.
+  Offline renders build every frame, so the A/B of that round could not see it. A newly made bed now clears the wait:
+  its graph is built from the next frame, as before.

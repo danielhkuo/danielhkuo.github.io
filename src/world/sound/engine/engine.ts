@@ -20,7 +20,7 @@ import { TAIL_S } from "../synth/probe.ts";
 import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
 import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
-import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
+import { createEar, gatherRows, latticeOf, latticeRoom, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
 import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
@@ -32,6 +32,7 @@ import { buildFalls, type Falls } from "./falls.ts";
 import { buildGulls, type Gulls } from "./gulls.ts";
 import { buildHub, type Hub } from "./hub.ts";
 import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
+import { buildRain } from "./rain.ts";
 import { buildRiverBed } from "./river.ts";
 import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
@@ -291,6 +292,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     demand("bed", [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], buildSurfBed, master.bus.water, BED_ON, BED_OFF, true),
     demand("open", [T.OPEN], buildOpenSea, master.bus.water, BED_ON, BED_OFF, true),
     demand("river", [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE], buildRiverBed, master.bus.water, BED_ON, BED_OFF, true, true),
+    // Rain: only while a shower is heard (its noises and the brook's bubbles come with the surf's and the river's kits).
+    demand("rain", [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ], buildRain, master.bus.water, BED_ON, BED_OFF, true, true),
     // The whistles: only when the dragon is going fast enough for them to be heard (they are 26 dB under the rush at
     // cruise). On above 30 % of their fullest (s > 1.1), off after two seconds under 25 %.
     // The whoosh: only round a turn.
@@ -523,6 +526,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
           b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
           b.built = false;
           b.quietSince = NaN;
+          // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
+          buildIdleUntil = -Infinity;
         }
         continue;
       }
@@ -702,8 +707,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
         look = lookahead;
       }
-      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second (a voice
-      // that becomes buildable later, a moment come into reach, waits at most that long). Offline renders build at once.
+      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second. A bed
+      // made by tendBeds asks at once (it would otherwise come in up to half a second late), and every other voice is
+      // built once, while the kit comes in. Offline renders build every frame.
       if (offline || !(pose.t < buildIdleUntil) || pose.t < buildIdleUntil - 1) {
         build(now);
         if (!offline && (work & WORK.build) === 0 && kit.done()) buildIdleUntil = pose.t + 0.5;
@@ -1048,7 +1054,7 @@ function localEar(n: number, land: Land): Listener {
  * frame calls for (about four thousand pixel reads at 60 Hz) into a buffer; ten times a second the buffer is handed
  * over, and the Hearing comes back a moment later. Two buffers take turns.
  */
-function remoteEar(n: number, land: Land): Listener | null {
+export function remoteEar(n: number, land: Land): Listener | null {
   let worker: Worker;
   try {
     worker = new Worker(new URL("../ear.worker.ts", import.meta.url), { type: "module" });
@@ -1103,9 +1109,12 @@ function remoteEar(n: number, land: Land): Listener | null {
         const size = lat.cols * lat.rows;
         if (heardSpare.length === 0) return hearing;
         let buffer = spare.pop();
-        if (buffer && buffer.length !== size) buffer = undefined;
+        // A buffer too small for this frame (the window has grown) is let go and a bigger one takes its place, so two
+        // always take turns. (Buffers once had to match the lattice exactly, and its size changes with the parity of
+        // the frame's first row: two crossings into flight both were thrown away and the ear stopped for good.)
+        if (buffer && buffer.length < size) buffer = new Uint32Array(latticeRoom(rect));
         if (!buffer && made < 2) {
-          buffer = new Uint32Array(size);
+          buffer = new Uint32Array(latticeRoom(rect));
           made++;
         }
         if (!buffer) return hearing;

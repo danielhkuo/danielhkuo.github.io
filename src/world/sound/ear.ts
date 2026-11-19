@@ -34,6 +34,15 @@ export function latticeOf(rect: { x: number; y: number; w: number; h: number }):
   return { px0, py0, cols: (rect.w - px0 + 1) >> 1, rows: (rect.h - py0 + 1) >> 1 };
 }
 
+/**
+ * Room for the lattice of any frame of this size. Where a side is odd the lattice has a row or a column more or less
+ * by the parity of the frame's first pixel, which changes each time the camera crosses a bake row: many times a
+ * second in flight. A buffer is made with room for the larger count, so it takes either.
+ */
+export function latticeRoom(rect: { w: number; h: number }): number {
+  return ((rect.w + 1) >> 1) * ((rect.h + 1) >> 1);
+}
+
 /** The land the ear listens to. */
 export interface EarWorld {
   /** World size, cells. */
@@ -523,7 +532,7 @@ export function createEar(): Ear {
         if (bake.length >= lat.cols * lat.rows) bakeRows(pose, bake, rect, r0, r1, lanes, true);
       } else if (bake.length >= rect.w * rect.h) {
         // A whole frame is gathered to its lattice first, as the page gathers it for the worker: one way of reading it.
-        if (own.length !== lat.cols * lat.rows) own = new Uint32Array(lat.cols * lat.rows);
+        if (own.length < lat.cols * lat.rows) own = new Uint32Array(latticeRoom(rect));
         // (The row above the first is needed again: squares and river neighbours look up.)
         gatherRows(own, rect, bake, rect, Math.max(0, r0 - 1), r1);
         bakeRows(pose, own, rect, r0, r1, lanes, true);

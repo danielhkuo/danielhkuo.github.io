@@ -215,7 +215,8 @@ export function createSoundControl(env: ControlEnv): SoundControl {
 
   const record: SoundLog | null = env.log ? { v: 1, worldId: "", places: null, prefs: { ...prefs }, frames: [], hearings: [] } : null;
   let logFrom = NaN;
-  let lastHearing: Hearing | null = null;
+  /** The time of the last Hearing logged: the ear hands back one pooled object, so a new Hearing is told by its time. */
+  let lastHearingT = NaN;
 
   const measuring = env.arm ?? "";
   /** The "frozen" arm: the context has been suspended on purpose, and the frame loop carries on as if it ran. */
@@ -493,9 +494,9 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         if (logFrom !== logFrom) logFrom = t;
         if (t - logFrom <= LOG_SECONDS) {
           const h = live && rt ? rt.hearing() : null;
-          if (h && h !== lastHearing) {
-            // The log copies: the ear reuses its Hearings.
-            lastHearing = h;
+          if (h && h.t !== lastHearingT) {
+            // The log copies: the ear reuses its Hearing object.
+            lastHearingT = h.t;
             record.hearings.push(copyHearing(h));
           }
           const r = (v: number, k: number) => Math.round(v * k) / k;

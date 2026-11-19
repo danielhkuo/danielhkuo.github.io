@@ -5,6 +5,7 @@ import { BUSES, type Bus } from "../../world/sound/engine/graph";
 import { createEngine, type Engine } from "../../world/sound/engine/engine";
 import { createKit, spawnWorker, type Kit } from "../../world/sound/engine/kit";
 import { isSoundLog, replayScene, SCENES, type Scene } from "../../world/sound/bench/scenes";
+import type { SoundLog } from "../../world/sound/control";
 import type { Pose, Prefs } from "../../world/sound/types";
 
 export const SEED = 3;
@@ -17,17 +18,29 @@ async function shippedWorldId(): Promise<string | null> {
   return world.worldId ?? null;
 }
 
-/** The recorded flight, if there is one and it was flown over the shipped world. */
-export async function loadReplay(): Promise<Scene | null> {
+/** A recorded flight, if the file is there and was flown over the shipped world. */
+async function loadLog(url: string, worldId: string | null): Promise<SoundLog | null> {
   try {
-    const [res, worldId] = await Promise.all([fetch("/world-sound/flight.json"), shippedWorldId()]);
+    const res = await fetch(url);
     if (!res.ok || worldId === null) return null;
     const log: unknown = await res.json();
-    if (!isSoundLog(log) || log.worldId !== worldId) return null;
-    return replayScene(log);
+    return isSoundLog(log) && log.worldId === worldId ? log : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * The recorded flights: the world-fly route's first 30 s (`flight-replay`), and two minutes of it over the world as
+ * it now is, the whole mix's measure (`long-flight`, design §13).
+ */
+export async function loadReplays(): Promise<Scene[]> {
+  const worldId = await shippedWorldId().catch(() => null);
+  const [short, long] = await Promise.all([loadLog("/world-sound/flight.json", worldId), loadLog("/world-sound/long-flight.json", worldId)]);
+  const out: Scene[] = [];
+  if (short) out.push(replayScene(short));
+  if (long) out.push(replayScene(long, 120, "long-flight", "Two minutes of the world-fly route over the world as it is now, by day in clear air: the whole mix, measured for its loudness and range."));
+  return out;
 }
 
 /** A dropped file as a replay scene; throws with a sentence for the status line when it is not one for this world. */
@@ -53,9 +66,9 @@ export function createSceneStore(): { subscribe(fn: () => void): () => void; get
   const subscribers = new Set<() => void>();
   let loaded: Promise<Scene[]> | null = null;
   const load = () =>
-    (loaded ??= loadReplay().then((replay) => {
-      if (replay) {
-        scenes = [...SCENES, replay];
+    (loaded ??= loadReplays().then((replays) => {
+      if (replays.length) {
+        scenes = [...SCENES, ...replays];
         for (const fn of subscribers) fn();
       }
       return scenes;

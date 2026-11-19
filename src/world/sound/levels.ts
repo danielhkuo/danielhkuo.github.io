@@ -190,6 +190,25 @@ export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;
 export const BED_OFF_S = 2;
 
+// ── Rain (§13) ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The rain bed's shape: the patter's grains (the velvet read `patterRate` times fast) through a band-pass; a heavy
+ * shower's sheet; the drops on water as the brook's bubbles read fast through a band-pass, with a fizz above them.
+ * Q is linear for the band-passes. `landFloor`: the patter's share over open sea (drops on the dragon and the waves).
+ * `topHz`, `topDb`: a shelf over the sheet and the fizz (not the drops), so the rain leaves the surf's top end its
+ * breaks: without it the rain was as loud as the coast above 8 kHz and took 47 % of the breaks' swing there (§13).
+ */
+export const RAIN = {
+  patterRate: 2.5, patterHz: 3200, patterQ: 0.7, knockHz: 120,
+  sheetHz: 2000, sheetQ: 0.5,
+  plinkHz: 3000, plinkQ: 0.8, plinkRate: 2, fizzHz: 5000, fizzShare: 0.35,
+  topHz: 7000, topDb: -9,
+  landFloor: 0.25,
+};
+/** Rain's gains at a full shower (linear). Calibrated against the solo targets of §13. */
+export const K_RAIN = { patter: 0.21, sheet: 0.055, fizz: 0.1 };
+
 // ── Rivers and falls (§3.2, §4.4, §4.5) ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -243,8 +262,11 @@ export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
 /**
  * A call's notes, a startled bird's keks and its wingbeats, linear (their buffers peak at 0.5), and the reverb
  * send's level. Calibrated: a call 40 cells off peaks at −30 LUFS momentary.
+ * `near`: the most a startled bird is given of a lone bird's level (1 within the small class's reference distance),
+ * so the nearest are heard as one about 51 cells off. Without it, birds put up close ahead of a boosting flier, two
+ * at once, peaked at −3.8 dBTP in the recorded flights (§9.1's bar is −4.5); the bench's beach pass is unchanged (§13).
  */
-export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158 };
+export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.7 };
 
 // ── The clock and the moments (§4.8–4.10) ────────────────────────────────────────────────────────────────────────────
 

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createSoundControl, SOUND_UI, type ContextLike, type ControlEnv, type SoundModule, type SoundRuntime } from "./control.ts";
 import { KEY_WANTED } from "./prefs.ts";
-import { emptyHearing } from "./types.ts";
+import { emptyHearing, type Hearing } from "./types.ts";
 
 type Fn = (e: Event) => void;
 
 /** A stand-in browser: listeners, timers, a context whose state the test moves, and a runtime that records its calls. */
-function world(opts: { stored?: string | null; storage?: boolean; resumes?: boolean; hidden?: boolean; log?: boolean } = {}) {
+function world(opts: { stored?: string | null; storage?: boolean; resumes?: boolean; hidden?: boolean; log?: boolean; hearing?: Hearing } = {}) {
   const store = new Map<string, string>();
   if (opts.stored) store.set(KEY_WANTED, opts.stored);
   const listeners = new Map<string, Set<Fn>>();
@@ -26,7 +26,7 @@ function world(opts: { stored?: string | null; storage?: boolean; resumes?: bool
     kitMs: () => 0.01,
     work: () => 4,
     settled: () => true,
-    hearing: () => emptyHearing(),
+    hearing: () => opts.hearing ?? emptyHearing(),
     enable: (first) => void calls.push(first ? "enable:first" : "enable:again"),
     mute: () => void calls.push("mute"),
     hide: () => void calls.push("hide"),
@@ -377,3 +377,18 @@ test("?soundlog records the flight whether sound is on or off, for at most 120 s
   assert.equal(w.contexts.length, 0, "recording makes no context");
   assert.equal(c.state(), "off");
 });
+
+test("?soundlog logs each new Hearing once, by its time, though the ear hands back one pooled object", async () => {
+  const pooled = emptyHearing();
+  const w = world({ stored: "on", log: true, hearing: pooled });
+  const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
+  w.key("ArrowUp");
+  await w.loaded();
+  for (let k = 0; k < 9; k++) {
+    pooled.t = k < 3 ? 1 : k < 6 ? 1.1 : 1.2;
+    c.frame(1 + k / 60, FLIGHT, 0);
+  }
+  assert.deepEqual(c.log()!.hearings.map((h) => h.t), [1, 1.1, 1.2]);
+});
+

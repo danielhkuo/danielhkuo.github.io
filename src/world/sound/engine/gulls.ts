@@ -177,8 +177,8 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
         // A bird put up is heard for what it is from anywhere along the pass: its level falls as the square root of the
         // distance (the small class's reach, a gentler law), or the further half of them would be lost under the wind.
         // Several up at once share a little of the level (each n^−¼ of a lone bird's): a flock is not three times as
-        // loud as a gull.
-        const level = (Math.sqrt(distanceGain(SMALL, o.d)) * southGain(b)) / Math.pow(ledger.size + 1, 0.25);
+        // loud as a gull. The nearest are held to `near`, the level of a bird about 51 cells off (true peak).
+        const level = Math.min(K_GULL.near, (Math.sqrt(distanceGain(SMALL, o.d)) * southGain(b)) / Math.pow(ledger.size + 1, 0.25));
         if (level < 1e-3) continue;
         const end = at(s.t0 + ALOFT) + 0.3;
         const chain = opts.pool.take(now, end, level, airCutoff(o.d) * southCutoff(b), panOf(o.dx, o.dy, calm));

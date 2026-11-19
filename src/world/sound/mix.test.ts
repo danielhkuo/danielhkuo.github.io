@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BOOST, BRAKE, CRUISE, startState, stepFlight, type FlightInput, type FlightState } from "../runtime/flight.ts";
-import { K_WIND, MIST_LOWPASS_HZ, MIST_WORLD_DB, WORLD_LOWPASS_HZ } from "./levels.ts";
+import { K_RAIN, K_WIND, MIST_LOWPASS_HZ, MIST_WORLD_DB, RAIN, WORLD_LOWPASS_HZ } from "./levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T, windSpeed } from "./mix.ts";
 import { gainToDb } from "./space.ts";
 import { EMPTY_CENSUS, emptyHearing, type Pose, type Prefs } from "./types.ts";
@@ -304,6 +304,25 @@ test("mist muffles the world, not the wind: the cutoff falls to 3.5 kHz and the 
   for (const i of [T.A_L, T.A_R, T.B_GAIN, T.C_GAIN, T.D_GAIN, T.E_GAIN, T.W_GAIN, T.MASTER]) near(full[i], clear[i], 1e-9, `target ${i} under mist`);
   // A pose with no air is clear air; a fresh targets array is open before the first mix.
   near(newTargets()[T.WORLD_HZ], WORLD_LOWPASS_HZ, 1e-3, "before the first mix");
+});
+
+test("rain: none in clear air; the patter on land, the drops on water at sea, the sheet only in a heavy shower", () => {
+  // (Targets are 32-bit floats: compared to a few parts in ten million.)
+  const clear = one(pose());
+  for (const i of [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ]) assert.equal(clear[i], 0, `target ${i} in clear air`);
+  const atSea = { ...emptyHearing(), sea: 1 };
+  const land = one(pose({ rain: 1 })), sea = mix(pose({ rain: 1 }), atSea, EMPTY_CENSUS, PREFS).targets;
+  near(land[T.RAIN_PATTER], K_RAIN.patter, 1e-6, "a full shower on land");
+  assert.equal(land[T.RAIN_FIZZ], 0, "no drops on water over land");
+  near(sea[T.RAIN_PATTER], K_RAIN.patter * RAIN.landFloor, 1e-6, "over open sea, only the drops on the dragon and the waves");
+  near(sea[T.RAIN_FIZZ], K_RAIN.fizz, 1e-6, "a full shower on open sea");
+  near(sea[T.RAIN_SHEET], land[T.RAIN_SHEET], 1e-7, "the sheet is the same over land and sea");
+  // The patter grows with the shower, the sheet with its square: a light shower has almost none.
+  const light = one(pose({ rain: 0.3 }));
+  near(light[T.RAIN_PATTER] / land[T.RAIN_PATTER], 0.3, 1e-6, "the patter at a light shower");
+  near(light[T.RAIN_SHEET] / land[T.RAIN_SHEET], 0.09, 1e-6, "the sheet at a light shower");
+  // Out of range is held in range.
+  near(one(pose({ rain: 2 }))[T.RAIN_PATTER], K_RAIN.patter, 1e-6, "rain past 1");
 });
 
 test("the volume can mute fully: at 0 the master target is exactly 0", () => {

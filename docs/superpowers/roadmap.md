@@ -261,12 +261,12 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
-- **Sound, what is left.** A rain bed for the showers (drops on land, bubbles on water) and the final re-pin of every
-  level against the whole mix: both wait for Fable (its usage limit, 2026-11-19). Later moments (the airship, the
-  marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12). Headphones (HRTF) as an
-  option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the small hours. Tall
-  falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills, and sounds for the
-  rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
+- **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Recorded
+  flights in rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
+  moments (the airship, the marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12).
+  Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
+  small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
+  and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
 
@@ -420,8 +420,7 @@ From the first-flight review:
   ("ambient" session); in desktop Safari, a sound panned hard left (WebKit 257447; the engine pans by gain pairs, not
   StereoPannerNode); with Bluetooth headphones, whether the abbey's bells meet the clock's figures. Listening set:
   `side-session-notes/…/sound-listening/index.html`.
-- Owner: the clock's tune in two public melody indexes (Musipedia's contour search, FolkTuneFinder): both need one
-  "Verify you are human" tick in the app's browser. The corpus check (13,367 tunes) found nothing close; see
-  `research/2026-11-19-clock-tune-originality.md`.
+- ~~The clock's tune in a public melody index~~ Done 2026-11-19: Musipedia's contour search (run by the owner) and the
+  corpus check (13,367 tunes) find nothing that tracks it; see `research/2026-11-19-clock-tune-originality.md`.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
   `PAGES` list once it passes.

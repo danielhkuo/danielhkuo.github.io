@@ -284,7 +284,9 @@ async function fly(browser, origin, opts, label, rate) {
     gc = { minor: sum("MinorGC"), major: sum("MajorGC"), perSecond: Number((sum("MinorGC").n / secs).toFixed(2)) };
   }
   if (opts.soundlog && rate === 1) {
-    const log = await page.evaluate(() => JSON.stringify(window.__flight.soundLog ?? null));
+    // Four decimals are plenty for a replay (the Hearings are logged as the ear made them, to the last bit): a sixth
+    // off the size. (Most of it is the shore points' keys; the two minutes' log is 2 MB, a few hundred kB gzipped.)
+    const log = await page.evaluate(() => JSON.stringify(window.__flight.soundLog ?? null, (_, v) => (typeof v === "number" && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v)));
     mkdirSync(path.dirname(path.resolve(opts.soundlog)), { recursive: true });
     writeFileSync(opts.soundlog, log);
   }
