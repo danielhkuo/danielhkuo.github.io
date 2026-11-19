@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CRUISE, MIN_GAP, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
+import { SETTLE_SLOPE } from "../dragon/body.ts";
+import { CLEARANCE, CRUISE, MIN_GAP, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
 import {
   advance, beginLanding, cameraAt, easeFocus, FOCUS_RATE, LANDING_CAP, land, MAX_TURN, NEAR, nearest, offered,
-  pullUp, QUIET_FACTOR, REST_LIFT, restShare, takeOff, type Phase, type Target,
+  pullUp, QUIET_FACTOR, REST_LIFT, restShare, RISE_SLOPE, SINK_END, takeOff, type Phase, type Target,
 } from "./landing.ts";
 
 const N = 10240;
@@ -97,10 +98,45 @@ test("it slows as it comes down and never speeds up in its last second", () => {
   assert.ok(Math.max(...speeds) <= CRUISE + 1e-9 && t > 2);
 });
 
-test("it comes down onto the ground where it lies, not a level of its own", () => {
+test("over the last of its sweep it follows the ground round its coil, and rests on it", () => {
   const slope: Terrain = { groundHeight: (x) => 5 + 0.1 * (x - 5000), occlusionFloor: () => 0 };
-  const { s } = comeDown(flier(TOWER.x + 60, TOWER.y, Math.PI / 2, 40), TOWER, slope);
-  assert.ok(Math.abs(s.alt - (slope.groundHeight(s.x, s.y) + REST_LIFT)) < 0.5, `alt ${s.alt}`);
+  let s = flier(TOWER.x + 60, TOWER.y, Math.PI / 2, 40);
+  let phase: Phase = { kind: "landing", approach: beginLanding(s, TOWER, N) };
+  while (phase.kind === "landing") {
+    const a = phase.approach;
+    ({ phase, s } = advance(phase, s, STILL, DT, slope, N, TARGETS));
+    const over = s.alt - slope.groundHeight(s.x, s.y);
+    if (a.swept / a.sweep > SINK_END + 0.05) assert.ok(Math.abs(over - REST_LIFT) < 0.3, `at ${(a.swept / a.sweep).toFixed(2)} of the sweep: ${over.toFixed(2)} over the ground`);
+  }
+  assert.ok(Math.abs(s.alt - (slope.groundHeight(s.x, s.y) + REST_LIFT)) < 0.3, `rests at ${s.alt}`);
+});
+
+test("at a cliff's foot the head rests where the coil's ring holds it, not down on the ground below", () => {
+  // The tower stands on the edge: ground at 14 to its north, the sea at 0 where the head comes to rest.
+  const cliff: Terrain = { groundHeight: (_x, y) => (y < 5000 ? 14 : 0), occlusionFloor: () => 0 };
+  const { s, phase } = comeDown(flier(TOWER.x + 60, TOWER.y, Math.PI / 2, 40), TOWER, cliff);
+  // A quarter of the ring from the cliff's edge, sloping down from it no steeper than the body bends.
+  const held = 14 - SETTLE_SLOPE * (Math.PI / 2) * TOWER.radius + REST_LIFT;
+  assert.ok(Math.abs(s.alt - held) < 0.6, `rests at ${s.alt.toFixed(2)}, the ring at ${held.toFixed(2)}`);
+  const later = advance(phase, s, STILL, 0.5, cliff, N, TARGETS).s;
+  assert.equal(later.alt, s.alt);
+});
+
+test("round a coil that crosses a cliff it rises and falls no steeper than its body bends, and never dips under the ground", () => {
+  // The tower stands on the edge: ground at 14 to its north, the sea at 0 to its south.
+  const cliff: Terrain = { groundHeight: (_x, y) => (y < 5000 ? 14 : 0), occlusionFloor: () => 0 };
+  for (const heading of [Math.PI / 2, -Math.PI / 2]) {
+    let s = flier(TOWER.x + 60, TOWER.y, heading, 40);
+    let phase: Phase = { kind: "landing", approach: beginLanding(s, TOWER, N) };
+    while (phase.kind === "landing") {
+      const a = phase.approach, before = s;
+      ({ phase, s } = advance(phase, s, STILL, DT, cliff, N, TARGETS));
+      assert.ok(s.alt >= cliff.groundHeight(s.x, s.y) + MIN_GAP - 1e-9, `under the ground at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
+      if (a.swept / a.sweep <= SINK_END + 0.05) continue;
+      const run = Math.hypot(delta(before.x, s.x), delta(before.y, s.y));
+      assert.ok(Math.abs(s.alt - before.alt) <= SETTLE_SLOPE * run + 0.02, `stepped ${(s.alt - before.alt).toFixed(3)} over ${run.toFixed(3)} cells`);
+    }
+  }
 });
 
 test("it lands across the world's edge", () => {
@@ -168,13 +204,26 @@ test("the camera eases from the flier to the landmark and back", () => {
   assert.equal(easeFocus(0.05, false, 0.1), 0);
 });
 
-test("the dragon rests as the coil closes: not at all flying, fully once landed", () => {
+test("the dragon calms as the coil closes, and rests only once it has landed", () => {
   assert.equal(restShare(FLYING), 0);
   assert.equal(restShare({ kind: "landed", id: TOWER.id }), 1);
   const a = beginLanding(flier(TOWER.x + 50, TOWER.y, Math.PI / 2), TOWER, N);
   assert.equal(restShare({ kind: "landing", approach: a }), 0);
-  assert.equal(restShare({ kind: "landing", approach: { ...a, swept: a.sweep * 0.5 } }), 0);
-  const late = restShare({ kind: "landing", approach: { ...a, swept: a.sweep * 0.9 } });
-  assert.ok(late > 0 && late < 1, `${late}`);
-  assert.equal(restShare({ kind: "landing", approach: { ...a, swept: a.sweep } }), 1);
+  const mid = restShare({ kind: "landing", approach: { ...a, swept: a.sweep * 0.8 } });
+  assert.ok(mid > 0 && mid < 0.5, `${mid}`);
+  // Still landing, it is never more at rest than not: the body lies down only when the head has stopped.
+  assert.equal(restShare({ kind: "landing", approach: { ...a, swept: a.sweep } }), 0.5);
+});
+
+test("taking off, it climbs no steeper than its body can follow, and comes up to its flying height", () => {
+  const { s: rest } = comeDown(flier(TOWER.x + 50, TOWER.y, Math.PI / 2), TOWER, FLAT);
+  let phase = takeOff({ kind: "landed", id: TOWER.id });
+  let s = rest;
+  for (let i = 0; i < 60 * 3; i++) {
+    const r = advance(phase, s, STILL, DT, FLAT, N, TARGETS);
+    const run = Math.hypot(delta(s.x, r.s.x), delta(s.y, r.s.y));
+    assert.ok(r.s.alt - s.alt <= RISE_SLOPE * run + 1e-9, `step ${i}: rose ${(r.s.alt - s.alt).toFixed(3)} over ${run.toFixed(3)} cells`);
+    ({ phase, s } = r);
+  }
+  assert.ok(Math.abs(s.alt - (5 + CLEARANCE)) < 0.5, `flying at ${s.alt}`);
 });

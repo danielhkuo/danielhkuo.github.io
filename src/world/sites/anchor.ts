@@ -33,11 +33,11 @@ export interface Anchor {
 const SEARCH: Record<LandmarkType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24 };
 
 /** The coil's radius when nothing is known of the building, by kind (the sprite boxes of design 5.9). */
-const FALLBACK: Record<LandmarkType, number> = { abbey: 23, town: 9, lighthouse: 9, windmill: 10.4, bridge: 20, cathedral: 23, yew: 22 };
+const FALLBACK: Record<LandmarkType, number> = { abbey: 22, town: 8, lighthouse: 8, windmill: 9.4, bridge: 19, cathedral: 22, yew: 21 };
 
 /** The coil's radius: the body's own width clear of the walls. */
-const CLEAR = 4;
-export const REST_MIN = 9;
+const CLEAR = 3;
+export const REST_MIN = 8;
 export const REST_MAX = 26;
 
 /**

@@ -46,17 +46,17 @@ test("of two as tall, the nearer is the anchor", () => {
   assert.equal(anchorOf({ x: 1000, y: 1000, type: "yew" }, [far, near], N)!.x, 1003);
 });
 
-test("the coil rests just clear of the walls, never tighter than 9 or wider than 26", () => {
-  assert.equal(restRadius({ x: 0, y: 0, halfW: 3.5, halfD: 3.5, height: 34 }, "lighthouse"), 9);
-  assert.ok(Math.abs(restRadius({ x: 0, y: 0, halfW: 4.5, halfD: 4.5, height: 20 }, "windmill") - (Math.hypot(4.5, 4.5) + 4)) < 1e-9);
+test("the coil rests just clear of the walls, never tighter than 8 or wider than 26", () => {
+  assert.equal(restRadius({ x: 0, y: 0, halfW: 3.5, halfD: 3.5, height: 34 }, "lighthouse"), 8);
+  assert.ok(Math.abs(restRadius({ x: 0, y: 0, halfW: 4.5, halfD: 4.5, height: 20 }, "windmill") - (Math.hypot(4.5, 4.5) + 3)) < 1e-9);
   assert.equal(restRadius({ x: 0, y: 0, halfW: 40, halfD: 30, height: 9 }, "bridge"), 26);
 });
 
 test("without a building, the radius goes by the kind of landmark", () => {
-  assert.equal(restRadius(null, "lighthouse"), 9);
+  assert.equal(restRadius(null, "lighthouse"), 8);
   assert.ok(restRadius(null, "abbey") > restRadius(null, "windmill"));
   for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"] as const) {
     const r = restRadius(null, t);
-    assert.ok(r >= 9 && r <= 26, `${t}: ${r}`);
+    assert.ok(r >= 8 && r <= 26, `${t}: ${r}`);
   }
 });
