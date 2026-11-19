@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { indexBuilt } from "../gen/built.ts";
 import { buildBakeWorld } from "../bake/world.ts";
 import { buildWorld } from "../cli/build.ts";
 import { occlusionFloor } from "../gen/occlusion.ts";
@@ -51,6 +52,9 @@ test("a world shipped in regions (format 2) reads back whole, value for value", 
   const occlusion = { block: manifest.block, data: occlusionFloor(bw.ground, bw.gN, n / bw.gN, manifest.block) };
   const whole = (await encodeWorld(bw, { occlusion })).bin;
   const want = await decodeWorld(whole);
+  // Format 2 leaves the road polylines out of the built list (the bake draws roads from world.roads), so compare
+  // built against the whole world's with its road polylines emptied.
+  if (want.built) want.built = indexBuilt({ ...want.built.built, roads: [] }, want.n);
   for (const k of [...GRIDS, ...VECTORS]) assert.deepEqual(got.world[k], want[k], k);
   assert.equal(got.world.gWin, undefined, "a whole world, not a window");
   const fd = await decodeFlightData(whole);
