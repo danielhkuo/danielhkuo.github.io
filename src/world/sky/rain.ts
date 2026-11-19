@@ -149,25 +149,30 @@ export function createRain(seed: number): (out: Uint32Array, rect: ViewRect, t: 
     const camX = Math.floor(rect.x), camY = Math.floor(rect.y);
     for (let k = 0; k < count; k++) {
       const fallen = t * fall[k];
-      // The streak's foot, the drop itself, wrapped round the space.
-      const y = (Math.floor(startY[k] + fallen - camY) & (SPACE_H - 1)) - OVER;
-      const x = (Math.floor(startX[k] + lean * fallen - camX) & (SPACE_W - 1)) - ASIDE;
+      // The streak's foot, the drop itself, wrapped round the space; the space repeats over a frame of any size.
+      const y0 = (Math.floor(startY[k] + fallen - camY) & (SPACE_H - 1)) - OVER;
+      const x0 = (Math.floor(startX[k] + lean * fallen - camX) & (SPACE_W - 1)) - ASIDE;
       const len = length[k];
-      if (y < 0 || y - len >= h || x < -5 || x >= w + 5) continue;
-      const strong = alpha[k] * gusts[(x + ASIDE) >> GUST_SHIFT];
-      // Three flat steps up the streak: whole at the drop, fainter behind it.
-      const a0 = strong | 0, a1 = (strong * 0.68) | 0, a2 = (strong * 0.4) | 0;
-      for (let j = 0; j < len; j++) {
-        const py = y - j, px = x - Math.round(j * lean);
-        if (px < 0 || px >= w || py < 0 || py >= h) continue;
-        const i = py * w + px, a = j * 3 < len ? a0 : j * 3 < len * 2 ? a1 : a2;
-        const dst = out[i];
-        if ((dst & 255) + ((dst >>> 8) & 255) > lightFrom) blendPx(out, i, ink, (a * INK_SHARE) | 0);
-        else blendPx(out, i, pale, a);
+      for (let y = y0; y - len < h; y += SPACE_H) {
+        if (y < 0) continue;
+        for (let x = x0; x < w + 5; x += SPACE_W) {
+          if (x < -5) continue;
+          const strong = alpha[k] * gusts[((x + ASIDE) & (SPACE_W - 1)) >> GUST_SHIFT];
+          // Three flat steps up the streak: whole at the drop, fainter behind it.
+          const a0 = strong | 0, a1 = (strong * 0.68) | 0, a2 = (strong * 0.4) | 0;
+          for (let j = 0; j < len; j++) {
+            const py = y - j, px = x - Math.round(j * lean);
+            if (px < 0 || px >= w || py < 0 || py >= h) continue;
+            const i = py * w + px, a = j * 3 < len ? a0 : j * 3 < len * 2 ? a1 : a2;
+            const dst = out[i];
+            if ((dst & 255) + ((dst >>> 8) & 255) > lightFrom) blendPx(out, i, ink, (a * INK_SHARE) | 0);
+            else blendPx(out, i, pale, a);
+          }
+          // The slate tail, one pixel above the stroke.
+          const ty = y - len, tx = x - Math.round(len * lean);
+          if (tx >= 0 && tx < w && ty >= 0 && ty < h) blendPx(out, ty * w + tx, tail, (strong * TAIL_SHARE) | 0);
+        }
       }
-      // The slate tail, one pixel above the stroke.
-      const ty = y - len, tx = x - Math.round(len * lean);
-      if (tx >= 0 && tx < w && ty >= 0 && ty < h) blendPx(out, ty * w + tx, tail, (strong * TAIL_SHARE) | 0);
     }
   };
 }
@@ -202,41 +207,47 @@ export function splashLayer(seed: number): LiveLayer {
           placeOf[k] = hash2(k, round, seed ^ 0x5b1a);
         }
         const hsh = placeOf[k];
-        const x = (((hsh & 0xfff) - camX) & (SPACE_W - 1)) - ASIDE, y = ((((hsh >>> 12) & 0xfff) - camY) & (SPACE_H - 1)) - OVER;
-        if (x < 2 || x >= w - 2 || y < 1 || y >= h - 1) continue;
-        const i = y * w + x;
-        const m = matOf(bake[i]);
-        if (m === 0) continue;
-        if (isWater[m] === 1) {
-          const a = Math.round(RING_ALPHA * (0.5 + 0.5 * air.rain) * (1 - 0.75 * age));
-          if (age < 0.28) {
-            // The drop.
-            blendPx(out, i, colour, a);
-          } else if (age < 0.62) {
-            // A small ring.
-            blendPx(out, i - 1, colour, a);
-            blendPx(out, i + 1, colour, a);
-            blendPx(out, i - w, colour, a >> 1);
-            blendPx(out, i + w, colour, a >> 1);
-          } else {
-            // The ring opened wide and flat, as the ground is seen from above and aslant.
-            blendPx(out, i - 2, colour, a);
-            blendPx(out, i + 2, colour, a);
-            blendPx(out, i - w - 1, colour, a >> 1);
-            blendPx(out, i - w, colour, a >> 1);
-            blendPx(out, i - w + 1, colour, a >> 1);
-            blendPx(out, i + w - 1, colour, a >> 1);
-            blendPx(out, i + w, colour, a >> 1);
-            blendPx(out, i + w + 1, colour, a >> 1);
-          }
-        } else if (age < 0.6) {
-          const a = Math.round(FLECK_ALPHA * (0.5 + 0.5 * air.rain));
-          if (age < 0.3) {
-            blendPx(out, i, colour, a);
-          } else {
-            // The fleck jumps apart.
-            blendPx(out, i - w - 1, colour, a >> 1);
-            blendPx(out, i - w + 1, colour, a >> 1);
+        const x0 = (((hsh & 0xfff) - camX) & (SPACE_W - 1)) - ASIDE, y0 = ((((hsh >>> 12) & 0xfff) - camY) & (SPACE_H - 1)) - OVER;
+        // The space repeats over a frame of any size: the splash lands in each copy of it on the frame.
+        for (let y = y0; y < h - 1; y += SPACE_H) {
+          if (y < 1) continue;
+          for (let x = x0; x < w - 2; x += SPACE_W) {
+            if (x < 2) continue;
+            const i = y * w + x;
+            const m = matOf(bake[i]);
+            if (m === 0) continue;
+            if (isWater[m] === 1) {
+              const a = Math.round(RING_ALPHA * (0.5 + 0.5 * air.rain) * (1 - 0.75 * age));
+              if (age < 0.28) {
+                // The drop.
+                blendPx(out, i, colour, a);
+              } else if (age < 0.62) {
+                // A small ring.
+                blendPx(out, i - 1, colour, a);
+                blendPx(out, i + 1, colour, a);
+                blendPx(out, i - w, colour, a >> 1);
+                blendPx(out, i + w, colour, a >> 1);
+              } else {
+                // The ring opened wide and flat, as the ground is seen from above and aslant.
+                blendPx(out, i - 2, colour, a);
+                blendPx(out, i + 2, colour, a);
+                blendPx(out, i - w - 1, colour, a >> 1);
+                blendPx(out, i - w, colour, a >> 1);
+                blendPx(out, i - w + 1, colour, a >> 1);
+                blendPx(out, i + w - 1, colour, a >> 1);
+                blendPx(out, i + w, colour, a >> 1);
+                blendPx(out, i + w + 1, colour, a >> 1);
+              }
+            } else if (age < 0.6) {
+              const a = Math.round(FLECK_ALPHA * (0.5 + 0.5 * air.rain));
+              if (age < 0.3) {
+                blendPx(out, i, colour, a);
+              } else {
+                // The fleck jumps apart.
+                blendPx(out, i - w - 1, colour, a >> 1);
+                blendPx(out, i - w + 1, colour, a >> 1);
+              }
+            }
           }
         }
       }

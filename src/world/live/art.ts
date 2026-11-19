@@ -82,22 +82,24 @@ export function frameY(f: LiveFrame, by: number, margin: number): number {
 }
 
 /**
- * The frame row where the ground at world (column px, row y) is drawn, or −1 when it lies outside the frame or behind
- * nearer land. World rows fall as the frame's rows rise, so this is a bisection of the column.
+ * The frame row where the ground at world (column px, row y) is drawn, looked for from `reach` rows above the frame to
+ * `reach` rows below it, or null when it lies outside that or behind nearer land. px may lie past the frame's edge, and
+ * the rows past it are read from the land there (see bakeAt), so a thing standing just off the frame is found as it
+ * would be on it. World rows fall as the frame's rows rise, so this is a bisection of the column.
  */
-export function groundRow(f: LiveFrame, px: number, y: number): number {
+export function groundRow(f: LiveFrame, px: number, y: number, reach = 0): number | null {
   const h = f.rect.h;
   // y in the frame's own turn of the torus.
   const mid = (f.rect.y + h / 2) / 0.8;
   const yy = y + Math.round((mid - y) / f.n) * f.n;
-  let lo = 0, hi = h - 1;
-  if (worldRowAt(f, px, hi) < yy - 0.5) return -1;
+  let lo = -reach, hi = h - 1 + reach;
+  if (worldRowAt(f, px, hi) < yy - 0.5) return null;
   while (lo < hi) {
     const m = (lo + hi) >> 1;
     if (worldRowAt(f, px, m) >= yy - 0.5) hi = m;
     else lo = m + 1;
   }
-  return worldRowAt(f, px, lo) <= yy + 1.5 ? lo : -1;
+  return worldRowAt(f, px, lo) <= yy + 1.5 ? lo : null;
 }
 
 /** Blends `rgb` over out[i] at `a` (0–255), keeping it opaque. */

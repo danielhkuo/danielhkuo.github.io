@@ -350,11 +350,18 @@ test("forced, a lingering balloon keeps the next from showing until it has gone,
   for (const f of frames) assert.ok(f.seen.length <= 1, `${f.seen.length} balloons ${f.t - end} s after`);
   const after = frames.filter((f) => f.t >= end);
   assert.ok(after[0].seen.length === 1, "the first stays on past its time");
-  // The first drifts east until it has left the frame; the next, waiting till then, comes in back near the middle.
-  const jump = after.findIndex((f, j) => j > 0 && f.seen.length === 1 && after[j - 1].seen.length === 1 && f.seen[0].px < after[j - 1].seen[0].px - 50);
+  // The first drifts east until it has left the frame (it is drawn, and so seen, while any of it is on the frame); the
+  // next, waiting till then, comes in back near the middle, a frame or so after the first was last seen.
+  let first = -1, jump = -1;
+  for (let j = 0; j < after.length && jump < 0; j++) {
+    if (after[j].seen.length === 0) continue;
+    if (first >= 0 && after[j].seen[0].px < after[first].seen[0].px - 50) jump = j;
+    else first = j;
+  }
   assert.ok(jump > 0, "the next comes once the first has gone");
-  for (const f of after.slice(0, jump)) assert.equal(f.seen.length, 1, `the first drifts on ${f.t - end} s after its time`);
-  assert.ok(after[jump - 1].seen[0].px >= W - 12, `the first left by the edge, from ${after[jump - 1].seen[0].px}`);
+  for (const f of after.slice(0, first + 1)) assert.equal(f.seen.length, 1, `the first drifts on ${f.t - end} s after its time`);
+  assert.ok(jump - first <= 2, `the next follows the first's going at once (${jump - first} frames)`);
+  assert.ok(after[first].seen[0].px >= W - 12, `the first left by the edge, from ${after[first].seen[0].px}`);
   assert.ok(!after[jump].seen[0].inView, "the next comes in faintly");
 });
 

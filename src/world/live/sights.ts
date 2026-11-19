@@ -13,7 +13,7 @@ import { artSet, blend, frameX, frameY, groundRow, modP, smooth01, stamp } from 
 import { Lingers } from "./linger.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
-import { drawSprite, worldRowAt } from "./sprites.ts";
+import { bakeAt, drawSprite, worldRowAt } from "./sprites.ts";
 
 // ── Tuning ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -26,6 +26,9 @@ export const KITE_EVERY = 150;
 export const KITE_UP = 70;
 /** How high the kite flies over the child, in pixels. */
 const KITE_HEIGHT = 30;
+/** The kite, its string and its tail reach this many pixels right of the child and this many rows above it. */
+const KITE_LEAN = 18;
+const KITE_RISE = 38;
 /** The nets' clock, as the kite's. */
 export const NET_EVERY = 120;
 export const NET_OUT = 52;
@@ -224,10 +227,13 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
       const at = kiteDown.at(s, into < KITE_UP ? into : -1, Math.floor(flown / KITE_EVERY), true);
       if (at < 0) continue;
       const up = easeInOut(at, KITE_UP, 7);
-      const px = frameX(f, town.x, 0);
-      if (px < 12 || px >= w - 12) continue;
-      const gy = groundRow(f, px, town.y);
-      if (gy < 2) continue;
+      // The child, the string, the kite and its tail cover 6 pixels left of the child to KITE_LEAN right, and 6 rows
+      // under its feet to KITE_RISE above: a child that far past the frame's edge still puts some of it on the frame,
+      // so its ground is looked for there too.
+      const px = frameX(f, town.x, KITE_LEAN);
+      if (px >= w + 6) continue;
+      const gy = groundRow(f, px, town.y, KITE_RISE);
+      if (gy === null || gy < -6 || gy - KITE_RISE >= h) continue;
       // The kite leans downwind and wanders on its string.
       const kx = px + Math.round(up * (9 + 4 * psin(t * 0.5) + 1.5 * psin(t * 1.3 + 1)));
       const ky = gy - 2 - Math.round(up * (KITE_HEIGHT + 3 * psin(t * 0.7 + 2)));
@@ -238,9 +244,9 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
       for (let j = 1; j < rise - 3; j++) {
         const u = j / rise;
         const lx = px + Math.round((kx - px) * u * u), ly = gy - 2 - j;
-        if (ly < 0 || ly >= h || lx < 1 || lx >= w) continue;
-        out[ly * w + lx] = line;
-        blend(out, ly * w + lx - 1, ink, 150);
+        if (ly < 0 || ly >= h || lx < 0 || lx > w) continue;
+        if (lx < w) out[ly * w + lx] = line;
+        if (lx >= 1) blend(out, ly * w + lx - 1, ink, 150);
       }
       stamp(f, kite, kx, ky, false);
       // A tail of ribbons, swinging.
@@ -249,7 +255,9 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
         const tx = kx - Math.round(j * 0.8 + swing * j * 0.3), ty = ky + 3 + j;
         if (ty >= 0 && ty < h && tx >= 0 && tx < w) out[ty * w + tx] = palette[(j & 1) === 1 ? (M.river << 8) | 8 : (M.whitewash << 8) | 13];
       }
-      kiteDown.drawn(s, true);
+      // Watched while some of the child, the string, the kite or its tail is on the frame.
+      const left = Math.min(px - 1, kx - 6), right = Math.max(px, kx + 2), top = ky - 2, bottom = Math.max(gy, ky + 8);
+      kiteDown.drawn(s, left < w && right >= 0 && top < h && bottom >= 0);
       note("kite", kx, ky);
     }
   }
@@ -259,16 +267,17 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
     const { out, bake, palette, t } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
     const perX = n / 320, perY = (n * 0.8) / 256;
-    const cx1 = Math.floor((rx + w) / 320), cy1 = Math.floor((ry + h) / 256);
-    for (let cy = Math.floor(ry / 256); cy <= cy1; cy++) for (let cx = Math.floor(rx / 320); cx <= cx1; cx++) {
+    // The boat covers 3 pixels either side of its point and 3 rows above; its net lies 23 pixels astern (west) and 5
+    // rows either side. Every boat that reaches the frame is placed, by the water past the frame's edge as on it.
+    const cx1 = Math.floor((rx + w + 23) / 320), cy1 = Math.floor((ry + h + 5) / 256);
+    for (let cy = Math.floor((ry - 5) / 256) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx - 3) / 320) - 1; cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0xf154);
       const px = cx * 320 + 20 + ((hc >>> 4) % 280) - rx, py = cy * 256 + 20 + ((hc >>> 14) % 216) - ry;
-      if (px < 26 || px >= w - 6 || py < 10 || py >= h - 10) continue;
-      const i = py * w + px;
+      if (px < -3 || px >= w + 23 || py < -5 || py >= h + 5) continue;
       // Deep water under the boat and where the net will lie.
       let deep = true;
       for (let d = -24; d <= 4 && deep; d += 2) {
-        const v = bake[i + d];
+        const v = bakeAt(f, px + d, py);
         if (isSea[v & 255] === 0 || ((v >>> 8) & 15) < 6) deep = false;
       }
       if (!deep) continue;

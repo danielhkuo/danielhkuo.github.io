@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { Device } from "../../world/controls/guides";
 import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
+import { getFrameFit } from "./useFrameScale";
 import { startFlight, type FlightSession, type FlightStats, type PhaseKind } from "./session";
 import type { TerminalLink } from "./useTerminalDrawer";
 
@@ -54,7 +55,7 @@ export function useFlight(
     if (!el) return;
     const s = startFlight(
       el,
-      { landmarks, terminalOpen: terminal.isOpen, closeTerminal: terminal.close, optionsOpen: panel.isOpen, options: getOptions },
+      { landmarks, terminalOpen: terminal.isOpen, closeTerminal: terminal.close, optionsOpen: panel.isOpen, options: getOptions, frame: getFrameFit },
       {
         failed: () => setFailed(true),
         phase: (kind, at) => {
