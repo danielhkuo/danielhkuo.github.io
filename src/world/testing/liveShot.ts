@@ -6,16 +6,16 @@ import { join } from "node:path";
 import { namedViews, renderStrip } from "../cli/live.ts";
 import type { Flier, LiveFrame, LiveLayer } from "../live/live.ts";
 import type { Manifest } from "../pack/manifest.ts";
-import { decodeFlightData } from "../pack/world.ts";
+import { readShipped } from "../pack/shipped.ts";
 
 const root = process.cwd();
-const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin")));
-const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
+const worldRoot = join(root, "public/world");
+const shipped = await readShipped(worldRoot);
+const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
 
-export const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8")) as Manifest;
+export const manifest = shipped.manifest as unknown as Manifest;
 /** The shipped world's ground grid, as the flight page hands it to the layers. */
-export const land = await decodeFlightData(bin);
+export const land = shipped.flight;
 
 /** The composed land of one view, its bake pixels and the rect. */
 export interface Shot {
@@ -32,13 +32,13 @@ const shots = new Map<string, Shot>();
 export async function shot(view: string): Promise<Shot> {
   const hit = shots.get(view);
   if (hit) return hit;
-  const place = (await namedViews(bin, manifest))[view];
+  const place = (await namedViews(shipped.world, manifest))[view];
   let got: Shot | null = null;
   const grab: LiveLayer = {
     name: "grab",
     draw: (f) => { got = { out: new Uint32Array(f.out), bake: new Uint32Array(f.bake), rect: { ...f.rect }, palette: f.palette, n: f.n }; },
   };
-  await renderStrip({ bin, manifest, mask, x: place.x, y: place.y, times: [0], layers: [grab], clouds: null });
+  await renderStrip({ world: shipped.world, flight: shipped.flight, manifest, mask, x: place.x, y: place.y, times: [0], layers: [grab], clouds: null });
   assert.ok(got, "the view drew");
   shots.set(view, got);
   return got;

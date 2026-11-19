@@ -11,7 +11,7 @@ import { worldLook } from "../bake/look.ts";
 import { wrap } from "../core/torus.ts";
 import { encodePng } from "./png.ts";
 import type { Manifest } from "../pack/manifest.ts";
-import { decodeWorld } from "../pack/world.ts";
+import { readShipped } from "../pack/shipped.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import { flownDragon } from "../dragon/index.ts";
@@ -82,11 +82,9 @@ function blit2(sheet: Uint8Array, sheetW: number, dx: number, dy: number, src: U
 export async function main(argv: readonly string[]): Promise<number> {
   const t = readT(argv);
   const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
-  const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
-  const id = current.worldId;
-  const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
-  const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
-  const world = await decodeWorld(bin);
+  const shipped = await readShipped(worldRoot);
+  const manifest = shipped.manifest as unknown as Manifest;
+  const world = shipped.world;
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
   const look = worldLook(world.n, buildPalette(MIDDAY));
 

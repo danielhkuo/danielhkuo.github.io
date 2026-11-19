@@ -17,13 +17,15 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { BakeWorld } from "../bake/world.ts";
 import { torusDist2, wrap } from "../core/torus.ts";
 import type { LiveLayer } from "../live/live.ts";
 import { makeLayers } from "../live/registry.ts";
 import { wondersOf, type Manifest } from "../pack/manifest.ts";
-import { decodeFlightData, decodeWorld } from "../pack/world.ts";
+import { readShipped } from "../pack/shipped.ts";
+import { decodeFlightData, decodeWorld, type FlightData } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
-import { createBakeHost } from "../runtime/bakeHost.ts";
+import { createBakeHost, createWorldBakeHost } from "../runtime/bakeHost.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { flownDragon } from "../dragon/index.ts";
@@ -33,10 +35,19 @@ import type { CloudStyle } from "../sky/styles.ts";
 import { styleFrom } from "../sky/styles.ts";
 import { encodePng } from "./png.ts";
 
-export interface StripOptions {
-  bin: Uint8Array;
+interface StripBase {
   manifest: Manifest;
   mask: Uint8Array;
+}
+
+/**
+ * A strip drawn from format-1 bytes (`bin`) or from a world already decoded (`world` and `flight`).
+ * The tools pass the decoded world. Callers that still hold `world.bin` pass `bin`.
+ */
+export type StripOptions = StripBase & (
+  | { bin: Uint8Array; world?: undefined; flight?: undefined }
+  | { world: BakeWorld; flight: FlightData; bin?: undefined }
+) & {
   /** The camera's world point (the kite flies here, heading north, 18 units over the ground). */
   x: number;
   y: number;
@@ -47,7 +58,7 @@ export interface StripOptions {
   clouds: CloudStyle | null;
   width?: number;
   height?: number;
-}
+};
 
 const DEFAULT_W = 400;
 const DEFAULT_H = 225;
@@ -122,14 +133,15 @@ function blit2(sheet: Uint8Array, sheetW: number, dx: number, dy: number, src: U
 
 /**
  * Draws one 400×225 frame (or width × height) per time: the stream view over the decoded world with every chunk baked
- * in-process (createBakeHost) before drawing, the layers run by the view, then sky below, the kite, sky above.
+ * in-process (createWorldBakeHost, or createBakeHost when only `bin` is given) before drawing, the layers run by the
+ * view, then sky below, the kite, sky above.
  */
 export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const width = o.width ?? DEFAULT_W;
   const height = o.height ?? DEFAULT_H;
-  const data = await decodeFlightData(o.bin);
+  const data = o.flight ?? await decodeFlightData(o.bin);
   const palette = buildPalette(MIDDAY);
-  const bake = await createBakeHost(o.bin, o.mask);
+  const bake = o.world ? createWorldBakeHost(o.world, o.mask) : await createBakeHost(o.bin, o.mask);
   const pool = syncPool(bake);
   const view = createStreamView(data, pool, palette, o.mask, {
     width,
@@ -173,7 +185,7 @@ function siteOf(manifest: Manifest, type: string): { x: number; y: number } | un
   return undefined;
 }
 
-function riverAt(world: Awaited<ReturnType<typeof decodeWorld>>, manifest: Manifest): { x: number; y: number } {
+function riverAt(world: BakeWorld, manifest: Manifest): { x: number; y: number } {
   let refX = manifest.start.x;
   let refY = manifest.start.y;
   const abbey = siteOf(manifest, "abbey");
@@ -203,8 +215,10 @@ function riverAt(world: Awaited<ReturnType<typeof decodeWorld>>, manifest: Manif
  * waterfall, from the decoded world's `falls`), river (the abbey site's river point, else a river vertex near the start),
  * peak (the highest ground), sea (600 cells off the start along −(dx, dy)).
  */
-export async function namedViews(bin: Uint8Array, manifest: Manifest): Promise<Record<string, { x: number; y: number }>> {
-  const world = await decodeWorld(bin);
+export async function namedViews(bin: Uint8Array, manifest: Manifest): Promise<Record<string, { x: number; y: number }>>;
+export async function namedViews(world: BakeWorld, manifest: Manifest): Promise<Record<string, { x: number; y: number }>>;
+export async function namedViews(source: Uint8Array | BakeWorld, manifest: Manifest): Promise<Record<string, { x: number; y: number }>> {
+  const world = source instanceof Uint8Array ? await decodeWorld(source) : source;
   const { gN, ground, n, start } = { gN: world.gN, ground: world.ground, n: world.n, start: manifest.start };
   let peakI = 0;
   for (let i = 1; i < ground.length; i++) if (ground[i] > ground[peakI]) peakI = i;
@@ -278,7 +292,8 @@ function parseAt(argv: readonly string[]): { x: number; y: number } | null {
 async function writeStrip(
   name: string,
   place: { x: number; y: number },
-  bin: Uint8Array,
+  world: BakeWorld,
+  flight: FlightData,
   manifest: Manifest,
   mask: Uint8Array,
   layers: readonly LiveLayer[],
@@ -287,7 +302,8 @@ async function writeStrip(
   dir: string,
 ): Promise<string[]> {
   const frames = await renderStrip({
-    bin,
+    world,
+    flight,
     manifest,
     mask,
     x: place.x,
@@ -346,12 +362,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
-  const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
-  const id = current.worldId;
-  const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
-  const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
+  const shipped = await readShipped(worldRoot);
+  const manifest = shipped.manifest as unknown as Manifest;
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
-  const land = await decodeFlightData(bin);
+  const land = shipped.flight;
   const layers = makeLayers({
     seed: manifest.seed,
     n: manifest.n,
@@ -364,7 +378,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   const dir = join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });
 
-  const places = await namedViews(bin, manifest);
+  const places = await namedViews(shipped.world, manifest);
   if (at) places.at = at;
 
   const todo: string[] = [];
@@ -380,7 +394,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const name = todo[i];
     const place = places[name];
     if (!place) continue;
-    const paths = await writeStrip(name, place, bin, manifest, mask, layers, clouds, times, dir);
+    const paths = await writeStrip(name, place, shipped.world, land, manifest, mask, layers, clouds, times, dir);
     for (let j = 0; j < paths.length; j++) written.push(paths[j]);
   }
   for (let i = 0; i < written.length; i++) console.log(written[i]);

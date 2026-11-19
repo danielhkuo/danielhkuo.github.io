@@ -21,9 +21,9 @@ import { wrap } from "../core/torus.ts";
 import { createDragon, type Dragon } from "../dragon/index.ts";
 import { makeLayers } from "../live/registry.ts";
 import type { Manifest } from "../pack/manifest.ts";
-import { decodeFlightData } from "../pack/world.ts";
+import { readShipped } from "../pack/shipped.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
-import { createBakeHost } from "../runtime/bakeHost.ts";
+import { createWorldBakeHost } from "../runtime/bakeHost.ts";
 import { CRUISE, startState, stepFlight, type FlightInput, type FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { createStreamView, type StreamView } from "../runtime/stream.ts";
@@ -170,12 +170,12 @@ function readFlag(argv: readonly string[], name: string): string | undefined {
 /** The command line; 0 on success. */
 export async function main(argv: readonly string[]): Promise<number> {
   const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
-  const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
-  const id = current.worldId;
-  const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
-  const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
+  const shipped = await readShipped(worldRoot);
+  const manifest = shipped.manifest as unknown as Manifest;
   const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
-  const [data, bake, named] = await Promise.all([decodeFlightData(bin), createBakeHost(bin, mask), namedViews(bin, manifest)]);
+  const data = shipped.flight;
+  const bake = createWorldBakeHost(shipped.world, mask);
+  const named = await namedViews(shipped.world, manifest);
   const view = createStreamView(data, syncPool(bake), buildPalette(MIDDAY), mask, {
     width: W,
     height: H,
