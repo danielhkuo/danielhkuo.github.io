@@ -166,11 +166,26 @@ export const MATERIAL = {
   saltCreek: 93,
   /** Gorse: dark, dense bushes on open moor, still flecked with gold in summer. */
   gorse: 94,
+
+  /** Verdigris: weathered copper sheet, for domes and the roofs of the bathhouse. */
+  copper: 95,
+  /** Butter-yellow plaster. */
+  plasterButter: 96,
+  /** Dusty rose plaster. */
+  plasterRose: 97,
+  /** Sage plaster. */
+  plasterSage: 98,
+  /** Pale blue plaster. */
+  plasterSea: 99,
+  /** Ivy on a wall. Stays green; it is masonry, not a crown. */
+  ivy: 100,
+  /** Moss on stone that stands in the wet. */
+  moss: 101,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 95;
+export const MATERIAL_COUNT = 102;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -224,6 +239,7 @@ export const isVegetation: Uint8Array = flags([
 export const isBuilt: Uint8Array = flags([
   M.whitewash, M.plaster, M.stone, M.stoneDark, M.roofSlate, M.roofTile, M.roofLead, M.timber, M.brick, M.opening,
   M.cobble, M.gilt, M.dial, M.lantern, M.sailcloth, M.quarry,
+  M.copper, M.plasterButter, M.plasterRose, M.plasterSage, M.plasterSea, M.ivy, M.moss,
 ]);
 
 /** Grass that the live wind layer may brighten under a gust. */

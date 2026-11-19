@@ -2,35 +2,60 @@
 // stand-in kite, to judge motion.
 //
 //   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--frames 6] [--dt 0.25]
-//                         [--t 0] [--clouds <style>|none] [--sights all]
+//                         [--t 0] [--clouds <style>|none] [--sights all] [--time dusk] [--season autumn]
+//                         [--weather rain] [--out dir] [--times dawn,day,golden,dusk,night] [--weathers clear,rain]
+//
+// --time, --season and --weather take what the page's ?time=, ?season= and ?weather= take (sky/clock.ts,
+// sky/weather.ts): a clear midsummer noon when left out. --times draws one frame at each time instead of frames
+// through t (each at --t), and --weathers one in each weather: a sweep over the same land.
+//   npm run world:live -- --view moments
+//   npm run world:live -- --view baths
+//
+// `--view moments` (or one wonder: baths, railway, drowned-church, cove-hotel, marsh-house, airship-mast,
+// bridge-town, great-oak, observatory, clock, floating-garden, land-ship) settles the seed-3 world and draws
+// each moment through its appearance. `--view all` stays on the shipped world and its seven named views.
 //
 // --sights all shows every rare sight at once, near the view's centre where the land allows.
 //
-// Writes .cache/world-live/<view>.png (the frames side by side at 2×) and <view>-<k>.png for each frame.
+// Writes .cache/world-live/<view>.png (the frames side by side at 2×) and <view>-<k>.png for each frame, or into --out.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { BakeWorld } from "../bake/world.ts";
 import { torusDist2, wrap } from "../core/torus.ts";
 import type { LiveLayer } from "../live/live.ts";
 import { makeLayers } from "../live/registry.ts";
-import type { Manifest } from "../pack/manifest.ts";
-import { decodeFlightData, decodeWorld } from "../pack/world.ts";
-import { buildPalette, MIDDAY } from "../render/palette.ts";
-import { createBakeHost } from "../runtime/bakeHost.ts";
+import { wondersOf, type Manifest } from "../pack/manifest.ts";
+import { readShipped } from "../pack/shipped.ts";
+import { decodeFlightData, decodeWorld, type FlightData } from "../pack/world.ts";
+import { airOf, lightFor, NOON_AIR, type Air } from "../sky/air.ts";
+import { dayOfYear, parseSeason, parseTime, PHASES, SEASONS } from "../sky/clock.ts";
+import { CLEAR_WEATHER, parseWeather } from "../sky/weather.ts";
+import { createBakeHost, createWorldBakeHost } from "../runtime/bakeHost.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { flownDragon } from "../dragon/index.ts";
 import { createStreamView } from "../runtime/stream.ts";
+import { createRain } from "../sky/rain.ts";
 import { createSky } from "../sky/sky.ts";
 import type { CloudStyle } from "../sky/styles.ts";
 import { styleFrom } from "../sky/styles.ts";
 import { encodePng } from "./png.ts";
 
-export interface StripOptions {
-  bin: Uint8Array;
+interface StripBase {
   manifest: Manifest;
   mask: Uint8Array;
+}
+
+/**
+ * A strip drawn from format-1 bytes (`bin`) or from a world already decoded (`world` and `flight`).
+ * The tools pass the decoded world. Callers that still hold `world.bin` pass `bin`.
+ */
+export type StripOptions = StripBase & (
+  | { bin: Uint8Array; world?: undefined; flight?: undefined }
+  | { world: BakeWorld; flight: FlightData; bin?: undefined }
+) & {
   /** The camera's world point (the kite flies here, heading north, 18 units over the ground). */
   x: number;
   y: number;
@@ -41,7 +66,11 @@ export interface StripOptions {
   clouds: CloudStyle | null;
   width?: number;
   height?: number;
-}
+  /** The light and weather; a clear midsummer noon when left out. */
+  air?: Air;
+  /** One air per frame, in place of `air`: a sweep through the day or the weather over the same land. */
+  airs?: readonly Air[];
+};
 
 const DEFAULT_W = 400;
 const DEFAULT_H = 225;
@@ -52,6 +81,12 @@ const CREAM_G = 0xe8;
 const CREAM_B = 0xd2;
 
 const VIEW_NAMES = ["start", "town", "abbey", "falls", "river", "peak", "sea"] as const;
+
+/** Settled-world strips, one appearance each. Not part of `--view all`. */
+const MOMENT_VIEWS = new Set([
+  "baths", "railway", "drowned-church", "cove-hotel", "marsh-house", "airship-mast",
+  "bridge-town", "great-oak", "observatory", "clock", "floating-garden", "land-ship",
+]);
 
 function rgbaOf(px: Uint32Array): Uint8Array {
   return new Uint8Array(px.buffer, px.byteOffset, px.byteLength);
@@ -110,14 +145,16 @@ function blit2(sheet: Uint8Array, sheetW: number, dx: number, dy: number, src: U
 
 /**
  * Draws one 400×225 frame (or width × height) per time: the stream view over the decoded world with every chunk baked
- * in-process (createBakeHost) before drawing, the layers run by the view, then sky below, the kite, sky above.
+ * in-process (createWorldBakeHost, or createBakeHost when only `bin` is given) before drawing, the layers run by the
+ * view, then sky below, the kite, sky above.
  */
 export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const width = o.width ?? DEFAULT_W;
   const height = o.height ?? DEFAULT_H;
-  const data = await decodeFlightData(o.bin);
-  const palette = buildPalette(MIDDAY);
-  const bake = await createBakeHost(o.bin, o.mask);
+  const data = o.flight ?? await decodeFlightData(o.bin);
+  const air = o.air ?? NOON_AIR;
+  const { palette, cream } = lightFor(air);
+  const bake = o.world ? createWorldBakeHost(o.world, o.mask) : await createBakeHost(o.bin, o.mask);
   const pool = syncPool(bake);
   const view = createStreamView(data, pool, palette, o.mask, {
     width,
@@ -125,6 +162,7 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
     sites: o.manifest.sites,
     layers: o.layers,
   });
+  view.setLight(palette, cream, air);
   const ground = view.groundHeight(o.x, o.y);
   const alt = ground + 18;
   const kite: FlightState = {
@@ -139,14 +177,27 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   for (let i = 0; i < 10 && !view.ready(); i++) view.update(0, 0);
 
   const sky = o.clouds ? createSky(o.manifest.seed, o.manifest.n, o.clouds) : null;
+  const rain = createRain(o.manifest.seed);
   const out = new Uint32Array(width * height);
   const frames: Uint32Array[] = [];
+  let lit = air;
   for (let t = 0; t < o.times.length; t++) {
     const time = o.times[t];
+    const want = o.airs?.[t] ?? air;
+    if (want !== lit) {
+      const next = lightFor(want);
+      view.setLight(next.palette, next.cream, want);
+      lit = want;
+    }
     view.frame(out, time, { x: kite.x, y: kite.y, alt: kite.alt, heading: kite.heading, speed: kite.speed });
     const rect = view.rect();
+    sky?.setAir(lit);
+    // The rain falls under the clouds and the flier, as on the page.
+    rain(out, rect, time, lit);
     if (sky) sky.draw(out, rect, time, "below");
-    flownDragon(o.manifest.n, kite, time).draw(out, rect, kite, view);
+    const dragon = flownDragon(o.manifest.n, kite, time);
+    dragon.setAir(lit);
+    dragon.draw(out, rect, kite, view);
     if (sky) sky.draw(out, rect, time, "above");
     frames.push(new Uint32Array(out));
   }
@@ -161,7 +212,7 @@ function siteOf(manifest: Manifest, type: string): { x: number; y: number } | un
   return undefined;
 }
 
-function riverAt(world: Awaited<ReturnType<typeof decodeWorld>>, manifest: Manifest): { x: number; y: number } {
+function riverAt(world: BakeWorld, manifest: Manifest): { x: number; y: number } {
   let refX = manifest.start.x;
   let refY = manifest.start.y;
   const abbey = siteOf(manifest, "abbey");
@@ -191,8 +242,10 @@ function riverAt(world: Awaited<ReturnType<typeof decodeWorld>>, manifest: Manif
  * waterfall, from the decoded world's `falls`), river (the abbey site's river point, else a river vertex near the start),
  * peak (the highest ground), sea (600 cells off the start along −(dx, dy)).
  */
-export async function namedViews(bin: Uint8Array, manifest: Manifest): Promise<Record<string, { x: number; y: number }>> {
-  const world = await decodeWorld(bin);
+export async function namedViews(bin: Uint8Array, manifest: Manifest): Promise<Record<string, { x: number; y: number }>>;
+export async function namedViews(world: BakeWorld, manifest: Manifest): Promise<Record<string, { x: number; y: number }>>;
+export async function namedViews(source: Uint8Array | BakeWorld, manifest: Manifest): Promise<Record<string, { x: number; y: number }>> {
+  const world = source instanceof Uint8Array ? await decodeWorld(source) : source;
   const { gN, ground, n, start } = { gN: world.gN, ground: world.ground, n: world.n, start: manifest.start };
   let peakI = 0;
   for (let i = 1; i < ground.length; i++) if (ground[i] > ground[peakI]) peakI = i;
@@ -266,16 +319,20 @@ function parseAt(argv: readonly string[]): { x: number; y: number } | null {
 async function writeStrip(
   name: string,
   place: { x: number; y: number },
-  bin: Uint8Array,
+  world: BakeWorld,
+  flight: FlightData,
   manifest: Manifest,
   mask: Uint8Array,
   layers: readonly LiveLayer[],
   clouds: CloudStyle | null,
   times: readonly number[],
   dir: string,
+  air: Air,
+  airs?: readonly Air[],
 ): Promise<string[]> {
   const frames = await renderStrip({
-    bin,
+    world,
+    flight,
     manifest,
     mask,
     x: place.x,
@@ -283,6 +340,8 @@ async function writeStrip(
     times,
     layers,
     clouds,
+    air,
+    airs,
   });
   const written: string[] = [];
   const w = DEFAULT_W;
@@ -325,20 +384,54 @@ export async function main(argv: readonly string[]): Promise<number> {
   const times: number[] = [];
   for (let i = 0; i < framesN; i++) times.push(t0 + i * dt);
 
-  const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
-  const current = JSON.parse(readFileSync(join(worldRoot, "current.json"), "utf8")) as { worldId: string };
-  const id = current.worldId;
-  const manifest = JSON.parse(readFileSync(join(worldRoot, id, "manifest.json"), "utf8")) as Manifest;
-  const bin = new Uint8Array(readFileSync(join(worldRoot, id, "world.bin")));
-  const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
   const forceSights = readFlag(argv, "--sights") === "all";
-  const land = await decodeFlightData(bin);
-  const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites, land, forceSights });
+  // The air: a midsummer day unless told otherwise, so a clock time lands where it would in June.
+  const doy = dayOfYear(2026, 6, 21);
+  const time = parseTime(readFlag(argv, "--time") ?? null, doy) ?? PHASES.noon;
+  const season = parseSeason(readFlag(argv, "--season") ?? null) ?? SEASONS.summer;
+  const weather = parseWeather(readFlag(argv, "--weather") ?? null) ?? CLEAR_WEATHER;
+  const air = airOf(time, season, weather);
+  let airs: Air[] | undefined;
+  const sweepTimes = readFlag(argv, "--times"), sweepWeathers = readFlag(argv, "--weathers");
+  if (sweepTimes || sweepWeathers) {
+    airs = [];
+    for (const tq of sweepTimes ? sweepTimes.split(",") : [null]) {
+      for (const wq of sweepWeathers ? sweepWeathers.split(",") : [null]) {
+        const at = tq === null ? time : parseTime(tq, doy);
+        const w = wq === null ? weather : parseWeather(wq);
+        if (at === null || w === null) throw new Error(`no such time or weather: ${tq ?? ""} ${wq ?? ""}`);
+        airs.push(airOf(at, season, w));
+      }
+    }
+    times.length = 0;
+    for (let i = 0; i < airs.length; i++) times.push(t0);
+  }
+  if (viewArg === "moments" || MOMENT_VIEWS.has(viewArg)) {
+    const { renderMomentViews } = await import("./momentstrip.ts");
+    const names = viewArg === "moments" ? [...MOMENT_VIEWS] : [viewArg];
+    const written = renderMomentViews(names);
+    for (let i = 0; i < written.length; i++) console.log(written[i]);
+    return 0;
+  }
+  const worldRoot = fileURLToPath(new URL("../../../public/world/", import.meta.url));
+  const shipped = await readShipped(worldRoot);
+  const manifest = shipped.manifest as unknown as Manifest;
+  const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
+  const land = shipped.flight;
+  const layers = makeLayers({
+    seed: manifest.seed,
+    n: manifest.n,
+    sites: manifest.sites,
+    land,
+    wonders: wondersOf(manifest),
+    forceSights,
+    structures: shipped.world.built?.built.structures,
+  });
 
-  const dir = join(process.cwd(), ".cache", "world-live");
+  const dir = readFlag(argv, "--out") ?? join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });
 
-  const places = await namedViews(bin, manifest);
+  const places = await namedViews(shipped.world, manifest);
   if (at) places.at = at;
 
   const todo: string[] = [];
@@ -354,7 +447,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const name = todo[i];
     const place = places[name];
     if (!place) continue;
-    const paths = await writeStrip(name, place, bin, manifest, mask, layers, clouds, times, dir);
+    const paths = await writeStrip(name, place, shipped.world, land, manifest, mask, layers, clouds, times, dir, air, airs);
     for (let j = 0; j < paths.length; j++) written.push(paths[j]);
   }
   for (let i = 0; i < written.length; i++) console.log(written[i]);

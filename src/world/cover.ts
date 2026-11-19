@@ -116,6 +116,21 @@ const TREE_LINE = 0.6;
 const STRATA_SPACING = 5.5;
 /** Below this height nothing is ever snow, so the snowline is not worked out. */
 const SNOW_FLOOR = 62;
+/** Heather wants exposure: the form's convexity (CoverInput.curve) from which a crest begins to count, and at which it counts in full. */
+const HEATH_CREST: readonly [number, number] = [0.9, 2.6];
+/** What a full crest adds to the heath's score, and what open ground that is no crest loses. */
+const HEATH_CREST_GAIN = 1.4;
+/** Height above the valley (CoverInput.hand) from which a broad top begins to count as exposed, and counts in full. */
+const HEATH_TOP: readonly [number, number] = [30, 50];
+const HEATH_OPEN = 0.85;
+/** Ground this low, this flat and this close to its drainage is fen: wet whatever the wind. */
+const WET_E = 3.2;
+const WET_SLOPE = 0.06;
+const WET_HAND = 2.6;
+/** On a face, how far a bed decides whether snow holds: hard beds shed it, soft ones hold it in ledges across the face. */
+const FACE_BEDS = 1;
+/** On a face, the share of the turf-to-rock threshold the beds decide; slow noise along the contour decides the rest. */
+const LEDGE_BEDS = 0.75;
 
 /**
  * The hue field: 200-cell periodic noise with a finer rotated octave, about
@@ -230,6 +245,14 @@ function fieldCell(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
   return u % 4 < 2 && r < 0.85 ? M.vineRow : M.vine;
 }
 
+/**
+ * A cell of a reed bed: reeds, with a short upright stroke of the wetter ground between them here and there, so a bed
+ * reads as standing stems and not as a flat blotch.
+ */
+function reedBed(x: number, y: number): number {
+  return (hash2(x, y >> 2, MARSH_SEED + 5) & 7) < 2 ? M.marsh : M.reeds;
+}
+
 /** Smooth periodic noise, about ±0.6, with features `cells` cells across. */
 function soft(x: number, y: number, n: number, cells: number, seed: number): number {
   const p = Math.max(1, Math.round(n / cells));
@@ -244,6 +267,15 @@ function soft(x: number, y: number, n: number, cells: number, seed: number): num
  */
 function strata(e: number, x: number, y: number, n: number): number {
   const t = e / STRATA_SPACING + 2.2 * soft(x, y, n, 44, STRATA_SEED) + 0.6 * soft(x, y, n, 12, STRATA_SEED + 1);
+  return (hash2(Math.floor(t) + 4096, 0x57, STRATA_SEED) & 1023) / 511.5 - 1;
+}
+
+/**
+ * −1…1, constant along a bed: as strata, bent only by the slow noise, so a crag band follows its bed a long way across
+ * a face before it breaks.
+ */
+function beds(e: number, x: number, y: number, n: number): number {
+  const t = e / STRATA_SPACING + 2.2 * soft(x, y, n, 44, STRATA_SEED);
   return (hash2(Math.floor(t) + 4096, 0x57, STRATA_SEED) & 1023) / 511.5 - 1;
 }
 
@@ -287,28 +319,37 @@ function moorGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: nu
   return M.moorCool + (f < 0.5 ? 0 : f < 1.5 ? 1 : 2);
 }
 
-/** Open hill ground: heather where it is dry or slaty, grass moor where it is wet, in drifts. */
+/** Open hill ground: heather on the exposed crests, grass moor and bracken on the open slopes and in the hollows. */
 function heathOrMoor(c: CoverInput, x: number, y: number, j: number, mask: Uint8Array, n: number): number {
-  // Heather keeps to dry, exposed, well-drained ground: the windward convex
-  // tops high above their valleys, and slate country. The score follows the
-  // land, so heather follows ridges and spurs; its edge is a narrow dither.
-  // On a steep face the height above the valley says little (every spur
-  // between two rills would be a stripe): there heather keeps to the drier
-  // ledges, bed by bed, and leaves the runnels to grass and bracken.
+  // Heather keeps to dry, exposed, well-drained ground: the windward crests,
+  // the backs of spurs and the tops high above their valleys, a little more
+  // of it in slate country. The open slope, the hollow and the runnel are
+  // grass moor and bracken, so a hill is green with heather along its tops,
+  // never blanketed in it nor striped down its face. Exposure is read off
+  // the form's convexity, a dozen cells across, so a cell-wide rib between
+  // two gullies is not a crest.
   const k = faceShare(c.steep === undefined ? c.slope : c.steep);
   const above = (c.hand - 18) / 30;
-  // Runnels are the form's own hollows, a dozen cells wide; the cell-wide gullies inside them are left to the light.
-  const spur = c.curve === undefined ? 0 : c.curve < -1.5 ? -1.5 : c.curve > 1.5 ? 1.5 : c.curve;
-  const drift = 0.4 * soft(x, y, n, 38, HEATH_SEED) + 0.15 * soft(x, y, n, 11, HEATH_SEED + 3);
-  let score = 3 * (c.wind - 0.55) + (1 - k) * (above < -0.6 ? -0.6 : above > 0.5 ? 0.5 : above) + 0.5 * c.region[2] + 0.2 * c.region[1] - 3 * (c.moisture - 0.75) + j * 0.06 + drift;
-  if (k > 0) {
-    score += k * ((above < -0.2 ? -0.2 : above > 0.25 ? 0.25 : above) + 0.34 * strata(c.form === undefined ? c.e : c.form, x, y, n) + 0.14 * spur);
-  }
+  const curve = c.curve === undefined ? 0 : c.curve;
+  // A long spur is heather in patches along its back, not one stripe from top to foot.
+  const patch = 0.2 + 1.6 * soft(x, y, n, 17, HEATH_SEED + 7);
+  const ridge = (curve <= HEATH_CREST[0] ? 0 : curve >= HEATH_CREST[1] ? 1 : (curve - HEATH_CREST[0]) / (HEATH_CREST[1] - HEATH_CREST[0])) *
+    (patch <= 0 ? 0 : patch >= 1 ? 1 : patch);
+  // A broad top far above its valleys is as exposed as a crest; a face, however high, is not.
+  const height = c.hand <= HEATH_TOP[0] ? 0 : c.hand >= HEATH_TOP[1] ? 1 : (c.hand - HEATH_TOP[0]) / (HEATH_TOP[1] - HEATH_TOP[0]);
+  // Only a top that rises, never the open slope below it; and in patches, as on a ridge.
+  const top = (1 - k) * height * (curve <= 0 ? 0 : curve >= 1 ? 1 : curve) * (patch <= 0 ? 0 : patch >= 1 ? 1 : patch);
+  const crest = ridge > top ? ridge : top;
+  const drift = 0.3 * soft(x, y, n, 38, HEATH_SEED) + 0.12 * soft(x, y, n, 11, HEATH_SEED + 3);
+  // Wind alone does not make a heath: a blown slope is grass moor until it is also a crest or a top.
+  const blown = 3 * (c.wind - 0.55);
+  let score = (blown < -0.9 ? -0.9 : blown > 0.5 ? 0.5 : blown) + (1 - k) * (above < -0.6 ? -0.6 : above > 0.3 ? 0.3 : above) + 0.25 * c.region[2] + 0.1 * c.region[1] - 3 * (c.moisture - 0.75) + j * 0.06 + drift;
+  score += HEATH_CREST_GAIN * crest - HEATH_OPEN;
   // The heath's edge is ragged: heather and grass in a mosaic for a few cells either side of it.
-  score += 0.16 * ruleJitter(mask, x, y, RULE.hue) + 0.14 * soft(x, y, n, 5, HEATH_SEED + 5);
+  score += 0.14 * ruleJitter(mask, x, y, RULE.hue) + 0.12 * soft(x, y, n, 5, HEATH_SEED + 5);
   if (score <= 0.3) return moorGround(c, x, y, mask, n);
-  // In bloom at the heart of the heath, browner toward its edge.
-  return score > 0.85 ? M.heathCool : score > 0.55 ? M.heathMid : M.heathWarm;
+  // In bloom only at the heart of the heath, on the barest crests; browner toward its edge.
+  return score > 1.05 ? M.heathCool : score > 0.65 ? M.heathMid : M.heathWarm;
 }
 
 /**
@@ -376,7 +417,13 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     const rdx = c.riverDx === undefined ? 0 : c.riverDx;
     const rdy = c.riverDy === undefined ? 0 : c.riverDy;
     const beside = (rdx !== 0 || rdy !== 0) && rdx * rdx + rdy * rdy < (2.2 + 2 * j) * (2.2 + 2 * j);
-    if (beside || hand < 0.25 + j * 0.2) return M.reeds;
+    // Reeds keep to the water's edge. A fen is so flat that all of it lies at its drainage's level, far from any river
+    // as near: there reeds stand in beds, and the ground between them is marsh and wet meadow.
+    if (beside) return M.reeds;
+    if (hand < 0.25 + j * 0.2) {
+      if (e >= WET_E) return M.reeds;
+      if (soft(x, y, n, 22, MARSH_SEED + 3) + 0.3 * soft(x, y, n, 7, MARSH_SEED + 4) > 0.2 + 0.1 * j) return reedBed(x, y);
+    }
     const mp = Math.max(1, Math.round(n / 34));
     if (gradNoise(((x + 0.5) * mp) / n, ((y + 0.5) * mp) / n, mp, MARSH_SEED) > 0.2 + j * 0.1) return M.marsh;
     return M.meadowCool + hueVariant(x, y, HUE_CLASS.meadow, mask, n);
@@ -422,16 +469,20 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
       const bench = st < 0.42 ? (st < 0.2 ? 1 : (0.42 - st) / 0.22) : 0;
       // The lie of the ground is worth up to SNOW_TONGUE of score, and nothing that far below the line.
       const near = alt > -0.25 ? 1 : (alt + SNOW_TONGUE + 0.25) / SNOW_TONGUE;
-      const lie = (near < 0 ? 0 : near) * (0.62 * hollow + 0.42 * gully + 0.3 * bench * (1 - crest));
+      // On a face the couloirs hold less of it, so the snow there lies along the ledges and does not hang in tongues.
+      const faceShed = st > 0.8 ? 1 : st < 0.5 ? 0 : (st - 0.5) / 0.3;
+      const lie = (near < 0 ? 0 : near) * (0.62 * hollow + 0.42 * gully * (1 - 0.75 * faceShed) + 0.3 * bench * (1 - crest));
       // A sharp crest is blown and falls away on both sides: the sharper and the steeper its flanks, the more it sheds.
       // A crest only some way above the line would carry a ribbon of snow and nothing either side of it: it is white only as part of a cap.
       crestShed = crest * (0.9 + (st > 0.42 ? 0.5 * (st > 0.7 ? 1 : (st - 0.42) / 0.28) : 0));
       // Steep ground sheds: its ribs first, and bed by bed, so a snow face shows its rock in ledges and arêtes.
       const face = st > 0.8 ? 1 : st < 0.55 ? 0 : (st - 0.55) / 0.25;
+      // On a face the beds decide more than the ribs do, so its rock shows in ledges across it and not in a comb of
+      // bare ribs down it; and the noise that breaks the snow's edge is held down there for the same reason.
       shed = crestShed + (st > 0.7 ? 2.4 * (st - 0.7) : 0) + (north < 0 && st > 0.55 ? -0.5 * north * (st > 0.9 ? 1 : (st - 0.55) / 0.35) : 0) +
-        face * ((relief > 0 ? 0.75 * (relief > 0.9 ? 1 : relief / 0.9) : 0) + 0.3 * strata(ef, x, y, n));
+        face * (relief > 0 ? 0.25 * (relief > 0.9 ? 1 : relief / 0.9) : 0) + (st > 1 ? 1 : st < 0.72 ? 0 : (st - 0.72) / 0.28) * FACE_BEDS * beds(ef, x, y, n);
       snowScore = alt + (lie > SNOW_TONGUE ? SNOW_TONGUE : lie) - shed +
-        0.22 * soft(x, y, n, 7, SNOWLINE_SEED + 4) + 0.16 * fine + 0.1 * soft(x, y, n, 3.2, SNOWLINE_SEED + 5) +
+        (1 - 0.6 * face) * (0.22 * soft(x, y, n, 7, SNOWLINE_SEED + 4) + 0.16 * fine + 0.1 * soft(x, y, n, 3.2, SNOWLINE_SEED + 5)) +
         // The dither is worth a cell or two of height whatever the slope: on gentle ground a fixed one would be a field of static.
         (st > 0.8 ? 0.2 : st < 0.12 ? 0.04 : 0.25 * st) * ruleJitter(mask, x, y, RULE.snow);
     }
@@ -448,8 +499,11 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   j = ruleJitter(mask, x, y, RULE.rock);
   const dS3 = j * 3 * PER_CELL.slope;
   const bend = soft(x, y, n, 6, EDGE_SEED);
+  // Where a face passes from turf to bare rock is decided bed by bed: a crag band follows its stratum across the face, so
+  // the rock shows as ledges along the contour and never as a comb of columns down it.
+  const ledge = LEDGE_BEDS * beds(ef, x, y, n) + (1 - LEDGE_BEDS) * soft(x, y, n, 40, EDGE_SEED + 1);
   if (
-    st > CLIFF_SLOPE + 0.24 * bend + j * 0.03 || (c.shore === 3 && s > 0.9 + dS3) ||
+    st > CLIFF_SLOPE + 0.13 * (1 + ledge) + j * 0.03 || (c.shore === 3 && s > 0.9 + dS3) ||
     (s > SCARP_SLOPE + dS3 && (c.steep === undefined || st < 0.55))
   ) {
     return M.cliffHard + rockKind(c, x, y, n);
@@ -484,11 +538,12 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
       if (stone && sj > -0.2) return M.screeStone;
     }
   }
-  if (snowScore + shed > -0.2 + 0.1 * bend && (st > 0.78 + 0.1 * fine || crestShed > 0.4 + 0.2 * fine)) {
+  if (snowScore + shed > -0.2 + 0.1 * ledge && (st > 0.78 + 0.1 * fine || crestShed > 0.4 + 0.2 * fine)) {
     // Bare faces at and above the snowline are bedded: dark steps and paler benches, and snow lying on the widest ledges.
-    const bed = strata(ef, x, y, n);
+    const bed = beds(ef, x, y, n);
     if (bed < -0.42 && st < 1 && snowScore + shed > 0.3 && soft(x, y, n, 20, SNOWLINE_SEED + 3) > -0.08) return M.snow;
-    return (st > 0.95 + 0.2 * bend || bed > 0.35 ? M.cliffHard : M.rockHard) + rockKind(c, x, y, n);
+    // Hard beds stand as dark walls, softer ones as paler benches: in bands across the face, bed by bed.
+    return (bed > 0.1 ? M.cliffHard : M.rockHard) + rockKind(c, x, y, n);
   }
   if (st > 0.45 && (e - 75) / 40 + 2 * (c.wind - 0.6) + (curve > 4 ? 0.16 : curve < -4 ? -0.16 : 0.04 * curve) > 0.45 + 0.14 * bend + j * 0.03) {
     return M.rockHard + rockKind(c, x, y, n);
@@ -547,6 +602,21 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
     ) {
       return fieldCell(c, x, y, mask, n, true, false);
     }
+  }
+
+  // Fen: the lowest, flattest open ground stands wet whatever the wind does.
+  // Heather and moor want drained ground; here reed beds fringe the water,
+  // sedge and rush fill the hollows and wet meadow lies between, with the
+  // odd carr of alder (scatter plants those on the marsh).
+  j = ruleJitter(mask, x, y, RULE.marsh);
+  if (e < WET_E + 0.5 * j && st < WET_SLOPE + 0.01 * j && hand < WET_HAND) {
+    const rdx = c.riverDx === undefined ? 0 : c.riverDx, rdy = c.riverDy === undefined ? 0 : c.riverDy;
+    const bank = (rdx !== 0 || rdy !== 0) && rdx * rdx + rdy * rdy < (1.6 + 1.5 * j) * (1.6 + 1.5 * j);
+    if (bank || hand < 0.1 + 0.1 * j) return M.reeds;
+    const wet = soft(x, y, n, 28, MARSH_SEED + 1) + 0.45 * soft(x, y, n, 9, MARSH_SEED + 2) - 0.35 * curve - 0.12 * hand + 0.08 * j;
+    if (wet > 0.45) return reedBed(x, y);
+    if (wet > 0.2) return M.marsh;
+    return M.meadowCool + hueVariant(x, y, HUE_CLASS.meadow, mask, n);
   }
 
   // Low ground is sheltered: the wind that bares a hilltop does not bare a

@@ -12,7 +12,7 @@ import { COVER_FIELDS_MARGIN, coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
-import { HMAX, type BakeWorld, type Patch } from "./world.ts";
+import { HMAX, type BakeWorld, type GridWindow, type Patch } from "./world.ts";
 
 export const TILE = 256;
 
@@ -164,8 +164,13 @@ const WEIGHTS: Float64Array = (() => {
   return out;
 })();
 
-/** Ground heights of cells [x0, x0 + w) × [y0, y0 + h) by periodic cubic B-spline of G; matches core/bspline.ts. */
-export function upsampleGround(src: Float32Array, gN: number, x0: number, y0: number, w: number, h: number, out: Float32Array): void {
+/**
+ * Ground heights of cells [x0, x0 + w) × [y0, y0 + h) by periodic cubic B-spline of G; matches core/bspline.ts.
+ * When `win` is set, `src` holds only that window of nodes (see BakeWorld.gWin).
+ */
+export function upsampleGround(src: Float32Array, gN: number, x0: number, y0: number, w: number, h: number, out: Float32Array, win?: GridWindow): void {
+  // Hoisted once: with no window this is a subtract of 0 and a stride of gN, so the sample loop is unchanged.
+  const xOff = win ? win.x0 : 0, yOff = win ? win.y0 : 0, stride = win ? win.w : gN;
   // Node rows needed: floor(v) − 1 … floor(v) + 2 for v = (y + 0.5)/4 − 0.5.
   const jMin = Math.floor((y0 + 0.5) / 4 - 0.5) - 1;
   const jMax = Math.floor((y0 + h - 0.5) / 4 - 0.5) + 2;
@@ -175,10 +180,10 @@ export function upsampleGround(src: Float32Array, gN: number, x0: number, y0: nu
   for (let x = 0; x < w; x++) {
     const j = Math.floor((x0 + x + 0.5) / 4 - 0.5);
     wk[x] = wrap(x0 + x, 4);
-    for (let q = 0; q < 4; q++) ix[x * 4 + q] = wrap(j - 1 + q, gN);
+    for (let q = 0; q < 4; q++) ix[x * 4 + q] = wrap(j - 1 + q - xOff, gN);
   }
   for (let r = 0; r < rows; r++) {
-    const s = wrap(jMin + r, gN) * gN, d = r * w;
+    const s = wrap(jMin + r - yOff, gN) * stride, d = r * w;
     for (let x = 0; x < w; x++) {
       const k = wk[x] * 4, q = x * 4;
       tmp[d + x] = WEIGHTS[k] * src[s + ix[q]] + WEIGHTS[k + 1] * src[s + ix[q + 1]] + WEIGHTS[k + 2] * src[s + ix[q + 2]] + WEIGHTS[k + 3] * src[s + ix[q + 3]];
@@ -316,22 +321,27 @@ function chamfer(d: Int16Array, w: number, h: number, lo: number): void {
 /** Cells [x0, x0 + w) × [y0, y0 + h) of the world. Coordinates are unwrapped; any integers. */
 export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: number, y0: number, w: number, h: number): Cells {
   const { n, gN, cN } = world;
+  // Window offsets, hoisted out of the reads. With no window they are 0 and the stride is the full grid, so every
+  // index below is the plain wrapped node and the inner loops do no extra work.
+  const gWin = world.gWin, cWin = world.cWin;
+  const gX0 = gWin ? gWin.x0 : 0, gY0 = gWin ? gWin.y0 : 0, gStride = gWin ? gWin.w : gN;
+  const cX0 = cWin ? cWin.x0 : 0, cY0 = cWin ? cWin.y0 : 0, cStride = cWin ? cWin.w : cN;
   const W = w + PAD_N + PAD_S, H = h + PAD_N + PAD_S;
   const wx0 = x0 - PAD_N, wy0 = y0 - PAD_N;
   const count = W * H;
 
   // 1. Ground.
   const ground = new Float32Array(count);
-  upsampleGround(world.ground, gN, wx0, wy0, W, H, ground);
+  upsampleGround(world.ground, gN, wx0, wy0, W, H, ground, gWin);
   // The cells that stand on a sea stack.
   let stackTop: Uint8Array | null = null;
   if (world.base && world.conform && world.stamps) {
     // Crisp coasts: the pre-stamp ground, the coast stamps at cell size, then the rivers' conforming.
     const crisp = new Float32Array(count), delta = new Float32Array(count);
     const near = stampsNear(world, wx0, wy0, W, H);
-    upsampleGround(world.base, gN, wx0, wy0, W, H, crisp);
+    upsampleGround(world.base, gN, wx0, wy0, W, H, crisp, gWin);
     applyStampsTo(crisp, { w: W, h: H, cellsPerNode: 1, x0: wx0, y0: wy0, period: n }, near);
-    upsampleGround(world.conform, gN, wx0, wy0, W, H, delta);
+    upsampleGround(world.conform, gN, wx0, wy0, W, H, delta, gWin);
     for (let i = 0; i < count; i++) {
       // Heights are kept to whole 64ths, so the last bits of a stamp's arithmetic cannot differ between windows.
       const v = Math.floor((crisp[i] + delta[i]) * 64 + 0.5) / 64;
@@ -440,9 +450,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const lakeLevel = new Float32Array(gW * gH);
   let lakes = false;
   for (let j = 0; j < gH; j++) {
-    const row = wrap(gya + j, gN) * gN;
+    const row = wrap(gya + j - gY0, gN) * gStride;
     for (let i = 0; i < gW; i++) {
-      const g = row + wrap(gxa + i, gN);
+      const g = row + wrap(gxa + i - gX0, gN);
       if (world.waterKind[g] === 2) {
         lakeLevel[j * gW + i] = world.waterLevel[g];
         lakes = true;
@@ -646,7 +656,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const region = new Float32Array(6);
   const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0 };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
-  const cc = cN * cN;
+  const cc = cStride * (cWin ? cWin.h : cN);
   const rockW = new Float64Array(3);
   // Stamps may only touch cells whose crowns matter: the core, TREE_REACH to the north-west and one cell round.
   const sLo = PAD_N - TREE_REACH, sHiX = PAD_N + w + 1, sHiY = PAD_N + h + 1;
@@ -657,9 +667,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   for (let x = 0; x < cw; x++) {
     const wx = wx0 + cOff + x;
     const gu = (wx + 0.5) / 4 - 0.5, gj = Math.floor(gu);
-    gI0[x] = wrap(gj, gN); gI1[x] = wrap(gj + 1, gN); gF[x] = gu - gj; gL[x] = gj - gxa;
+    gI0[x] = wrap(gj - gX0, gN); gI1[x] = wrap(gj + 1 - gX0, gN); gF[x] = gu - gj; gL[x] = gj - gxa;
     const cu = (wx + 0.5) / 8 - 0.5, cj = Math.floor(cu);
-    cI0[x] = wrap(cj, cN); cI1[x] = wrap(cj + 1, cN); cF[x] = cu - cj;
+    cI0[x] = wrap(cj - cX0, cN); cI1[x] = wrap(cj + 1 - cX0, cN); cF[x] = cu - cj;
   }
   const { hand, shore, moisture, wind, exposure, debris, rock, regions } = world;
   // Shore classes live on the one ring of nodes at the water. Spread two nodes inland and voted by the corners'
@@ -670,8 +680,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     // The ring's classes over the node window and two nodes round it.
     const rw = gW + 4, rh = gH + 4, ring = new Uint8Array(rw * rh);
     for (let j = 0; j < rh; j++) {
-      const row = wrap(gya + j - 2, gN) * gN;
-      for (let q = 0; q < rw; q++) ring[j * rw + q] = shore[row + wrap(gxa + q - 2, gN)];
+      const row = wrap(gya + j - 2 - gY0, gN) * gStride;
+      for (let q = 0; q < rw; q++) ring[j * rw + q] = shore[row + wrap(gxa + q - 2 - gX0, gN)];
     }
     for (let j = 0; j < gH; j++) for (let q = 0; q < gW; q++) {
       const at = (j + 2) * rw + q + 2;
@@ -693,9 +703,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   for (let y = 0; y < ch; y++) {
     const wy = wy0 + cOff + y;
     const gv = (wy + 0.5) / 4 - 0.5, gj = Math.floor(gv), gfy = gv - gj;
-    const gr0 = wrap(gj, gN) * gN, gr1 = wrap(gj + 1, gN) * gN;
+    const gr0 = wrap(gj - gY0, gN) * gStride, gr1 = wrap(gj + 1 - gY0, gN) * gStride;
     const cv = (wy + 0.5) / 8 - 0.5, cj = Math.floor(cv), cfy = cv - cj;
-    const cr0 = wrap(cj, cN) * cN, cr1 = wrap(cj + 1, cN) * cN;
+    const cr0 = wrap(cj - cY0, cN) * cStride, cr1 = wrap(cj + 1 - cY0, cN) * cStride;
     c.y = wrap(wy, n);
     for (let x = 0; x < cw; x++) {
       const i = (y + cOff) * W + x + cOff;
@@ -851,7 +861,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   }
 
   // Structures: their tops go into the crown layer over whatever grew there; their yards repaint the ground.
-  const fixed = new Uint8Array(count), made = new Uint8Array(count);
+  // Picture marks (a crown, a mast) leave a shadow depth on cells they do not stand on.
+  const fixed = new Uint8Array(count), made = new Uint8Array(count), pictShadow = new Uint8Array(count);
   if (bi) {
     for (const id of structuresIn(bi, wx0, wy0, wx0 + W, wy0 + H)) {
       const s = bi.built.structures[id];
@@ -871,6 +882,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           } else if (s.paint[a] !== 0 && made[k] !== 2) {
             crown[k] = -Infinity;
             if (!water[k] && riv[k] !== 0) { gmat[k] = s.paint[a]; made[k] = 1; }
+          }
+          if (s.shadow) {
+            const d = s.shadow[a];
+            if (d > pictShadow[k]) pictShadow[k] = d;
           }
         }
       }
@@ -938,6 +953,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (v > over) over = v;
       }
       flags |= shadowDepth(over, top);
+      // A picture's shadow, on land and on water: at least the depth the builder stored.
+      const cast = pictShadow[i];
+      if (cast > (flags & F_SHADOW)) flags = (flags & ~F_SHADOW) | cast;
 
       out.surf[o] = top;
       out.mat[o] = m;
@@ -950,10 +968,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           out.mat[o] = boulder ? (look.apronRock as number) : look.apron;
           if (boulder) out.surf[o] = top + 1 + ((hs >>> 8) & 1);
           // Pale stones under the dark wall, a tone darker where the water laps them. The cliff's own shadow is held to
-          // its lightest, or the strip reads as a violet line round the coast.
+          // its lightest, or the strip reads as a violet line round the coast. A picture's shadow keeps its depth.
           out.light[o] = boulder ? 96 + (hs & 31) : (dist[i] <= 4 ? 126 : 110) + (hs & 15);
           out.aux[o] = 0;
-          out.flags[o] = ((flags & F_SHADOW) !== 0 ? 1 : 0) | F_QUIET;
+          const held = (flags & F_SHADOW) !== 0 ? 1 : 0;
+          out.flags[o] = (pictShadow[i] > held ? pictShadow[i] : held) | F_QUIET;
           continue;
         }
       }

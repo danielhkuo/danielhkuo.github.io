@@ -10,7 +10,7 @@ import { fbm, GRADIENTS } from "../core/noise.ts";
 import { rngFor } from "../core/rng.ts";
 import { NB8_DX, NB8_DY, torusDelta, wrapIndex } from "../core/torus.ts";
 import { boxBlur, drainage, nearestSource, nodeAt, regionsOn, rockOn } from "./field.ts";
-import { ARCHETYPE_COUNT, type WorldParams } from "./params.ts";
+import { ARCHETYPE_COUNT, lengthScale, type WorldParams } from "./params.ts";
 import type { Plan } from "./plan.ts";
 import { applyStamps, type CoveStamp, deltaAt, inCove, spitCentre, type SpitStamp, type Stamp, stampReach } from "./stamps.ts";
 
@@ -21,6 +21,12 @@ export interface CoastContext {
   regions: Float32Array | null;
   /** Hold the cliffs to one retreat and one cap along the shore (for tests that compare a coast node for node). */
   plain?: boolean;
+  /** Per node, 0–1: the share of a shore's exposure taken away (a lagoon's shores, a fen behind its flats). */
+  calm?: Float32Array;
+  /** Per node, in units: the deepest the sea bed may lie there (a lagoon, tidal flats); 0 leaves it free. */
+  shoal?: Float32Array;
+  /** Per node, in units: the shallowest the sea bed may lie there (a fjord); 0 leaves it free. */
+  deep?: Float32Array;
 }
 
 /**
@@ -213,6 +219,8 @@ const EDGE_CELLS = 60;
 const BATHY_BLUR = 32;
 /** The sea is at least this deep, so a sea node never reads as land. */
 const SEA_MIN = 0.05;
+/** The slope a beach's or ledge's shelf falls at on deep water (ctx.deep), in units a cell. */
+const DEEP_SHELF_SLOPE = 0.6;
 /** The cap falls from the cliff cap to the gate's over this much of |facing·east| short of the gate, and is then evened over CAP_SMOOTH passes along the shore. */
 const CAP_RAMP = 0.35;
 const CAP_SMOOTH = 12;
@@ -231,7 +239,7 @@ const BLUFF_MAX = 2.1;
 /** The cap wanders too, between these shares of cliffCap, over CAP_VARY_CELLS; a headland's stands CAP_HEAD of cliffCap higher, a bay's as much lower. */
 const CAP_VARY: readonly [number, number] = [0.32, 1.3];
 const CAP_VARY_CELLS = 105;
-const CAP_HEAD = 0.2;
+const CAP_HEAD = 0.45;
 const CAP_MAX = 1.35;
 /**
  * A stream too small for a cove still wears the cliff down where it meets the sea: one draining NOTCH_AREA of a channel's
@@ -240,6 +248,11 @@ const CAP_MAX = 1.35;
  */
 const NOTCH_AREA = 0.3;
 const NOTCH_SLOPE = 0.6;
+/** The notches' steepness wanders over this many cells (of the 6400 world); where its noise is under NOTCH_SKIP, no notch is cut. */
+const NOTCH_CELLS = 90;
+/** The depth of a shoal's crest off a headland. */
+const SHOAL_TOP: readonly [number, number] = [3.6, 5.6];
+const NOTCH_SKIP = 0.22;
 /** Block size, in nodes, of the coarse height maxima used to bound a cap's reach. */
 const BLOCK = 8;
 /** The waterline is the half-land contour of the land mask blurred over this many nodes, twice. */
@@ -316,7 +329,7 @@ function evenShore(h: Float64Array, n: number, ctx: CoastContext, p: WorldParams
 export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldParams, seed: number): CoastResult {
   const nn = n * n;
   const cpn = p.n / n;
-  const scale = p.n / 6400;
+  const scale = lengthScale(p.n);
   const c = p.coast;
   const rng = rngFor(seed, "coast");
   const noiseSeed = rng.next();
@@ -340,6 +353,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   // 1. Exposure, facing, concavity and slope of every shore node, and its point on the waterline.
   const shore = shoreExposure(isSea0, n, cpn, c.maxFetch, c.swWeight, c.fetchRange);
   const count = shore.nodes.length;
+  if (ctx.calm !== undefined) for (let s = 0; s < count; s++) shore.e[shore.nodes[s]] *= 1 - ctx.calm[shore.nodes[s]];
   const fx = new Float64Array(count);
   const fy = new Float64Array(count);
   const convex = new Float64Array(count);
@@ -564,7 +578,14 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
       }
       ring = next;
     }
-    for (let s = 0; s < count; s++) if (depth[s] >= 0) wear[s] = Math.min(wear[s], NOTCH_SLOPE * depth[s] * cpn);
+    // The notches are not all alike: how steeply the cliff comes down to each wanders along the shore, and some
+    // streams cut none, so the cliff line is not a row of equal scallops.
+    for (let s = 0; s < count; s++) {
+      if (depth[s] < 0) continue;
+      const v = 0.5 + 0.5 * noiseAt(px[s], py[s], NOTCH_CELLS * scale, 0x5e);
+      if (v < NOTCH_SKIP) continue;
+      wear[s] = Math.min(wear[s], NOTCH_SLOPE * (0.55 + 1.4 * v) * depth[s] * cpn);
+    }
   }
   const retreat = new Float64Array(count);
   for (let s = 0; s < count; s++) {
@@ -712,9 +733,11 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     let form: "delta" | "estuary" | "plain" = "plain";
     if (retreat[s] > 0 && cells >= coveMin) {
       const grow = Math.min(1, Math.sqrt(cells / (COVE_FULL * coveMin)));
-      const len = Math.min(c.coveLen[1], (c.coveLen[0] + (c.coveLen[1] - c.coveLen[0]) * grow) * rng.range(0.7, 1.3));
-      const wide = len * rng.range(0.2, 0.36);
-      const neck = rng.range(0.35, 0.6);
+      // No two coves alike: the largest are not all cut to one length, and the mouth is never a narrow gap into a
+      // round pool: a cliffed shore is not a row of keyholes.
+      const len = Math.min(c.coveLen[1] * Math.min(1, rng.range(0.55, 1.1)), (c.coveLen[0] + (c.coveLen[1] - c.coveLen[0]) * grow) * rng.range(0.7, 1.3));
+      const wide = len * rng.range(0.18, 0.36);
+      const neck = rng.range(0.72, 0.95);
       const sand = rng.float() < c.coveBoulder ? 0 : rng.range(0.25, 0.42);
       const coveSeed = rng.next();
       // The cove lies along the stream's last reach, not along the shore's normal.
@@ -851,9 +874,17 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
       stack(sx, sy, r, lead * (1 - 0.22 * k) * rng.range(0.85, 1));
     }
     const reach = d - retreat[s];
-    shoals.push({ x: x + fx[s] * (retreat[s] + 0.55 * reach), y: y + fy[s] * (retreat[s] + 0.55 * reach), r: 0.6 * reach + rng.range(c.shoalR[0], c.shoalR[1]), top: rng.range(1, 2.2) });
+    // A shoal lies a few units down: broken, greener water, never a pale disc floating offshore.
+    shoals.push({ x: x + fx[s] * (retreat[s] + 0.55 * reach), y: y + fy[s] * (retreat[s] + 0.55 * reach), r: 0.6 * reach + rng.range(c.shoalR[0], c.shoalR[1]), top: rng.range(SHOAL_TOP[0], SHOAL_TOP[1]) });
   }
 
+  // A shore on a fjord's deep water keeps no shelf: the bed falls away from the foot of its sand or ledge.
+  const onDeep = (i: number): boolean => {
+    if (ctx.deep === undefined) return false;
+    const x = i % n, y = (i - x) / n;
+    for (let q = 0; q < 8; q++) if (ctx.deep[wrapIndex(x + NB8_DX[q], y + NB8_DY[q], n)] > 0) return true;
+    return false;
+  };
   // 6. Beaches. Each stamp lays sand as wide as its shore holds, rising to beachTop at the back;
   // the shelf's width wanders along the shore and narrows with the sand.
   for (let s = 0; s < count; s++) {
@@ -862,7 +893,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     const x = shoreX(s);
     const y = shoreY(s);
     const shelf = c.shelf * (1 + 0.45 * noiseAt(x, y, SHELF_CELLS * scale, 0x51)) * Math.min(1, 0.35 + width[s] / c.beachWidth[1]);
-    stamps.push({ kind: "beach", x, y, land: width[s], base: c.beachBase, rise: (c.beachTop - c.beachBase) / width[s], shelf, shelfSlope: c.shelfSlope });
+    stamps.push({ kind: "beach", x, y, land: width[s], base: c.beachBase, rise: (c.beachTop - c.beachBase) / width[s], shelf, shelfSlope: onDeep(i) ? DEEP_SHELF_SLOPE : c.shelfSlope });
     stamps.push({ kind: "berm", x, y, inner: width[s], outer: width[s] + c.berm[0], top: c.beachTop + c.berm[1] });
   }
 
@@ -870,7 +901,7 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
   for (let s = 0; s < count; s++) {
     if (retreat[s] > 0 || width[s] > 0 || cls[s] !== SHORE.rocky || inCoveAt[shore.nodes[s]]) continue;
     const g = c.ledge;
-    stamps.push({ kind: "ledge", x: px[s], y: py[s], land: g.width, base: g.base, rise: (g.top - g.base) / g.width, shelf: g.shelf, shelfSlope: c.shelfSlope });
+    stamps.push({ kind: "ledge", x: px[s], y: py[s], land: g.width, base: g.base, rise: (g.top - g.base) / g.width, shelf: g.shelf, shelfSlope: onDeep(shore.nodes[s]) ? DEEP_SHELF_SLOPE : c.shelfSlope });
     stamps.push({ kind: "berm", x: px[s], y: py[s], inner: g.width, outer: g.width + c.berm[0], top: g.bank });
   }
 
@@ -975,7 +1006,9 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     const apron = c.shelfWide * (1 - e) * (1 - e) * sand[i] * (1 + 0.6 * wide);
     // On the shelf the bed never falls faster than shelfSlope; the edge noise only moves where the shelf ends.
     const past = Math.max(0, d * (1 + 0.3 * edge) - apron);
-    const depth = c.shelfSlope * Math.min(d, apron) + b.slope * (b.base + b.eGain * e) * past;
+    let depth = c.shelfSlope * Math.min(d, apron) + b.slope * (b.base + b.eGain * e) * past;
+    if (ctx.deep !== undefined && ctx.deep[i] > depth) depth = ctx.deep[i];
+    if (ctx.shoal !== undefined && ctx.shoal[i] > 0 && ctx.shoal[i] < depth) depth = ctx.shoal[i];
     base[i] = -Math.max(SEA_MIN, Math.min(b.max, depth));
   }
   for (const o of shoals) {

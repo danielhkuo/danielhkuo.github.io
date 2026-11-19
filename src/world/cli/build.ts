@@ -1,26 +1,29 @@
 // Builds the shipped world: generates (or reads from the cache) the chosen seed,
-// encodes it into world.bin with its occlusion floor, and writes the manifest.
+// encodes it as a core and one file per region, and writes the manifest.
 //
 //   npm run world:build -- --seed 3 [--n 6400] [--cache]
 //
-// Output: <out>/<worldId>/world.bin, <out>/<worldId>/manifest.json, <out>/current.json.
+// Output: <out>/<worldId>/core.bin, <out>/<worldId>/regions/<rx>-<ry>.bin,
+// <out>/<worldId>/manifest.json, <out>/current.json.
 
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { worldLook } from "../bake/look.ts";
+import { wrap } from "../core/torus.ts";
 import { occlusionFloor } from "../gen/occlusion.ts";
 import { paramsFor } from "../gen/params.ts";
 import { makeWorld, settleWorld, type World } from "../gen/pipeline.ts";
 import { sha256 } from "../pack/codec.ts";
-import { startOf, type Manifest } from "../pack/manifest.ts";
-import { decodeWorld, encodeWorld, WORLD_FORMAT } from "../pack/world.ts";
+import { manifestWonders, startOf, type Manifest } from "../pack/manifest.ts";
+import { REGION_CELLS, encodeTiled } from "../pack/regions.ts";
+import { decodeWorld, encodeWorld } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { createView } from "../runtime/view.ts";
 import { encodePng } from "./png.ts";
 import { cachedTerrain } from "./worldcache.ts";
 
-/** world.bin may not be larger than this for the 6400 world. */
+/** The core and its regions together may not be larger than this for the 6400 world. */
 export const BUDGET_BYTES = 3_670_016;
 /** Cells per occlusion block. */
 export const OCCLUSION_BLOCK = 16;
@@ -34,41 +37,83 @@ export interface BuildOptions {
   cache?: boolean;
   /** A world already made for (n, seed): used instead of generating. */
   world?: World;
-  /** Refuse, writing nothing, when world.bin would be larger than this. */
+  /** Cells a side of one region. Default REGION_CELLS. Must divide n. */
+  regionCells?: number;
+  /** Refuse, writing nothing, when the core and regions together would be larger than this. */
   maxBytes?: number;
 }
 
 const VIEW_W = 400;
 const VIEW_H = 225;
 
+/**
+ * The regions the first view loads: the 2×2 nearest the start, that is the region under it and its neighbours toward
+ * the nearer edges, row-major. Fewer when the world has fewer regions a side.
+ */
+export function startRegions(m: Pick<Manifest, "n" | "regionCells" | "start">): { rx: number; ry: number }[] {
+  const side = m.n / m.regionCells;
+  const axis = (v: number): number[] => {
+    const at = wrap(v, m.n);
+    const r = Math.floor(at / m.regionCells);
+    const other = wrap(at - r * m.regionCells < m.regionCells / 2 ? r - 1 : r + 1, side);
+    return other === r ? [r] : [Math.min(r, other), Math.max(r, other)];
+  };
+  const out: { rx: number; ry: number }[] = [];
+  for (const ry of axis(m.start.y)) for (const rx of axis(m.start.x)) out.push({ rx, ry });
+  return out;
+}
+
+/** Bytes of the world the page downloads before its first flight: the core and the start's regions. */
+export function beforeFlight(m: Manifest): number {
+  const side = m.n / m.regionCells;
+  let total = m.core.bytes;
+  for (const r of startRegions(m)) total += m.regions[r.ry * side + r.rx].bytes;
+  return total;
+}
+
 /** Writes the world's files and returns its manifest. Older world folders under `out` are left in place. */
 export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
   const { n, seed, out } = opts;
+  const regionCells = opts.regionCells ?? REGION_CELLS;
   const params = paramsFor(n);
   const world = opts.world ?? (opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed));
   const bw = buildBakeWorld({ params, seed, world });
   const occlusion = occlusionFloor(bw.ground, bw.gN, n / bw.gN, OCCLUSION_BLOCK);
-  const { bin, sections } = await encodeWorld(bw, { occlusion: { block: OCCLUSION_BLOCK, data: occlusion } });
-  if (opts.maxBytes !== undefined && bin.length > opts.maxBytes) {
-    throw new Error(`world.bin would be ${bin.length} bytes, over the budget of ${opts.maxBytes}; nothing was written`);
+  const tiled = await encodeTiled(bw, { regionCells, occlusion: { block: OCCLUSION_BLOCK, data: occlusion } });
+  let total = tiled.core.bin.length;
+  for (let i = 0; i < tiled.regions.length; i++) total += tiled.regions[i].bin.length;
+  if (opts.maxBytes !== undefined && total > opts.maxBytes) {
+    throw new Error(`the world would be ${total} bytes, over the budget of ${opts.maxBytes}; nothing was written`);
   }
-  const worldId = (await sha256(bin)).slice(0, 12);
+  const coreHash = await sha256(tiled.core.bin);
+  const worldId = coreHash.slice(0, 12);
+  const regions = await Promise.all(tiled.regions.map(async (r) => ({
+    rx: r.rx, ry: r.ry, bytes: r.bin.length, sha256: await sha256(r.bin),
+  })));
   const sites = world.settlement.sites.map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y }));
   const manifest: Manifest = {
-    format: WORLD_FORMAT,
+    format: 2,
     worldId,
     n,
     seed,
-    bytes: bin.length,
-    sections,
+    regionCells,
+    core: { bytes: tiled.core.bin.length, sha256: coreHash },
+    regions,
     block: OCCLUSION_BLOCK,
     sites,
+    wonders: manifestWonders(world.settlement.wonders, n),
     start: startOf(world.settlement.sites, n),
   };
+  // A wonder the land could not host is named here and left out; it is never forced.
+  for (const line of world.settlement.wonderSkips) console.log(`wonder skipped: ${line}`);
 
   const dir = join(out, worldId);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "world.bin"), bin);
+  mkdirSync(join(dir, "regions"), { recursive: true });
+  writeFileSync(join(dir, "core.bin"), tiled.core.bin);
+  for (let i = 0; i < tiled.regions.length; i++) {
+    const r = tiled.regions[i];
+    writeFileSync(join(dir, "regions", `${r.rx}-${r.ry}.bin`), r.bin);
+  }
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   writeFileSync(join(out, "current.json"), JSON.stringify({ worldId }) + "\n");
 
@@ -136,16 +181,24 @@ export async function main(argv: readonly string[]): Promise<number> {
     console.error(e instanceof Error ? e.message : String(e));
     return 1;
   }
-  for (let i = 0; i < manifest.sections.length; i++) {
-    const s = manifest.sections[i];
-    console.log(`${s.name} ${(s.bytes / 1024).toFixed(1)} KB`);
+  console.log(`core ${(manifest.core.bytes / 1024).toFixed(1)} KB`);
+  let total = manifest.core.bytes;
+  for (let i = 0; i < manifest.regions.length; i++) {
+    const r = manifest.regions[i];
+    total += r.bytes;
+    console.log(`${r.rx}-${r.ry} ${(r.bytes / 1024).toFixed(1)} KB`);
   }
-  console.log(`total ${(manifest.bytes / 1024).toFixed(1)} KB`);
+  console.log(`total ${(total / 1024).toFixed(1)} KB`);
+  const start = startRegions(manifest).map((r) => `${r.rx}-${r.ry}`).join(" ");
+  console.log(`before flight ${(beforeFlight(manifest) / 1024).toFixed(1)} KB: the core and the start's regions ${start}`);
 
   const look = worldLook(n, buildPalette(MIDDAY));
   const mask = new Uint8Array(readFileSync(join(process.cwd(), "public", "world", "bluenoise.bin")));
   const original = buildBakeWorld({ params, seed, world });
-  const decoded = await decodeWorld(new Uint8Array(readFileSync(join(out, manifest.worldId, "world.bin"))));
+  const round = await encodeWorld(original, {
+    occlusion: { block: OCCLUSION_BLOCK, data: occlusionFloor(original.ground, original.gN, n / original.gN, OCCLUSION_BLOCK) },
+  });
+  const decoded = await decodeWorld(round.bin);
   const views: { name: string; x: number; y: number }[] = [
     { name: "start", x: manifest.start.x, y: manifest.start.y },
   ];

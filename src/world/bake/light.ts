@@ -6,6 +6,8 @@
 export const SUN_X = -0.3210197;
 export const SUN_Y = -0.3210197;
 export const SUN_Z = 0.8910065;
+/** The sun's vector across the ground: how much of it lies in the horizontal. */
+export const SUN_H = Math.sqrt(SUN_X * SUN_X + SUN_Y * SUN_Y);
 
 /** The shadow ray drops this much per diagonal step (tan 63° · √2 = 2√2 to within the angle's rounding). */
 export const SHADOW_DROP = 2 * Math.SQRT2;
@@ -18,8 +20,18 @@ export const EXAGGERATE = 2.5;
 export const EXAGGERATE_LOW = 2;
 export const LOWLAND_TOP = 60;
 
-/** And by this on snow. */
-export const SNOW_LEAN = 1.8;
+/** Snow is lit by its true normal: its slope is leaned only this much. */
+export const SNOW_LEAN = 1.1;
+/** A snow slope's aspect counts in full from this slope; a gentler one is lit more evenly, towards the flat tone. */
+export const SNOW_ASPECT = 0.32;
+/** Snow this far under the mean of the ground round it (light.ts relief) takes the full lilac of a hollow. */
+export const SNOW_HOLLOW = 4.5;
+/** A steep snow face is in light only when it faces the sun's bearing by more than this cosine; short of it, in shade. */
+export const SNOW_TURN = 0.3;
+/** The least shade a steep face out of the light takes, so the whole face reads as one shaded face. */
+export const SNOW_SHADE_FLOOR = 0.1;
+/** Gentle snow's undulations are lit through its normal leaned this much. */
+export const SNOW_SOFT_LEAN = 1.8;
 
 /** Upland tones part round the terminator by up to this much, easing in between these heights. */
 export const UPLAND_PART = 0.22;
@@ -132,16 +144,41 @@ export function shade(dhdx: number, dhdy: number, relief: number, e: number): nu
 }
 
 /**
- * Tone 0–1 of snow, from its own normal alone: flat snow sits at the base tone, a
- * slope turned to the sun runs up to a clean blue-white, one turned away falls
- * steadily into blue-violet shade, so ridges, couloirs and cirque walls model.
- * Couloirs and lee hollows sit a little deeper.
+ * Tone 0–1 of snow, from its true normal: the way a slope faces decides its side of the light, and its steepness how
+ * far it goes. Flat snow sits at the base tone, with soft undulations of light and lilac. A slope turned towards the
+ * sun runs up to a clean white. A steep one turned less than SNOW_TURN towards it is in shade, the deeper the further
+ * it turns away: so each arête parts at its crest into a broad bright face and a broad lilac one, and a face turned to
+ * the camera is one face in shade, its ribs modelled inside the shade and not striped white down it. Couloirs and lee
+ * hollows sit a little deeper.
  */
 export function shadeSnow(dhdx: number, dhdy: number, relief: number): number {
-  // Snowfields are broad and low: the normal is leaned a little, less than the land's, so no face saturates.
   const ex = dhdx * SNOW_LEAN, ey = dhdy * SNOW_LEAN;
-  const ndotl = (-ex * SUN_X - ey * SUN_Y + SUN_Z) / Math.sqrt(ex * ex + ey * ey + 1);
-  let tone = ndotl >= SUN_Z ? BASE_TONE + (0.36 * (ndotl - SUN_Z)) / (1 - SUN_Z) : BASE_TONE - 0.66 * (SUN_Z - ndotl);
-  if (relief < 0) tone += relief < -10 ? -0.09 : 0.009 * relief;
+  const g = Math.sqrt(ex * ex + ey * ey);
+  let tone = BASE_TONE;
+  if (g > 1e-6) {
+    // The cosine of the turn between the way the slope faces and the sun's bearing: 1 facing it, 0 side-on, −1 away.
+    const facing = -(ex * SUN_X + ey * SUN_Y) / (SUN_H * g);
+    const steep = g >= SNOW_ASPECT ? 1 : g / SNOW_ASPECT;
+    if (facing >= SNOW_TURN) tone += 0.4 * steep * ((facing - SNOW_TURN) / (1 - SNOW_TURN));
+    else {
+      const t = (SNOW_TURN - facing) / (1 + SNOW_TURN);
+      // A floor of shade once the face has turned from the sun, eased in over the first quarter of the turn so the
+      // terminator is soft and not a seam.
+      const floor = t >= 0.25 ? 1 : (t / 0.25) * (t / 0.25) * (3 - 2 * (t / 0.25));
+      tone -= steep * (SNOW_SHADE_FLOOR * floor + 0.26 * t * t * (3 - 2 * t));
+      // The shade is deepest just under the crest and lifts down the face, where the snow below throws light back.
+      if (relief > 0) tone -= steep * 0.05 * (relief > 5 ? 1 : relief / 5);
+    }
+    // Gentle snow keeps the soft light and lilac of its undulations, as a plain Lambert term would give it.
+    if (steep < 1) {
+      const lx = dhdx * SNOW_SOFT_LEAN, ly = dhdy * SNOW_SOFT_LEAN;
+      const ndotl = (-lx * SUN_X - ly * SUN_Y + SUN_Z) / Math.sqrt(lx * lx + ly * ly + 1);
+      tone += (1 - steep) * 0.6 * (ndotl - SUN_Z);
+    }
+  }
+  // Hollows, couloirs and the lee of a ridge hold a lilac shade; crests and knolls stand a little brighter. So even flat,
+  // sunlit snow is modelled and does not lie like a sheet of paper.
+  if (relief < 0) tone += relief < -SNOW_HOLLOW ? -0.14 : (0.14 * relief) / SNOW_HOLLOW;
+  else tone += relief > 6 ? 0.05 : (0.05 * relief) / 6;
   return tone < 0.08 ? 0.08 : tone > 0.94 ? 0.94 : tone;
 }

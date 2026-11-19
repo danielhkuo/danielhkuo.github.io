@@ -7,25 +7,31 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { namedViews, renderStrip } from "../cli/live.ts";
+import type { Manifest } from "../pack/manifest.ts";
+import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
 import type { LiveFrame } from "./live.ts";
 import { waterLayer } from "./water.ts";
 
 const VIEWS = ["start", "sea", "falls", "peak"] as const;
 const TIMES = [0.7, 2.3, 5.1] as const;
-/** sha256 of `out` after the water layer, per view and time, from the version before the speed pass. */
+/**
+ * sha256 of `out` after the water layer, per view and time. Taken before the speed pass; retaken on the 2026-11-18
+ * terrain polish, which repaints the land under the water (snow light, rock beds, upland colours) but not the water.
+ */
 const GOLDEN: Record<string, string> = {
-  "start@0.7": "2d17be0a45a04d25aa71b5236e5a84d167cdf577543a9a8dcea8ab8ff9d08b12",
-  "start@2.3": "c644ed0c9b355cf564e839f3d0d2867d456c0f858196d525f54579e6bd78531e",
-  "start@5.1": "1afa5a6c0a4a35bff53cfe6c94cd91e6f936b8fb275a42a5a0533839975bc25f",
-  "sea@0.7": "aa6d48d8c8bdc0c7c137d131f2eade59b418efad4c4891a1781ef40285aa9f1e",
-  "sea@2.3": "ebe4d0e8b0ca11e62386c02154a9e8532da5dbfaed2967dfc326ad35fe194812",
-  "sea@5.1": "d26ec54b5aa003e5749c0e3a6979f50c7a72fb05ba0ef3a42148936fdb2466b5",
-  "falls@0.7": "7a1daf56897e9f8158a297f81a2f6746f71e0e51f7fa7a4ab51fcf5c165ec213",
-  "falls@2.3": "13fa783234ef6c6c092c8340737ad0fa2c96ffa694f4d79fff59a4ce92141b27",
-  "falls@5.1": "ce6ac4014498b749fb81c1df7e2298453f40ebed72309ca75b682fd539765055",
-  "peak@0.7": "22c79315b7c2ae30ba34f4831739c4daab3305a33ec6f50cd0d940b47da9b511",
-  "peak@2.3": "9e402bd72860bcd89161f39efe2d78adf24552d5c5105bc994925ed15ea19ea1",
-  "peak@5.1": "0905a34a3ca5afa10fb5227b8e610164d06e869df8a234ea354e4631b3794519"
+  "start@0.7": "5cb014accdef0d82461942bf41c8b4095dd12d021ccff5193a2927cb61a84573",
+  "start@2.3": "5f5d05d0f00436a2990331a691aedf31f520a8993e920a65e3405205c8d06300",
+  "start@5.1": "35b9466f37a8e23ca78a9e48a80b058b227b02376873117e4b738916a8322a68",
+  "sea@0.7": "45d6adcf155afd19fda8960411b3664af9d0ea706f40c568bda4d2cc81e2a381",
+  "sea@2.3": "1406d71960e5c6dc0c644e91e3e828e04f6953a2ae0462e5c97104012e9a9880",
+  "sea@5.1": "a81cb884aaa7a2cbe206a26a4d9963991922c9c1fc8d7c4cb7720e27af1e6c51",
+  "falls@0.7": "d61684ad0ba8f980274ecbdd4ef67024752b68fe57c19a6b9a0863c983e458bd",
+  "falls@2.3": "3febdb3a40bc66b6a892d19ef3ddcf99bc0eee439a1353d762aee9c592b3f781",
+  "falls@5.1": "2334585af2c06d2561034fc9a7d9885676a63ed2d1f089f6bad8161a64e4fe0d",
+  "peak@0.7": "5e22d6245940ba27fd70bbde29fccd32867394394d39410fcf7607fe94026975",
+  "peak@2.3": "8d8508004d5625fa684a002c107fe40fbd0502395fa9cc1c0d8cabc416029485",
+  "peak@5.1": "b44086e8ff0a081c53f301b9cec7e031fe5c45f93815a667495674ba28917967"
 };
 
 interface Fixture { frames: Record<string, LiveFrame>; seed: number }
@@ -33,15 +39,14 @@ let memo: Promise<Fixture> | null = null;
 function fixture(): Promise<Fixture> {
   memo ??= (async () => {
     const root = process.cwd();
-    const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-    const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin")));
-    const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8"));
+    const { world, flight, manifest: shippedManifest } = await readShipped(FIXTURE_WORLD);
+    const manifest = shippedManifest as unknown as Manifest;
     const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
-    const views = await namedViews(bin, manifest);
+    const views = await namedViews(world, manifest);
     const frames: Record<string, LiveFrame> = {};
     for (const name of VIEWS) {
       const grab = { name: "grab", draw: (f: LiveFrame) => { frames[name] = { ...f, out: f.out.slice(), bake: f.bake.slice(), rect: { ...f.rect } }; } };
-      await renderStrip({ bin, manifest, mask, x: views[name].x, y: views[name].y, times: [0], layers: [grab], clouds: null });
+      await renderStrip({ world, flight, manifest, mask, x: views[name].x, y: views[name].y, times: [0], layers: [grab], clouds: null });
     }
     return { frames, seed: manifest.seed as number };
   })();

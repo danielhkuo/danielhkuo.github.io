@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { torusDist } from "../core/torus.ts";
 import { seamRatio } from "../testing/seam.ts";
-import { ARCHETYPE, paramsFor } from "./params.ts";
+import { ARCHETYPE, FORM, paramsFor } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 
 const p = paramsFor(1024);
@@ -17,17 +17,21 @@ test("arrays sized to C", () => {
   assert.equal(pl.regions.length, 6 * cN * cN);
 });
 
-test("archetype quota", () => {
+test("archetype and form quota", () => {
   const pl = plan();
   const count = (a: number) => pl.cores.filter((c) => c.archetype === a).length;
+  const forms = (f: number) => pl.cores.filter((c) => c.form === f).length;
   assert.equal(count(ARCHETYPE.home), 1);
-  assert.equal(count(ARCHETYPE.highland), 1);
-  assert.equal(count(ARCHETYPE.slate), 1);
-  assert.equal(count(ARCHETYPE.lakes), 1);
+  // Belts of every archetype but the skerries, and one each of the other forms.
+  assert.equal(forms(FORM.belts), 5);
+  for (const f of [FORM.fjord, FORM.fen, FORM.table, FORM.cone, FORM.caldera]) assert.equal(forms(f), 1, `form ${f}`);
+  assert.equal(count(ARCHETYPE.highland), 2);
+  assert.equal(count(ARCHETYPE.slate), 3);
+  assert.equal(count(ARCHETYPE.lakes), 2);
   assert.equal(count(ARCHETYPE.karst), 2);
   const sk = count(ARCHETYPE.skerry);
-  assert.ok(sk >= 5 && sk <= 7, `skerries ${sk}`);
-  assert.ok(pl.cores.length >= 11 && pl.cores.length <= 13);
+  assert.ok(sk >= 5 && sk <= 7 && forms(FORM.cluster) === sk, `skerries ${sk}`);
+  assert.ok(pl.cores.length >= 15 && pl.cores.length <= 17);
 });
 
 test("Poisson spacing on the torus", () => {
@@ -41,13 +45,25 @@ test("Poisson spacing on the torus", () => {
   }
 });
 
-test("spines run within 25° of west–east with 3–6 segments", () => {
+test("spines have 3–6 segments, and no island's strike turns past maxTurn from west–east", () => {
+  const most = Math.tan(p.strike.maxTurn);
   for (const c of plan().cores) {
     const s = c.spine, segs = s.length / 2 - 1;
     assert.ok(segs >= 3 && segs <= 6, `segments ${segs}`);
+    // A caldera's spine is its islet's, which lies any way.
+    if (c.form === FORM.caldera) continue;
     const dx = s[s.length - 2] - s[0], dy = s[s.length - 1] - s[1];
-    assert.ok(Math.abs(dx) > 0 && Math.abs(dy) <= p.strike.maxSlope * Math.abs(dx) + 1e-9, `strike ${dx},${dy}`);
+    // psin and pcos are good to about 1e-6, so an island turned the whole way may sit a hair past tan(maxTurn).
+    assert.ok(Math.abs(dx) > 0 && Math.abs(dy) <= most * Math.abs(dx) * (1 + 1e-4), `strike ${dx},${dy}`);
   }
+});
+
+test("islands lie at different strikes", () => {
+  const turns = plan().cores.filter((c) => c.form !== FORM.caldera).map((c) => {
+    const s = c.spine;
+    return Math.atan2(s[s.length - 1] - s[1], s[s.length - 2] - s[0]);
+  });
+  assert.ok(Math.max(...turns) - Math.min(...turns) > 0.8, `strikes span ${Math.max(...turns) - Math.min(...turns)}`);
 });
 
 test("erodibility uses the three rock multipliers, all present", () => {
@@ -60,18 +76,19 @@ test("erodibility uses the three rock multipliers, all present", () => {
   assert.equal(seen.size, 3);
 });
 
-test("region weights sum to one; diffusion blends the archetype values", () => {
-  const pl = plan(), lo = Math.min(...p.erode.d), hi = Math.max(...p.erode.d);
+test("region weights sum to one; diffusion blends the islands' values", () => {
+  // An island's diffusion is its archetype's unless its form sets its own.
+  const all = [...p.erode.d, ...p.cores.archetypes.flatMap((a) => (a.d === undefined ? [] : [a.d]))];
+  const pl = plan(), lo = Math.min(...all), hi = Math.max(...all);
   for (let i = 0; i < cN * cN; i++) {
-    let sum = 0, mix = 0;
+    let sum = 0;
     for (let a = 0; a < 6; a++) {
       const w = pl.regions[a * cN * cN + i];
       assert.ok(w >= 0);
       sum += w;
-      mix += w * p.erode.d[a];
     }
     assert.ok(Math.abs(sum - 1) <= 1e-6);
-    assert.ok(Math.abs(pl.d[i] - mix) <= 1e-6 && pl.d[i] >= lo - 1e-9 && pl.d[i] <= hi + 1e-9);
+    assert.ok(pl.d[i] >= lo - 1e-9 && pl.d[i] <= hi + 1e-9);
   }
 });
 

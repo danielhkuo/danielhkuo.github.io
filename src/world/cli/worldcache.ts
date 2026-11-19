@@ -9,7 +9,7 @@ import type { WorldParams } from "../gen/params.ts";
 import { makeTerrain, type Terrain } from "../gen/pipeline.ts";
 
 /** Bump when a stage before siting changes what it returns. */
-const VERSION = 6;
+const VERSION = 9;
 
 export function cachedTerrain(p: WorldParams, seed: number, dir = join(process.cwd(), ".cache", "world-gen")): Terrain {
   const file = join(dir, `v${VERSION}-${p.n}-${seed}.bin`);

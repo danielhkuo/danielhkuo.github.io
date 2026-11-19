@@ -112,8 +112,24 @@ export interface BakeWorld {
 
   /** What people built: structures, pads and terraces. Absent on a wild world. */
   built?: BuiltIndex;
+
+  /**
+   * When set, every G-grid array holds only this window of nodes (row-major, gWin.w × gWin.h) instead of gN²; the
+   * bake reads global node (gx, gy), wrapped into [0, gN), at its offset inside the window. See bake/window.ts.
+   */
+  gWin?: GridWindow;
+  /** The same for the C-grid arrays (each regions plane is cWin.w × cWin.h). */
+  cWin?: GridWindow;
   /** Roads and paths, indexed like rivers; a vertex's width is 2 for a road, 1 for a path. */
   roads?: RiverIndex;
+}
+
+/** A rectangle of grid nodes: north-west node (x0, y0) in global coordinates, which may lie outside [0, size) and wrap, and size w × h. */
+export interface GridWindow {
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
 }
 
 /** One river polyline: x, y, width per vertex (cells, unwrapped; any consistent frame). */
