@@ -237,6 +237,9 @@ From landing (2026-11-18):
   now about 78 % of its first size. See the landing design.
 - A lighthouse stands on a cliff's edge, so its coil is draped from the sea up over the rock behind the tower. A coil
   wound up the tower itself, held by it, would be the better picture there.
+- Take-off, from the render critic: where the coil is a closed ring (the harbour, a lighthouse) the head crosses its
+  own tail for about half a second as it leaves; at the ruined cathedral the wooded bank in front cuts the rising body
+  in two for a moment. Both pass; a take-off that leaves outward, and climbs faster where it is hidden, would cure them.
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
   could part round a landed site.
 - ~~In the town the coil lies among the houses round the bell tower, and the houses hide some of it.~~ The town now
