@@ -651,17 +651,19 @@ On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
 | Fields by climate beyond the Mediterranean and the steppe (oasis plots are built; paddies are not) | partly |
 | The six churches of the climates | built, then cut by the owner: commit `967f669` holds them |
 
-Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7, world `cd3d75d05d9d`):
+Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7, world `3389a57cc203`):
 
 - **Native land:** of the 43 islands, 19 are grown again for their climate and 6 kept from today's land (home, the
   temperate cone and caldera, three skerry groups); the rest are cones, calderas and skerries of the cold and wet,
   which keep their forms but are worn under their own rain. Land is 27 % of the world (34.7 % before; the plains and
   low deserts stand lower and lose their drowned margins). The land for the climates takes about 4 minutes to grow
   and is cached apart; the join, the climate and the landforms take seconds on every read.
-- **Landmarks:** all seven placed in their own climate and side, none let out. The six projects hold the six that
-  are not the abbey (`assignments.json`, world `cd3d75d05d9d`, from a build with the real pinned repos). Eight of nine
-  wonders placed; the marsh house finds no marsh 300 cells clear of the landmarks and the other wonders.
-- **Download:** the whole world 8293 KB (9191 before climates); before first flight 1225 KB (1447); the core 686 KB.
+- **Landmarks:** all seven placed in their own climate and side, none let out: lighthouse by the pack ice, yew off
+  home, cathedral in the wet side's jungle (the dry side's equator is savanna), windmill in the Mediterranean, bridge
+  on the steppe. The six projects hold the six that are not the abbey (`assignments.json`, world `3389a57cc203`, from
+  a build with the real pinned repos). Eight of nine wonders placed; the marsh house finds no marsh 300 cells clear of
+  the landmarks and the other wonders.
+- **Download:** the whole world 8293 KB (9191 before climates); before first flight 1226 KB (1447); the core 687 KB.
   The new land is lower and smoother, so it packs smaller.
 - **Identity:** the build's start and abbey frames, as generated and as shipped, are the same files, to the byte, as
   every earlier build's (md5 `9b28eb…`, `b3064c…`, `4af97f…`, `99b54d…`).
@@ -670,8 +672,14 @@ Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7, world `cd3d7
   it did (37.7 ms against 37.0, +1.8 %); any other tile 61.0 ms against 46.9, **+30 %**, over the 15 % this design set
   in section 11 (it was about +40 % on the first build). The painter's chunk over cached tiles costs the same
   (7.5 ms against 8.0). The bake runs in workers; it is the time to a full view, not the frame.
-- **Frame:** FRAMEBUDGET
-- **Tests:** TESTCOUNT
+- **Frame:** nothing new is drawn per frame. `world-fly.mjs` on a quiet machine (load average 2.4 to 5, no other
+  flight running), in turn with a build of `world/bigmap` at `0aef5c8` on its own world, three pairs: at 4× throttle
+  the base's p95 ran 3.9, 4.1 and 4.0 ms and this branch's 4.2, 4.1 and 3.8 (p50 2.4 to 2.6 against 2.4 to 3.0); at
+  1× 2.1 to 2.5 against 2.3 to 2.6. The two cannot be told apart, and both sit on the 4 ms line. Chunks baked a second
+  at 4×: 1.79 to 1.86 against 1.34 to 1.66, the bake's 30 %. (Three earlier runs alone showed 14 ms at 4×: another
+  session was flying at the same time.)
+- **Tests:** 1579, all passing (with `world/bigmap` merged); types and lint clean. `npm run build` passes with the
+  real pinned repos.
 
 Critic scores and what each round changed are in the look ledger ("Climate rounds").
 

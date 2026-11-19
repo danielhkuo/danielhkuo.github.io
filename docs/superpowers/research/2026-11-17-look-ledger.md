@@ -178,7 +178,33 @@ shield under its tree line, with fjords; plains are one broad belt, not parallel
 country stand as mesas; the ice sheet fills its hollows to a dome; karst towers stand in clusters, larger,
 flat-topped and of many heights; benches softer at their edges.
 
-ROUND8SCORES
+**Round 8, scored by a fresh critic** (views chosen where the land lies most wholly in each climate).
+
+| Biome | Reads | Land | Style | Craft | What the critic saw |
+|---|---|---|---|---|---|
+| Ice | 3 | 2 | 3 | 2 | A snowy range, not a polar dome; black cracks with loose dashes |
+| Tundra | 3 | 2 | 2 | 2 | Sea stacks in a graded row; a straight shore platform edge |
+| Taiga | 4 | 2 | 3 | 3 | Boreal forest now reads; a smooth scalloped shore, no fjord in view |
+| Temperate | 4 | 3 | 4 | 4 | Little temperate land outside home |
+| Warm forest | 2 | 3 | 2 | 3 | A dark hill-shade, no tree glyphs: beside the jungle it looks the same |
+| Jungle | 3 | 2 | 2 | 2 | No coastal plain in view; vertical green stripes on a scarp |
+| Savanna | 4 | 3 | 3 | 2 | One acacia stamp packed edge to edge |
+| Desert | 4 | 3 | 3 | 3 | The ripple is one fill laid over every slope |
+| Mediterranean | 3 | 2 | 4 | 2 | A flat triangular headland with a ruler-straight shore |
+| Steppe | 1 | 1 | 2 | 2 | No plain: ridges with lakes in the troughs; the bridge on tundra mottle |
+
+The world, temperate → climates → native: Variety 3 → 6 → 8, Depth 4 → 3 → 6, Quality 7 → 5 → 6, Detail 6 → 6 → 7.
+The globe 2 of 4: the sides read as different; the dry side's steppe, Mediterranean and stony tundra share one
+beige; the pack still reads as a band; the geography differs (fjords, the ice-sheet island, rias, smooth dry
+plateaus), but the dry side's comb-of-fingers islands and three ovals cast from one mould still read as one
+generator. Silly mistakes named: the cathedral on savanna ground, a horseshoe amphitheatre repeated, roads ruled
+along the grid, speckle on a mesa top, identical tower cones, turquoise water in the cold steppe.
+
+**After round 8.** The ruined cathedral stands in the wet side's jungle (the dry side's equator is savanna); the dry
+side's tundra begins 14 units colder, so the steppe keeps its grass to the tundra's latitudes (the bridge stands on
+khaki steppe). Not answered, and named in the roadmap: the steppe's and Mediterranean's own land (the islands that
+fall in their bands keep the ridge recipe of their mean climate), the warm forest drawn in the temperate hand, the
+pack as a band, repeated stamps and the ruled roads.
 
 Consensus left: the borders the tests hold to 150 cells are measured on level ground; one south-west wind puts rain
 on the same side of every island, where a globe has trades and westerlies; the open polar sea and the polar shallows

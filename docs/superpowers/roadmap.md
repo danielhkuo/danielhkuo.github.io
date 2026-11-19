@@ -375,9 +375,15 @@ From the climates (2026-11-19):
   `isSea` in life, sights, rare and moments).
 - Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
   pasture; no animal belongs to the new climates yet.
-- Native land, next: atolls and reefs in the tropics; deltas; the bridge town has no river crossing off home on
-  seed 3 but beside the old bridge, so it is left out (8 of 9 wonders); a seed search for a world whose islands fall
-  more evenly into the climates (seed 3's desert is one island and two calderas).
+- Native land, next (look ledger, round 8): the steppe and Mediterranean as land of their own (an island takes the
+  recipe of its mean climate, so one that reaches into the steppe band is still ridged; a recipe by latitude within
+  the island, or plains cut by braided rivers); the warm forest drawn in the temperate hand, apart from the jungle;
+  the jungle's coastal plains and mangroves (its rain cuts them into hills); the pack as floes along the coasts, not a
+  band; repeated stamps (sea-stack rows, horseshoe amphitheatres, acacia carpets, tower cones) and roads ruled along
+  the grid; the marsh house finds no marsh clear of the landmarks on seed 3 (8 of 9 wonders); a seed search for
+  islands that fall more evenly into the climates.
+- The climates' bake: tiles outside the temperate plateau cost 30 % more than as a temperate world (the design's
+  limit is 15 %; `scripts/world-climate-cost.ts`). The frame is unchanged.
 - The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
   are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.
 - Black sand on tropical volcanic islands; tidewater glaciers; burn scars on the savanna.

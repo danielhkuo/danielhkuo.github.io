@@ -1114,7 +1114,8 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   // Tundra: the ground beyond the tree line of a cold latitude, whatever the region. Weighted in by the shift, so
   // a temperate mountain keeps its own alpine meadow and moor.
   if (shift > 0) {
-    const t = tundraAt(c, x, y, mask, n, shift, cold, st, curve, north);
+    // The dry side's grass runs further toward the pole: its tundra begins some fourteen units colder.
+    const t = tundraAt(c, x, y, mask, n, shift, cold - 0.14 * aridNow, st, curve, north);
     if (t !== 0) return t;
   }
 
