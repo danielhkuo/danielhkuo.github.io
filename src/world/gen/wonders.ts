@@ -516,7 +516,8 @@ const HOTEL: Kind = {
       for (const rock of c.stacks) {
         const dx = torusDelta(cove.x, rock.x, n), dy = torusDelta(cove.y, rock.y, n);
         const d = Math.sqrt(dx * dx + dy * dy);
-        // Off the mouth or beside it, never up the cove.
+        // Off the mouth or beside it, never up the cove. The nearer the better (see the score): a rock far out on the
+        // deep water does not belong to the cove.
         if (d > r.hotel.rock || rock.top > r.hotel.top || dy < -8) continue;
         tally.pass(L2);
         // The hotel's own rock takes in whatever stands within its oval; outside it, nothing but water beside
@@ -531,7 +532,7 @@ const HOTEL: Kind = {
         const x = Math.floor(rock.x), y = Math.floor(rock.y);
         const px = x - W.HOTEL_ROCK[0] + W.HOTEL_PONTOON[0], py = y - W.HOTEL_ROCK[1] + W.HOTEL_PONTOON[1];
         out.push({
-          x, y, level: 0, height: 31, score: 2 - e - d / r.hotel.rock + cove.width / 40,
+          x, y, level: 0, height: 31, score: 2 - e - (2 * d) / r.hotel.rock + cove.width / 40,
           box: [x - W.HOTEL_ROCK[0] - 2, y - W.HOTEL_ROCK[1] - 2, x - W.HOTEL_ROCK[0] + W.HOTEL_W + 2, y - W.HOTEL_ROCK[1] + W.HOTEL_H + 2],
           anchors: { pontoon: [px, py], cove: [cove.x, cove.y] },
           probes: [[x, y + 2, 0, 25], [px, py, 0, 2]],
@@ -977,10 +978,9 @@ const OBSERVATORY: Kind = {
 
 /**
  * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
- * score: the great oak in temperate country, the bridge town from the steppe through the Mediterranean and the warm
- * forest (wherever it finds its farmland), the drowned church in a lake that is not frozen, the marsh house in any
- * marsh off the ice (on stilts in a jungle swamp as well as in a fen); the baths lean to the cold and the hotel to
- * the warm.
+ * score: the great oak in temperate country, the bridge town in temperate and warm country, the drowned church in
+ * a lake that is not frozen, the marsh house off the tundra and the jungle; the baths lean to the cold and the hotel
+ * to the warm.
  */
 /** Land that feeds a town: fields and meadows, and in dry country the sage and steppe that are grazed. */
 function worked(m: number): boolean {
@@ -989,9 +989,9 @@ function worked(m: number): boolean {
 
 const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
   "great-oak": { lo: 0.44, hi: 0.62 },
-  "bridge-town": { lo: 0.3, hi: 0.8 },
+  "bridge-town": { lo: 0.44, hi: 0.66 },
   "drowned-church": { lo: 0.32, hi: 1 },
-  "marsh-house": { lo: 0.2, hi: 0.97 },
+  "marsh-house": { lo: 0.3, hi: 0.75 },
   baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
   "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
   // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.

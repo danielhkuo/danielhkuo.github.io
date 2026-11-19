@@ -17,7 +17,7 @@ import type { Core } from "./plan.ts";
 import type { Reach, RiversResult } from "./rivers.ts";
 
 /** Bump when a recipe or the way L1 is grown changes: the cache keeps L1 under this. */
-export const NATIVE_VERSION = 7;
+export const NATIVE_VERSION = 10;
 
 export type Recipe = "keep" | "ice" | "tundraWet" | "tundraDry" | "taiga" | "steppe" | "mediterranean" | "desert" | "savanna" | "warmForest" | "jungle";
 
@@ -78,8 +78,13 @@ export function recipeOf(c: IslandClimate): Recipe {
  * theirs where volcanoes are at home (the cold and the wet), and in dry country stand as mesas.
  */
 function reformable(form: number, recipe: Recipe): boolean {
-  if (form === FORM.cone || form === FORM.caldera) return recipe === "desert" || recipe === "mediterranean" || recipe === "steppe" || recipe === "savanna";
-  return form === FORM.belts || form === FORM.fjord || form === FORM.fen || form === FORM.table;
+  if (form === FORM.cone || form === FORM.caldera) return dryRecipe(recipe);
+  if (form === FORM.table) return dryRecipe(recipe) || recipe === "jungle";
+  return form === FORM.belts || form === FORM.fjord || form === FORM.fen;
+}
+
+function dryRecipe(recipe: Recipe): boolean {
+  return recipe === "desert" || recipe === "mediterranean" || recipe === "steppe" || recipe === "savanna";
 }
 
 /**
@@ -105,10 +110,10 @@ function recipeBase(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
       return { ...base, id: A.lakes, form: F.fen, look: [[A.lakes, 0.8], [A.skerry, 0.2]], aspect: [0.6, 0.8], turn: 1.2, peak: 22, rugged: 0.25, d: 0.008, rockBias: [0.6, 0.4, 0], ridges: [4, 6], bite: 1.7 };
     // The dry side's tundra: a low stony plateau.
     case "tundraDry":
-      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.lakes, 0.4]], aspect: [0.4, 0.62], turn: 0.9, peak: 24, rugged: 0.35, d: 0.012, rockBias: [0.7, 0.3, 0], ridges: [2, 4], plateau: 0.6, bite: 1 };
+      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.lakes, 0.4]], aspect: [0.4, 0.62], turn: 0.9, peak: 40, rugged: 0.6, d: 0.01, rockBias: [0.7, 0.3, 0], ridges: [2, 4], bite: 1 };
     // The taiga: glaciated mountains and fjords.
     case "taiga":
-      return { ...base, id: A.lakes, form: F.fjord, look: [[A.lakes, 0.6], [A.highland, 0.4]], aspect: [0.5, 0.62], turn: 0.4, peak: 26, rugged: 0.5, d: 0.006, rockBias: [0.85, 0.15, 0], ridges: [2, 3], plateau: 0.5 };
+      return { ...base, id: A.lakes, form: F.belts, look: [[A.lakes, 0.6], [A.highland, 0.4]], aspect: [0.5, 0.62], turn: 0.4, peak: 26, rugged: 0.5, d: 0.006, rockBias: [0.85, 0.15, 0], ridges: [2, 3], plateau: 0.5, bite: 1.4 };
     // The steppe: a plain. A wide lowland ramp, low swells, smooth slopes and a smooth coast.
     case "steppe":
       return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.5, 0.75], turn: 0.9, peak: 30, rugged: 0, d: 0.03, rockBias: [0.2, 0.5, 0.3], ridges: [1, 1], plateau: 0.75, bite: 0.5, grain: 0.35 };
@@ -165,7 +170,12 @@ export function nativePlan(land: Land, climate: Climate, views: readonly { x: nu
     recipes.push(recipe);
     // A fen keeps today's land in any climate: low lobes round meres are a tundra of pools, a delta of lagoons or a
     // swamp as the climate dresses them, and they hold the marshes and the still water the wonders need.
-    if (recipe === "keep" || near[c] || core.form === FORM.fen) {
+    // So does a table outside dry country and the jungle: a karst plateau of the cold is already its own land.
+    // And the warm forest: its recipe (steep ridges, rias) is the land the generator grows already, and judged no
+    // better side by side; the warm country's wonders (the bridge town) stand on it as they did. And an island on
+    // the equator line, whose land is both sides' jungle (the cove hotel's cove is on one).
+    const straddles = climates[c].arid > 0.2 && climates[c].arid < 0.8 && climates[c].temp > 0.85;
+    if (recipe === "keep" || recipe === "warmForest" || straddles || near[c] || core.form === FORM.fen || (core.form === FORM.table && !reformable(core.form, recipe))) {
       kept.push(true);
       specs.push(null);
     } else {

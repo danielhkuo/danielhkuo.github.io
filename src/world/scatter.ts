@@ -282,7 +282,7 @@ export function scatterAt(
         : inTriple(groundMat, M.savannaCool)
           // Acacias stand in open parkland: loose groves a hundred cells across, each tree apart from the next, and
           // wide grass between the groves with a lone tree here and there.
-          ? 0.06 + 1.5 * clamp01(2.2 * (softNoise(x, y, n, 110, CLUMP_SEED + 2) + 0.35 * softNoise(x, y, n, 30, CLUMP_SEED + 3) + 0.12))
+          ? 0.04 + 0.85 * clamp01(2.2 * (softNoise(x, y, n, 110, CLUMP_SEED + 2) + 0.35 * softNoise(x, y, n, 30, CLUMP_SEED + 3) + 0.12))
         : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.sageCool) || inTriple(groundMat, M.tundraCool) || inTriple(groundMat, M.steppeCool) || groundMat === M.reg || groundMat === M.earthPale
         ? gathered(x, y, n, THICKET_CELLS, 0.14, THICKET_PEAK, 0, 0.41)
         : gathered(x, y, n, SPINNEY_CELLS, 0.3, SPINNEY_PEAK, c.region[0] > 0.5 ? SPINNEY_FLOOR : 0, 0.17);

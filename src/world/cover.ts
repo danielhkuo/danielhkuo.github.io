@@ -433,7 +433,7 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
   }
   if (wet < STEPPE_RAIN + 0.012 * j) {
     // Toward the savanna the thorn stands in dark bands along the contour, a dozen cells apart: tiger bush.
-    if (hl > 0.52 && st > 0.035 && st < 0.3) {
+    if (hl > 0.52 && hl < 0.6 && st > 0.035 && st < 0.3) {
       const t = ef / 1.25 + 1.6 * soft(x, y, n, 46, WARM_SEED + 10);
       if (t - Math.floor(t) < 0.2 && soft(x, y, n, 19, WARM_SEED + 11) > -0.2) return M.tigerBush;
     }
@@ -737,8 +737,6 @@ function tundraGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: 
   const dry = 0.5 * (curve > 2 ? 1 : curve < -2 ? -1 : curve / 2) + 0.9 * soft(x, y, n, 19, TUNDRA_SEED + 7) + 0.4 * soft(x, y, n, 6, TUNDRA_SEED + 8) + 0.6 * (c.wind - 0.5);
   // A clean lobed edge: a speckled one, on ground this even, would be static.
   if (dry + 0.25 * soft(x, y, n, 3.5, TUNDRA_SEED + 10) > 0.62 - 0.3 * aridNow) return M.lichen;
-  // The dry side's tundra is stony: fields of frost-shattered grey stone between the lichen and the heath.
-  if (aridNow >= 0.5 && soft(x, y, n, 23, TUNDRA_SEED + 13) + 0.35 * soft(x, y, n, 7, TUNDRA_SEED + 14) > 0.15) return M.scree;
   // Olive in the damp, khaki between, russet only in patches on the drier banks.
   const f = hueField(x, y, HUE_CLASS.moor, n) + 1.3 * soft(x, y, n, 9, TUNDRA_SEED + 9) + 0.5 * j - 0.8 * (c.moisture - 0.5);
   return M.tundraCool + (f < 0.85 ? 0 : f < 2.35 ? 1 : 2);

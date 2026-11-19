@@ -726,6 +726,10 @@ function windmillCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] 
     tally.pass(L.along);
     if (!isOpenCover(coverAtNode(c, gx, gy))) continue;
     tally.pass(L.cover);
+    // Not on the brink of a sea cliff: the camera looks north, and a mill's foot over a cliff's face reads as a seam.
+    let brink = false;
+    for (let dy = 1; dy <= 8 && !brink; dy++) for (let dx = -3; dx <= 3; dx++) if (c.isSea[idx(c, gx + dx, gy + dy)]) { brink = true; break; }
+    if (brink) continue;
     const seen = seenShare(c, gx, gy, 1, 1, level, BOX.windmill.h);
     if (seen.box < r.visible || seen.pad < r.visible) continue;
     tally.pass(L.seen);

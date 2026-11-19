@@ -27,8 +27,8 @@ const BENCH_RISE = 0.14;
 export const RIDGE_HEIGHT = 6.5;
 const RIDGE_CELLS = 40;
 /** The ice sheet fills hollows toward the land's surface smoothed over this many G nodes, by this share. */
-const ICE_RADIUS = 18;
-const ICE_FILL = 0.95;
+const ICE_RADIUS = 10;
+const ICE_FILL = 0.75;
 
 const SEED = 0x1a4df0;
 const LANDFORM_SEED = SEED;
