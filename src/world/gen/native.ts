@@ -17,7 +17,7 @@ import type { Core } from "./plan.ts";
 import type { Reach, RiversResult } from "./rivers.ts";
 
 /** Bump when a recipe or the way L1 is grown changes: the cache keeps L1 under this. */
-export const NATIVE_VERSION = 5;
+export const NATIVE_VERSION = 7;
 
 export type Recipe = "keep" | "ice" | "tundraWet" | "tundraDry" | "taiga" | "steppe" | "mediterranean" | "desert" | "savanna" | "warmForest" | "jungle";
 
@@ -163,12 +163,14 @@ export function nativePlan(land: Land, climate: Climate, views: readonly { x: nu
   plan.cores.forEach((core: Core, c: number) => {
     const recipe: Recipe = core.archetype === ARCHETYPE.home ? "keep" : recipeOf(climates[c]);
     recipes.push(recipe);
-    if (recipe === "keep" || near[c]) {
+    // A fen keeps today's land in any climate: low lobes round meres are a tundra of pools, a delta of lagoons or a
+    // swamp as the climate dresses them, and they hold the marshes and the still water the wonders need.
+    if (recipe === "keep" || near[c] || core.form === FORM.fen) {
       kept.push(true);
       specs.push(null);
     } else {
       kept.push(false);
-      specs.push(reformable(core.form, recipe) ? recipeSpec(recipe, n, core.form === FORM.belts || core.form === FORM.fjord || core.form === FORM.fen ? core.form : FORM.table) : null);
+      specs.push(reformable(core.form, recipe) ? recipeSpec(recipe, n, core.form === FORM.belts || core.form === FORM.fjord ? core.form : FORM.table) : null);
     }
   });
   return { recipes, kept, specs };
