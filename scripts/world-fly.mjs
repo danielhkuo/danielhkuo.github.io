@@ -10,7 +10,8 @@
 // same route with the touch stick and the Boost button (mobile spec 8, the phone perf gate). It sets its own viewport.
 //
 // The page reports through window.__flight (set only with ?stats). The frame fills the window, so --viewport sets how
-// many frame pixels are drawn (runtime/fit.ts); --query adds to the page's query, e.g. ?pixels= to try another budget.
+// many frame pixels are drawn (runtime/fit.ts); --query adds to the page's query: ?pixels= to try another budget, or
+// ?time= and ?weather= to hold the light and the weather still (time=night&weather=rain).
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -158,7 +159,12 @@ async function fly(browser, origin, opts, label, rate) {
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
-  const res = await page.evaluate(() => ({ frame: `${document.querySelector("canvas").width}x${document.querySelector("canvas").height}`, frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(), state: window.__flight.state?.() ?? null }));
+  const res = await page.evaluate(() => ({
+    frame: `${document.querySelector("canvas").width}x${document.querySelector("canvas").height}`,
+    frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])],
+    hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(),
+    air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])], state: window.__flight.state?.() ?? null,
+  }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
   return {
@@ -168,6 +174,7 @@ async function fly(browser, origin, opts, label, rate) {
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
     guideMsP50: pct(res.guideMs, 0.5), guideMsP95: pct(res.guideMs, 0.95), guideMsMax: pct(res.guideMs, 1),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
+    air: res.air, palettes: res.paletteMs.length, paletteMsMax: pct(res.paletteMs, 1),
     ...(opts.phone ? { workers: res.state?.workers, pacedTo: res.state?.rate } : {}),
   };
 }

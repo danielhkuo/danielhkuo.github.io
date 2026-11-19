@@ -24,9 +24,9 @@ async function placed(view: string, t: number, flier?: Flier): Promise<Placed[]>
   return life.log;
 }
 
-test("the registry runs the wind, the life, the sights, the rare sights and the wake after the water", () => {
+test("the registry runs the wind, the rain's splashes, the life, the sights, the rare sights, the wake, the mist and the night after the water", () => {
   const names = makeLayers(ctx).map((l) => l.name);
-  assert.deepEqual(names, ["water", "wind", "life", "sights", "moments", "rare", "wake"]);
+  assert.deepEqual(names, ["water", "wind", "splashes", "life", "sights", "moments", "rare", "wake", "mist", "night"]);
 });
 
 test("the same time gives the same frame, whatever was drawn before", async () => {

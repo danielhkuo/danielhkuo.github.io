@@ -2,7 +2,12 @@
 // stand-in kite, to judge motion.
 //
 //   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--frames 6] [--dt 0.25]
-//                         [--t 0] [--clouds <style>|none] [--sights all]
+//                         [--t 0] [--clouds <style>|none] [--sights all] [--time dusk] [--season autumn]
+//                         [--weather rain] [--out dir] [--times dawn,day,golden,dusk,night] [--weathers clear,rain]
+//
+// --time, --season and --weather take what the page's ?time=, ?season= and ?weather= take (sky/clock.ts,
+// sky/weather.ts): a clear midsummer noon when left out. --times draws one frame at each time instead of frames
+// through t (each at --t), and --weathers one in each weather: a sweep over the same land.
 //   npm run world:live -- --view moments
 //   npm run world:live -- --view baths
 //
@@ -12,7 +17,7 @@
 //
 // --sights all shows every rare sight at once, near the view's centre where the land allows.
 //
-// Writes .cache/world-live/<view>.png (the frames side by side at 2×) and <view>-<k>.png for each frame.
+// Writes .cache/world-live/<view>.png (the frames side by side at 2×) and <view>-<k>.png for each frame, or into --out.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,12 +29,15 @@ import { makeLayers } from "../live/registry.ts";
 import { wondersOf, type Manifest } from "../pack/manifest.ts";
 import { readShipped } from "../pack/shipped.ts";
 import { decodeFlightData, decodeWorld, type FlightData } from "../pack/world.ts";
-import { buildPalette, MIDDAY } from "../render/palette.ts";
+import { airOf, lightFor, NOON_AIR, type Air } from "../sky/air.ts";
+import { dayOfYear, parseSeason, parseTime, PHASES, SEASONS } from "../sky/clock.ts";
+import { CLEAR_WEATHER, parseWeather } from "../sky/weather.ts";
 import { createBakeHost, createWorldBakeHost } from "../runtime/bakeHost.ts";
 import type { FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { flownDragon } from "../dragon/index.ts";
 import { createStreamView } from "../runtime/stream.ts";
+import { createRain } from "../sky/rain.ts";
 import { createSky } from "../sky/sky.ts";
 import type { CloudStyle } from "../sky/styles.ts";
 import { styleFrom } from "../sky/styles.ts";
@@ -58,6 +66,10 @@ export type StripOptions = StripBase & (
   clouds: CloudStyle | null;
   width?: number;
   height?: number;
+  /** The light and weather; a clear midsummer noon when left out. */
+  air?: Air;
+  /** One air per frame, in place of `air`: a sweep through the day or the weather over the same land. */
+  airs?: readonly Air[];
 };
 
 const DEFAULT_W = 400;
@@ -140,7 +152,8 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const width = o.width ?? DEFAULT_W;
   const height = o.height ?? DEFAULT_H;
   const data = o.flight ?? await decodeFlightData(o.bin);
-  const palette = buildPalette(MIDDAY);
+  const air = o.air ?? NOON_AIR;
+  const { palette, cream } = lightFor(air);
   const bake = o.world ? createWorldBakeHost(o.world, o.mask) : await createBakeHost(o.bin, o.mask);
   const pool = syncPool(bake);
   const view = createStreamView(data, pool, palette, o.mask, {
@@ -149,6 +162,7 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
     sites: o.manifest.sites,
     layers: o.layers,
   });
+  view.setLight(palette, cream, air);
   const ground = view.groundHeight(o.x, o.y);
   const alt = ground + 18;
   const kite: FlightState = {
@@ -163,14 +177,27 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   for (let i = 0; i < 10 && !view.ready(); i++) view.update(0, 0);
 
   const sky = o.clouds ? createSky(o.manifest.seed, o.manifest.n, o.clouds) : null;
+  const rain = createRain(o.manifest.seed);
   const out = new Uint32Array(width * height);
   const frames: Uint32Array[] = [];
+  let lit = air;
   for (let t = 0; t < o.times.length; t++) {
     const time = o.times[t];
+    const want = o.airs?.[t] ?? air;
+    if (want !== lit) {
+      const next = lightFor(want);
+      view.setLight(next.palette, next.cream, want);
+      lit = want;
+    }
     view.frame(out, time, { x: kite.x, y: kite.y, alt: kite.alt, heading: kite.heading, speed: kite.speed });
     const rect = view.rect();
+    sky?.setAir(lit);
+    // The rain falls under the clouds and the flier, as on the page.
+    rain(out, rect, time, lit);
     if (sky) sky.draw(out, rect, time, "below");
-    flownDragon(o.manifest.n, kite, time).draw(out, rect, kite, view);
+    const dragon = flownDragon(o.manifest.n, kite, time);
+    dragon.setAir(lit);
+    dragon.draw(out, rect, kite, view);
     if (sky) sky.draw(out, rect, time, "above");
     frames.push(new Uint32Array(out));
   }
@@ -300,6 +327,8 @@ async function writeStrip(
   clouds: CloudStyle | null,
   times: readonly number[],
   dir: string,
+  air: Air,
+  airs?: readonly Air[],
 ): Promise<string[]> {
   const frames = await renderStrip({
     world,
@@ -311,6 +340,8 @@ async function writeStrip(
     times,
     layers,
     clouds,
+    air,
+    airs,
   });
   const written: string[] = [];
   const w = DEFAULT_W;
@@ -354,6 +385,27 @@ export async function main(argv: readonly string[]): Promise<number> {
   for (let i = 0; i < framesN; i++) times.push(t0 + i * dt);
 
   const forceSights = readFlag(argv, "--sights") === "all";
+  // The air: a midsummer day unless told otherwise, so a clock time lands where it would in June.
+  const doy = dayOfYear(2026, 6, 21);
+  const time = parseTime(readFlag(argv, "--time") ?? null, doy) ?? PHASES.noon;
+  const season = parseSeason(readFlag(argv, "--season") ?? null) ?? SEASONS.summer;
+  const weather = parseWeather(readFlag(argv, "--weather") ?? null) ?? CLEAR_WEATHER;
+  const air = airOf(time, season, weather);
+  let airs: Air[] | undefined;
+  const sweepTimes = readFlag(argv, "--times"), sweepWeathers = readFlag(argv, "--weathers");
+  if (sweepTimes || sweepWeathers) {
+    airs = [];
+    for (const tq of sweepTimes ? sweepTimes.split(",") : [null]) {
+      for (const wq of sweepWeathers ? sweepWeathers.split(",") : [null]) {
+        const at = tq === null ? time : parseTime(tq, doy);
+        const w = wq === null ? weather : parseWeather(wq);
+        if (at === null || w === null) throw new Error(`no such time or weather: ${tq ?? ""} ${wq ?? ""}`);
+        airs.push(airOf(at, season, w));
+      }
+    }
+    times.length = 0;
+    for (let i = 0; i < airs.length; i++) times.push(t0);
+  }
   if (viewArg === "moments" || MOMENT_VIEWS.has(viewArg)) {
     const { renderMomentViews } = await import("./momentstrip.ts");
     const names = viewArg === "moments" ? [...MOMENT_VIEWS] : [viewArg];
@@ -373,9 +425,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     land,
     wonders: wondersOf(manifest),
     forceSights,
+    structures: shipped.world.built?.built.structures,
   });
 
-  const dir = join(process.cwd(), ".cache", "world-live");
+  const dir = readFlag(argv, "--out") ?? join(process.cwd(), ".cache", "world-live");
   mkdirSync(dir, { recursive: true });
 
   const places = await namedViews(shipped.world, manifest);
@@ -394,7 +447,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     const name = todo[i];
     const place = places[name];
     if (!place) continue;
-    const paths = await writeStrip(name, place, shipped.world, land, manifest, mask, layers, clouds, times, dir);
+    const paths = await writeStrip(name, place, shipped.world, land, manifest, mask, layers, clouds, times, dir, air, airs);
     for (let j = 0; j < paths.length; j++) written.push(paths[j]);
   }
   for (let i = 0; i < written.length; i++) console.log(written[i]);

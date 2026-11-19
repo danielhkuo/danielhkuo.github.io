@@ -69,9 +69,12 @@ let touched = new Int32Array(0);
 /**
  * One shadow for the whole figure: each piece's footprint, turned to its heading, falls on the ground at
  * (x, y) + STACK_SHADOW_SLOPE · (alt − ground) along both axes. A pixel under any number of pieces is darkened once,
- * keeping STACK_SHADOW_KEEP / 256 of its colour, and only where view.depthAt is within 3 rows of the shadow's row.
+ * keeping `keep` / 256 of its colour (STACK_SHADOW_KEEP in full sun), and only where view.depthAt is within 3 rows of the
+ * shadow's row.
  */
-export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figure, n: number): void {
+export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figure, n: number, keep = STACK_SHADOW_KEEP): void {
+  // A shadow that keeps nearly all the light cannot be seen: none at all then.
+  if (keep >= 250) return;
   const fw = rect.w, fh = rect.h;
   if (mask.length < fw * fh) {
     mask = new Uint8Array(fw * fh);
@@ -111,7 +114,6 @@ export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figu
       }
     }
   }
-  const keep = STACK_SHADOW_KEEP;
   for (let i = 0; i < hits; i++) {
     const di = hit[i], dst = out[di];
     seen[di] = 0;

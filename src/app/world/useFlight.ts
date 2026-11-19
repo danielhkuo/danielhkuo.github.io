@@ -42,6 +42,8 @@ export interface FlightView {
   device: Device;
   /** With ?stats. */
   stats: FlightStats | null;
+  /** The paper's colour in the light of the moment, as CSS, for the page round the frame. */
+  paper: string;
   takeOff(): void;
   teachAgain(): void;
 }
@@ -56,6 +58,7 @@ export function useFlight(
   const [say, setSay] = useState("");
   const [device, setDevice] = useState<Device>("keyboard");
   const [stats, setStats] = useState<FlightStats | null>(null);
+  const [paper, setPaper] = useState("");
   const session = useRef<FlightSession | null>(null);
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export function useFlight(
         say: setSay,
         device: setDevice,
         toggleOptions: panel.toggle,
+        paper: setPaper,
         stall: touch.stall,
         buzz: touch.buzz,
       },
@@ -101,5 +105,5 @@ export function useFlight(
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);
-  return { failed, phase, caption, say, device, stats, takeOff, teachAgain };
+  return { failed, phase, caption, say, device, stats, paper, takeOff, teachAgain };
 }
