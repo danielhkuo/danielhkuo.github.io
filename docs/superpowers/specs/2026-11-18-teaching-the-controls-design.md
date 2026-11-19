@@ -55,7 +55,10 @@ pixel-art touch controls can use either.
   and turns vermilion with a paper legend. **Dim**: drawn at reduced opacity for keys of a stage not yet reached.
 - **Palette:** ink `#2e2a24`, paper `#f0e8d2`, skirt `#d8caa6`, vermilion `#cf3f2b`, gold `#d9a637`, the colours of
   the Codex sheet.
-- **Labels** are ink with a 1 px paper halo, so they read over sea, forest, cliffs and cloud without a box.
+- **Labels** sit on paper slips: flat plates 2 px shorter than a cap, with a soft-inked rim and clipped corners. They
+  read over sea, forest, cliffs and cloud, and beside a cap they read as its label, never as another key. A 1 px paper
+  halo was tried first; the critic found it made a pale blob on sea and cloud. Only the "or" between two families of
+  keys keeps the halo.
 - **Gamepad glyphs:** the face diamond (south, east, west, north), the left stick with ↔, the d-pad, and the triggers
   and shoulders. **Touch glyphs:** a tapping finger, plus the joystick ring and the boost and brake buttons for the
   mobile work.
@@ -96,9 +99,12 @@ pixel-art touch controls can use either.
 |---|---|---|---|
 | Flying, a landmark in reach | `[space] land · leaf` | `(south) land · leaf` | `(tap) land · leaf` |
 | Coming down | `[esc] pull up` | `(east) pull up` | `(tap) pull up` |
-| Landed | `[space] take off` | `(south) take off` | `(tap) take off` |
+| Landed | `[space] take off` | `(south) take off` | none: the Codex's Take off button |
 
-- The name is the project's, or "about me" at the abbey. An unclaimed landmark has none.
+- The name is the project's, "about me" at the abbey, or the landmark itself ("the windmill") when it keeps no work.
+- **Landed:** the dragon offers to take off only on a wide screen with keys or a pad. On a touch screen the Codex's own
+  button is the thing to tap, and over the narrow Codex (a bottom sheet) the prompt would be hidden. The Codex shows
+  its own `Space` hint only where the dragon's prompt does not.
 - **Placement.** A guide (prompt or lesson) stands 12 px from the dragon's head, in one of four slots: below, right,
   above or left. The first slot in that order wins unless the body covers it. The body's joints are projected to the
   screen and counted under each slot, and leaving the frame costs heavily. A slot is kept while at most one joint
@@ -123,7 +129,10 @@ pixel-art touch controls can use either.
   guides.
 - **Opening it:** `O`, the pad's Menu, or the corner button. It is a modal `<dialog>`, so Esc closes it (the pad's
   Menu or east button too). While it is open the session ignores flight keys, and the dragon cruises on.
-- **Glyph pixels** are the world's pixel scale, held between 2 and 3 CSS px, so the panel stays small.
+- **Glyph pixels** are a step finer than the world's pixel, 2 or 3 CSS px. The panel fills about half the window's
+  height: 50% at 1600×900, 42% at 1280×720. Keys and actions are laid out two to a row. The keys section has a
+  vermilion header over a dotted rule, as the Codex heads its register. A pilcrow stands before each action (soft at
+  rest, vermilion on hover or focus), and focus is an ink ring with a paper gap.
 - **Rows:** Boost (hold or toggle), Pace (cruise or gentle), Motion (full or reduced), the five keys, Show the
   lesson again, Leave the world, and Close.
 
@@ -148,3 +157,18 @@ pixel-art touch controls can use either.
 
 - Touch flight (the joystick and the boost and brake buttons) goes to the mobile work, using the touch glyphs here.
 - Steering toward the pointer on desktop (roadmap) is not built.
+
+## Critic rounds
+
+A Fable critic judged the renders twice, scoring legibility, fit, placement, device glyphs, the panel and restraint.
+Round 1 found eight fixes; three were blockers:
+
+- the corner said `esc leave` while the prompt said `esc pull up`;
+- the `O` cap read as a zero;
+- the take-off prompt was hidden or doubled when landed.
+
+All eight went in, as recorded above.
+
+Round 2 scored 8, 8, 8, 7, 8, 8 and said ship. It asked for one more fix before release: same-height slips read as
+pressable keys. They are now 2 px shorter and soft-rimmed. Two polish items also went in: a 2 px gap between a glyph
+and its slip, and "land · take off" spanning the panel's width.

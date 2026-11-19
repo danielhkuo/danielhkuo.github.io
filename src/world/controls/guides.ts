@@ -105,7 +105,7 @@ function prompt(s: GuideState, what: "land" | "back", verb: string, name: string
   const id = `prompt|${g.id}|${words}`;
   return {
     id,
-    sprite: memo(id, () => row([g.sprite(), slip(words)], 1)),
+    sprite: memo(id, () => row([g.sprite(), slip(words)], 2)),
     alpha: 1,
     tap,
     say: `${g.word} to ${verb}${name ? `: ${name}` : ""}.`,
@@ -120,7 +120,7 @@ function caps(s: GuideState, keys: readonly string[]): { id: string; sprite: () 
 
 /** A line of a lesson: glyphs, then a word on its slip. */
 function line(parts: { id: string; sprite: () => Sprite }[], word: string): { id: string; sprite: () => Sprite } {
-  return { id: `${parts.map((p) => p.id).join(",")}:${word}`, sprite: () => row([...parts.map((p) => p.sprite()), slip(word)], 1) };
+  return { id: `${parts.map((p) => p.id).join(",")}:${word}`, sprite: () => row([...parts.map((p) => p.sprite()), slip(word)], 2) };
 }
 
 function orWord(): { id: string; sprite: () => Sprite } {

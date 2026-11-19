@@ -92,6 +92,11 @@
   gap: calc(var(--px) * 4);
 }
 
+/* Land and take off, the odd one out, takes the whole row, its cap at the right edge with the choices above. */
+.keyRow:last-child {
+  grid-column: 1 / -1;
+}
+
 .keyWord {
   line-height: 0;
 }

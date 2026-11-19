@@ -105,25 +105,6 @@ export function label(t: string, c = INK): Sprite {
   return haloed(text(t, c));
 }
 
-/**
- * Words on a slip of paper: a flat paper plate with an inked rim and clipped corners, as tall as a key-cap, the words
- * sitting on their x-height in the middle. It reads over sea, forest, cliff and cloud alike, and beside a cap it reads
- * as the cap's own label (flat, where the cap stands up on its skirt).
- */
-export function slip(t: string): Sprite {
-  const words = text(t);
-  const w = words.w + 6;
-  const s = blank(w, CAP_H);
-  for (let y = 0; y < CAP_H; y++) {
-    for (let x = 0; x < w; x++) {
-      if ((x === 0 || x === w - 1) && (y === 0 || y === CAP_H - 1)) continue;
-      set(s, x, y, x === 0 || y === 0 || x === w - 1 || y === CAP_H - 1 ? INK : PAPER);
-    }
-  }
-  stamp(s, words, 3, 1);
-  return s;
-}
-
 /** Rows of `s` that hold anything: [first, last], or [0, -1] when it is empty. */
 function inkRows(s: Sprite): [number, number] {
   let top = -1;
@@ -144,6 +125,28 @@ function inkRows(s: Sprite): [number, number] {
 export const CAP_H = 12;
 /** A key-cap is never narrower than this, so single letters sit in square-ish caps. */
 export const CAP_MIN_W = 11;
+
+/** Height of a slip: two pixels under a cap's, so a word never passes for a key. */
+export const SLIP_H = CAP_H - 2;
+
+/**
+ * Words on a slip of paper: a flat paper plate with a soft-inked rim and clipped corners, the words just filling it
+ * (ascenders to descenders). It reads over sea, forest, cliff and cloud alike; beside a cap it reads as the cap's
+ * label, flat and lower, where the cap stands up on its skirt.
+ */
+export function slip(t: string): Sprite {
+  const words = text(t);
+  const w = words.w + 6;
+  const s = blank(w, SLIP_H);
+  for (let y = 0; y < SLIP_H; y++) {
+    for (let x = 0; x < w; x++) {
+      if ((x === 0 || x === w - 1) && (y === 0 || y === SLIP_H - 1)) continue;
+      set(s, x, y, x === 0 || y === 0 || x === w - 1 || y === SLIP_H - 1 ? INK_SOFT : PAPER);
+    }
+  }
+  stamp(s, words, 3, 1);
+  return s;
+}
 
 /**
  * A key-cap with `legend` on it: an inked rim with its corners clipped, a pale face with the legend centred on it, and

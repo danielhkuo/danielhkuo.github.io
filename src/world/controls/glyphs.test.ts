@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { blit } from "./blit.ts";
 import { ROWS, textWidth } from "./font.ts";
 import {
-  CAP_H, CAP_MIN_W, COLOURS, FACE, INK, keyCap, keycap, keyLegend, label, padDpad, padFace, padStick, padTrigger, PAPER, row,
+  CAP_H, CAP_MIN_W, COLOURS, FACE, INK, INK_SOFT, keyCap, keycap, keyLegend, label, padDpad, padFace, padStick, padTrigger, PAPER, row,
   column, SKIRT, slip, text, touchButton, touchStick, touchTap, VERMILION, VERMILION_DARK, type Sprite,
 } from "./glyphs.ts";
 
@@ -61,12 +61,13 @@ test("labels are ink with a paper halo, a pixel wider each side", () => {
   assert.ok(count(l, PAPER) > count(l, INK));
 });
 
-test("a slip is a paper plate as tall as a cap, its words inked on it", () => {
+test("a slip is a paper plate two pixels under a cap, soft-rimmed, its words inked on it", () => {
   const s = slip("land");
-  assert.deepEqual([s.w, s.h], [textWidth("land") + 6, CAP_H]);
+  assert.deepEqual([s.w, s.h], [textWidth("land") + 6, CAP_H - 2]);
   assert.equal(s.px[0], 0, "corners clipped");
-  assert.equal(s.px[1], INK);
-  assert.equal(count(s, INK) - (2 * (s.w - 2) + 2 * (CAP_H - 2)), count(text("land"), INK));
+  assert.equal(s.px[1], INK_SOFT);
+  assert.equal(count(s, INK), count(text("land"), INK));
+  assert.equal(count(s, INK_SOFT), 2 * (s.w - 2) + 2 * (s.h - 2));
 });
 
 test("rows and columns lay sprites out with their gaps", () => {
