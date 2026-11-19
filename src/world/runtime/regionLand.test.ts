@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { upsampleGround } from "../bake/cells.ts";
 import { occlusionFloor } from "../gen/occlusion.ts";
-import { decodeCore, encodeTiled } from "../pack/regions.ts";
+import { readPack, sha256, writePack } from "../pack/codec.ts";
+import { decodeCore, decodeRegion, encodeTiled } from "../pack/regions.ts";
 import { decodeFlightData, encodeWorld } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { hazeOf } from "../render/haze.ts";
@@ -32,12 +33,30 @@ function wholeHeight(flight: Awaited<ReturnType<typeof decodeFlightData>>, x: nu
   return out[0] < 0 ? 0 : out[0];
 }
 
+/** The region file with its stamps swapped for bytes that do not decode, sealed again so that its checksum holds. */
+async function withBadStamps(bin: Uint8Array): Promise<Uint8Array> {
+  const sections = readPack(bin).slice(0, -1).map((s) => (s.name === "stamps" ? { name: s.name, bytes: new Uint8Array([1, 2, 3, 4, 5]) } : s));
+  const hex = await sha256(writePack(sections));
+  const sum = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) sum[i] = Number.parseInt(hex.slice(2 * i, 2 * i + 2), 16);
+  return writePack([...sections, { name: "sum", bytes: sum }]);
+}
+
 const POINTS: [number, number][] = [[5, 5], [319.5, 320.2], [640, 3], [1279, 1279], [-3, 700], [1283, -2], [400, 960], [961, 641]];
 
 test("with its regions loaded, the ground height equals the whole world's, across region edges and the seam", async () => {
   const s = await setup();
   const land = createRegionLand(s.core, s.fetchRegion);
   assert.equal(land.n, 1280);
+  for (const [x, y] of POINTS) await land.want(x, y, 16);
+  for (const [x, y] of POINTS) assert.equal(land.groundHeight(x, y), wholeHeight(s.flight, x, y), `at ${x},${y}`);
+});
+
+test("the land reads a region's ground and never decodes its stamps, which only a bake needs", async () => {
+  const s = await setup();
+  const bad = await withBadStamps(await s.fetchRegion(1, 1));
+  await assert.rejects(decodeRegion(bad, s.core), "a bake could not read this region");
+  const land = createRegionLand(s.core, async (rx, ry) => withBadStamps(await s.fetchRegion(rx, ry)));
   for (const [x, y] of POINTS) await land.want(x, y, 16);
   for (const [x, y] of POINTS) assert.equal(land.groundHeight(x, y), wholeHeight(s.flight, x, y), `at ${x},${y}`);
 });

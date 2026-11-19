@@ -10,7 +10,7 @@ import { makeWorld, type World } from "../gen/pipeline.ts";
 import { sha256 } from "../pack/codec.ts";
 import { startOf, type Manifest } from "../pack/manifest.ts";
 import { decodeCore, decodeRegion } from "../pack/regions.ts";
-import { buildWorld, OCCLUSION_BLOCK } from "./build.ts";
+import { beforeFlight, buildWorld, OCCLUSION_BLOCK, startRegions } from "./build.ts";
 
 const N = 1280, SEED = 7, REGION = 320;
 interface Built { world: World; a: Manifest; b: Manifest; dirA: string; dirB: string }
@@ -86,4 +86,22 @@ test("a world over its budget is refused before anything is written", async () =
   const dir = mkdtempSync(join(tmpdir(), "world-build-over-"));
   await assert.rejects(buildWorld({ n: N, seed: SEED, out: dir, world, regionCells: REGION, maxBytes: 1000 }), /budget/);
   assert.deepEqual(readdirSync(dir), [], "no world folder and no current.json");
+});
+
+test("the start's regions are the four nearest it, round the seam where the nearer edges are", () => {
+  const start = (x: number, y: number) => ({ x, y, dx: 1, dy: 0 });
+  // The shipped world's start: west and south of it are the nearer edges.
+  assert.deepEqual(startRegions({ n: 10240, regionCells: 1280, start: start(6878, 3816) }), [
+    { rx: 4, ry: 2 }, { rx: 5, ry: 2 }, { rx: 4, ry: 3 }, { rx: 5, ry: 3 },
+  ]);
+  assert.deepEqual(startRegions({ n: 1280, regionCells: 320, start: start(10, 1270) }), [
+    { rx: 0, ry: 0 }, { rx: 3, ry: 0 }, { rx: 0, ry: 3 }, { rx: 3, ry: 3 },
+  ]);
+  assert.deepEqual(startRegions({ n: 1280, regionCells: 1280, start: start(10, 1270) }), [{ rx: 0, ry: 0 }], "one region");
+});
+
+test("before the first flight the page downloads the core and the start's regions", async () => {
+  const { a } = await built();
+  const want = startRegions(a).reduce((sum, r) => sum + a.regions[r.ry * (N / REGION) + r.rx].bytes, a.core.bytes);
+  assert.equal(beforeFlight(a), want);
 });

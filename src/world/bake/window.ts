@@ -1,9 +1,11 @@
 // Baking from a window of the world's grids instead of the whole world. A bake worker for a large world cannot hold
-// every grid; it holds the vectors (rivers, roads, stamps, buildings) whole, and for each 256-cell tile it cuts the
-// G and C nodes that tile reads. A tile baked from its window is byte-identical to the same tile baked from the
-// whole world: the world keeps its size n, gN and cN and its global coordinates, and only the grid storage shrinks.
+// every grid; it holds the vectors (rivers, roads, buildings) whole, and for each 256-cell tile it cuts the G and C
+// nodes that tile reads, and the coast stamps that can reach them. A tile baked from its window is byte-identical to
+// the same tile baked from the whole world: the world keeps its size n, gN and cN and its global coordinates, and
+// only the grid storage and the stamp list shrink.
 
 import { wrap } from "../core/torus.ts";
+import { stampReach, type Stamp } from "../gen/stamps.ts";
 import { buildTile, TILE, type Cells, type Look } from "./cells.ts";
 import type { TileSource } from "./chunk.ts";
 import type { BakeWorld, GridWindow } from "./world.ts";
@@ -40,6 +42,30 @@ export function tileWindows(world: Pick<BakeWorld, "n" | "gN" | "cN">, tx: numbe
   };
 }
 
+// How far past its reach a stamp still counts as reaching a cell. The bake takes a stamp whose centre lies within its
+// reach and 2 of the cells it builds (cells.ts stampsNear); two more keep this test the wider of the two whatever the
+// rounding.
+const STAMP_SLACK = 4;
+
+/**
+ * Whether coast stamp `s` can change a cell of [x0, x0 + w) × [y0, y0 + h) on a torus n cells round: its centre lies
+ * within its reach, and a little slack, of the rectangle. Never narrower than the bake's own test, so a window that
+ * keeps the stamps reaching its cells bakes as the whole world does.
+ */
+export function stampReaches(s: Stamp, n: number, x0: number, y0: number, w: number, h: number): boolean {
+  const e = stampReach(s) + STAMP_SLACK;
+  return wrap(s.x - x0 + e, n) <= w + 2 * e && wrap(s.y - y0 + e, n) <= h + 2 * e;
+}
+
+/**
+ * Whether stamp `s` can change a cell under G window `g` (in nodes; the world is n cells and gN nodes a side). A tile
+ * reads no cell outside its G window, whose nodes it upsamples, so no other stamp can change the tile.
+ */
+export function stampReachesWindow(s: Stamp, n: number, gN: number, g: GridWindow): boolean {
+  const per = n / gN;
+  return stampReaches(s, n, g.x0 * per, g.y0 * per, g.w * per, g.h * per);
+}
+
 function fillWindow(src: ArrayLike<number>, n: number, win: GridWindow, out: Float32Array | Uint8Array): void {
   const { x0, y0, w, h } = win;
   for (let y = 0; y < h; y++) {
@@ -70,14 +96,16 @@ function cutRegions(src: Float32Array, n: number, win: GridWindow): Float32Array
 
 /**
  * A copy of `world` whose G-grid arrays hold only window `g` and whose C-grid arrays hold only window `c` (row-major,
- * w × h each), with gWin and cWin set. Vectors, indexes and scalars are shared, not copied. Nodes are read from the
- * whole world with wrapping, so a window may straddle the torus seam.
+ * w × h each), with gWin and cWin set, and whose stamps are the ones that can reach `g` (stampReachesWindow), in world
+ * order. Other vectors, indexes and scalars are shared, not copied. Nodes are read from the whole world with wrapping,
+ * so a window may straddle the torus seam.
  */
 export function cutWindow(world: BakeWorld, g: GridWindow, c: GridWindow): BakeWorld {
   return {
     ...world,
     gWin: g,
     cWin: c,
+    stamps: world.stamps?.filter((s) => stampReachesWindow(s, world.n, world.gN, g)),
     ground: cutF32(world.ground, world.gN, g),
     waterLevel: cutF32(world.waterLevel, world.gN, g),
     waterKind: cutU8(world.waterKind, world.gN, g),

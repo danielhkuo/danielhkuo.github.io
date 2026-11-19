@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bakeChunk, tileCache, type TileSource } from "../bake/chunk.ts";
 import { worldLook } from "../bake/look.ts";
+import type { BakeWorld } from "../bake/world.ts";
+import type { Stamp } from "../gen/stamps.ts";
 import { encodeTiled } from "../pack/regions.ts";
 import { decodeWorld, encodeWorld } from "../pack/world.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
@@ -11,8 +13,24 @@ import { createTiledBakeHost, tilesForChunk } from "./tiledHost.ts";
 
 const mask = loadMask();
 
+/** Cliff cuts 76 cells across: on the torus's corner, astride the corner of four 320-cell regions, and on the seam. */
+const SEAM_CUTS: Stamp[] = [[0.5, 0.5], [320.25, 639.75], [1279.5, 960.5]].map(([x, y]) => ({
+  kind: "cut", x, y, r: 26, level: -1.5, fall: 0.05, cap: 4, slope: 0.3, reach: 12,
+}));
+
+let stamped: BakeWorld | null = null;
+
+/** The generated 1280 world, plus the seam cuts: its stamps reach across region edges and the seam. */
+function stampedWorld(): BakeWorld {
+  if (!stamped) {
+    const w = generatedWorld();
+    stamped = { ...w, stamps: [...(w.stamps ?? []), ...SEAM_CUTS] };
+  }
+  return stamped;
+}
+
 async function tiledWorld(regionCells: number) {
-  const w = generatedWorld();
+  const w = stampedWorld();
   const tiled = await encodeTiled(w, { regionCells });
   const files = new Map(tiled.regions.map((r) => [`${r.rx},${r.ry}`, r.bin]));
   const fetched: string[] = [];
@@ -47,15 +65,24 @@ test("tilesForChunk lists every tile bakeChunk reads, each once, wrapped", () =>
   }
 });
 
-test("the tiled host bakes the same bytes as the whole-world host, for every chunk", async () => {
+for (const regionCells of [320, 640]) {
+  test(`the tiled host bakes the same bytes as the whole-world host, for every chunk, from ${regionCells}-cell regions`, async () => {
+    const { tiled, fetchRegion } = await tiledWorld(regionCells);
+    const { bin } = await encodeWorld(stampedWorld());
+    const whole = await createBakeHost(bin, mask);
+    const host = await createTiledBakeHost(tiled.core.bin, fetchRegion, mask);
+    const w = await decodeWorld(bin);
+    for (let cy = 0; cy < w.n / 320; cy++) for (let cx = 0; cx < w.n / 256; cx++) {
+      assert.deepEqual(await host(cx, cy), whole(cx, cy), `chunk ${cx},${cy}`);
+    }
+  });
+}
+
+test("with room for one region the host still bakes a chunk, standing in for the regions it cannot hold", async () => {
   const { tiled, fetchRegion } = await tiledWorld(320);
-  const { bin } = await encodeWorld(generatedWorld());
-  const whole = await createBakeHost(bin, mask);
-  const host = await createTiledBakeHost(tiled.core.bin, fetchRegion, mask);
-  const w = await decodeWorld(bin);
-  for (let cy = 0; cy < w.n / 320; cy++) for (let cx = 0; cx < w.n / 256; cx++) {
-    assert.deepEqual(await host(cx, cy), whole(cx, cy), `chunk ${cx},${cy}`);
-  }
+  const host = await createTiledBakeHost(tiled.core.bin, fetchRegion, mask, { regionCapacity: 1 });
+  const px = await host(1, 1);
+  assert.equal(px.length, 256 * 256);
 });
 
 test("each region is fetched once while it stays cached, and only regions a chunk needs", async () => {
@@ -71,7 +98,7 @@ test("each region is fetched once while it stays cached, and only regions a chun
 
 test("with a small region cache the host still bakes correctly, fetching again what it dropped", async () => {
   const { tiled, fetchRegion, fetched } = await tiledWorld(320);
-  const { bin } = await encodeWorld(generatedWorld());
+  const { bin } = await encodeWorld(stampedWorld());
   const whole = await createBakeHost(bin, mask);
   const host = await createTiledBakeHost(tiled.core.bin, fetchRegion, mask, { regionCapacity: 6 });
   for (const [cx, cy] of [[0, 0], [3, 2], [0, 0], [4, 3], [1, 1]]) {
