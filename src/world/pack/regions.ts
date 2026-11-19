@@ -1,16 +1,24 @@
-// The world in pieces: a core (meta, every vector, the falls, the occlusion floor and a haze overview) and one file
-// per square region holding that region's G and C grids. A bake worker or the page fetches the core, then only the
-// regions near the flier; a window of the grids cut from regions equals the same window cut from the whole decoded
-// world (pack/world.ts), value for value.
+// The world in pieces: a core (meta, the vectors a bake reads whole, the falls, the occlusion floor and a haze
+// overview) and one file per square region holding that region's G and C grids and the coast stamps that can reach
+// it. A bake worker or the page fetches the core, then only the regions near the flier; a window of the grids cut
+// from regions equals the same window cut from the whole decoded world (pack/world.ts), value for value, and so do
+// its stamps (bake/window.ts cutWindow).
+//
+// The stamps are most of the world's vectors and each reaches a few dozen cells, so they ship with the regions they
+// reach rather than in the core: a stamp near a region's edge is in both regions, under its index in the world's
+// list, so a window that spans regions gets each one once and in world order. The core's built keeps no road
+// polylines: the bake draws roads from the core's road lines.
 //
 // Each file is a pack whose last section, "sum", is the SHA-256 of the pack of the sections before it, so a flipped
 // byte in a deflate stream is refused even when inflate itself succeeds. "fp" is a fingerprint of this world: the
 // SHA-256 of the core sections, which include a digest of every region. A region carries those same bytes and is
 // refused when they belong to another world.
 
+import { stampReaches, stampReachesWindow } from "../bake/window.ts";
 import { riverIndex, type BakeWorld, type GridWindow } from "../bake/world.ts";
 import { wrap } from "../core/torus.ts";
 import { indexBuilt, type Built } from "../gen/built.ts";
+import type { Stamp as CoastStamp } from "../gen/stamps.ts";
 import { encodeBytes, encodeHeights, readPack, sha256, writePack, type PackSection } from "./codec.ts";
 import {
   FIELD_SCALE, H_SCALE, WORLD_FORMAT,
@@ -47,10 +55,23 @@ export interface RegionGrids {
   rock: Uint8Array;
   /** Six planes, plane-major, each (regionCells / 8)². */
   regions: Float32Array;
+  /** The coast stamps that can reach the region. Absent when the world has none or they were not decoded. */
+  stamps?: RegionStamps;
+}
+
+/** The world's coast stamps that can reach a cell of a region or one beyond it (stampReaches), in world order. */
+export interface RegionStamps {
+  /** Each stamp's index in the world's list, ascending. */
+  index: Uint32Array;
+  list: CoastStamp[];
 }
 
 export interface Core {
-  /** The world with every grid empty (bake/window.ts strippedWorld) and every vector decoded. */
+  /**
+   * The world with every grid empty (bake/window.ts strippedWorld) and every vector decoded but two: stamps is empty
+   * (the regions hold them; it is set when the world has any), and built's road polylines are empty (world.roads
+   * holds the roads the bake draws).
+   */
   world: BakeWorld;
   regionCells: number;
   /** Regions a side: n / regionCells. */
@@ -246,10 +267,9 @@ function coreJobs(w: BakeWorld, occlusion: Occlusion | undefined, overview: Uint
   push(FALLS, storeRaw(bytesOf(w.falls).slice()));
   push(RIVERS, storeRaw(encodeRiverBytes(w.rivers)));
   if (w.roads) push(ROADS, storeRaw(encodeRiverBytes(w.roads)));
-  if (w.stamps) push(STAMPS, storeRaw(encodeValue(w.stamps)));
   if (w.ponds) push(PONDS, storeRaw(encodeValue(w.ponds)));
   if (w.bars) push(BARS, storeRaw(encodeValue(w.bars)));
-  if (w.built) push(BUILT, storeRaw(encodeValue(w.built.built)));
+  if (w.built) push(BUILT, storeRaw(encodeValue({ ...w.built.built, roads: [] })));
   if (occlusion) push(OCCL, encodeBytes(occlusion.data));
   push(OVER, encodeBytes(overview));
   return jobs;
@@ -260,9 +280,103 @@ interface Prep {
   levels: Float32Array;
   hands: Uint8Array;
   weights: Float32Array;
+  /** The stamps as a decoder sees them (numbers are stored as f32), and per region the indices of those reaching it. */
+  stamps?: { list: CoastStamp[]; byRegion: number[][] };
 }
 
-function regionJobs(w: BakeWorld, prep: Prep, rx: number, ry: number, gS: number, cS: number): Job[] {
+/**
+ * For each region, row-major, the indices of the stamps that can reach a cell of it or one beyond (the extra cell
+ * keeps this test wider than a window's own, rounding included), ascending.
+ */
+function stampsByRegion(stamps: readonly CoastStamp[], n: number, regionCells: number, side: number): number[][] {
+  const out: number[][] = [];
+  for (let k = 0; k < side * side; k++) out.push([]);
+  const xs: number[] = [], ys: number[] = [];
+  for (let i = 0; i < stamps.length; i++) {
+    const s = stamps[i];
+    xs.length = 0;
+    ys.length = 0;
+    // One axis at a time: a rectangle n cells long on the other axis always reaches the stamp there.
+    for (let r = 0; r < side; r++) {
+      if (stampReaches(s, n, r * regionCells - 1, 0, regionCells + 2, n)) xs.push(r);
+      if (stampReaches(s, n, 0, r * regionCells - 1, n, regionCells + 2)) ys.push(r);
+    }
+    for (let a = 0; a < ys.length; a++) for (let b = 0; b < xs.length; b++) out[ys[a] * side + xs[b]].push(i);
+  }
+  return out;
+}
+
+/** A region's stamps, grouped by kind so each column of numbers holds one kind's: per kind, index gaps and stamps. */
+function encodeStamps(list: readonly CoastStamp[], index: readonly number[]): Uint8Array {
+  const groups = new Map<string, { at: number[]; list: CoastStamp[] }>();
+  for (let k = 0; k < index.length; k++) {
+    const s = list[index[k]];
+    let g = groups.get(s.kind);
+    if (!g) {
+      g = { at: [], list: [] };
+      groups.set(s.kind, g);
+    }
+    g.at.push(index[k]);
+    g.list.push(s);
+  }
+  const value: Record<string, { gaps: Uint32Array; list: CoastStamp[] }> = {};
+  for (const [kind, g] of groups) {
+    const gaps = new Uint32Array(g.at.length);
+    for (let k = 0; k < gaps.length; k++) gaps[k] = g.at[k] - (k > 0 ? g.at[k - 1] : 0);
+    value[kind] = { gaps, list: g.list };
+  }
+  return encodeValue(value);
+}
+
+/** Lists each ascending by index, merged into one in world order; of stamps with the same index, the first is kept. */
+function mergeByIndex(parts: readonly RegionStamps[]): RegionStamps {
+  const next = new Uint32Array(parts.length);
+  const index: number[] = [];
+  const list: CoastStamp[] = [];
+  for (;;) {
+    let from = -1;
+    let at = 0;
+    for (let k = 0; k < parts.length; k++) {
+      if (next[k] >= parts[k].index.length) continue;
+      const i = parts[k].index[next[k]];
+      if (from < 0 || i < at) {
+        from = k;
+        at = i;
+      }
+    }
+    if (from < 0) break;
+    const s = parts[from].list[next[from]++];
+    if (index.length > 0 && index[index.length - 1] === at) continue;
+    index.push(at);
+    list.push(s);
+  }
+  return { index: Uint32Array.from(index), list };
+}
+
+function decodeStamps(raw: Uint8Array): RegionStamps {
+  const value = decodeValue(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("bad stamps");
+  const groups: RegionStamps[] = [];
+  let count = 0;
+  for (const [kind, group] of Object.entries(value as Record<string, unknown>)) {
+    const g = group as { gaps?: unknown; list?: unknown } | null;
+    if (!g || !(g.gaps instanceof Uint32Array) || !Array.isArray(g.list) || g.list.length !== g.gaps.length) fail("bad stamps");
+    const index = new Uint32Array(g.gaps.length);
+    for (let k = 0; k < index.length; k++) {
+      const s = g.list[k] as CoastStamp | null;
+      if (!s || typeof s !== "object" || s.kind !== kind || (k > 0 && g.gaps[k] === 0)) fail("bad stamps");
+      index[k] = (k > 0 ? index[k - 1] : 0) + g.gaps[k];
+    }
+    groups.push({ index, list: g.list as CoastStamp[] });
+    count += index.length;
+  }
+  const merged = mergeByIndex(groups);
+  // One index under two kinds is a damaged file, not a stamp shared by two regions.
+  if (merged.list.length !== count) fail("bad stamps");
+  return merged;
+}
+
+function regionJobs(w: BakeWorld, prep: Prep, rx: number, ry: number, gS: number, cS: number, side: number): Job[] {
   const { gN, cN } = w;
   const gx = rx * gS, gy = ry * gS, cx = rx * cS, cy = ry * cS;
   const jobs: Job[] = [];
@@ -284,26 +398,35 @@ function regionJobs(w: BakeWorld, prep: Prep, rx: number, ry: number, gS: number
   const c2 = cN * cN;
   const planes = [0, 1, 2, 3, 4, 5].map((k) => encodeHeights(rect(prep.weights.subarray(k * c2, (k + 1) * c2), cN, cx, cy, cS), cS, cS, 1));
   push(REGIONS, Promise.all(planes).then(frameChunks));
+  if (prep.stamps) push(STAMPS, storeRaw(encodeStamps(prep.stamps.list, prep.stamps.byRegion[ry * side + rx])));
   return jobs;
 }
 
 /**
  * Encodes `w` as a core and (n / regionCells)² regions. regionCells must divide n and be a multiple of 8. Grids are
- * quantised exactly as encodeWorld quantises them, so decoding gives the same values decodeWorld would.
+ * quantised exactly as encodeWorld quantises them, and stamps stored as it stores them, so decoding gives the same
+ * values decodeWorld would.
  */
 export async function encodeTiled(w: BakeWorld, opts: { regionCells: number; occlusion?: Occlusion }): Promise<TiledWorld> {
   const { regionCells, occlusion } = opts;
   const { side, gS, cS } = tileSize(w, regionCells);
+  let stamps: Prep["stamps"];
+  if (w.stamps) {
+    // Which regions a stamp reaches is decided on the values a decoder will see, so that it agrees with the windows.
+    const list = decodeValue(encodeValue(w.stamps)) as CoastStamp[];
+    stamps = { list, byRegion: stampsByRegion(list, w.n, regionCells, side) };
+  }
   const prep: Prep = {
     residual: w.base ? baseResidual(w.base, w.ground) : undefined,
     levels: lakeLevels(w.waterLevel, w.waterKind),
     hands: handBytes(w.hand),
     weights: regionWeights(w.regions, w.cN),
+    stamps,
   };
   const jobs = coreJobs(w, occlusion, overviewOf(w.ground, w.gN, w.n));
   const plans: { rx: number; ry: number; jobs: Job[] }[] = [];
   for (let ry = 0; ry < side; ry++) {
-    for (let rx = 0; rx < side; rx++) plans.push({ rx, ry, jobs: regionJobs(w, prep, rx, ry, gS, cS) });
+    for (let rx = 0; rx < side; rx++) plans.push({ rx, ry, jobs: regionJobs(w, prep, rx, ry, gS, cS, side) });
   }
 
   const [coreBodies, regionBodies] = await Promise.all([
@@ -367,7 +490,8 @@ async function decodeCoreInner(bin: Uint8Array): Promise<Core> {
     rock: new Uint8Array(0),
     regions: new Float32Array(0),
   };
-  if (flagged(meta, "stamps")) world.stamps = (await decodeValue(await loadRaw(requirePart(parts, STAMPS)))) as BakeWorld["stamps"];
+  // The stamps are in the regions; an empty list says the world has them.
+  if (flagged(meta, "stamps")) world.stamps = [];
   if (flagged(meta, "ponds")) world.ponds = (await decodeValue(await loadRaw(requirePart(parts, PONDS)))) as BakeWorld["ponds"];
   if (flagged(meta, "bars")) world.bars = (await decodeValue(await loadRaw(requirePart(parts, BARS)))) as BakeWorld["bars"];
   if (flagged(meta, "built")) world.built = indexBuilt((await decodeValue(await loadRaw(requirePart(parts, BUILT)))) as Built, n);
@@ -437,7 +561,7 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
   return { ground, base, conform, waterLevel, waterKind, hand, shore, moisture, wind, exposure, debris, rock, regions };
 }
 
-async function decodeRegionInner(bin: Uint8Array, core: Core): Promise<RegionGrids> {
+async function decodeRegionInner(bin: Uint8Array, core: Core, withStamps: boolean): Promise<RegionGrids> {
   const expectFp = fingerprints.get(core);
   if (!expectFp) fail("bad core");
   const content = await unseal(bin);
@@ -453,13 +577,21 @@ async function decodeRegionInner(bin: Uint8Array, core: Core): Promise<RegionGri
   if (typeof rx !== "number" || typeof ry !== "number" || !Number.isInteger(rx) || !Number.isInteger(ry) || rx < 0 || ry < 0 || rx >= core.side || ry >= core.side) {
     fail("bad region");
   }
-  return { rx, ry, ...await decodeGrids(parts, core) };
+  const stampPart = core.world.stamps ? requirePart(parts, STAMPS) : undefined;
+  const [grids, stamps] = await Promise.all([
+    decodeGrids(parts, core),
+    stampPart && withStamps ? loadRaw(stampPart).then(decodeStamps) : undefined,
+  ]);
+  return { rx, ry, ...grids, stamps };
 }
 
-/** Decodes one region file for `core`. Throws a decode error on a damaged file or one from another world. */
-export async function decodeRegion(bin: Uint8Array, core: Core): Promise<RegionGrids> {
+/**
+ * Decodes one region file for `core`. Throws a decode error on a damaged file or one from another world. With
+ * `stamps: false` its stamps are left out (the page's land reads only the ground), and it cannot be cut for a bake.
+ */
+export async function decodeRegion(bin: Uint8Array, core: Core, opts: { stamps?: boolean } = {}): Promise<RegionGrids> {
   try {
-    return await decodeRegionInner(bin, core);
+    return await decodeRegionInner(bin, core, opts.stamps !== false);
   } catch (e) {
     throw asDecodeError(e);
   }
@@ -491,8 +623,30 @@ export function regionsFor(core: Pick<Core, "regionCells" | "side"> & { world: P
 }
 
 /**
+ * The stamps that reach G window `g`, once each and in world order, from the regions the window touches. Each of those
+ * regions holds every stamp that can reach a cell of it, so together they hold every stamp that can reach the window.
+ */
+function stampsFor(core: Core, have: Map<number, RegionGrids>, g: GridWindow): CoastStamp[] {
+  const { n, gN } = core.world;
+  const parts: RegionStamps[] = [];
+  for (const reg of have.values()) {
+    const s = reg.stamps;
+    if (!s) throw new Error("region decoded without its stamps");
+    const index: number[] = [];
+    const list: CoastStamp[] = [];
+    for (let k = 0; k < s.list.length; k++) {
+      if (!stampReachesWindow(s.list[k], n, gN, g)) continue;
+      index.push(s.index[k]);
+      list.push(s.list[k]);
+    }
+    parts.push({ index: Uint32Array.from(index), list });
+  }
+  return mergeByIndex(parts).list;
+}
+
+/**
  * The world cutWindow(whole, g, c) would give, cut from regions instead: `region(rx, ry)` returns a decoded region
- * (regionsFor lists the ones needed). Vectors and scalars are shared with core.world.
+ * (regionsFor lists the ones needed), with its stamps. Other vectors and scalars are shared with core.world.
  */
 export function cutFromRegions(core: Core, region: (rx: number, ry: number) => RegionGrids, g: GridWindow, c: GridWindow): BakeWorld {
   const have = new Map<number, RegionGrids>();
@@ -559,5 +713,6 @@ export function cutFromRegions(core: Core, region: (rx: number, ry: number) => R
     cWin: c,
     ground, waterLevel, waterKind, hand, shore, base, conform,
     moisture, wind, exposure, debris, rock, regions,
+    stamps: core.world.stamps ? stampsFor(core, have, g) : undefined,
   };
 }

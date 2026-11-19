@@ -74,7 +74,8 @@ export function createRegionLand(core: Core, fetchRegion: (rx: number, ry: numbe
     if (held) return Promise.resolve(held);
     const pending = inflight.get(key);
     if (pending) return pending;
-    const job = fetchRegion(rx, ry).then((bin) => decodeRegion(bin, core));
+    // Only the ground is read here; the stamps are for the bake workers, and decoding them would cost the page.
+    const job = fetchRegion(rx, ry).then((bin) => decodeRegion(bin, core, { stamps: false }));
     // The callback runs after `tracked` is assigned: a rejection must leave the region free to fetch again.
     const tracked: Promise<RegionGrids> = job.finally(() => {
       if (inflight.get(key) === tracked) inflight.delete(key);

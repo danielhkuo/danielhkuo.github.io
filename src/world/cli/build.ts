@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { worldLook } from "../bake/look.ts";
+import { wrap } from "../core/torus.ts";
 import { occlusionFloor } from "../gen/occlusion.ts";
 import { paramsFor } from "../gen/params.ts";
 import { makeWorld, settleWorld, type World } from "../gen/pipeline.ts";
@@ -44,6 +45,31 @@ export interface BuildOptions {
 
 const VIEW_W = 400;
 const VIEW_H = 225;
+
+/**
+ * The regions the first view loads: the 2×2 nearest the start, that is the region under it and its neighbours toward
+ * the nearer edges, row-major. Fewer when the world has fewer regions a side.
+ */
+export function startRegions(m: Pick<Manifest, "n" | "regionCells" | "start">): { rx: number; ry: number }[] {
+  const side = m.n / m.regionCells;
+  const axis = (v: number): number[] => {
+    const at = wrap(v, m.n);
+    const r = Math.floor(at / m.regionCells);
+    const other = wrap(at - r * m.regionCells < m.regionCells / 2 ? r - 1 : r + 1, side);
+    return other === r ? [r] : [Math.min(r, other), Math.max(r, other)];
+  };
+  const out: { rx: number; ry: number }[] = [];
+  for (const ry of axis(m.start.y)) for (const rx of axis(m.start.x)) out.push({ rx, ry });
+  return out;
+}
+
+/** Bytes of the world the page downloads before its first flight: the core and the start's regions. */
+export function beforeFlight(m: Manifest): number {
+  const side = m.n / m.regionCells;
+  let total = m.core.bytes;
+  for (const r of startRegions(m)) total += m.regions[r.ry * side + r.rx].bytes;
+  return total;
+}
 
 /** Writes the world's files and returns its manifest. Older world folders under `out` are left in place. */
 export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
@@ -160,6 +186,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     console.log(`${r.rx}-${r.ry} ${(r.bytes / 1024).toFixed(1)} KB`);
   }
   console.log(`total ${(total / 1024).toFixed(1)} KB`);
+  const start = startRegions(manifest).map((r) => `${r.rx}-${r.ry}`).join(" ");
+  console.log(`before flight ${(beforeFlight(manifest) / 1024).toFixed(1)} KB: the core and the start's regions ${start}`);
 
   const look = worldLook(n, buildPalette(MIDDAY));
   const mask = new Uint8Array(readFileSync(join(process.cwd(), "public", "world", "bluenoise.bin")));

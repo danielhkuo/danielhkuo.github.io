@@ -149,6 +149,7 @@ export async function createTiledBakeHost(
       debris: new Float32Array(c2),
       rock: new Uint8Array(c2),
       regions: new Float32Array(c2 * 6),
+      stamps: core.world.stamps ? { index: new Uint32Array(0), list: [] } : undefined,
     };
     blanks.set(key, empty);
     return empty;
