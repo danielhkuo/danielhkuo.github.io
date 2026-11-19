@@ -16,7 +16,7 @@ import { type Built, type Conform, conformed, conformGrid, ROAD_PIECE, type Road
 import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
-import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, tempAt } from "./sites.ts";
+import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, aridAt, tempAt } from "./sites.ts";
 import * as S from "./structures.ts";
 import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
@@ -47,6 +47,8 @@ export interface Settlement {
   sites: PlacedSite[];
   /** Types siting could not place, with the rule that failed; empty when all twelve stand. */
   shortfall: string[];
+  /** Kinds that stand outside their own climate for want of ground in it (gen/sites.ts). */
+  displaced: string[];
   /** The home island's land component. */
   home: number;
   hamlets: Hamlet[];
@@ -809,10 +811,17 @@ const HAMLET_COLDEST = 0.2;
 function houseStyle(c: SiteContext, x: number, y: number): number {
   const temp = tempAt(c, x, y);
   if (temp < 0.44) return S.HOUSE_STYLE.cold;
-  if (temp <= 0.56) return S.HOUSE_STYLE.temperate;
+  // The wet side builds as home does well into the warm forest, and then as the jungle does.
+  if (!(aridAt(c, x, y) > 0.5)) return temp <= 0.68 ? S.HOUSE_STYLE.temperate : S.HOUSE_STYLE.jungle;
+  // The dry side: whitewash and terracotta from the steppe's warm edge through the Mediterranean, then by the rain.
   if (temp < 0.7) return S.HOUSE_STYLE.mediterranean;
   const cN = c.gN / 2, rain = c.moisture[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
   return rain < 0.3 ? S.HOUSE_STYLE.desert : rain < 0.62 ? S.HOUSE_STYLE.savanna : S.HOUSE_STYLE.jungle;
+}
+
+/** Snow and ice: ground nobody builds on. */
+function isSnow(m: number): boolean {
+  return m === M.snow || m === M.snowLate || (m >= M.packIce && m <= M.crevasse);
 }
 
 function isSlate(c: SiteContext, i: number): boolean {
@@ -836,6 +845,8 @@ function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
     // Nobody settles the ice. The tundra is thinly settled, and dry country only where there is water.
     const temp = tempAt(c, 4 * gx + 2, 4 * gy + 2);
     if (temp < HAMLET_COLDEST) continue;
+    // Nor a mountain's snow, in any latitude.
+    if (temp !== 0.5 && isSnow(coverAtNode(c, gx, gy))) continue;
     const cN = gN / 2, rain = c.moisture[(gy >> 1) * cN + (gx >> 1)];
     const arid = temp > 0.66 && rain < 0.24;
     // By a river or a sheltered shore: where a road would cross or end.
@@ -1430,7 +1441,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   }
 
   return {
-    sites: placed.sites, shortfall: placed.shortfall, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
+    sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
     built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips,
   };
 }

@@ -482,8 +482,8 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
   const steep = st > 0.4 ? 1 : st / 0.4;
   const rdx = c.riverDx === undefined ? 0 : c.riverDx, rdy = c.riverDy === undefined ? 0 : c.riverDy;
   const rd = Math.sqrt(rdx * rdx + rdy * rdy);
-  /** 1 at a river's bank … 0 seven cells from it and beyond. */
-  const near = rd > 0 && rd < 7 ? 1 - rd / 7 : 0;
+  /** 1 at a river's bank … 0 seven cells from it and beyond. A stream's bank counts for less than half a river's: a wadi greens little. */
+  const near = rd > 0 && rd < 7 ? (c.riverWide === 0 ? 0.45 : 1) * (1 - rd / 7) : 0;
   /** Heat at the cell: less with height and on the shaded side. */
   const hl = heat - e / HEAT_LAPSE - 0.04 * north * steep;
   const j = ruleJitter(mask, x, y, RULE.hue);
@@ -525,8 +525,10 @@ function warmWood(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
   // Only what grows low is taken: grass, heath, crops and their hedges. A mountain's ground above the trees is its own.
   if (m >= M.alpineCool && m <= M.alpineWarm) return m;
   // People keep their fields clear longest, and the driest lee slopes stay open.
-  const open = 0.5 + 0.8 * soft(x, y, n, 64, WARM_SEED + 31) + 0.3 * soft(x, y, n, 19, WARM_SEED + 32) + 0.06 * ruleJitter(mask, x, y, RULE.hue) +
-    (ruledField ? 0.45 : 0) - 0.6 * (c.moisture - 0.6);
+  // The wood takes the slopes first and the level valley floors last, so its edge follows the land.
+  const st = c.steep === undefined ? c.slope : c.steep;
+  const open = 0.5 + 0.55 * soft(x, y, n, 64, WARM_SEED + 31) + 0.25 * soft(x, y, n, 19, WARM_SEED + 32) + 0.06 * ruleJitter(mask, x, y, RULE.hue) +
+    (ruledField ? 0.45 : 0) - 0.6 * (c.moisture - 0.6) + (c.hand < 5 ? 0.3 * (1 - c.hand / 5) : 0) - 0.45 * (st > 0.4 ? 1 : st / 0.4);
   return open < 1.4 * close ? M.floorBroadleaf : m;
 }
 
@@ -544,14 +546,17 @@ function aridDress(m: number, c: CoverInput, x: number, y: number, mask: Uint8Ar
   const curve = c.curve === undefined ? 0 : c.curve;
   const steep = st > 0.4 ? 1 : st / 0.4;
   const j = ruleJitter(mask, x, y, RULE.hue);
-  // How dry the cell is: 0.5 at the mildest latitude … 1 at the desert's edge and in the deep steppe, more or less
-  // by the lie of the land, the rain and the water near.
-  const dry = 0.5 + 0.5 * hot + 0.4 * cold + 0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
-    (hand < 4 ? 0.25 * (1 - hand / 4) : 0) - 0.3 * near - 0.9 * (c.moisture - 0.5) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j;
+  // How dry the cell is: 0.6 at the mildest latitude … 1 at the desert's edge and in the deep steppe, more or less
+  // by the lie of the land and the rain. Only water makes it green: a river's bank and the floor of its valley.
+  const dry = 0.6 + 0.4 * hot + 0.35 * cold + 0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
+    (hand < 1.5 ? 0.2 * (1 - hand / 1.5) : 0) - 0.45 * near - 0.7 * (c.moisture - 0.45) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j;
   if (dry < 0.26) return m;
-  // Woods are groves on the dry side: they keep to the hollows, the banks and the wetter slopes.
+  // From how dry the sward is khaki steppe, not sage. The Mediterranean is sage nearly to the desert's edge; the
+  // steppe is khaki nearly throughout; where the two meet they are one sward.
+  const khaki = 0.8 + (hot > 0 ? 0.25 * (hot > 0.25 ? 1 : hot / 0.25) : 0) - 0.12 * cold;
+  // Woods are groves on the dry side: they keep to the banks and the wetter slopes, and on the steppe to little else.
   if (m === M.floorBroadleaf || m === M.floorConifer) {
-    return dry > 1.02 + 0.3 * soft(x, y, n, 38, WARM_SEED + 35) ? M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n) : m;
+    return dry > 1 - 0.3 * cold + 0.25 * soft(x, y, n, 38, WARM_SEED + 35) ? M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n) : m;
   }
   // On the steppe the grass is thin on the driest ground: pale earth shows through it in worn patches.
   if (cold > 0 && !ruledField && dry > 0.95 && soft(x, y, n, 24, WARM_SEED + 12) + 0.4 * soft(x, y, n, 7, WARM_SEED + 13) > 0.62 - 0.3 * (dry - 0.95) && m >= M.meadowCool && m <= M.scrubWarm) return M.earthPale;
@@ -561,14 +566,18 @@ function aridDress(m: number, c: CoverInput, x: number, y: number, mask: Uint8Ar
   if (m === M.wall || m === M.hedge || (m >= M.wheat && m <= M.vine) || (m >= M.wheatRow && m <= M.stubbleRow)) return dry > 1.05 ? M.steppeMid : M.scrubMid;
   // Bare stony earth on the steepest, driest banks.
   if (dry > 1.2 && st > 0.3 && m !== M.floorBroadleaf && m !== M.floorConifer) return M.earthPale;
-  if (m >= M.pastureCool && m <= M.pastureWarm) return dry > 0.8 ? M.steppeCool + (m - M.pastureCool) : M.scrubCool + (m - M.pastureCool);
-  if (m >= M.meadowCool && m <= M.meadowWarm) return dry > 0.6 ? M.steppeWarm : m;
+  if (m >= M.pastureCool && m <= M.pastureWarm) return dry > khaki ? M.steppeCool + (m - M.pastureCool) : M.scrubCool + (m - M.pastureCool);
+  // A meadow of the steppe is straw; of the Mediterranean, sage, and straw only toward the desert.
+  if (m >= M.meadowCool && m <= M.meadowWarm) return dry > khaki - 0.15 ? M.steppeWarm : dry > 0.45 ? M.scrubWarm : m;
   // Grass moor dries to sage and then to khaki steppe; only the heather's own crests turn to garrigue.
-  if (m >= M.moorCool && m <= M.moorWarm) return dry > 0.8 ? M.steppeCool + (m - M.moorCool) : M.scrubCool + (m - M.moorCool);
+  if (m >= M.moorCool && m <= M.moorWarm) return dry > khaki ? M.steppeCool + (m - M.moorCool) : M.scrubCool + (m - M.moorCool);
   // Garrigue is only the heart of what was heather, on the driest crests: the rest is sage and khaki like the hill round it.
-  if (m >= M.heathCool && m <= M.heathWarm) return m === M.heathCool && dry > 0.6 && cold < 0.25 ? M.garrigue : dry > 0.8 ? M.steppeCool + (m - M.heathCool) : M.scrubCool + (m - M.heathCool);
+  if (m >= M.heathCool && m <= M.heathWarm) {
+    if (m === M.heathCool && dry > 0.7 && cold < 0.25 && soft(x, y, n, 26, WARM_SEED + 36) + 0.4 * soft(x, y, n, 8, WARM_SEED + 37) > 0.08) return M.garrigue;
+    return dry > khaki ? M.steppeCool + (m - M.heathCool) : M.scrubCool + (m - M.heathCool);
+  }
   if (m === M.bracken) return M.scrubWarm;
-  if (m >= M.scrubCool && m <= M.scrubWarm) return dry > 1.05 ? M.steppeCool + (m - M.scrubCool) : m;
+  if (m >= M.scrubCool && m <= M.scrubWarm) return dry > khaki + 0.05 ? M.steppeCool + (m - M.scrubCool) : m;
   return m;
 }
 
@@ -735,6 +744,8 @@ function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
     const d = aridDress(m, c, x, y, mask, n, 0, shift >= 24 ? 1 : shift / 24, rd > 0 && rd < 7 ? 1 - rd / 7 : 0);
     if (d !== M.floorConifer) return d;
   }
+  // A marsh of the steppe is reeds and wet grass, not the taiga's red bog.
+  if (arid >= 1 && m === M.marsh && shift < SHIFT_TREELINE - 8) return m;
   if (ruledField) return m;
   // How far the dress has come on: nothing at the plateau, whole by a shift of 40, in patches between.
   const patch = 8 + 26 * (0.5 + 0.6 * soft(x, y, n, 33, SKIN_SEED) + 0.25 * soft(x, y, n, 9, SKIN_SEED + 1)) + 4 * ruleJitter(mask, x, y, RULE.hue);

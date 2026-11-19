@@ -222,7 +222,7 @@ export function main(argv: readonly string[]): number {
   if (world) {
     const counts: Record<string, number> = {};
     for (const s of world.settlement.sites) counts[s.type] = (counts[s.type] ?? 0) + 1;
-    console.log(`sites ${JSON.stringify(counts)}  shortfall ${JSON.stringify(world.settlement.shortfall)}`);
+    console.log(`sites ${JSON.stringify(counts)}  shortfall ${JSON.stringify(world.settlement.shortfall)}  displaced ${JSON.stringify(world.settlement.displaced)}`);
   }
   return 0;
 }

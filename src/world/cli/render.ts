@@ -195,6 +195,7 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const made = opts.wild ? (cachedTerrain(params, seed) as World) : opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
   if (!opts.wild) {
     for (const line of made.settlement.shortfall) log(`siting shortfall: ${line}`);
+    for (const line of made.settlement.displaced) log(`siting out of climate: ${line}`);
     log(`${made.settlement.sites.length} sites, ${made.settlement.hamlets.length} hamlets, ${made.settlement.built.structures.length} structures, ${made.settlement.built.roads.length} road lines`);
   }
   const plan = made.land.plan;

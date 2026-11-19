@@ -981,8 +981,8 @@ const OBSERVATORY: Kind = {
  * is not frozen, the marsh house off the tundra and the jungle; the baths lean to the cold and the hotel to the warm.
  */
 const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
-  "great-oak": { lo: 0.44, hi: 0.7 },
-  "bridge-town": { lo: 0.44, hi: 0.7 },
+  "great-oak": { lo: 0.44, hi: 0.62 },
+  "bridge-town": { lo: 0.44, hi: 0.66 },
   "drowned-church": { lo: 0.32, hi: 1 },
   "marsh-house": { lo: 0.3, hi: 0.75 },
   baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
