@@ -54,7 +54,9 @@ Last updated 2026-11-18.
   from the frame's own bake. The layers now read the land past the edge (`LiveFrame.bakeSpace`, `live/sprites.ts`
   `bakeAt`) and cull each thing by how far it reaches; the rare sights no longer fade in at the edge, which only hid the
   old cull. `live/edges.test.ts` holds every sprite layer to a bigger view of the same land, at three frame sizes. The
-  window's size never mattered: the frame is always 400 × 225, only scaled.
+  window's size never mattered: the frame is always 400 × 225, only scaled. Cost: about 0.01 ms a frame in Node; at 4×
+  throttle, seven alternating world-fly runs on a loaded machine gave p50 3.2 ms for both builds and p95 4.5 ms against
+  4.4 ms before. Re-check the p95 against 4 ms on a quiet machine.
 - **Terrain polish on the 10240 world** (2026-11-18, `terrain-polish`), five critic rounds (look ledger). Snow lit by
   its true normal, parted at each crest into a bright face and a lilac one; rock walls in horizontal beds with lit
   ledges, hatching along the contour; heather only on exposed crests and tops, fresher upland greens; fens as compact
