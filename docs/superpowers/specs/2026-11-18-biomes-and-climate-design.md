@@ -398,10 +398,10 @@ plateau, so the home island's ground is the same to the bit), and all of it by t
 | Landform | Climate | What it is |
 |---|---|---|
 | **Benches and mesas** | desert (hot, arid) | The ground is stepped by height: level treads 11 units apart with steep risers, the beds wandering a little like strata. Slopes become benches, summits mesas, and valleys canyons with stepped walls; the bolder in some country than other. The cover draws every steep bank of the desert as red sandstone, so a riser is a scarp |
-| **Dune ridges** | the desert's sand seas | Long ridges of sand across the wind, some 40 cells apart and up to 6.5 units high, gentle to windward. The bake's small dunes ride on them |
+| **Dune ridges** | the desert's sand seas | Linear dunes running with the south-west wind, as in the great ergs, some 40 cells apart and up to 6.5 units high. The bake's small dunes ride on them, the same way. **[Call]** Crests across the wind would run along the north-west light and not show: its first version did not |
 | **The ice sheet** | ice | Hollows and gullies fill toward the land's own smoothed surface: domes of ice with the peaks standing out of them. The main valleys stay, each with its frozen river: outlet glaciers |
 | **Karst towers** | jungle, in patches | Steep-sided hills 14 to 22 cells across and 14 to 25 units high, close set on low gentle ground: tower karst, forest to their tops and bare on their sides |
-| **Rock domes** | savanna | Lone domes of bare rock, 40 to 70 cells across, a few hundred cells apart on the plain: inselbergs |
+| **Rock domes** | savanna | Lone domes of bare rock, 40 to 70 cells across, a few hundred cells apart on the plain: inselbergs. The cover draws steep hard rock in grass country as bare granite |
 
 Not changed: temperate, taiga, the warm forest, the Mediterranean and the steppe keep the land as grown. The steppe
 wants plains, and a plain cannot be made over land that is already cut by rivers without leaving them perched; that
@@ -441,18 +441,20 @@ forms everywhere, but are taken from L1, so they are eroded and drained under th
 **Which recipe.** Each island takes the climate of its own land (L0's climate, averaged over the island): its mean
 sea-level temperature, its side and its mean moisture.
 
-| Recipe | Where | Form | Relief | Coast |
+| Recipe | Where (mean sea-level temperature of the island; side) | Form | Relief | Coast |
 |---|---|---|---|---|
-| Ice | temp under 0.16 | fjord belts | high massif, broad top: the ice sheet fills it to a dome with nunataks | outlet fjords |
-| Tundra, wet side | 0.16–0.29 | fen | low, lobed, lake-studded, glacial ribbon lakes | ragged, many islets |
-| Tundra, dry side | 0.16–0.29 | belts | low stony plateau | plain rocky |
-| Taiga | 0.29–0.44, wet | fjord belts | glaciated mountains, troughs | fjords |
-| Steppe | 0.29–0.5, dry | broad low belts | a plain: a wide lowland ramp, low swells, smooth slopes | smooth, low |
-| Mediterranean | 0.5–0.7, dry | belts | rugged limestone ridges | peninsulas, cliffs and coves |
-| Desert | over 0.7, dry, moisture under 0.25 | belts with a broad flat top | a plateau with scarps (benched by 6.6) over lowland plains (the ergs) | straight, cliffed |
-| Savanna | over 0.86, dry, moisture 0.25–0.6 | broad low belts | a plain, its rock domes by 6.6 | smooth |
-| Warm forest | 0.56–0.85, wet | belts | steep ridges, deep valleys | rias |
-| Jungle | over 0.85 (wet) or 0.95 (dry), moist | belts | rugged limestone mountains over wide coastal plains (towers by 6.6) | deltas, mangrove |
+| Ice | under 0.2 | fjord belts | a high massif with a broad top (peak 150): the ice sheet of 6.6 fills it to a dome with nunataks | outlet fjords |
+| Tundra, wet side | 0.2–0.29 | fen | low (22), lobed, studded with lakes, glacial ribbon lakes | ragged, many islets |
+| Tundra, dry side | 0.2–0.29 | belts | a low stony plateau (24), under its snowline | plain, rocky |
+| Taiga | 0.29–0.44, wet | fjord belts | glaciated hills (48), troughs and lakes, mostly under its snowline | fjords |
+| Steppe | 0.29–0.5, dry | broad belts | a plain: a low plateau (30, flat over three quarters of its half-width), smooth slopes, shallow valleys | smooth, low |
+| Mediterranean | 0.5–0.7, dry | belts | rugged limestone ridges (85) | peninsulas, cliffs and coves |
+| Desert | over 0.7, dry, moisture under 0.27 | belts | a low mesa plateau (34; high ground would cool out of hot country) over wide plains where the ergs lie; hard beds over soft, benched by 6.6 | straight, cliffed |
+| Savanna | over 0.8, dry, moisture 0.27 and over | broad belts | a low plateau plain (34); its granite domes by 6.6 | smooth |
+| Warm forest | 0.56–0.85, wet | belts | steep ridges (95) and deep valleys | rias |
+| Jungle | over 0.85 wet, or 0.93 dry and moist | belts | rugged limestone mountains (70) over wide coastal plains, where the tower karst of 6.6 stands | inlets, deltas, mangrove |
+
+A table island stays a table: a mesa in dry country, a tepui in the tropics; a table is too small to carry belts.
 
 An island keeps its size: it is rebuilt from the same drawn length at the same place, and shrunk if its new outline
 would reach past the old one's extents, so the channels the placement kept between islands still hold.
@@ -470,6 +472,15 @@ moisture normalised by L0's 95th percentile, and the landforms of 6.6 run as bef
 
 **Proof.** The build's own check: the start and abbey frames, as generated and as shipped, hash the same as before
 (`9b28eb…`, `b3064c…`, `4af97f…`, `99b54d…`). A test pins the join: a kept island's nodes equal L0's in every field.
+
+**The join's seam.** The two lands' sea beds differ, so where both are sea within 30 G nodes (120 cells) of the join
+the bed is blended across it, half and half at the join. The join runs through open sea, at least 347 cells from the
+start view on seed 3, so home's views never see it.
+
+**Settling the new land.** The landmarks are sited again by their climates (10). Wonders keep off the home island,
+so the opening flight stays as it was however the rest is grown; a crowded world gives a wonder a last pass at 250
+cells from landmarks and wonders (half and then 600 before), but not the bridge town, which would stand by the old
+bridge. The marsh house may stand in any marsh off the ice; the bridge town counts grazed dry sward as working land.
 
 ## 7. Shipping
 
@@ -628,12 +639,13 @@ On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
 | The dry side, dressed whole: stony tundra, khaki steppe with wheat and pine groves, sage Mediterranean with olives, cypress and pines, desert with sand seas, gravel, salt and wadis, tiger bush, savanna | built |
 | The cold band: tundra with pools and frost polygons, ice cap with drifts and crevasses, plate pack ice, frozen lakes and rivers | built |
 | Pictures for palms, acacias, umbrella pines and cactus (`bake/sprites.ts`) | built |
-| Landforms by climate (6.6, `gen/landforms.ts`): desert benches and dune ridges, the ice sheet, karst towers, rock domes | built; first pass, judged by the lead |
+| Landforms by climate (6.6, `gen/landforms.ts`): desert benches, linear dunes, the ice sheet, karst towers, granite domes | built |
+| Native land by climate (6.7, `gen/native.ts`): every island outside home grown again for its climate and joined to today's | built |
 | Seven landmarks, one of each kind, each in its climate and side, never dropped; hamlets and houses by climate and side; no hamlet on snow | built |
 | The wonders' climates | built |
 | Haze by climate and side (a plane in the core); manifest `climate` | built |
 | The map and render tools: `world:map --view cover|climate --wild`, `world:render --wild --no-gates --temperate` | built |
-| Growing each climate's land natively (6.6 B) | not built: **[Decide 4]** |
+| Growing each climate's land natively (6.6 B) | built as 6.7, after the owner's decision |
 | Bergs on the sea, mangrove crowns in the shallows (6.3 "stamps on water") | not built: mangroves stand on the mud of the shore; no bergs |
 | A cold sea and a silty river colour | not built: follow-up (6.5) |
 | Fields by climate beyond the Mediterranean and the steppe (oasis plots are built; paddies are not) | partly |

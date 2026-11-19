@@ -7,9 +7,7 @@
 // drainage), and the coast keeps its line (nothing moves near the shore). On the temperate plateau every landform's
 // weight is 0, so the home island's ground is the same to the bit.
 
-import { ergAt, heatOf, softNoise, TEMPERATE, COLD_SPAN } from "../biome.ts";
-import { hash2 } from "../core/hash.ts";
-import { torusDelta } from "../core/torus.ts";
+import { bumpAt, DOME, ergAt, heatOf, softNoise, TEMPERATE, TOWER, COLD_SPAN } from "../biome.ts";
 import { blurTorus } from "./climate.ts";
 
 /** Nothing moves within BANK_NEAR units above the nearest drainage; the change is whole from BANK_FAR. */
@@ -23,50 +21,20 @@ export const LOWER_SHARE = 0.5;
 
 /** Benches: units of height from one tread to the next; the share of that range a tread takes, and of the step it rises. */
 export const BENCH_STEP = 11;
-const BENCH_TREAD = 0.985;
+const BENCH_TREAD = 0.94;
 const BENCH_RISE = 0.14;
 /** Dune ridges: the greatest height in units, and cells from crest to crest along the wind. */
 export const RIDGE_HEIGHT = 6.5;
 const RIDGE_CELLS = 40;
 /** The ice sheet fills hollows toward the land's surface smoothed over this many G nodes, by this share. */
-const ICE_RADIUS = 10;
-const ICE_FILL = 0.75;
-/** Karst towers: one to a lattice square of this many cells with this chance; radius in cells and height in units. */
-const TOWER = { cells: 34, chance: 0.6, r0: 7, r1: 11, h0: 14, h1: 25 };
-/** Rock domes of the savanna. */
-const DOME = { cells: 240, chance: 0.42, r0: 20, r1: 36, h0: 12, h1: 24 };
+const ICE_RADIUS = 18;
+const ICE_FILL = 0.95;
 
 const SEED = 0x1a4df0;
+const LANDFORM_SEED = SEED;
 
 function ramp(t: number): number {
   return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-}
-
-/**
- * The height of the bump field at a cell, 0–1 of its own greatest: one bump to a square of a lattice that wraps on
- * the world, set anywhere in the square, with its own radius and height. `tower` bumps are flat-topped and
- * steep-sided; the others are domes.
- */
-function bumpAt(x: number, y: number, n: number, k: typeof TOWER, seed: number, tower: boolean): number {
-  const per = Math.max(1, Math.round(n / k.cells)), size = n / per;
-  const ix = Math.floor(x / size), iy = Math.floor(y / size);
-  let best = 0;
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-    const jx = ix + dx, jy = iy + dy;
-    const h = hash2(((jx % per) + per) % per, ((jy % per) + per) % per, seed);
-    if ((h & 1023) / 1024 >= k.chance) continue;
-    const cx = (jx + 0.2 + 0.6 * (((h >>> 10) & 255) / 256)) * size, cy = (jy + 0.2 + 0.6 * (((h >>> 18) & 255) / 256)) * size;
-    const u = (h >>> 26) / 64;
-    const r = k.r0 + (k.r1 - k.r0) * u;
-    const ex = torusDelta(cx, x, n), ey = torusDelta(cy, y, n);
-    const q2 = (ex * ex + ey * ey) / (r * r);
-    if (q2 >= 1) continue;
-    // A tower stands to nearly its full height across most of its width; a dome falls away from its crown.
-    const shape = tower ? 1 - q2 * Math.sqrt(q2) : (1 - q2) * Math.sqrt(1 - q2);
-    const v = shape * (k.h0 + (k.h1 - k.h0) * (1 - u)) / k.h1;
-    if (v > best) best = v;
-  }
-  return best;
 }
 
 /**
@@ -167,17 +135,18 @@ export function shapeByClimate(c: LandformInput): Landforms {
         // Karst towers: in patches of the jungle, on its low and gentle ground.
         const jungle = ramp((heat - 0.62) / 0.12) * ramp((rain - 0.62) / 0.12);
         if (jungle > 0) {
-          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.4 * softNoise(x, y, n, 200, SEED + 22) + 0.2) / 0.2);
+          // In clusters: a field of towers here, open plain there.
+          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.6 * softNoise(x, y, n, 150, SEED + 22) + 0.05) / 0.15);
           const where = jungle * patch * ramp((0.28 - slope) / 0.12) * ramp((55 - e) / 15);
           if (where > 0) {
-            const v = TOWER.h1 * where * bumpAt(x, y, n, TOWER, SEED + 23, true);
+            const v = TOWER.h1 * where * bumpAt(x, y, n, TOWER, LANDFORM_SEED + 23, true);
             if (v > 0) { d += v; moved.tower++; }
           }
         }
         // Rock domes: alone on the savanna's plain.
         const savanna = dry * ramp((heat - 0.6) / 0.1) * ramp((rain - 0.3) / 0.08) * ramp((0.7 - rain) / 0.08);
         if (savanna > 0) {
-          const v = DOME.h1 * savanna * ramp((0.3 - slope) / 0.12) * bumpAt(x, y, n, DOME, SEED + 31, false);
+          const v = DOME.h1 * savanna * ramp((0.3 - slope) / 0.12) * bumpAt(x, y, n, DOME, LANDFORM_SEED + 31, false);
           if (v > 0) { d += v; moved.dome++; }
         }
       } else {

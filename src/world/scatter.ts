@@ -398,7 +398,7 @@ export function scatterAt(
         // The warm forest of the wet side: the temperate wood's own crowns, the darker of them, and among them more
         // and more of the jungle's as the heat rises, tree by tree.
         const v = hueField(x, y, HUE_CLASS.broadleaf, n) + (u4 - 0.5) * 1.3;
-        if (u3 < (heat - 0.12) / 0.34) {
+        if (u3 < 0.3 + (heat - 0.1) / 0.28) {
           r = 1.7 + 1.2 * u1 * u1;
           h = 0.9 * r + 1.8;
           mat = M.jungleCool + (v < 1 ? 0 : 1);

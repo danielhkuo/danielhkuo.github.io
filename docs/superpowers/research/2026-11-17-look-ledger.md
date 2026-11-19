@@ -145,7 +145,42 @@ yew's own drawing; towers and dune ridges that read at a glance (towers want to 
 stacks are); the taiga's and the jungle's greens on the overview; tundra on level ground in a close view.
 
 
-Consensus left: the borders the tests hold to 150 cells are measured on level ground, and on the map a long island
-lying along a latitude still changes climate along a line that follows it; one south-west wind puts rain on the same
-side of every island, where a globe has trades and westerlies; the open polar sea is the temperate blue; the land's
-outlines and rivers are the temperate generator's in every climate (the landforms work over them).
+**Round 7 (2026-11-19: native land, spec 6.7), scored by a fresh critic** (one Opus critic, art and geography and
+geomorphology together; overviews of the temperate world, the climates on the old land and the native land; sheets
+of each climate's island inland, on its coast and on its high ground, the landforms and the landmarks). Four scores:
+Reads, Land (the relief and coast belong to the climate), Style, Craft.
+
+| Biome | Reads | Land | Style | Craft | What the critic saw |
+|---|---|---|---|---|---|
+| Ice | 4 | 2 | 2 | 2 | Ridged mountains with valley glaciers, not a domed sheet; flat fills and floes |
+| Tundra | 1 | 2 | 3 | 3 | The dry side's tundra is the steppe's khaki, with conifer stands |
+| Taiga | 1 | 3 | 2 | 1 | No boreal forest in any frame: half snow, the coast all snow; lines across the pack ice |
+| Temperate | 4 | 4 | 4 | 3 | The great oak upstages the yew |
+| Warm forest | 1 | 3 | 4 | 3 | The temperate palette and canopy |
+| Jungle | 4 | 2 | 3 | 3 | No coastal plain: steep hills to the water |
+| Savanna | 2 | 3 | 2 | 2 | Its biggest island is closed canopy |
+| Desert | 4 | 3 | 3 | 2 | Flat facets with ruler-straight edges on the benches |
+| Mediterranean | 1 | 2 | 3 | 3 | The desert's palette, no maquis or olive |
+| Steppe | 3 | 3 | 3 | 2 | A snowfield in the middle of the plain |
+
+The world, temperate → climates → native: Variety 3 → 6 → 7, Depth 4 → 4 → 6, Quality 7 → 4 → 5, Detail 6 → 6 → 7.
+The globe 2 of 4: the sides differ broadly, but four dry climates share one khaki; the polar belt reads as a stripe;
+the geography differs by climate in places (fjords, a ria bay, desert cuestas, flat steppe lowlands), elsewhere the
+belts' parallel ridges are the temperate recipe repainted, and the volcanoes come back where they were. Landmarks:
+abbey and town the best of the pack; the windmill reads as a second lighthouse; the yew barely registers; the bridge
+weakest. The home island matches the climates' overview to 0.1 %.
+
+**Round 8 (changes on round 7's findings).** The dry side's savanna reaches nearly to the equator; the
+Mediterranean's crags are limestone, sandstone only toward the desert; the dry side's tundra is stone and lichen with
+no trees, and its snowline stands 12 units higher (no snowfield on the steppe); the pack's long leads are gone and
+its edge pulled back; the warm forest takes the jungle's brighter crowns early. Land: the taiga is a low lake-studded
+shield under its tree line, with fjords; plains are one broad belt, not parallel ridges; cones and calderas of dry
+country stand as mesas; the ice sheet fills its hollows to a dome; karst towers stand in clusters, larger,
+flat-topped and of many heights; benches softer at their edges.
+
+ROUND8SCORES
+
+Consensus left: the borders the tests hold to 150 cells are measured on level ground; one south-west wind puts rain
+on the same side of every island, where a globe has trades and westerlies; the open polar sea and the polar shallows
+are the temperate blue and turquoise (a cold sea colour is a live-layer change); the jungle's coastal plains are cut
+into hills by its rain; some building kinds (a slate-roofed hall with silos) are not dressed by climate.

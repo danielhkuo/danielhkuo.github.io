@@ -136,7 +136,11 @@ Last updated 2026-11-19.
   are untouched. Palms, acacias, umbrella pines and cactus are small pictures drawn over the painted land. Seven
   landmarks, one of each kind, each in a climate that suits it: the lighthouse by the pack ice, the yew in temperate
   country off the home island, the ruined cathedral in the jungle, the windmill in the Mediterranean, the bridge on
-  the steppe. Hamlets and houses by climate. Temperature and the dry side's share ship as two more sections a region;
+  the steppe. Every island outside home is grown again for its climate (`gen/native.ts`): plains for the steppe and
+  savanna, low mesa plateaus and ergs for the desert, fjords and glaciated hills for the taiga, an ice sheet at the
+  pole, rugged limestone for the Mediterranean, rias for the warm forest, karst plains for the jungle. Two grown lands
+  are joined island by island through open sea, so home's start and abbey frames are the same to the byte. Hamlets
+  and houses by climate. Temperature and the dry side's share ship as two more sections a region;
   the haze and the manifest know the climate. Design, measurements and follow-ups:
   `specs/2026-11-18-biomes-and-climate-design.md`. The world on disk has not been re-shipped: `npm run world:build --
   --seed 3 --n 10240 --cache` makes the new one, and `src/world/sites/assignments.json` is pinned to it.
@@ -371,10 +375,9 @@ From the climates (2026-11-19):
   `isSea` in life, sights, rare and moments).
 - Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
   pasture; no animal belongs to the new climates yet.
-- Land grown for its climate (plains for the steppe, plateaux and few rivers in the desert, fjords in the cold,
-  atolls and deltas in the tropics): the plan, uplift, erosion and rain take the climate. A new land everywhere but
-  home, a seed search and a judging round; the owner's to ask for (spec 6.6, **[Decide 4]**). The landform stage built
-  now works over the land as grown.
+- Native land, next: atolls and reefs in the tropics; deltas; the bridge town has no river crossing off home on
+  seed 3 but beside the old bridge, so it is left out (8 of 9 wonders); a seed search for a world whose islands fall
+  more evenly into the climates (seed 3's desert is one island and two calderas).
 - The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
   are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.
 - Black sand on tropical volcanic islands; tidewater glaciers; burn scars on the savanna.
@@ -420,8 +423,8 @@ From the first-flight review:
 The owner decided the large ones on 2026-11-19 (a simple story that asks nothing of the generator; two sides, each
 climate once a lap; seven landmarks; size left to the design, which keeps 10240). Still open in
 `specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise: north
-colder at home; the home island kept temperate with the belt swelling round it; no new water colours yet; and
-whether to grow each climate's land natively (6.6).
+colder at home; the home island kept temperate with the belt swelling round it; no new water colours yet. Native
+land was decided (grow it) and is built (spec 6.7).
 
 ## Decisions waiting (2026-11-18 morning)
 

@@ -6,7 +6,9 @@
 // tundra and ice across the cold latitudes as they lay them up a mountain. On the temperate plateau the offset is
 // nothing, and the cover is the temperate one, bit for bit.
 
+import { hash2 } from "./core/hash.ts";
 import { gradNoise } from "./core/noise.ts";
+import { torusDelta } from "./core/torus.ts";
 
 /** The temperature of the temperate plateau. Exactly this, or none at all, is the temperate climate. */
 export const TEMPERATE = 0.5;
@@ -93,3 +95,41 @@ export function duneAt(x: number, y: number, n: number): number {
   // A dune is a body, not a blade: most of its length stands near its crest's height.
   return ridge * (0.45 + 0.55 * ridge) * (size < 0.2 ? 0.2 : size);
 }
+
+/** A lattice of bumps (gen/landforms.ts): one to a square of `cells` cells with `chance`; radius in cells and height in units. */
+export interface Bump { cells: number; chance: number; r0: number; r1: number; h0: number; h1: number }
+/** Karst towers. */
+export const TOWER: Bump = { cells: 46, chance: 0.55, r0: 9, r1: 17, h0: 10, h1: 30 };
+/** Rock domes of the savanna. */
+export const DOME: Bump = { cells: 240, chance: 0.42, r0: 20, r1: 36, h0: 12, h1: 24 };
+/** The seed the landforms raise the domes with, so the cover can find them: 0x1a4df0 + 31. */
+export const DOME_SEED = 0x1a4df0 + 31;
+
+/**
+ * The height of the bump field at a cell, 0–1 of its own greatest: one bump to a square of a lattice that wraps on
+ * the world, set anywhere in the square, with its own radius and height. `tower` bumps are flat-topped and
+ * steep-sided; the others are domes.
+ */
+export function bumpAt(x: number, y: number, n: number, k: Bump, seed: number, tower: boolean): number {
+  const per = Math.max(1, Math.round(n / k.cells)), size = n / per;
+  const ix = Math.floor(x / size), iy = Math.floor(y / size);
+  let best = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const jx = ix + dx, jy = iy + dy;
+    const h = hash2(((jx % per) + per) % per, ((jy % per) + per) % per, seed);
+    if ((h & 1023) / 1024 >= k.chance) continue;
+    const cx = (jx + 0.2 + 0.6 * (((h >>> 10) & 255) / 256)) * size, cy = (jy + 0.2 + 0.6 * (((h >>> 18) & 255) / 256)) * size;
+    const u = (h >>> 26) / 64;
+    const r = k.r0 + (k.r1 - k.r0) * u;
+    const ex = torusDelta(cx, x, n), ey = torusDelta(cy, y, n);
+    const q2 = (ex * ex + ey * ey) / (r * r);
+    if (q2 >= 1) continue;
+    // A tower stands to nearly its full height across most of its width; a dome falls away from its crown.
+    // A tower is flat-topped (its forest stands on the top) and sheer-sided; a dome falls away from its crown.
+    const shape = tower ? 1 - q2 * q2 * q2 : (1 - q2) * Math.sqrt(1 - q2);
+    const v = shape * (k.h0 + (k.h1 - k.h0) * (1 - u)) / k.h1;
+    if (v > best) best = v;
+  }
+  return best;
+}
+

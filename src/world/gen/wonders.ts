@@ -978,8 +978,9 @@ const OBSERVATORY: Kind = {
 /**
  * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
  * score: the great oak in temperate country, the bridge town from the steppe through the Mediterranean and the warm
- * forest (wherever it finds its farmland), the drowned church in a lake that is not frozen, the marsh house off the
- * ice and the deep jungle; the baths lean to the cold and the hotel to the warm.
+ * forest (wherever it finds its farmland), the drowned church in a lake that is not frozen, the marsh house in any
+ * marsh off the ice (on stilts in a jungle swamp as well as in a fen); the baths lean to the cold and the hotel to
+ * the warm.
  */
 /** Land that feeds a town: fields and meadows, and in dry country the sage and steppe that are grazed. */
 function worked(m: number): boolean {
@@ -990,7 +991,7 @@ const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean
   "great-oak": { lo: 0.44, hi: 0.62 },
   "bridge-town": { lo: 0.3, hi: 0.8 },
   "drowned-church": { lo: 0.32, hi: 1 },
-  "marsh-house": { lo: 0.25, hi: 0.85 },
+  "marsh-house": { lo: 0.2, hi: 0.97 },
   baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
   "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
   // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
@@ -1049,8 +1050,11 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
     const order = sortIndicesBy(Float64Array.from(cands, (q) => -q.score));
     let why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     let placed = 0;
-    // A crowded world may leave a wonder no place at the full spacing; it then takes the best place at half of it.
-    for (const reach of [rules.spacing, rules.spacing / 2]) {
+    // A crowded world may leave a wonder no place at the full spacing; it then takes the best place at half of it,
+    // and at 250 cells (of the 10240 world) if it must: still out of a landmark's own view, some 200 cells to either
+    // side. Not the bridge town: so near, it would stand by the old bridge, two bridges in one view.
+    const reaches = type === "bridge-town" ? [rules.spacing, rules.spacing / 2] : [rules.spacing, rules.spacing / 2, rules.spacing / 2.4];
+    for (const reach of reaches) {
     if (placed >= rules.counts[type]) break;
     why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     for (const k of order) {
