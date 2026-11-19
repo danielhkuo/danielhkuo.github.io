@@ -11,9 +11,9 @@ import { MATERIAL as M } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
 import { faceRow, house, mark, paint, put, sculpt, T_EAST, T_FLAT, T_NORTH, T_RIDGE, T_SOUTH, T_WALL, T_WEST, tower } from "./structures.ts";
 
-/** Heights above the water. The rails sit just on the surface; the sleepers a little under them. The halt's planks are a step above the rails. */
-export const TRACK_DECK = 0.55;
-const SLEEPER = 0.35;
+/** Heights above the water. The rails sit just over the sleepers; the sleepers are awash. The halt's planks are 2.45. */
+export const TRACK_DECK = 0.3;
+const SLEEPER = 0.15;
 export const HALT_DECK = 1.85;
 
 function clampTone(t: number): number {
@@ -83,7 +83,7 @@ export const BATH_W = 52;
 export const BATH_H = 38;
 
 /**
- * The thermal baths (52 × 38; nothing stands more than 22 over the court). Base: the sea. On the cliff top a
+ * The thermal baths (52 × 38; nothing stands more than 30 over the court). Base: the sea. On the cliff top a
  * bathhouse in three stacked copper roofs, cream walls banded with red rails and warm windows, and a boiler
  * house with a tall chimney on the bare north-east; below it three copper-roofed storeys on lacquered walls,
  * one small pool, and a brick bridge on the west; at the water a quay, an arched bridge along it, and four
@@ -99,7 +99,7 @@ export function thermalBaths(top: number, seed: number): Structure {
   for (let y = 0; y < 17; y++) for (let x = X0; x <= 49; x++) put(s, x, y, L, M.cobble, T_FLAT);
 
   // Three roofs, each taller and narrower than the one in front of it, so the south wall of each shows
-  // three or four pixels above the copper in front. The crown's ridge is the highest cell: 22 over the court.
+  // three or four pixels above the copper in front. The crown's ridge is 22 over the court; the boiler chimney stands at 30.
   const front = hall(s, 11, 10, 31, 6, L + 11, 2, M.plaster);
   lacquerFront(s, 11, 41, front, L, 3, 3);
   const middle = hall(s, 16, 5, 20, 5, L + 16, 1.5, M.plaster);
@@ -138,7 +138,7 @@ export function thermalBaths(top: number, seed: number): Structure {
   // The boiler house on the bare north-east court, and a chimney three cells wide: lit on the west, dark on the east.
   house(s, 43, 2, 7, 8, L + 6, 1.6, { gable: 0, wallMat: M.brick, roofMat: M.roofSlate, openings: 0, chimney: false });
   const flue = [160, 128, 96];
-  for (let y = 4; y <= 6; y++) for (let i = 0; i < 3; i++) put(s, 45 + i, y, L + 21, M.brick, y === 6 ? flue[i] : T_NORTH);
+  for (let y = 4; y <= 6; y++) for (let i = 0; i < 3; i++) put(s, 45 + i, y, L + 30, M.brick, y === 6 ? flue[i] : T_NORTH);
 
   // A red rail along the court's south edge, open at the door.
   for (let x = X0; x <= X1; x++) if (Math.abs(x - door) > 2) put(s, x, 16, L + 1.3, x % 5 === 0 ? M.stone : M.brick, x % 5 === 0 ? 150 : 118);
@@ -164,7 +164,10 @@ export function thermalBaths(top: number, seed: number): Structure {
     const [y0, y1] = BATH_ROWS.pools[k];
     const level = lv.pools[k], below = k < 2 ? lv.pools[k + 1] : lv.quay;
     const t0 = X0 + 3 * k, t1 = X1 - 3 * k, drop = level - below, front = y1 - 1;
-    for (let y = y0; y <= front; y++) for (let x = t0; x <= t1; x++) put(s, x, y, level, M.copper, y === front ? T_RIDGE : T_SOUTH);
+    for (let y = y0; y <= front; y++) for (let x = t0; x <= t1; x++) {
+      const tone = k === 0 ? (y === front ? 182 : 162) : y === front ? T_RIDGE : T_SOUTH;
+      put(s, x, y, level, M.copper, tone);
+    }
     const stories = Math.max(1, Math.floor(drop / 3));
     lacquerFront(s, t0, t1, front, below, stories, 3);
     if (k === 0) {
@@ -200,20 +203,17 @@ export function thermalBaths(top: number, seed: number): Structure {
     if (rise + 1 < voussoir) mark(s, x, face, Math.floor(rise) + 1, M.stoneDark, 132);
   }
 
-  // Four landings up the east side, each with a rail face, from the court down to the bridge.
+  // Steps two rows deep down the east side, from the court to the bridge: a stone tread, a dark riser, brick rails.
   const bx0 = 43, bx1 = 49, yTop = 15, yBot = by0 - 1;
-  const each = Math.floor((yBot - yTop + 1) / 4);
-  for (let k = 0; k < 4; k++) {
-    const y0 = yTop + k * each, y1 = k === 3 ? yBot : y0 + each - 1;
-    const z = L + (deck - L) * (k / 3);
-    for (let y = y0; y < y1; y++) {
-      for (let x = bx0 + 1; x < bx1; x++) put(s, x, y, z, M.roofTile, T_FLAT);
-      put(s, bx0, y, z + 0.6, M.brick, 168);
-      put(s, bx1, y, z + 0.6, M.brick, 112);
-    }
-    for (let x = bx0; x <= bx1; x++) {
-      if (y1 - 1 >= y0) put(s, x, y1 - 1, z + 0.6, M.brick, 170);
-      put(s, x, y1, z + 1.2, M.brick, T_WALL);
+  const steps = Math.floor((yBot - yTop + 1) / 2);
+  for (let k = 0; k < steps; k++) {
+    const y0 = yTop + 2 * k, y1 = k === steps - 1 ? yBot : y0 + 1;
+    const z = L + (deck - L) * (k / Math.max(1, steps - 1));
+    for (let y = y0; y <= y1; y++) {
+      const tread = y === y0;
+      for (let x = bx0 + 1; x < bx1; x++) put(s, x, y, z, M.stone, tread ? 182 : 100);
+      put(s, bx0, y, z + 0.6, M.brick, 160);
+      put(s, bx1, y, z + 0.6, M.brick, 104);
     }
   }
   const gate = hall(s, 43, 11, 7, 5, L + 5, 2, M.plaster);
@@ -232,8 +232,8 @@ export function trackBow(bow: number, t: number): number {
 }
 
 /**
- * The track from (ax, ay) to (bx, by), in world cells: two rails and a stone sleeper every third cell, sitting
- * just on the water, bowed `bow` cells off the straight at its middle so it is not ruled, with a telegraph
+ * The track from (ax, ay) to (bx, by), in world cells: two stone rails and a timber sleeper every second cell,
+ * the sleepers awash, bowed `bow` cells off the straight at its middle so it is not ruled, with a telegraph
  * pole every ten cells on the north side. Base: the sea. It comes as pieces at most `piece` cells long, each
  * a small raster, so no bake window carries the whole line.
  */
@@ -267,10 +267,9 @@ export function tideTrack(ax: number, ay: number, bx: number, by: number, bow: n
       const a = px * ux + py * uy;
       if (a < a0 - 0.5 || a >= a1 + 0.5 || a < 0 || a > len) continue;
       const lat = -px * uy + py * ux - off(a);
-      const alat = lat < 0 ? -lat : lat;
-      if (alat > 1.25) continue;
-      if (Math.floor(a) % 3 === 0) put(s, i, j, SLEEPER, M.stone, 175);
-      if (Math.abs(alat - 0.75) <= 0.42) put(s, i, j, TRACK_DECK, M.stoneDark, 70);
+      if (lat < -2 || lat >= 2) continue;
+      if (Math.floor(a) % 2 === 0) put(s, i, j, SLEEPER, M.timber, 96);
+      if (lat < -1 || lat >= 1) put(s, i, j, TRACK_DECK, M.stone, 190);
     }
     const stepX = Math.abs(ux) >= Math.abs(uy) ? (ux >= 0 ? 1 : -1) : 0;
     const stepY = stepX === 0 ? (uy >= 0 ? 1 : -1) : 0;
@@ -289,51 +288,48 @@ export function tideTrack(ax: number, ay: number, bx: number, by: number, bow: n
 }
 
 /**
- * The lone halt at the track's end (36 × 11, 13 tall): a plank platform 22 long beside the line, posts on
- * its face, a gabled shelter, two copper cars on the rails, and the rails running six cells past the platform.
- * Base: the sea. The track arrives along row `HALT_TRACK_ROW`; `east` is true when it comes in from the west
- * and ends at the east. The last rail is local column 27: the line to the far shore begins just past it.
+ * The lone halt at the track's end (36 × 11, 13 tall): a plaster platform north of the line, an 8 × 3 slate
+ * shelter on it, and two copper cars on the rails. The rails run six cells past the platform. Base: the sea.
+ * The track arrives along row `HALT_TRACK_ROW`; `east` is true when it comes in from the west and ends at the
+ * east. The last rail is local column 27: the line to the far shore begins just past it. The halt has no poles
+ * of its own.
  */
-export const HALT_TRACK_ROW = 2;
+export const HALT_TRACK_ROW = 7;
 export const HALT_RAIL_END = 27;
 export function tideHalt(east: boolean): Structure {
   const s = sculpt(36, 11), deck = HALT_DECK + 0.6;
-  // Rails through the halt and six cells past the platform. Sleepers every third cell.
+  // Rails on rows 5 and 8. Sleepers every second cell across the four rows of the track, awash between the rails.
   for (let x = 0; x <= HALT_RAIL_END; x++) {
-    if (x % 3 === 0) for (const y of [1, 2, 3]) put(s, x, y, SLEEPER, M.stone, 175);
-    put(s, x, 1, TRACK_DECK, M.stoneDark, 70);
-    put(s, x, 3, TRACK_DECK, M.stoneDark, 70);
+    if (x % 2 === 0) for (const y of [5, 6, 7, 8]) put(s, x, y, SLEEPER, M.timber, 96);
+    put(s, x, 5, TRACK_DECK, M.stone, 190);
+    put(s, x, 8, TRACK_DECK, M.stone, 190);
   }
-  // Two cars on the rails. The far side is a north plane; the near side carries the band and the windows.
+  // Two cars on rows 6–8. The face is row 8: underframe, windows and a white band, all above the water.
   const carTop = TRACK_DECK + 4;
   const car = (x0: number, x1: number): void => {
     for (let x = x0; x <= x1; x++) {
-      put(s, x, 1, carTop, M.copper, T_NORTH);
-      put(s, x, 2, carTop, M.copper, T_FLAT);
-      put(s, x, 3, carTop, M.copper, 150);
-      mark(s, x, 3, 3, M.whitewash, 210);
-      if ((x - x0) % 2 === 0) mark(s, x, 3, 2, M.opening, 100);
+      put(s, x, 6, carTop, M.copper, T_NORTH);
+      put(s, x, 7, carTop, M.copper, T_FLAT);
+      put(s, x, 8, carTop, M.copper, 150);
+      mark(s, x, 8, 1, M.stoneDark, 90);
+      if ((x - x0) % 2 === 0) mark(s, x, 8, 2, M.opening, 100);
+      mark(s, x, 8, 3, M.whitewash, 210);
     }
     const pan = x0 + 4;
-    mark(s, pan, 3, 5, M.stoneDark, 72);
-    mark(s, pan, 3, 6, M.stoneDark, 90);
+    mark(s, pan, 8, 5, M.stoneDark, 72);
+    mark(s, pan, 8, 6, M.stoneDark, 90);
   };
   car(1, 10);
   car(12, 21);
-  for (const y of [1, 2, 3]) put(s, 11, y, TRACK_DECK + 1.2, M.timber, y === 1 ? T_NORTH : 110);
-  // Telegraph poles on the north side.
-  for (const x of [4, 14, 24]) {
-    for (let z = 1; z <= 7; z++) mark(s, x, 0, z, M.timber, 92);
-    for (const dx of [-1, 0, 1]) mark(s, x + dx, 0, 7, M.timber, 112);
-  }
-  // The platform, 22 × 3, a step above the rails, posts along the face the camera sees.
-  for (let y = 5; y <= 7; y++) for (let x = 0; x <= 21; x++) put(s, x, y, deck, M.plaster, (x + y) % 3 === 0 ? 150 : 168);
-  for (let x = 0; x <= 21; x++) if (x < 4 || x > 9) mark(s, x, 7, 1, M.timber, 90);
-  // The shelter: gable to the south, tile roof, wall 4.
-  house(s, 4, 4, 6, 4, 4, 1.6, { gable: 1, wallMat: M.whitewash, roofMat: M.roofTile, openings: 0, chimney: false });
-  for (let z = 1; z <= 6; z++) mark(s, 16, 7, Math.floor(deck + z), M.timber, 90);
-  mark(s, 15, 7, Math.floor(deck + 6), M.timber, 100);
-  mark(s, 15, 7, Math.floor(deck + 5), M.lantern, 236);
+  for (const y of [6, 7, 8]) put(s, 11, y, TRACK_DECK + 1.2, M.timber, y === 6 ? T_NORTH : 110);
+  // The platform, rows 1–3, plaster at 2.45, north of the track.
+  for (let y = 1; y <= 3; y++) for (let x = 0; x <= 21; x++) put(s, x, y, deck, M.plaster, (x + y) % 3 === 0 ? 150 : 168);
+  for (let x = 0; x <= 21; x++) if (x < 4 || x > 11) mark(s, x, 3, 1, M.timber, 90);
+  // The shelter on the platform: 8 × 3, slate, gable to the south.
+  house(s, 4, 1, 8, 3, 4, 1.6, { gable: 1, wallMat: M.whitewash, roofMat: M.roofSlate, openings: 0, chimney: false });
+  for (let z = 1; z <= 6; z++) mark(s, 16, 3, Math.floor(deck + z), M.timber, 90);
+  mark(s, 15, 3, Math.floor(deck + 6), M.timber, 100);
+  mark(s, 15, 3, Math.floor(deck + 5), M.lantern, 236);
   lap(s, 0x7a15);
   if (east) return s;
   // The mirror image, for a line that ends at its west.
@@ -365,22 +361,22 @@ export const CHURCH_TOWER = [5, 7] as const;
 export function drownedChurch(seed: number): Structure {
   const s = sculpt(CHURCH_W, CHURCH_H), W = CHURCH_W;
   const rnd = (k: number): number => (hash2(k, seed, 0xd20c) & 1023) / 1024;
-  // Each wall is a lit north row over a dark south face. One height for a run of 3–5 cells, then a gap.
+  // The north wall stands, with a lancet in every third column. The south wall is stubs. One height for a run, then a gap.
   const runs = (face: number, x0: number, x1: number, key: number): void => {
     let x = x0;
+    const north = face === 4;
     while (x <= x1) {
       const n = hash2(x, key, seed);
       const gap = 1 + (n % 3), run = 3 + ((n >>> 2) % 3);
-      const h = 3 + ((n >>> 5) % 5);
+      const h = north ? 5 + ((n >>> 5) % 4) : 1 + ((n >>> 5) % 2);
       x += gap;
       for (let i = 0; i < run && x + i <= x1; i++) {
         const xx = x + i;
         put(s, xx, face, h, M.stone, T_WALL);
         put(s, xx, face - 1, h + 0.6, M.stone, 175);
-        if (xx % 3 === 0) {
-          mark(s, xx, face, 1, M.moss, 156);
-          mark(s, xx, face, h - 2, M.opening, 108);
-        }
+        if (!north || xx % 3 !== 0) continue;
+        mark(s, xx, face, 1, M.moss, 156);
+        for (let z = 2; z <= h - 2; z++) mark(s, xx, face, z, M.opening, 108);
       }
       x += run;
     }
@@ -403,15 +399,15 @@ export function drownedChurch(seed: number): Structure {
     put(s, x, face - 1, h + 0.6, M.stone, 175);
     if (x % 3 === 0) mark(s, x, face, 1, M.moss, 156);
   }
-  // A tree growing out of the nave. Tone 0: the bake shades the crown. Three roots show on the south wall.
-  const cr = 3.5, ccx = 17, ccy = 4;
-  for (let y = Math.floor(ccy - cr); y <= Math.ceil(ccy + cr); y++) for (let x = Math.floor(ccx - cr); x <= Math.ceil(ccx + cr); x++) {
-    const dx = x - ccx, dy = y - ccy, d2 = dx * dx + dy * dy;
-    if (d2 > cr * cr || x < 0 || y < 0 || x >= W || y >= CHURCH_H) continue;
-    const t = 9 * (0.35 + 0.65 * Math.sqrt(1 - d2 / (cr * cr)));
+  // A tree growing out of the nave: a broad crown, not a column. Tone 0: the bake shades it. Roots show on the south stubs.
+  const rx = 5.5, ry = 3.2, ccx = 17, ccy = 8;
+  for (let y = Math.floor(ccy - ry); y <= Math.ceil(ccy + ry); y++) for (let x = Math.floor(ccx - rx); x <= Math.ceil(ccx + rx); x++) {
+    const nx = (x - ccx) / rx, ny = (y - ccy) / ry;
+    if (nx * nx + ny * ny > 1 || x < 0 || y < 0 || x >= W || y >= CHURCH_H) continue;
+    const t = 6.5 * Math.sqrt(1 - nx * nx - ny * ny);
     if (t > s.top[y * W + x]) put(s, x, y, t, M.broadleafMid, 0);
   }
-  for (const x of [15, 17, 19]) for (let z = 1; z <= 4; z++) mark(s, x, 12, z, M.timber, 88 + z * 6);
+  for (const x of [15, 17, 19]) for (let z = 1; z <= 2; z++) mark(s, x, 12, z, M.timber, 88 + z * 6);
   // Rubble and a clump of reeds beside the nave, and the churchyard crosses, their heads above the water.
   for (let k = 0; k < 4; k++) {
     const x = 12 + k * 4 + Math.floor(rnd(50 + k) * 2), y = 13 + (k & 1);
@@ -431,10 +427,29 @@ export function drownedChurch(seed: number): Structure {
   // Ivy spilled over the south wall, four to six cells, clear of the tree.
   const ivyN = 4 + (hash2(9, 3, seed) % 3);
   for (let k = 0; k < ivyN; k++) put(s, [11, 14, 15, 18, 22, 27][k], 13, 0.9 + (k & 1) * 0.5, M.ivy, 146);
-  // The tower: stone face, ivy ragged on the west two columns, a lead spire so its west and east read.
-  const tx = CHURCH_TOWER[0] - 3, ty = CHURCH_TOWER[1] - 3;
-  tower(s, tx, ty, 6, 7, 17, 10, M.stone, M.roofLead, true);
-  const south = ty + 6;
+  // The tower, built here: tower() is shared, and this spire is a parapet with a short lead roof. 6 × 7 shaft.
+  const tx = CHURCH_TOWER[0] - 3, ty = CHURCH_TOWER[1] - 3, south = ty + 6, shaft = 17;
+  for (let i = 0; i < 6; i++) put(s, tx + i, south, shaft, M.stone, T_WALL);
+  let tip = 0, tipX = tx + 2, tipY = ty + 3;
+  for (let j = 0; j < 6; j++) for (let i = 0; i < 6; i++) {
+    const outer = i === 0 || i === 5 || j === 0 || j === 5;
+    if (outer) {
+      const h = (i + j) % 2 === 0 ? 17.8 : 17.2;
+      const tone = j === 5 ? 150 : i === 0 ? 178 : i === 5 ? 110 : 168;
+      put(s, tx + i, ty + j, h, M.stone, tone);
+      continue;
+    }
+    const lift = 13 * (1 - Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5)) / 2);
+    const h = shaft + lift;
+    const ax = Math.abs(i - 2.5), ay = Math.abs(j - 2.5);
+    const tone = ax >= ay ? (i < 2.5 ? T_WEST : T_EAST) : j > 2.5 ? T_SOUTH : T_NORTH;
+    put(s, tx + i, ty + j, h, M.roofLead, ax < 0.6 && ay < 0.6 ? T_RIDGE : tone);
+    if (h > tip + 1e-6 || (Math.abs(h - tip) <= 1e-6 && ty + j >= tipY)) { tip = h; tipX = tx + i; tipY = ty + j; }
+  }
+  const cz = Math.floor(tip + 0.5);
+  for (let k = 1; k <= 4; k++) mark(s, tipX, tipY, cz + k, M.gilt, 150);
+  mark(s, tipX - 1, tipY, cz + 3, M.gilt, 150);
+  mark(s, tipX + 1, tipY, cz + 3, M.gilt, 150);
   for (let x = tx; x < tx + 6; x++) {
     s.mat[south * W + x] = M.stone;
     s.tone[south * W + x] = 132;
@@ -442,8 +457,7 @@ export function drownedChurch(seed: number): Structure {
   s.top[south * W + tx] -= 1.5;
   s.top[south * W + tx + 5] -= 1.5;
   for (const x of [tx, tx + 1]) for (let z = 1; z <= 10; z++) if ((hash2(x, z, seed ^ 0x171) & 3) !== 0) mark(s, x, south, z, M.ivy, 132 + (z & 3) * 8);
-  for (const x0 of [tx + 1, tx + 3]) for (const x of [x0, x0 + 1]) for (const z of [11, 12]) mark(s, x, south, z, M.opening, 96);
-  mark(s, tx + 2, south, 12, M.gilt, 170);
+  for (const x of [tx + 1, tx + 4]) for (let z = 10; z <= 12; z++) mark(s, x, south, z, M.opening, 96);
   mark(s, tx + 3, south, 5, M.opening, 100);
   mark(s, tx + 3, south, 6, M.opening, 112);
   lap(s, seed);
@@ -471,20 +485,16 @@ export function coveHotel(seed: number, rock: number, cliff: number): Structure 
   const W = HOTEL_W, s = sculpt(W, HOTEL_H);
   const [rx0, ry0] = HOTEL_ROCK;
   const P = 6;
-  // The flat of the rock, and its rim: west lit, south in shade with a dark joint every other cell, east dark.
+  // The flat of the rock. Outside it the cliff shows, so there is no painted rim.
   for (let y = 0; y < 24; y++) for (let x = 0; x < W; x++) {
     const dx = (x - rx0) / 19.5, dy = (y - ry0) / 11;
     const lump = ((hash2(x >> 1, y >> 1, seed) & 7) - 3.5) * 0.02;
     const q = Math.sqrt(dx * dx + dy * dy) + lump;
-    if (q > 1) continue;
-    if (q <= 0.78) { put(s, x, y, P, rock, 0); continue; }
-    const ax = Math.abs(dx), ay = Math.abs(dy), south = ay > ax && dy >= 0;
-    const tone = ax >= ay ? (dx < 0 ? 178 : 98) : dy >= 0 ? 122 : T_NORTH;
-    put(s, x, y, P, rock, tone);
-    if (south && (x & 1) === 0) mark(s, x, y, Math.floor(P) - 1, M.stoneDark, 96);
+    if (q > 0.78) continue;
+    put(s, x, y, P, rock, 0);
   }
-  // The garden terrace west of the hotel: cobble, a balustrade, four parasols and a pergola, one pine.
-  for (let y = 5; y <= 15; y++) for (let x = 3; x <= 13; x++) put(s, x, y, P, M.cobble, 160);
+  // The garden terrace west of the hotel: pasture, a balustrade, four parasols and a pergola, one pine.
+  for (let y = 5; y <= 15; y++) for (let x = 3; x <= 13; x++) put(s, x, y, P, M.pastureMid, T_FLAT);
   for (let x = 3; x <= 13; x++) put(s, x, 15, P + 1.1, x % 3 === 0 ? M.stoneDark : M.stone, x % 3 === 0 ? 108 : T_WALL);
   const parasol = (x: number, y: number, cloth: number, tone: number): void => {
     for (let z = 1; z <= 3; z++) mark(s, x, y, P + z, M.stoneDark, 90);
@@ -513,12 +523,17 @@ export function coveHotel(seed: number, rock: number, cliff: number): Structure 
   // The hotel: four floors of whitewash under a hipped tile roof, the long side to the sea.
   const bx = 14, by = 3, bw = 16, wall = P + 11;
   house(s, bx, by, bw, 8, wall, 3.4, { gable: 0, wallMat: M.whitewash, roofMat: M.roofTile, openings: 0, chimney: false, hip: true });
-  // South roof courses, every other row a step darker, so the tile reads.
+  // South roof courses, every other row a step darker, so the tile reads. A lit band on the rows under the ridge.
   for (const y of [by + 6, by + 4]) for (let i = 0; i < bw; i++) {
     const idx = y * W + (bx + i);
     if (s.mat[idx] !== M.roofTile) continue;
-    const t = s.tone[idx] - 8;
+    const t = s.tone[idx] - 22;
     s.tone[idx] = t < 60 ? 60 : t;
+  }
+  for (const y of [by + 2, by + 3]) for (let i = 2; i <= bw - 3; i++) {
+    const idx = y * W + (bx + i);
+    s.top[idx] = wall + 3.4;
+    s.tone[idx] = 188;
   }
   const upper = by + 7;
   for (let i = 1; i < bw - 1; i += 2) for (const z of [8, 10]) mark(s, bx + i, upper, P + z, M.opening, z === 10 ? 130 : 108);
@@ -589,6 +604,15 @@ function dot(p: Picture, x: number, z: number, mat: number, tone: number): void 
   if (px < 0 || px >= p.w || pz < 1 || pz > p.tall) return;
   p.mat[pz * p.w + px] = mat;
   p.tone[pz * p.w + px] = clampTone(tone);
+}
+
+/** Every second pixel from (x0, z0) to (x1, z1), so a guy reads as wire. */
+function dotted(p: Picture, x0: number, z0: number, x1: number, z1: number, mat: number, tone: number): void {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0))));
+  for (let k = 0; k <= steps; k += 2) {
+    const t = k / steps;
+    dot(p, x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, mat, tone);
+  }
 }
 
 /** A straight stroke from (x0, z0) to (x1, z1), `thick` pixels deep, its upper edge lighter by `lift`. */
@@ -794,10 +818,13 @@ export function marshHouse(seed: number, ux = 0, uy = 1): Structure {
     mark(s, x, 13, 2, M.opening, 112);
     mark(s, x, 13, 4, M.opening, 120);
   }
-  for (let i = 0; i < s.mat.length; i++) {
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
     if (s.mat[i] !== M.roofLead) continue;
-    if (s.tone[i] === T_SOUTH) s.tone[i] = 130;
-    else if (s.tone[i] === T_RIDGE) s.tone[i] = 160;
+    const tone = s.tone[i];
+    const gable = x >= hx + 5 && x <= hx + 10 && y >= hy + 3 && y <= hy + 7;
+    if (tone === T_SOUTH || (gable && (tone === T_WEST || tone === T_EAST))) s.tone[i] = 124;
+    else if (tone === T_RIDGE) s.tone[i] = 186;
   }
 
   // Alders, leaning from the sea wind: each crown stands east of its foot.
@@ -870,14 +897,14 @@ export function marshCauseway(ax: number, ay: number, bx: number, by: number, bo
 // ---------------------------------------------------------------------------
 // The airship mast.
 
-export const MAST_W = 42;
+export const MAST_W = 58;
 export const MAST_H = 34;
 /** The mast's foot in its raster, and its height to the lamp. */
 export const MAST_FOOT = [14, 10] as const;
 export const MAST_TALL = 46;
 
 /**
- * The airship mast (42 × 34, 46 tall). Base: the pad. A tapering tower of slate lattice on four stone feet,
+ * The airship mast (58 × 34, 46 tall). Base: the pad. A tapering tower of slate lattice on four stone feet,
  * guyed, with two galleries and a banded cone; an airship moored at the cone. Beside it a small winch house,
  * two low gas holders, the anchor blocks of the yaw lines and a windsock.
  */
@@ -890,11 +917,9 @@ export function airshipMast(seed: number): Structure {
   // Near iron is slate; the far legs stay dark stone. The picture is wide enough for the guys.
   const iron = M.stoneDark, slate = M.roofSlate, p = picture(29, MAST_TALL), c = 14;
   const half = (z: number): number => (z >= 34 ? 1.3 : 7.4 - 5.6 * (z / 34));
-  // Guys, drawn first so the tower stands in front of them.
-  stroke(p, c - 1, 30, 1, 6, 1, iron, 78);
-  stroke(p, c + 1, 30, 27, 6, 1, iron, 70);
-  stroke(p, c - 1, 18, 2, 4, 1, iron, 86);
-  stroke(p, c + 1, 18, 26, 4, 1, iron, 74);
+  // Guys, drawn first so the tower stands in front of them. The upper pair only, dotted, down to the ground.
+  dotted(p, c - 1, 30, 1, 1, M.stone, 150);
+  dotted(p, c + 1, 30, 27, 1, M.stone, 150);
   // The far legs, seen through the bracing. They start above the feet, so the stone shows.
   for (let z = 5; z <= 34; z++) { dot(p, c - half(z) + 1.4, z, iron, 128); dot(p, c + half(z) - 1.4, z, iron, 128); }
   // A cross in every panel, each panel about as tall as the tower is wide there.
@@ -936,23 +961,39 @@ export function airshipMast(seed: number): Structure {
   // The airship, moored nose-on to the cone, hung behind the mast so the lattice stands in front of it.
   const ship = picture(27, 46), zc = 42;
   for (let x = 0; x < 27; x++) {
-    const t = x / 26;
-    let rad = 4;
-    if (t < 0.15) rad = 1 + 3 * (t / 0.15);
-    else if (t > 0.55 && t < 0.85) rad = 4 - 1.5 * ((t - 0.55) / 0.3);
-    else if (t >= 0.85) rad = 2.5 - 1.2 * ((t - 0.85) / 0.15);
-    const rib = x === 7 || x === 14 || x === 21;
-    for (let dz = -Math.floor(rad); dz <= Math.floor(rad); dz++) {
-      const u = rad > 0 ? dz / rad : 0;
-      let tone = u > 0.33 ? 195 : u < -0.33 ? 120 : 150;
-      if (rib) tone -= 35;
-      dot(ship, x, zc + dz, M.sailcloth, tone);
+    const t = x / 26, u = (t - 0.47) / 0.53;
+    if (u * u >= 1) continue;
+    const rad = 4.4 * Math.sqrt(1 - u * u), top = Math.floor(rad), rib = x % 4 === 0, n = top * 2 + 1;
+    for (let dz = -top; dz <= top; dz++) {
+      const idx = top - dz;
+      let tone = idx < 3 ? 205 : idx >= n - 2 ? 118 : 165;
+      if (rib) tone -= 28;
+      const pz = zc + dz;
+      if (pz < 1 || pz > MAST_TALL) continue;
+      ship.mat[pz * ship.w + x] = M.sailcloth;
+      ship.tone[pz * ship.w + x] = tone;
     }
   }
-  for (let z = 0; z < 3; z++) {
-    dot(ship, 25, zc + 2 + z, M.sailcloth, 195);
-    dot(ship, 25, zc - 2 - z, M.sailcloth, 120);
-  }
+  // Tail fins, one or two pixels, never above the mast.
+  const finAt = (x: number, up: number, down: number): void => {
+    const fu = (x / 26 - 0.47) / 0.53;
+    const fr = 4.4 * Math.sqrt(Math.max(0, 1 - fu * fu));
+    const cap = zc + Math.floor(fr), keel = zc - Math.floor(fr);
+    for (let k = 1; k <= up; k++) {
+      const pz = cap + k;
+      if (pz > MAST_TALL) continue;
+      ship.mat[pz * ship.w + x] = M.sailcloth;
+      ship.tone[pz * ship.w + x] = 205;
+    }
+    for (let k = 1; k <= down; k++) {
+      const pz = keel - k;
+      if (pz < 1) continue;
+      ship.mat[pz * ship.w + x] = M.sailcloth;
+      ship.tone[pz * ship.w + x] = 118;
+    }
+  };
+  finAt(24, 2, 2);
+  finAt(25, 1, 1);
   for (let x = 8; x <= 13; x++) for (let z = 36; z <= 37; z++) dot(ship, x, z, M.timber, 112);
   const filled = (x: number, z: number): boolean => x >= 0 && x < ship.w && z >= 1 && z <= ship.tall && ship.mat[z * ship.w + x] !== 0;
   const edge: number[] = [];
@@ -1001,20 +1042,20 @@ export const BRIDGE_END = 6;
 export const BRIDGE_H = 13;
 /** How far the tallest roof stands over the deck, the chapel's cross included. */
 export const BRIDGE_TALL = 17;
-/** Cells of bare deck at the bridge's east end past the last house, and at its west end past the gatehouse. */
+/** Cells of bare deck at the bridge's east end past the last house, and at its west end past the clock tower. */
 const BRIDGE_BARE = 4;
 const BRIDGE_BARE_WEST = 4;
 
 /**
  * The bridge town (len + 12 wide, 13 deep; its roofs stand up to 17 over the deck). Base: the river. An old
  * stone bridge of round arches on cutwater piers, `len` cells long and `deck` above the water, built over for
- * its middle: a gatehouse at the west bridgehead, then tall narrow houses crowded along both sides of the
+ * its middle: a clock tower at the west end, then tall narrow houses crowded along both sides of the
  * street, plastered in several colours under steep roofs and chimneys. Where the south row parts, a small
  * square in front of the bridge chapel. The ends are bare deck between parapets, so the arches show; a
- * wayside cross stands at the east end. `wet` is the river's width: the arches over it stand in water, the
- * others on the banks.
+ * wayside cross stands at the east end. `wet` is the river's width, kept for callers.
  */
 export function bridgeTown(len: number, wet: number, deck: number, seed: number): Structure {
+  void wet;
   const W = len + 2 * BRIDGE_END, s = sculpt(W, BRIDGE_H);
   const x0 = BRIDGE_END, x1 = x0 + len - 1, y0 = BRIDGE_ROW, south = y0 + BRIDGE_DEPTH - 1, mid = x0 + (len >> 1);
   // The road on to it.
@@ -1024,11 +1065,11 @@ export function bridgeTown(len: number, wet: number, deck: number, seed: number)
   for (let y = y0; y <= south; y++) for (let x = x0; x <= x1; x++) put(s, x, y, deck, M.cobble, T_FLAT);
   for (let x = x0; x <= x1; x++) { put(s, x, y0, deck + 1, M.stone, T_FLAT); put(s, x, south, deck + 1, M.stone, T_WALL); }
 
-  // The gatehouse over the road at the west end.
-  tower(s, x0, y0 + 1, 5, BRIDGE_DEPTH - 1, deck + 10, 7, M.stone, M.roofSlate, false);
-  for (let x = x0; x < x0 + 5; x++) mark(s, x, south, deck + 9, M.stoneDark, 108);
-  mark(s, x0 + 2, south, deck + 6, M.opening);
-  for (let x = x0 + 1; x <= x0 + 2; x++) for (let dz = 0; dz < 2; dz++) mark(s, x, south, Math.floor(deck + 7) + dz, M.dial, 170);
+  // The clock tower on the south side at the west end. Its tip is the deck plus 17.
+  tower(s, x0, y0 + 4, 5, 4, deck + 13.5, 3.5, M.stone, M.roofSlate, false);
+  for (let i = 0; i < 5; i++) mark(s, x0 + i, south, deck + 12, M.stoneDark, 108);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = 8; dz <= 10; dz++) mark(s, x0 + 2 + dx, south, deck + dz, M.dial, 170);
+  mark(s, x0 + 2, south, deck + 9, M.gilt, 200);
   mark(s, x0 + 2, south, deck + 1, M.timber, 92);
   mark(s, x0 + 2, south, deck + 2, M.timber, 92);
   // The wayside cross on the parapet at the east end.
@@ -1068,17 +1109,27 @@ export function bridgeTown(len: number, wet: number, deck: number, seed: number)
       const face = y + d - 1;
       // A light face, so the plaster colour survives the shade on the south wall.
       for (let i = 0; i < w; i++) s.tone[face * W + x + i] = 176;
-      // The near rank: a shop, an awning, one window. The far rank: the floors that clear the roofs in front.
-      const floors = far ? [deck + 7, deck + 9] : [deck + 1, deck + 2];
-      for (let i = 0; i < w; i++) {
-        const bay = i % 2 === 1;
-        for (const z of floors) {
-          if (z >= wall) continue;
-          const lit = bay && z === floors[floors.length - 1] && (k + i) % 3 === 0;
-          mark(s, x + i, face, z, bay ? (lit ? M.lantern : M.opening) : M.timber, bay ? (lit ? 214 : 108) : 100);
-          if (bay && z + 1 < wall) mark(s, x + i, face, z + 1, lit ? M.lantern : M.opening, lit ? 196 : 124);
+      if (far) {
+        // A corner post, a timber string and two small windows, so each front stands apart.
+        for (let z = Math.floor(deck + 6); z < wall; z++) mark(s, x, face, z, M.timber, 96);
+        for (let i = 0; i < w; i++) mark(s, x + i, face, deck + 6, M.timber, 110);
+        if (deck + 8 < wall) {
+          const lit = k % 2 === 0;
+          mark(s, x + 1, face, deck + 8, lit ? M.lantern : M.opening, lit ? 214 : 108);
+          if (w > 3) mark(s, x + w - 2, face, deck + 8, M.opening, 108);
         }
-        if (!far && i < w - 1 && deck + 3 < wall) mark(s, x + i, face, deck + 3, i % 2 === 0 ? M.brick : M.sailcloth, 160);
+      } else {
+        const floors = [deck + 1, deck + 2];
+        for (let i = 0; i < w; i++) {
+          const bay = i % 2 === 1;
+          for (const z of floors) {
+            if (z >= wall) continue;
+            const lit = bay && z === floors[floors.length - 1] && (k + i) % 3 === 0;
+            mark(s, x + i, face, z, bay ? (lit ? M.lantern : M.opening) : M.timber, bay ? (lit ? 214 : 108) : 100);
+            if (bay && z + 1 < wall) mark(s, x + i, face, z + 1, lit ? M.lantern : M.opening, lit ? 196 : 124);
+          }
+          if (i < w - 1 && deck + 3 < wall) mark(s, x + i, face, deck + 3, i % 2 === 0 ? M.brick : M.sailcloth, 160);
+        }
       }
       if (gable === 1 && wall + 1 < wall + roof) mark(s, x + ((w - 1) >> 1), face, Math.floor(wall + 1), M.opening, 116);
       // The chimney stands on a roof row behind the face, so it does not repaint the wall.
@@ -1105,22 +1156,22 @@ export function bridgeTown(len: number, wet: number, deck: number, seed: number)
   put(s, mid + 3, south - 2, deck + 1.2, M.stone, T_WALL);
   mark(s, mid + 3, south - 2, deck + 2, M.timber, 90);
 
-  // The bridge's south face, painted over whatever stands on it: stone, a string course under the deck, and the
-  // arches, each under a ring of darker voussoirs, a pier with its cutwater between each pair.
-  const bays = Math.max(3, Math.round(len / 10)), bay = len / bays, a = bay / 2 - 1.2;
+  // Three arches on the south face, centred on the middle of the bridge. The ends are blind stone under the string course.
+  const bay = 9, origin = mid - 1.5 * bay, a = bay / 2 - 1.2;
   const top = Math.floor(deck);
   for (let x = x0; x <= x1; x++) {
-    const along = x + 0.5 - x0, v = along - (Math.floor(along / bay) + 0.5) * bay;
-    for (let z = 1; z < top; z++) mark(s, x, south, z, M.stone, T_WALL);
+    const along = x + 0.5 - origin;
+    const inSpan = along >= 0 && along < 3 * bay;
+    const v = inSpan ? along - (Math.floor(along / bay) + 0.5) * bay : 0;
+    const central = inSpan && Math.floor(along / bay) === 1;
+    for (let z = 1; z < top; z++) mark(s, x, south, z, M.stone, 150);
     mark(s, x, south, top, M.stoneDark, 112);
-    if (Math.abs(v) >= a) {
-      // A pier: its cutwater stands out a cell, lit on the west.
-      if (Math.abs(v) > bay / 2 - 0.6 && x > x0 + 1 && x < x1 - 1) put(s, x, south + 1, deck - 2.5, M.stone, v > 0 ? 150 : 104);
+    if (!inSpan || Math.abs(v) >= a) {
+      if (inSpan && Math.abs(v) > bay / 2 - 0.6 && x > x0 + 1 && x < x1 - 1) put(s, x, south + 1, deck - 2.5, M.stone, v > 0 ? 150 : 104);
       continue;
     }
     const rise = Math.min(deck - 2, 1 + a * Math.sqrt(1 - (v * v) / (a * a)));
-    const water = Math.abs(x - mid) <= wet / 2 + 1.5;
-    for (let z = 1; z <= rise; z++) mark(s, x, south, z, z === 1 && water ? M.river : M.opening, z >= rise - 1 ? 92 : 104);
+    for (let z = 1; z <= rise; z++) mark(s, x, south, z, central && z <= 2 ? M.river : M.opening, z >= rise - 1 ? 92 : 104);
     if (rise + 1 < top) mark(s, x, south, Math.floor(rise) + 1, M.stoneDark, 132);
   }
   return s;
@@ -1177,7 +1228,7 @@ export function greatOak(seed: number): Structure {
     }
     if (best < 0) continue;
     const light = 0.8 * bnz - 0.6 * bnx;
-    let tone = 115 + 75 * light, seam = false;
+    let tone = 140 + 70 * light, seam = false;
     for (const [mx, mz, rx, rz] of lobes) {
       if (seam || !inLobe(mx, mz, rx, rz, x, z)) continue;
       const nz = (z - mz) / rz;
@@ -1203,7 +1254,9 @@ export function greatOak(seed: number): Structure {
     const t = (z - 14) / 12;
     const centers = [cx - 3 - t * (cx - 3 - 12), cx, cx + 3 + t * (42 - cx - 3)];
     for (const c of centers) for (let dx = -1; dx <= 1; dx++) {
-      const x = Math.round(c) + dx;
+      const x = Math.round(c) + dx, px = Math.floor(x + 0.5);
+      const m = px >= 0 && px < W ? p.mat[z * W + px] : 0;
+      if (m === M.broadleafCool || m === M.broadleafMid || m === M.broadleafWarm) continue;
       dot(p, x, z, bark, barkTone(x, c, 1.5, z));
     }
   }
@@ -1232,13 +1285,12 @@ export function greatOak(seed: number): Structure {
   const empty = (x: number, z: number): boolean => x < 0 || x >= p.w || z < 1 || z > p.tall || p.mat[z * p.w + x] === 0;
   for (let z = 1; z <= p.tall; z++) for (let x = 0; x < p.w; x++) {
     if (leaf(x, z) && (empty(x - 1, z) || empty(x + 1, z) || empty(x, z - 1) || empty(x, z + 1))) {
-      p.mat[z * p.w + x] = M.broadleafCool;
-      p.tone[z * p.w + x] = 64;
+      p.mat[z * p.w + x] = M.timber;
+      p.tone[z * p.w + x] = 62;
     }
   }
   hang(s, p, 0, row);
 
-  raggedPaint(s, cx, row + 0.5, 10, 3, M.pastureMid, seed);
   for (let x = cx - 3; x <= cx + 3; x++) put(s, x, row, 1.2, bark, T_WALL);
   return s;
 }
@@ -1260,9 +1312,10 @@ function domeHouse(s: Structure, cx: number, cy: number, r: number, drum: number
     if (d2 > r * r) continue;
     if (d2 > inner * inner) { put(s, x, y, drum, M.whitewash, clampTone(132 - 34 * dx / r)); continue; }
     const k = Math.sqrt(1 - d2 / (inner * inner));
+    const lift = Math.min(k, 0.9);
     const slit0 = Math.floor(cx) + 1;
-    const open = x >= slit0 && x < slit0 + slit && dy > -0.5;
-    const jamb = x === slit0 - 1 && dy > -0.5;
+    const open = x >= slit0 && x < slit0 + slit && dy > 1.5;
+    const jamb = x === slit0 - 1 && dy > 1.5;
     const col = Math.round(x - cx);
     const rib = col !== 0 && col % 3 === 0 ? -8 : 0;
     let tone = 160 - (56 * dx) / r - (30 * dy) / r + rib;
@@ -1270,7 +1323,7 @@ function domeHouse(s: Structure, cx: number, cy: number, r: number, drum: number
     tone = Math.floor(tone);
     if (tone > 205) tone = 205;
     if (tone < 60) tone = 60;
-    put(s, x, y, drum + 1 + rise * k - (open ? 0.4 : 0), open ? M.opening : domeMat, open ? 112 : tone);
+    put(s, x, y, drum + 1 + rise * lift - (open ? 0.4 : 0), open ? M.opening : domeMat, open ? 112 : tone);
   }
   // On the cells that face the camera: a rail round the dome's foot and a string course below it.
   for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
@@ -1284,21 +1337,24 @@ function domeHouse(s: Structure, cx: number, cy: number, r: number, drum: number
 
 /**
  * The observatory (46 × 25, 24 tall). Base: its terrace on the summit. A great verdigris dome on a white
- * drum, its shutter open and the telescope's mouth in the slit; a lead-roofed hall for the astronomers
- * east of it, a small dome for the transit instrument beyond, and a walled terrace with a meridian pillar,
+ * drum, its shutter open on the lower half and the telescope's mouth in the slit; a slate-roofed hall for the astronomers
+ * east of it, a small stone dome for the transit instrument beyond, and a walled terrace with a meridian pillar,
  * a wind gauge and steps down to the path.
  */
 export function observatory(seed: number): Structure {
   const W = OBS_W, s = sculpt(W, OBS_H);
   const [cx, cy] = OBS_DOME;
-  // The terrace: flags behind a parapet on a retaining wall of the summit's own rubble.
-  for (let y = 1; y <= 21; y++) for (let x = 1; x <= 44; x++) {
-    const ex = Math.min(x - 1, 44 - x), ey = Math.min(y - 1, 21 - y);
-    if (ex + ey < 3) continue;
-    put(s, x, y, 1.4, M.cobble, T_FLAT);
-  }
+  // The terrace: two pads with the corners cut, so the snow stays south of the dome.
+  const onTerrace = (x: number, y: number): boolean => {
+    const pad = (x0: number, x1: number, y0: number, y1: number): boolean => {
+      if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+      return Math.min(x - x0, x1 - x) + Math.min(y - y0, y1 - y) >= 3;
+    };
+    return pad(5, 26, 1, 20) || pad(21, 44, 5, 16);
+  };
+  for (let y = 1; y <= 20; y++) for (let x = 5; x <= 44; x++) if (onTerrace(x, y)) put(s, x, y, 1.4, M.cobble, T_FLAT);
   for (let x = 1; x <= 44; x++) {
-    if (x >= 24 && x <= 28) continue;
+    if (x >= 29 && x <= 33) continue;
     const j = faceRow(s, x);
     if (j < 0) continue;
     put(s, x, j, 2.4, M.stoneDark, T_WALL);
@@ -1306,7 +1362,7 @@ export function observatory(seed: number): Structure {
     if (x % 3 === 0) mark(s, x, j, 1, M.stoneDark, 70);
   }
   // Steps along the face, not out from it.
-  for (let k = 0; k < 5; k++) put(s, 24 + k, 21, 2.2 - k * 0.35, M.stone, 160);
+  for (let k = 0; k < 5; k++) put(s, 29 + k, 17, 2.2 - k * 0.35, M.stone, 160);
   // A line of snow on the terrace's north and west borders.
   for (let x = 1; x <= 44; x++) for (let y = 1; y <= 21; y++) {
     if (s.mat[y * W + x] !== M.cobble) continue;
@@ -1340,13 +1396,13 @@ export function observatory(seed: number): Structure {
   mark(s, cx + 2, cy + 2, tz + 2, M.gilt, 170);
   mark(s, cx + 3, cy + 2, tz + 2, M.gilt, 150);
 
-  // The astronomers' hall, plaster under a lead roof, with a chimney.
-  house(s, 23, 7, 12, 7, 6.6, 2.8, { gable: 0, wallMat: M.plaster, roofMat: M.roofLead, openings: 0, chimney: true });
+  // The astronomers' hall, plaster under a slate roof, with a chimney.
+  house(s, 23, 7, 12, 7, 6.6, 2.8, { gable: 0, wallMat: M.plaster, roofMat: M.roofSlate, openings: 0, chimney: true });
   for (let i = 1; i < 12; i += 2) { mark(s, 23 + i, 13, 3, M.opening, 108); mark(s, 23 + i, 13, 4, M.lantern, 190); }
   for (let z = 2; z <= 3; z++) mark(s, 30, 13, z, M.timber, 92);
-  for (let i = 0; i < 12; i++) mark(s, 23 + i, 13, 6, M.roofLead, 140);
+  for (let i = 0; i < 12; i++) mark(s, 23 + i, 13, 6, M.roofSlate, 140);
   // The transit house.
-  domeHouse(s, 40, 10.5, 3.6, 5.4, 3.4, 1, M.roofLead);
+  domeHouse(s, 40, 10.5, 3.6, 5.4, 3.4, 1, M.stone);
   mark(s, 40, 14, 2, M.timber, 92);
   mark(s, 40, 14, 3, M.timber, 92);
 
@@ -1354,9 +1410,9 @@ export function observatory(seed: number): Structure {
   put(s, 6, 18, 4.4, M.stone, T_WALL);
   mark(s, 6, 18, 5, M.gilt, 170);
   const gx = 34 + (seed & 1);
-  put(s, gx, 18, 2, M.stoneDark, T_WALL);
-  for (let z = 3; z <= 9; z++) mark(s, gx, 18, z, M.timber, 88);
-  for (const dx of [-2, -1, 1, 2]) mark(s, gx + dx, 18, 9, M.stoneDark, Math.abs(dx) === 2 ? 150 : 90);
-  mark(s, gx, 18, 10, M.brick, 160);
+  put(s, gx, 15, 2, M.stoneDark, T_WALL);
+  for (let z = 3; z <= 9; z++) mark(s, gx, 15, z, M.timber, 88);
+  for (const dx of [-2, -1, 1, 2]) mark(s, gx + dx, 15, 9, M.stoneDark, Math.abs(dx) === 2 ? 150 : 90);
+  mark(s, gx, 15, 10, M.brick, 160);
   return s;
 }

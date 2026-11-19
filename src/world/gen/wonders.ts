@@ -278,10 +278,10 @@ const BATHS: Kind = {
       tally.pass(L3);
       const x = 4 * gx + 2, y = 4 * gy + 2;
       out.push({
-        x, y, level, height: 22, score: 3 - Math.abs(level - 27) / 5 - (hi - lo) / r.baths.relief,
+        x, y, level, height: 31, score: 3 - Math.abs(level - 27) / 5 - (hi - lo) / r.baths.relief,
         box: [x - 29, y - 10, x + 26, y + 38],
         anchors: { quay: [x, y + 29], funicularTop: [x + 20, y + 6], funicularFoot: [x + 20, y + 26] },
-        probes: [[x, y, level, 22], [x, y + 20, level * 0.4, 6], [x, y + 33, 0, 3]],
+        probes: [[x, y, level, 31], [x, y + 20, level * 0.4, 6], [x, y + 33, 0, 3]],
       });
     }
     return out;
@@ -405,7 +405,23 @@ const RAILWAY: Kind = {
     while (farY - yLine > n / 2) farY -= n;
     while (yLine - farY > n / 2) farY += n;
     const onward = (farX - xEnd) * (east ? 1 : -1) > 4 ? W.tideTrack(xEnd, yLine, farX, farY, 0) : [];
-    return { structures: [...W.tideTrack(ax, ay, bx, Math.floor(by) + 0.5, bow), ...onward, halt], conforms: [] };
+    // A shallow stripe under both runs and the halt, so the line reads pale against deeper water.
+    const conforms: Conform[] = [];
+    const wash = (x: number, y: number): void => {
+      conforms.push({ kind: "raise", x, y, rx: 3.5, ry: 3.5, round: true, level: -0.4, skirt: 3, limit: 0 });
+    };
+    const run = (x0: number, y0: number, x1: number, y1: number): void => {
+      const dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) return;
+      for (let d = 0; d <= len; d += 6) {
+        const t = d / len;
+        wash(x0 + dx * t, y0 + dy * t);
+      }
+    };
+    run(ax, ay, bx, Math.floor(by) + 0.5);
+    if (onward.length > 0) run(xEnd, yLine, farX, farY);
+    for (let i = 0; i < halt.w; i += 6) wash(halt.x + i + 0.5, yLine);
+    return { structures: [...W.tideTrack(ax, ay, bx, Math.floor(by) + 0.5, bow), ...onward, halt], conforms };
   },
 };
 
@@ -474,27 +490,7 @@ const CHURCH: Kind = {
     s.x = Math.floor(w.x) - W.CHURCH_TOWER[0];
     s.y = Math.floor(w.y) - W.CHURCH_TOWER[1];
     s.base = w.level;
-    // Pale shoals: lake nodes near the church, shallow, and surrounded by the lake, cut deeper so the water darkens.
-    const conforms: Conform[] = [];
-    const { c } = land, id = c.lakeId[nodeOf(c, w.x, w.y)];
-    if (id >= 0) {
-      const gx0 = Math.floor(w.x / 4), gy0 = Math.floor(w.y / 4);
-      for (let dy = -10; dy <= 10; dy++) for (let dx = -10; dx <= 10; dx++) {
-        if (dx * dx + dy * dy > 100) continue;
-        const j = at(c, gx0 + dx, gy0 + dy);
-        if (c.lakeId[j] !== id || w.level - c.h[j] >= 1.5) continue;
-        let neighbours = 0;
-        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-          if (ox === 0 && oy === 0) continue;
-          if (c.lakeId[at(c, gx0 + dx + ox, gy0 + dy + oy)] === id) neighbours++;
-        }
-        if (neighbours < 8) continue;
-        conforms.push({
-          kind: "dredge", x: w.x + 4 * dx, y: w.y + 4 * dy, rx: 4, ry: 4, round: true, level: w.level - 2.5, skirt: 1, limit: 0,
-        });
-      }
-    }
-    return { structures: [s], conforms };
+    return { structures: [s], conforms: [] };
   },
 };
 
@@ -554,7 +550,7 @@ const HOTEL: Kind = {
     // dredged down, so the hotel leads.
     const conforms: Conform[] = [
       { kind: "dredge", x: w.x, y: w.y, rx: 18, ry: 9, round: true, level: 5, skirt: 2, limit: 0 },
-      { kind: "raise", x: w.x, y: w.y, rx: 15, ry: 8, round: true, level: 5.5, skirt: 1.5, limit: 0 },
+      { kind: "raise", x: w.x, y: w.y, rx: 17, ry: 9, round: true, level: 5.5, skirt: 1.5, limit: 0 },
     ];
     for (const rock of land.c.stacks) {
       const dx = torusDelta(w.x, rock.x, land.c.n), dy = torusDelta(w.y, rock.y, land.c.n);
@@ -654,19 +650,19 @@ const MARSH: Kind = {
       { kind: "raise", x: s.x + YARD[0] + 6, y: s.y + YARD[1] - 4, rx: 8, ry: 6.5, round: true, level: W.MARSH_RISE, skirt: 5, limit: 0 },
     ];
     for (let y = 18; y <= 23; y++) for (let x = 0; x < s.w; x++) s.paint[y * s.w + x] = M.pastureCool;
-    // A mooring south of the wall, eight cells toward the side the causeway does not leave by.
+    // Water along the south front. The boat sits six cells off the middle, away from the causeway.
     const [glx] = W.marshGate(bx - ax, by - ay);
     const away = glx >= 16.5 ? -1 : 1;
-    const poolX = s.x + 16.5 + away * 8, poolY = s.y + 11.5 + 10.6 + 3;
-    conforms.push({ kind: "dredge", x: poolX, y: poolY, rx: 5, ry: 3, round: true, level: -0.6, skirt: 2, limit: 0 });
+    const poolX = s.x + 16.5, poolY = s.y + 24.6;
+    conforms.push({ kind: "dredge", x: poolX, y: poolY, rx: 10, ry: 2.5, round: false, level: -0.6, skirt: 2, limit: 0 });
+    const boatX = poolX + away * 6, boatY = poolY;
     let gapX = 16, gapY = 22, gapD = Infinity;
     for (let y = 1; y <= 22; y++) for (let x = 1; x <= 32; x++) {
       const qdx = (x - 16.5) / 15, qdy = (y - 11.5) / 10, q = Math.sqrt(qdx * qdx + qdy * qdy);
       if (q < 0.93 || q > 1.04 || s.top[y * s.w + x] > 0) continue;
-      const ox = x - (poolX - s.x), oy = y - (poolY - s.y), d = ox * ox + oy * oy;
+      const ox = x - (boatX - s.x), oy = y - (boatY - s.y), d = ox * ox + oy * oy;
       if (d < gapD) { gapD = d; gapX = x; gapY = y; }
     }
-    const boatX = poolX, boatY = poolY;
     const stepDx = boatX - (s.x + gapX), stepDy = boatY - (s.y + gapY);
     const stepLen = Math.sqrt(stepDx * stepDx + stepDy * stepDy) || 1;
     const su = stepDx / stepLen, sv = stepDy / stepLen;
@@ -728,7 +724,7 @@ const MAST: Kind = {
       out.push({
         x, y, level, height: W.MAST_TALL,
         score: rays / 16 + c.exposure[i] + Math.min(level, 40) / 40 - (hi - lo) / (2 * r.mast.relief),
-        box: [x - 20, y - 10, x + 24, y + 26],
+        box: [x - 20, y - 10, x + 40, y + 26],
         anchors: { mast: [fx, fy] },
         probes: [[fx, fy, level, W.MAST_TALL], [x + 10, y + 1, level, 6]],
       });
@@ -921,7 +917,7 @@ const OAK: Kind = {
     s.x = Math.floor(w.x) - W.OAK_TRUNK[0];
     s.y = Math.floor(w.y) - W.OAK_TRUNK[1];
     s.base = w.level;
-    return { structures: [s], conforms: [{ kind: "flat", x: w.x, y: w.y, rx: 8, ry: 4, round: true, level: w.level, skirt: 4, limit: 1.5 }] };
+    return { structures: [s], conforms: [{ kind: "flat", x: w.x, y: w.y, rx: 4.5, ry: 4, round: true, level: w.level, skirt: 4, limit: 1.5 }] };
   },
 };
 
