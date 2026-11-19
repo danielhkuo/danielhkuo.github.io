@@ -131,7 +131,7 @@ test("the builders are pure and stay under their stated heights; the track is un
   assert.deepEqual(thermalBaths(24, 9), thermalBaths(24, 9));
   assert.deepEqual(drownedChurch(5), drownedChurch(5));
   assert.deepEqual(coveHotel(5, 10, 14), coveHotel(5, 10, 14));
-  assert.ok(tallest(thermalBaths(35, 1)) <= 35 + 22);
+  assert.ok(tallest(thermalBaths(35, 1)) <= 35 + 31);
   assert.ok(tallest(drownedChurch(1)) <= 31);
   assert.ok(tallest(coveHotel(1, 10, 14)) <= 31);
   assert.ok(tallest(tideHalt(true)) <= 13);

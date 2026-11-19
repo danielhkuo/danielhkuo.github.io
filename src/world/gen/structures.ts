@@ -74,6 +74,10 @@ export function mirrored(s: Structure): Structure {
     o.paint[b] = s.paint[a];
   }
   for (let k = 0; k < s.marks.length; k += 5) o.marks.push(s.w - 1 - s.marks[k], s.marks[k + 1], s.marks[k + 2], s.marks[k + 3], s.marks[k + 4]);
+  if (s.shadow) {
+    o.shadow = new Uint8Array(s.w * s.h);
+    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) o.shadow[y * s.w + (s.w - 1 - x)] = s.shadow[y * s.w + x];
+  }
   o.x = s.x; o.y = s.y; o.base = s.base;
   if (s.onGround) o.onGround = true;
   return o;
@@ -87,6 +91,8 @@ export interface HouseOptions {
   /** 0 none, 1 a door and small windows, 2 tall lancets (a church). */
   openings: number;
   chimney: boolean;
+  /** Gable 0 only: the end two columns' lift falls to 0, west lit and east in shade. */
+  hip?: boolean;
 }
 
 /**
@@ -101,7 +107,17 @@ export function house(s: Structure, x: number, y: number, w: number, d: number, 
     for (let q = 0; q < rows; q++) {
       const lift = roof * (1 - Math.abs(q - mid) / (mid + 1));
       const tone = q < mid - 0.25 ? T_SOUTH : q > mid + 0.25 ? T_NORTH : T_RIDGE;
-      for (let i = 0; i < w; i++) put(s, x + i, south - 1 - q, wall + lift, o.roofMat, tone);
+      for (let i = 0; i < w; i++) {
+        let liftH = lift, toneH = tone;
+        if (o.hip) {
+          const fromEnd = i < w / 2 ? i : w - 1 - i;
+          if (fromEnd < 2) {
+            liftH = lift * (fromEnd / 2);
+            toneH = i < w / 2 ? T_WEST : T_EAST;
+          }
+        }
+        put(s, x + i, south - 1 - q, wall + liftH, o.roofMat, toneH);
+      }
     }
   } else {
     const mid = (w - 1) / 2;
