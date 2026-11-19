@@ -380,11 +380,20 @@ export default function Session({ projects, site }: { projects: SlimProject[]; s
   /** Run a line: `entered` at the prompt, or pressed as a button. */
   const run = (line: string, entered = false) => {
     reveal.by(entered);
-    setLast(line);
-    shell.run(line);
     // A mouse press on a button leaves the keys with the prompt. Someone who
     // pressed it with the keyboard stays on the button; a finger gets no focus.
-    if (!entered && hands.current === "mouse") focusPrompt();
+    const pressed = !entered && hands.current === "mouse";
+    // The keys go back a frame later, not at once. WebKit scrolls a focused
+    // field into view a moment after a script changes its value, and running
+    // a line empties the prompt. Given the keys at once, a prompt that held
+    // text (`cat projects/`, its last word pressed) pulled the page down to
+    // itself, past the top of the output `useReveal` had just scrolled to
+    // (WebKit 27.2; Chromium never did). So the prompt is without the keys
+    // while it is emptied.
+    if (pressed) inputRef.current?.blur();
+    setLast(line);
+    shell.run(line);
+    if (pressed) requestAnimationFrame(focusPrompt);
   };
 
   /** Put a line on the prompt for its next word. */
