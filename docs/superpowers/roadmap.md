@@ -12,7 +12,8 @@ Last updated 2026-11-18.
 | What the site is becoming, and the rules every change follows | `.claude/CLAUDE.md` |
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
 | Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
-| Lore and story (a brainstorm; the owner has not chosen) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
+| The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
+| Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -254,10 +255,11 @@ From the first-flight review:
 - **Title menu: parked by the owner** (2026-11-18 evening). The `title-menu` session explored twenty directions (A–T)
   in its browser pane; none is picked or built. Mobile gets a separate title screen (see Ideas).
 - ~~**A bigger map?**~~ Built: 10240 with more islands at today's scale, shipped in regions (see Done).
-- **The story** (2026-11-18, Fable). `specs/2026-11-18-lore-and-story.md` lays out four directions and picks the Round:
-  an order keeps each work in a house of its own, the dragon carries a roll between them, and the twelve months are
-  places laid round the realm. It asks the biomes work for months by latitude and for seven landmarks, one of each
-  kind. Nothing is built. Its section 7 holds the questions for the owner.
+- **The story** (2026-11-18, Fable). The owner set aside the first brainstorm, a world with an order, a history and
+  months as places (`specs/2026-11-18-lore-and-story.md`): "I just want something simple", in the spirit of *The
+  Little Prince*, about people and not world-building. `specs/2026-11-18-a-simple-story.md` proposes it: the dragon has
+  never made anything, so it asks the keeper of each landmark why they do, and each page of the Codex ends with one
+  short encounter. No gates, nothing on the text page, and nothing asked of the generator. Not built.
 
 ## Open checks
 

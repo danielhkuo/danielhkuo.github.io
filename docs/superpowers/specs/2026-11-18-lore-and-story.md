@@ -1,7 +1,9 @@
 # Lore and story: the Round
 
-Status: a brainstorm for the owner, written by Fable and checked by three Opus readers (brief from the coordinating
-session, 2026-11-18). Nothing here is built, and nothing is decided until the owner says so.
+Status: **set aside by the owner on 2026-11-18** as too much world-building ("I just want something simple"). The
+story now proposed is in `2026-11-18-a-simple-story.md`. This document is kept for the record: its section 5 (the
+wonders that sit nearest their films) and the generator notes in section 4 are still accurate. It was a brainstorm
+written by Fable and checked by three Opus readers; nothing in it was built.
 
 - **[Owner]** marks something the owner has already decided, with its date.
 - **[Call]** marks a choice of Fable's. The owner can overturn any of them.
