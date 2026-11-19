@@ -167,13 +167,13 @@ function all(c: Lch): Seasons {
   return [c, c, c, c];
 }
 
-/** Grass through the year from its summer colour: fresh in spring, tawny in autumn, bleached in winter. */
+/** Grass through the year from its summer colour: fresh in spring, tawny in autumn, a pale frosted sage in winter. */
 function grass(c: Lch): Seasons {
   return [
     [c[0] + 0.012, c[1] + 0.012, c[2] + 1],
     c,
     [c[0] - 0.012, c[1] - 0.022, c[2] - 15],
-    [c[0] - 0.045, c[1] - 0.045, c[2] - 24],
+    [c[0] + 0.01, c[1] - 0.058, c[2] + 12],
   ];
 }
 
@@ -258,16 +258,17 @@ function buildSpecs(): Spec[] {
 
   // Woods.
   // Floors sit between the crowns' shade and open grass, so a floor cell with no tree on it is not a dark tick.
-  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.5, 0.075, 147], [0.5, 0.06, 85], [0.5, 0.03, 60]], LAND);
+  set(M.floorBroadleaf, [[0.56, 0.08, 140], [0.5, 0.075, 147], [0.5, 0.06, 85], [0.6, 0.026, 75]], LAND);
   set(M.floorConifer, evergreen([0.44, 0.055, 160]), LAND);
-  // Woods are the dark mass of a lowland view; meadows and corn the light one.
-  set(M.broadleafCool, [[0.57, 0.095, 146], [0.46, 0.08, 156], [0.6, 0.085, 112], [0.5, 0.022, 25]], CANOPY);
-  set(M.broadleafMid, [[0.61, 0.11, 135], [0.51, 0.092, 142], [0.66, 0.095, 88], [0.52, 0.028, 50]], CANOPY);
-  set(M.broadleafWarm, [[0.65, 0.115, 126], [0.56, 0.098, 128], [0.56, 0.095, 52], [0.54, 0.032, 65]], CANOPY);
+  // Woods are the dark mass of a lowland view; meadows and corn the light one. Bare in winter they are a plum-grey
+  // haze of twigs over pale litter, cool against the frosted grass: never a brown.
+  set(M.broadleafCool, [[0.57, 0.095, 146], [0.46, 0.08, 156], [0.6, 0.085, 112], [0.44, 0.03, 335]], CANOPY);
+  set(M.broadleafMid, [[0.61, 0.11, 135], [0.51, 0.092, 142], [0.66, 0.095, 88], [0.47, 0.03, 348]], CANOPY);
+  set(M.broadleafWarm, [[0.65, 0.115, 126], [0.56, 0.098, 128], [0.56, 0.095, 52], [0.5, 0.032, 5]], CANOPY);
   set(M.coniferCool, evergreen([0.37, 0.05, 178]), CANOPY);
   set(M.coniferMid, evergreen([0.39, 0.055, 165]), CANOPY);
   set(M.coniferWarm, evergreen([0.42, 0.06, 152]), CANOPY);
-  set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.5, 0.02, 30]], CANOPY);
+  set(M.alder, [[0.56, 0.095, 138], [0.47, 0.08, 150], [0.56, 0.07, 105], [0.46, 0.028, 340]], CANOPY);
   set(M.shrub, evergreen([0.46, 0.07, 141]), CANOPY);
 
   // Crops ripen and are cut; ploughland shows in winter.
@@ -307,7 +308,7 @@ function buildSpecs(): Spec[] {
   for (let v = 0; v < 3; v++) {
     set(M.meadowCool + v, grass(meadow[v]), LAND);
     set(M.pastureCool + v, grass(pasture[v]), LAND);
-    set(M.scrubCool + v, [scrub[v], scrub[v], [scrub[v][0], scrub[v][1], scrub[v][2] - 8], [scrub[v][0] - 0.02, scrub[v][1] - 0.015, scrub[v][2] - 10]], LAND);
+    set(M.scrubCool + v, [scrub[v], scrub[v], [scrub[v][0], scrub[v][1], scrub[v][2] - 8], [scrub[v][0], scrub[v][1] - 0.04, scrub[v][2] + 8]], LAND);
   }
 
   // Flowers are out in spring and summer; afterwards the cell is meadow again.
@@ -324,7 +325,7 @@ function buildSpecs(): Spec[] {
   set(M.bracken, [[0.63, 0.075, 98], [0.67, 0.092, 122], [0.63, 0.095, 58], [0.57, 0.06, 55]], LAND);
   // Gorse blooms gold in spring and keeps a little of it all summer.
   set(M.gorse, [[0.66, 0.105, 100], [0.6, 0.09, 108], [0.55, 0.07, 122], [0.53, 0.06, 125]], LAND);
-  set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
+  set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.45, 0.03, 345]], CANOPY);
   set(M.wall, all([0.69, 0.012, 265]), LINE);
 
   // Built things. Walls are seen from the south, in soft shade: their own tone carries that, so the flat colour is the lit one.
@@ -393,31 +394,54 @@ interface Grade {
   gain: number;
   lift: number;
   sat: number;
-  /** OKLab a, b added to light tones and to dark tones. */
+  /** The power lightness is raised to before the gain: over 1 it parts pale things from the dark masses in low light. */
+  curve: number;
+  /** The share of its lightness a face turned from the light loses, on top of the gain. */
+  shade: number;
+  /** The share of the light's colour a strongly coloured thing takes: a red sun on leaves makes olive, never orange-brown. */
+  dyed: number;
+  /** How much of the sky's colour water takes, against the land's 1. */
+  water: number;
+  /** OKLab a, b added to faces in the light and to faces in shade. */
   warmA: number;
   warmB: number;
   coolA: number;
   coolB: number;
 }
 
-function grade(gain: number, lift: number, sat: number, warm: readonly [number, number], cool: readonly [number, number]): Grade {
+interface GradeSpec {
+  gain: number;
+  lift?: number;
+  sat: number;
+  curve?: number;
+  shade?: number;
+  dyed?: number;
+  water?: number;
+  /** The light's colour and the shade's, each as OKLCH chroma and hue. */
+  light: readonly [number, number];
+  dark: readonly [number, number];
+}
+
+function grade(s: GradeSpec): Grade {
   return {
-    gain, lift, sat,
-    warmA: warm[0] * Math.cos(warm[1] * RAD), warmB: warm[0] * Math.sin(warm[1] * RAD),
-    coolA: cool[0] * Math.cos(cool[1] * RAD), coolB: cool[0] * Math.sin(cool[1] * RAD),
+    gain: s.gain, lift: s.lift ?? 0, sat: s.sat, curve: s.curve ?? 1, shade: s.shade ?? 0, dyed: s.dyed ?? 1, water: s.water ?? 1,
+    warmA: s.light[0] * Math.cos(s.light[1] * RAD), warmB: s.light[0] * Math.sin(s.light[1] * RAD),
+    coolA: s.dark[0] * Math.cos(s.dark[1] * RAD), coolB: s.dark[0] * Math.sin(s.dark[1] * RAD),
   };
 }
 
-// The day, in sun phase (sky/clock.ts): 0.25 sunrise, 0.5 noon, 0.75 sunset. Night is moonlit, blue and low;
-// the blue hours either side of it are a deep cool wash; dawn is rose with lavender shade; golden hour warms the
-// light toward buff while the shade stays cool; dusk burns orange-rose over violet.
-const NIGHT = grade(0.4, 0.07, 0.4, [0.03, 255], [0.035, 270]);
-const BLUE = grade(0.58, 0.05, 0.58, [0.022, 250], [0.042, 278]);
-const DAWN = grade(0.82, 0.03, 0.78, [0.03, 22], [0.032, 285]);
-const MORNING = grade(0.985, 0.008, 0.94, [0.012, 70], [0.012, 250]);
-const NOON = grade(1, 0, 1, [0, 0], [0, 0]);
-const GOLDEN = grade(0.94, 0, 1, [0.04, 72], [0.026, 280]);
-const DUSK = grade(0.8, 0, 0.88, [0.034, 42], [0.042, 295]);
+// The day, in sun phase (sky/clock.ts): 0.25 sunrise, 0.5 noon, 0.75 sunset. Each grade names two lights: the one
+// on faces turned to the sun or the moon, and the one in their shade. Night is moonlit: most of the land's own colour
+// goes, pale blue-green where the moon falls and indigo in the shade, and the curve keeps roads, fields and snow
+// pale over dark woods. The blue hours are one deep blue wash. Dawn is rose-peach over lavender. Golden hour is
+// buff-gold over blue-violet. Dusk is a red-orange afterglow over deepening violet.
+const NIGHT = grade({ gain: 0.47, lift: 0.09, sat: 0.2, curve: 1.4, shade: 0.1, water: 1.1, light: [0.045, 238], dark: [0.06, 276] });
+const BLUE = grade({ gain: 0.62, lift: 0.07, sat: 0.3, curve: 1.2, shade: 0.08, water: 1.2, light: [0.042, 250], dark: [0.064, 274] });
+const DAWN = grade({ gain: 0.88, lift: 0.06, sat: 0.7, shade: 0.07, dyed: 0.6, water: 1.3, light: [0.056, 18], dark: [0.05, 282] });
+const MORNING = grade({ gain: 0.985, lift: 0.008, sat: 0.94, light: [0.014, 70], dark: [0.014, 255] });
+const NOON = grade({ gain: 1, sat: 1, light: [0, 0], dark: [0, 0] });
+const GOLDEN = grade({ gain: 0.95, sat: 0.9, shade: 0.08, dyed: 0.7, water: 0.5, light: [0.056, 72], dark: [0.04, 284] });
+const DUSK = grade({ gain: 0.82, lift: 0.01, sat: 0.7, curve: 1.05, shade: 0.16, dyed: 0.45, water: 1.4, light: [0.074, 33], dark: [0.06, 302] });
 
 /** Sun phase of each keyframe of the day. Noon holds from NOON_FROM to NOON_TO, so the shipped midday is plain noon. */
 export const DAY_KEYS = {
@@ -451,16 +475,23 @@ function gradeAt(time: number): Grade {
   const l = (p: number, q: number): number => p + (q - p) * f;
   return {
     gain: l(g0.gain, g1.gain), lift: l(g0.lift, g1.lift), sat: l(g0.sat, g1.sat),
+    curve: l(g0.curve, g1.curve), shade: l(g0.shade, g1.shade), dyed: l(g0.dyed, g1.dyed), water: l(g0.water, g1.water),
     warmA: l(g0.warmA, g1.warmA), warmB: l(g0.warmB, g1.warmB),
     coolA: l(g0.coolA, g1.coolA), coolB: l(g0.coolB, g1.coolB),
   };
 }
 
-/** Mist: a pale blue-grey veil, graded with the light, laid over every colour. */
-const MIST: Lch = [0.93, 0.014, 235];
-/** At full mist, the share of the way each colour goes to the veil, and the share of its own colour it then loses. */
-export const MIST_VEIL = 0.42;
-const MIST_DRAIN = 0.3;
+/** Mist: a pale, cool blue-grey veil, graded with the light, laid over every colour. */
+const MIST: Lch = [0.935, 0.022, 232];
+/**
+ * At full mist: the share of the way a dark colour goes to the veil, how much further a pale one goes, and the share
+ * of its own colour each loses first.
+ */
+export const MIST_VEIL = 0.46;
+const MIST_MELT = 0.14;
+const MIST_DRAIN = 0.45;
+/** Mist lies in the cool of the shade: it takes this little of the sun's colour, so a dusk mist is violet-grey, never sepia. */
+const MIST_LIT = 0.25;
 
 /** The light of one moment: the day's grade, the overcast, and the mist with its veil already graded. */
 interface Light {
@@ -475,30 +506,46 @@ function lightOf(o: PaletteOptions): Light {
   const overcast = o.overcast < 0 ? 0 : o.overcast > 1 ? 1 : o.overcast;
   const m = o.mist ?? 0;
   const mist = m < 0 ? 0 : m > 1 ? 1 : m;
-  return { g, overcast, mist, veil: applyGrade(lab(MIST), { g, overcast, mist: 0, veil: [0, 0, 0] }) };
+  return { g, overcast, mist, veil: applyGrade(lab(MIST), { g, overcast, mist: 0, veil: [0, 0, 0] }, false, MIST_LIT) };
 }
 
-/** A colour in the light: graded, greyed, misted and, unless `cap` is false (the dragon), kept off the reserved hues. */
-function applyGrade(c: Lab, light: Light, cap = true): Lab {
+/**
+ * A colour's own chroma from which it starts to resist the light's colour, and the span over which it comes to take
+ * only the grade's `dyed` share. Whitewash, roads, rock and snow take the light whole; leaves and tiles keep their own.
+ */
+const DYED_FROM = 0.02;
+const DYED_SPAN = 0.05;
+
+/**
+ * A colour in the light: graded, greyed, misted and, unless `cap` is false (the dragon), kept off the reserved hues.
+ * `lit` is how far the face is turned to the light, 0 shade to 1 full light; without it the colour's own lightness
+ * stands in (pale things catch the light). `take` is how much of the light's colour it takes, against the land's 1.
+ * `wash` is false for what is no wash of pigment: water and cloud take the light whatever their colour.
+ */
+function applyGrade(c: Lab, light: Light, cap = true, lit?: number, take = 1, wash = true): Lab {
   const { g, overcast, mist } = light;
-  const w = smooth((c[0] - 0.35) / 0.5);
-  let L = g.lift + g.gain * c[0];
-  let a = c[1] * g.sat + w * g.warmA + (1 - w) * g.coolA;
-  let b = c[2] * g.sat + w * g.warmB + (1 - w) * g.coolB;
+  const w = lit ?? smooth((c[0] - 0.35) / 0.5);
+  let L = g.lift + g.gain * (g.curve === 1 ? c[0] : Math.pow(c[0], g.curve)) * (1 - g.shade * (1 - w));
+  const own = wash && g.dyed !== 1 ? smooth((Math.sqrt(c[1] * c[1] + c[2] * c[2]) - DYED_FROM) / DYED_SPAN) : 0;
+  const wl = w * (1 - (1 - g.dyed) * own) * take, wd = (1 - w) * take;
+  let a = c[1] * g.sat + wl * g.warmA + wd * g.coolA;
+  let b = c[2] * g.sat + wl * g.warmB + wd * g.coolB;
   if (overcast > 0) {
-    // Flat grey light: less contrast, less colour, a little darker and cooler.
-    const pivot = g.lift + g.gain * 0.62;
-    L = pivot + (L - pivot) * (1 - 0.22 * overcast) - 0.03 * overcast * g.gain;
-    const k = 1 - 0.4 * overcast;
-    a = a * k - 0.001 * overcast;
+    // Rain light, flat and wet: the lights come down to a grey-green, the darks hold, and colour thins.
+    const pivot = g.lift + g.gain * 0.5;
+    L = pivot + (L - pivot) * (1 - 0.2 * overcast) - 0.04 * overcast * g.gain;
+    const k = 1 - 0.38 * overcast;
+    a = a * k - 0.004 * overcast;
     b = b * k - 0.007 * overcast;
   }
   if (mist > 0) {
-    // The veil: everything goes part of the way to the mist's own colour and loses some of its own.
-    const k = MIST_VEIL * mist, keep = 1 - MIST_DRAIN * mist;
+    // The veil: everything goes part of the way to the mist's own colour and loses some of its own. Pale washes
+    // melt furthest into it; woods and inked edges stay as soft blue-grey shapes.
+    const melt = smooth((L - g.lift - g.gain * 0.35) / (g.gain * 0.45));
+    const k = (MIST_VEIL + MIST_MELT * melt) * mist, keep = 1 - MIST_DRAIN * mist;
     L += (light.veil[0] - L) * k;
-    a = (a + (light.veil[1] - a) * k) * keep;
-    b = (b + (light.veil[2] - b) * k) * keep;
+    a = a * keep + (light.veil[1] - a * keep) * k;
+    b = b * keep + (light.veil[2] - b * keep) * k;
   }
   // Keep terrain clear of the dragon's vermilion and gold: a chroma cap over
   // the reserved hues, feathered out over the 18° to either side.
@@ -593,21 +640,30 @@ function shadowed(c: Lab, depth: number, overcast: number): Lab {
   return mix(c, target, SHADOW_MIX[depth] * (1 - 0.5 * overcast));
 }
 
+/**
+ * How far each tone of a land ramp is turned to the light: flat ground takes most of a low sun, a slope facing it
+ * all, a slope turned away none. A cast shadow takes most of it away again.
+ */
+const LIT_TONE: readonly number[] = Array.from({ length: 16 }, (_, t) => smooth((t / 15) * 1.25 - 0.15));
+const LIT_SHADOW: readonly number[] = [1, 0.5, 0.28, 0.12];
+/** The share of a land colour's light that comes from its tone; the rest from its own lightness, so pale walls still catch it. */
+const LIT_BY_TONE = 0.75;
+
 /** The whole table for one moment: 256 materials × 256 light bytes. */
 /** The light the world is baked and shown in until time of day lands: midday, early summer, clear. The bake workers and the page must agree on it. */
 export const MIDDAY: PaletteOptions = { time: 0.5, season: 0.25, overcast: 0 };
 
 /**
  * A colour that is not terrain (a cloud, the dragon) in the light of `o`, as packed RGBA: the same grade, overcast
- * and mist as the land, without the land's cap on the reserved hues.
+ * and mist as the land, without the land's cap on the reserved hues. `lit` and `take` as for the land's own grade.
  */
-export function gradeRgb(rgba: number, o: PaletteOptions): number {
+export function gradeRgb(rgba: number, o: PaletteOptions, lit?: number, take = 1): number {
   const light = lightOf(o);
   // Plain noon light changes nothing: the colour comes back exactly as it went in.
   const g = light.g;
-  if (g.gain === 1 && g.lift === 0 && g.sat === 1 && g.warmA === 0 && g.warmB === 0 && g.coolA === 0 && g.coolB === 0
-    && light.overcast === 0 && light.mist === 0) return rgba;
-  return pack(applyGrade(oklabOf(rgba), light, false));
+  if (g.gain === 1 && g.lift === 0 && g.sat === 1 && g.curve === 1 && g.shade === 0 && g.warmA === 0 && g.warmB === 0
+    && g.coolA === 0 && g.coolB === 0 && light.overcast === 0 && light.mist === 0) return rgba;
+  return pack(applyGrade(oklabOf(rgba), light, false, lit, take, false));
 }
 
 /** The paper in the light of `o`, as packed RGBA: what bare paper and the haze fade toward. */
@@ -629,9 +685,11 @@ export function buildPalette(o: PaletteOptions): Palette {
     const r = ramp(SPECS[mat], o.season);
     // Water keeps its own depth ramp; land darks are lifted once, after shade and shadow have both been laid.
     const land = SPECS[mat].ramp === "land";
-    tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c) => {
+    tones[mat] = [0, 1, 2, 3].map((depth) => r.map((c, tone) => {
       const s = shadowed(c, depth, overcast);
-      return applyGrade(land ? liftDark(s) : s, light);
+      if (!land) return applyGrade(s, light, true, undefined, light.g.water, false);
+      const d = liftDark(s);
+      return applyGrade(d, light, true, LIT_BY_TONE * LIT_TONE[tone] * LIT_SHADOW[depth] + (1 - LIT_BY_TONE) * smooth((d[0] - 0.35) / 0.5));
     }));
   }
 

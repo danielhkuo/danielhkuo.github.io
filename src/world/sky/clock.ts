@@ -36,11 +36,13 @@ function wrap01(v: number): number {
   return v - Math.floor(v);
 }
 
+/** Days in the year before the first of each month, in a common year. */
+const BEFORE = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
 /** Day of the year, 1 on 1 January. */
 export function dayOfYear(year: number, month: number, day: number): number {
   const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const before = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-  return before[month - 1] + day + (leap && month > 2 ? 1 : 0);
+  return BEFORE[month - 1] + day + (leap && month > 2 ? 1 : 0);
 }
 
 /** Hours of daylight on day `doy`: LONGEST_DAY at midsummer, SHORTEST_DAY at midwinter. */

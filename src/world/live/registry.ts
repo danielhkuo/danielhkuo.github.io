@@ -4,6 +4,7 @@ import type { Structure } from "../gen/built.ts";
 import type { Manifest, ManifestWonder } from "../pack/manifest.ts";
 import type { LiveLayer } from "./live.ts";
 import { lifeLayer } from "./life.ts";
+import { mistLayer } from "./mist.ts";
 import { momentsLayer } from "./moments.ts";
 import { nightLayer, nightLights } from "./night.ts";
 import { splashLayer } from "../sky/rain.ts";
@@ -34,6 +35,8 @@ export function makeLayers(ctx: LayerContext): LiveLayer[] {
   return [
     waterLayer(ctx.seed), windLayer(ctx.seed), splashLayer(ctx.seed), lifeLayer(ctx), sightsLayer(ctx), momentsLayer(ctx), rareLayer(ctx),
     wakeLayer(),
+    // The mist's banks lie over what lives on the land, and the lamps shine through them.
+    mistLayer(ctx.seed),
     nightLayer(ctx.seed, ctx.structures ? nightLights(ctx.structures, ctx.n) : undefined),
   ];
 }

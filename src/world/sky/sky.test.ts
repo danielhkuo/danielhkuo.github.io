@@ -241,3 +241,23 @@ test("at night the clouds go dark and blue, and before rain they go grey", async
     assert.ok(s[0] < d[0] - 0.02 && Math.hypot(s[1], s[2]) < Math.hypot(d[1], d[2]) + 0.01, `tone ${k} before rain`);
   }
 });
+
+test("a low sun burns on a cloud's rim and crown over violet undersides; the moon leaves it blue-grey", async () => {
+  const { rampIn } = await import("./sky.ts");
+  const { airOf } = await import("./air.ts");
+  const { oklabOf } = await import("../render/palette.ts");
+  for (const time of [0.25, 0.75]) {
+    const ramp = rampIn(airOf(time, 0.25));
+    const rim = oklabOf(ramp.rim), crown = oklabOf(ramp.tones[0]), under = oklabOf(ramp.tones[ramp.tones.length - 1]);
+    assert.ok(rim[1] > 0.04 && rim[2] > 0 && crown[1] > 0.03, `rim ${rim} crown ${crown} at ${time}`);
+    assert.ok(under[2] < -0.03 && under[0] < rim[0] - 0.2, `underside ${under} at ${time}`);
+  }
+  const golden = oklabOf(rampIn(airOf(0.705, 0.25)).rim);
+  assert.ok(golden[2] > 0.05 && golden[2] > golden[1], `golden rim ${golden}`);
+  const night = rampIn(airOf(0, 0.25));
+  for (const c of [night.rim, ...night.tones]) {
+    const [, a, b] = oklabOf(c);
+    assert.ok(b < -0.02 && Math.hypot(a, b) < 0.09, `a cloud at night ${[a, b]}`);
+  }
+  assert.ok(oklabOf(night.rim)[0] > oklabOf(night.tones[4])[0] + 0.1);
+});

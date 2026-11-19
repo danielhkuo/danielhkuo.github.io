@@ -485,3 +485,63 @@ test("colours that are not land take the same light: unchanged at noon, dark and
   const [L, a, b] = oklabOf(gradeRgb(vermilion, { ...NOON, time: PHASES.dusk }));
   assert.ok(Math.sqrt(a * a + b * b) > 0.12 && L > 0.3);
 });
+
+test("a low sun lights the faces turned to it and leaves their shade cool; the moon does the same in blue", () => {
+  const dusk = buildPalette({ ...NOON, time: DAY_KEYS.sunset });
+  const dawn = buildPalette({ ...NOON, time: PHASES.dawn });
+  for (const [pal, name] of [[dusk, "dusk"], [dawn, "dawn"]] as const) {
+    const lit = oklabOf(at(pal, M.whitewash, 15)), shade = oklabOf(at(pal, M.whitewash, 2, 2));
+    assert.ok(lit[1] > 0.025 && lit[2] > 0, `${name}: a lit wall is ${lit}`);
+    assert.ok(shade[2] < -0.02 && shade[1] > 0, `${name}: its shade is ${shade}`);
+  }
+  // Dusk burns redder than dawn, and its shade is deeper.
+  assert.ok(lch(at(dusk, M.whitewash, 15))[1] > lch(at(dawn, M.whitewash, 15))[1]);
+  assert.ok(oklabOf(at(dusk, M.whitewash, 2, 2))[0] < oklabOf(at(dawn, M.whitewash, 2, 2))[0]);
+  // Leaves keep their own colour in a red light: olive, never orange-brown.
+  for (const pal of [dusk, dawn]) {
+    for (const mat of [M.meadowMid, M.pastureMid, M.broadleafMid, M.coniferMid]) {
+      const [, , h] = lch(at(pal, mat, 13));
+      assert.ok(h > 80 && h < 200, `${MATERIAL_NAMES[mat]} in low sun has hue ${h.toFixed(0)}`);
+    }
+  }
+  // Water takes the sky: violet at dusk.
+  assert.ok(oklabOf(at(dusk, M.sea, 10))[1] > 0.01);
+});
+
+test("night is a painting, not a filter: blue all through, pale roads and fields over dark woods and deep water", () => {
+  const night = buildPalette({ ...NOON, time: PHASES.night });
+  for (const mat of LAND) {
+    for (const tone of [2, FLAT_TONE, 15]) {
+      const c = oklabOf(at(night, mat, tone));
+      assert.ok(c[2] < 0.012, `${MATERIAL_NAMES[mat]} tone ${tone} is not blue at night: ${c}`);
+    }
+  }
+  const L = (mat: number, tone = FLAT_TONE): number => lstar(at(night, mat, tone));
+  assert.ok(L(M.road) > L(M.meadowMid) + 4 && L(M.meadowMid) > L(M.broadleafMid) + 12, `road ${L(M.road)} meadow ${L(M.meadowMid)} wood ${L(M.broadleafMid)}`);
+  assert.ok(L(M.sea, 15) < L(M.meadowMid) - 8, "deep water is darker than the fields");
+  // Dark enough for a lamp to glow against, and the paper's grain with it.
+  assert.ok(L(M.whitewash) < 62 && lstar(paperIn({ ...NOON, time: PHASES.night })) < 62);
+  // Moonlit faces are paler and greener-blue than their indigo shade.
+  const lit = oklabOf(at(night, M.rockLime, 15)), shade = oklabOf(at(night, M.rockLime, 1, 2));
+  assert.ok(lit[0] > shade[0] + 0.1 && lit[1] < shade[1], `moonlit ${lit} shade ${shade}`);
+});
+
+test("winter is frost and bare twigs, not brown: pale sage grass, plum-grey woods", () => {
+  const winter = buildPalette({ time: 0.5, season: 0.75, overcast: 0 });
+  const autumn = buildPalette({ time: 0.5, season: 0.5, overcast: 0 });
+  for (const mat of [M.meadowMid, M.pastureMid, M.moorMid]) {
+    const w = lch(at(winter, mat, FLAT_TONE)), a = lch(at(autumn, mat, FLAT_TONE));
+    assert.ok(w[0] > a[0] && w[1] < 0.06 && w[2] > 120, `${MATERIAL_NAMES[mat]} in winter is ${w}`);
+  }
+  for (const mat of [M.broadleafCool, M.broadleafMid, M.broadleafWarm, M.alder, M.hedgeCrown]) {
+    const [, , h] = lch(at(winter, mat, FLAT_TONE));
+    assert.ok(h > 300 || h < 20, `${MATERIAL_NAMES[mat]} bare is at hue ${h.toFixed(0)}`);
+    assert.ok(lstar(at(winter, mat, FLAT_TONE)) < lstar(at(winter, M.meadowMid, FLAT_TONE)) - 20, "bare woods stay the dark mass");
+  }
+});
+
+test("mist stays cool in a warm light", () => {
+  const o = { ...NOON, time: DAY_KEYS.sunset };
+  const clear = oklabOf(paperIn(o)), misty = oklabOf(paperIn({ ...o, mist: 1 }));
+  assert.ok(misty[2] < clear[2] - 0.02 && misty[1] < clear[1], `paper at dusk ${clear}, in mist ${misty}`);
+});

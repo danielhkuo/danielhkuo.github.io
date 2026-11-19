@@ -12,14 +12,19 @@ import { imageOn, type Land } from "./parts.ts";
 import { drawRiver } from "./river.ts";
 
 /**
- * The dragon in the dark keeps some of its own light: of each colour's fall from its daylight self to the land's
- * light, the share it is spared at full dark. Its gold (mane, belly, tips) glows more than its lacquer.
+ * The dragon keeps some of its own light: of each colour's fall from its daylight self to the land's light, the share
+ * it is spared, by day's low light and at full dark. Lacquer never goes brown in a red sunset, and at night its gold
+ * (mane, belly, tips) glows more than its red.
  */
-const SPARE_BODY = 0.3;
-const SPARE_GOLD = 0.55;
+const SPARE_BODY: readonly [number, number] = [0.3, 0.45];
+const SPARE_GOLD: readonly [number, number] = [0.35, 0.7];
+/** How far each kind of piece is turned to the light: its highlights catch the sun's colour, its darks the shade's. */
+const LIT_HIGH = 1;
+const LIT_MID = 0.75;
+const LIT_LOW = 0.35;
 /** The pool of light it throws on the ground at night: half-width in pixels, and its strength (of 255) at the middle. */
-const POOL = 15;
-const POOL_ALPHA = 30;
+const POOL = 18;
+const POOL_ALPHA = 38;
 /** The pool's warm light, packed RGBA. */
 const POOL_LIGHT = 0xff6ab8ff;
 
@@ -33,16 +38,17 @@ function mixRgb(a: number, b: number, t: number): number {
   return (0xff000000 | (Math.round(bl) << 16) | (Math.round(g) << 8) | Math.round(r)) >>> 0;
 }
 
-/** The lacquer in this air: graded as the land is, overcast and mist softened, and spared some of the dark. */
+/** The lacquer in this air: graded as the land is, each piece by how it faces the light, overcast and mist softened, and spared some of the dark. */
 export function lookIn(air: Air): Look {
   const o = { time: air.time, season: air.season, overcast: air.overcast * 0.6, mist: air.mist * 0.5 };
-  const lit = (c: number, spare: number): number => mixRgb(gradeRgb(c, o), c, spare * air.night);
-  const L = LACQUER;
+  const lit = (c: number, spare: readonly [number, number], facing: number): number =>
+    mixRgb(gradeRgb(c, o, facing), c, spare[0] + (spare[1] - spare[0]) * air.night);
+  const L = LACQUER, B = SPARE_BODY, G = SPARE_GOLD;
   return {
-    bodyLight: lit(L.bodyLight, SPARE_BODY), body: lit(L.body, SPARE_BODY), bodyDark: lit(L.bodyDark, SPARE_BODY),
-    scale: lit(L.scale, SPARE_BODY), belly: lit(L.belly, SPARE_GOLD), bellyDark: lit(L.bellyDark, SPARE_GOLD),
-    mane: lit(L.mane, SPARE_GOLD), maneLight: lit(L.maneLight, SPARE_GOLD), maneDark: lit(L.maneDark, SPARE_GOLD),
-    tip: lit(L.tip, SPARE_GOLD), wing: lit(L.wing, SPARE_BODY), wingDark: lit(L.wingDark, SPARE_BODY), ink: lit(L.ink, 0),
+    bodyLight: lit(L.bodyLight, B, LIT_HIGH), body: lit(L.body, B, LIT_MID), bodyDark: lit(L.bodyDark, B, LIT_LOW),
+    scale: lit(L.scale, B, LIT_LOW), belly: lit(L.belly, G, LIT_HIGH), bellyDark: lit(L.bellyDark, G, LIT_LOW),
+    mane: lit(L.mane, G, LIT_MID), maneLight: lit(L.maneLight, G, LIT_HIGH), maneDark: lit(L.maneDark, G, LIT_LOW),
+    tip: lit(L.tip, G, LIT_HIGH), wing: lit(L.wing, B, LIT_MID), wingDark: lit(L.wingDark, B, LIT_LOW), ink: lit(L.ink, [0, 0], LIT_LOW),
   };
 }
 

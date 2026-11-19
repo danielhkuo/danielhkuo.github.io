@@ -7,6 +7,7 @@ import { PHASES } from "../sky/clock.ts";
 import { readShipped } from "../pack/shipped.ts";
 import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
 import { differing, frameOf, manifest, seaFrame, shot } from "../testing/liveShot.ts";
+import type { Structure } from "../gen/built.ts";
 import type { LiveFrame } from "./live.ts";
 import { nightLayer, nightLights, windowLit } from "./night.ts";
 import { matOf } from "./pixel.ts";
@@ -96,4 +97,48 @@ test("a lighthouse's beams sweep round it at night", () => {
   layer.draw(b);
   assert.ok(differing(a.out, before) > 300, "the beams light the sea round the lamp");
   assert.ok(differing(a.out, b.out) > 300, "and move");
+});
+
+/** A small roofed house, 8 × 4 cells, with `marks` on its walls. */
+function house(marks: number[]): Structure {
+  const cells = 8 * 4;
+  return {
+    x: 100, y: 100, w: 8, h: 4, base: 0,
+    top: new Float32Array(cells).fill(6), mat: new Uint8Array(cells).fill(M.roofSlate), tone: new Uint8Array(cells), paint: new Uint8Array(cells),
+    marks,
+  };
+}
+
+test("marks that touch on a wall are one window and light together; a windmill's hub and the marsh house's dark glass never light", () => {
+  // A tall window of three marks, and a single one two columns along.
+  const two = nightLights([house([2, 3, 2, M.opening, 110, 2, 3, 3, M.opening, 110, 2, 3, 4, M.opening, 110, 5, 3, 3, M.opening, 110])], 1024).windows;
+  assert.equal(two.key.length, 4);
+  assert.equal(new Set(two.key).size, 2, "two windows");
+  const sizes = [...new Set(two.key)].map((key) => two.key.filter((k) => k === key).length).sort();
+  assert.deepEqual(sizes, [1, 3], "the tall window is three marks with one hash");
+
+  const mill = nightLights([house([4, 3, 5, M.opening, 100, 5, 3, 5, M.sailcloth, 190, 2, 2, 3, M.opening, 110])], 1024).windows;
+  assert.equal(mill.key.length, 1, "the hub among the sails is no window");
+
+  const marsh = nightLights([house([2, 3, 3, M.lantern, 220, 2, 3, 4, M.lantern, 200, 5, 3, 3, M.opening, 104])], 1024);
+  assert.equal(marsh.windows.key.length, 0, "the marsh house's other glass stays dark");
+  assert.equal(marsh.lanterns.key.length, 2, "its one window is lit");
+});
+
+test("nothing pops: a window's light moves a little for a little more dusk", () => {
+  for (const k of Array.from(lights.windows.key).slice(0, 400)) {
+    for (let dark = 0; dark < 1; dark += 0.01) {
+      assert.ok(Math.abs(windowLit(k, 0.78, dark + 0.01) - windowLit(k, 0.78, dark)) <= 0.11);
+    }
+  }
+});
+
+test("cloud, rain and mist put the stars out", () => {
+  const palette = buildPalette(MIDDAY);
+  for (const veil of [{ overcast: 1 }, { rain: 1 }, { mist: 1 }, { cloud: 1 }]) {
+    const sea = at(seaFrame(1000, 800, 5, palette, manifest.n, M.sea), { ...NIGHT, ...veil });
+    const before = new Uint32Array(sea.out);
+    nightLayer(manifest.seed).draw(sea);
+    assert.equal(differing(sea.out, before), 0);
+  }
 });

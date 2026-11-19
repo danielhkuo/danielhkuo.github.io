@@ -6,11 +6,15 @@
 
 import { hash2 } from "../core/hash.ts";
 
-/** Seconds a slot lasts: one pass at most in each. */
-export const SLOT = 1800;
-/** Of 65536: the share of slots that hold a shower, and that hold a mist. */
-const RAIN_SHARE = 0.24 * 65536;
-const MIST_SHARE = 0.14 * 65536;
+/**
+ * Seconds a slot lasts: one pass at most in each. Twenty minutes, so a visitor who stays four meets some weather
+ * about three times in ten, and rain itself about one time in six: occasional, not rare. The longest pass (a mist of
+ * 750 s) still fits with a minute clear at each end.
+ */
+export const SLOT = 1200;
+/** Of 65536: the share of slots that hold a shower, and that hold a mist. About a fifth of all time has some weather. */
+const RAIN_SHARE = 0.26 * 65536;
+const MIST_SHARE = 0.16 * 65536;
 /** A shower: the clouds build for BUILD seconds, the rain holds 180–360 s, and the sky clears over CLEAR. */
 export const BUILD = 150;
 export const CLEAR = 150;

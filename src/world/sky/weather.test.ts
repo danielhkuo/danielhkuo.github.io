@@ -24,7 +24,7 @@ test("every amount stays within 0 and 1, and clear weather is all zeros", () => 
   }
 });
 
-test("weather is occasional: showers and mists each pass a few times a day, and most of the time is fair", () => {
+test("weather is occasional: showers and mists each pass many times a day, and most of the time is fair", () => {
   let raining = 0, misty = 0, any = 0, samples = 0, passes = 0, wasRaining = false;
   for (let at = EPOCH; at < EPOCH + SPAN; at += STEP) {
     const w = weatherAt(at, SEED);
@@ -36,10 +36,28 @@ test("weather is occasional: showers and mists each pass a few times a day, and 
     wasRaining = w.rain > 0;
   }
   const perDay = passes / 14;
-  assert.ok(perDay >= 4 && perDay <= 18, `${perDay} showers a day`);
-  assert.ok(raining / samples > 0.02 && raining / samples < 0.15, `rain ${raining / samples}`);
-  assert.ok(misty / samples > 0.01 && misty / samples < 0.12, `mist ${misty / samples}`);
-  assert.ok(any / samples < 0.3, `weather ${any / samples} of the time`);
+  assert.ok(perDay >= 10 && perDay <= 26, `${perDay} showers a day`);
+  assert.ok(raining / samples > 0.03 && raining / samples < 0.12, `rain ${raining / samples}`);
+  assert.ok(misty / samples > 0.04 && misty / samples < 0.12, `mist ${misty / samples}`);
+  assert.ok(any / samples > 0.12 && any / samples < 0.28, `weather ${any / samples} of the time`);
+});
+
+test("a visitor who stays four minutes meets weather now and then, and a fair sky more often than not", () => {
+  const STAY = 240;
+  let visits = 0, weather = 0, rain = 0;
+  for (let arrive = EPOCH; arrive < EPOCH + SPAN; arrive += 131) {
+    let sawWeather = false, sawRain = false;
+    for (let at = arrive; at <= arrive + STAY; at += 20) {
+      const w = weatherAt(at, SEED);
+      if (w.kind !== "clear") sawWeather = true;
+      if (w.rain > 0.3) sawRain = true;
+    }
+    visits++;
+    if (sawWeather) weather++;
+    if (sawRain) rain++;
+  }
+  assert.ok(weather / visits > 0.2 && weather / visits < 0.4, `weather on ${weather / visits} of visits`);
+  assert.ok(rain / visits > 0.08 && rain / visits < 0.25, `rain on ${rain / visits} of visits`);
 });
 
 test("the clouds build before the rain, and rain never falls from a thin sky", () => {

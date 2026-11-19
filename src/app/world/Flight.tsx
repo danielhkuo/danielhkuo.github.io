@@ -26,6 +26,8 @@ const fell = IM_Fell_English({ weight: "400", subsets: ["latin"] });
 
 const FRAME_W = 400;
 const FRAME_H = 225;
+/** Milliseconds between reads of the clock for the light and the weather. */
+const AIR_EVERY = 200;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -185,6 +187,8 @@ export default function Flight() {
           return airOf(fixedTime ?? sunPhase(hour, doy), fixedSeason ?? seasonOf(doy), fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
         };
         let builtAir = airNow();
+        let air = builtAir;
+        let airAt = 0;
         let lit = lightFor(builtAir);
         let lastBuild = 0;
         // The page round the frame takes the paper's colour in the same light.
@@ -236,8 +240,12 @@ export default function Flight() {
           const dt = lastT ? (t - lastT) / 1000 : 0;
           lastT = t;
 
-          // The air this frame. The palette is built again only once the light has moved a visible step.
-          const air = airNow();
+          // The air, read from the clock a few times a second (it changes slowly). The palette is built again only once
+          // the light has moved a visible step.
+          if (t - airAt >= AIR_EVERY) {
+            air = airNow();
+            airAt = t;
+          }
           if (lightMoved(builtAir, air) && t - lastBuild >= 400) {
             const p0 = performance.now();
             lit = lightFor(air);

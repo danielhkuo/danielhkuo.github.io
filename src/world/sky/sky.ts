@@ -188,9 +188,11 @@ export function drawShadows(
 
 /** The span of cloudiness over which a weather cloud condenses from nothing to whole. */
 const CONDENSE = 0.12;
+/** Steps of cloudiness at which the list of weather clouds that can show is made again. */
+const GATHER_STEPS = 32;
 
 /** Before rain the clouds go grey: the storm ramp each tone of the midday one goes toward, rim first. */
-const STORM: readonly number[] = [0xffd6cec8, 0xffe4dcd6, 0xffd0c4bc, 0xffb8a8a0, 0xffa08e88, 0xff86746e];
+const STORM: readonly number[] = [0xffdcd4cc, 0xffe6e0da, 0xffc8bcb2, 0xffa8988c, 0xff8c7a6e, 0xff746052];
 /** How far toward the storm ramp a fully built sky goes. */
 const STORM_SHARE = 0.85;
 
@@ -201,12 +203,26 @@ function mixRgb(a: number, b: number, t: number): number {
   return (0xff000000 | (Math.round(bl) << 16) | (Math.round(g) << 8) | Math.round(r)) >>> 0;
 }
 
-/** The cloud ramp in this air: the midday ramp greyed toward the storm by the built cloud, then graded with the light. */
+/** How far each tone of the ramp is turned to the light, crown to underside; the rim is fully in it. */
+const TONE_LIT: readonly number[] = [0.9, 0.55, 0.28, 0.1, 0];
+/** A cloud takes more of the light's colour than the land does, and most on its rim: a low sun burns there. */
+const CATCH = 0.7;
+/** Its undersides are blue-violet already: they take only this share of the shade's colour. */
+const SHADE_TAKE = 0.6;
+
+/**
+ * The cloud ramp in this air: the midday ramp greyed toward the storm by the built cloud, then graded with the light,
+ * the rim and crown in the sun's or the moon's colour and the undersides in the shade's.
+ */
 export function rampIn(air: Air): Ramp {
   const o = { time: air.time, season: air.season, overcast: air.overcast * 0.5, mist: air.mist };
   const k = STORM_SHARE * air.cloud;
-  const one = (c: number, storm: number): number => gradeRgb(k > 0 ? mixRgb(c, storm, k) : c, o);
-  return { rim: one(MIDDAY_RAMP.rim, STORM[0]), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1])), cuts: MIDDAY_RAMP.cuts };
+  // Under a built sky little direct light is left to catch.
+  const more = CATCH * (1 - 0.7 * air.cloud);
+  const one = (c: number, storm: number, lit: number): number => gradeRgb(k > 0 ? mixRgb(c, storm, k) : c, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + more) * lit);
+  return {
+    rim: one(MIDDAY_RAMP.rim, STORM[0], 1), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1], TONE_LIT[i])), cuts: MIDDAY_RAMP.cuts,
+  };
 }
 
 /** Paints every sprite again in `ramp`, by the tone each pixel took. Sprites without tones are left as they are. */
@@ -238,7 +254,11 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
   const low: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "low") };
   const banks: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "bank") };
   // With the weather's clouds among them, north to south, for when the weather has built.
-  const gathered: SkyField = { ...field, clouds: [...low.clouds, ...weatherClouds(seed, n, shapes)].sort((a, b) => a.y - b.y || a.x - b.x) };
+  // The weather's clouds, and the low layer with those of them the weather has built so far, north to south. The list is
+  // made again only when the cloud has moved a step, so a frame walks just the clouds that can show.
+  const weather = weatherClouds(seed, n, shapes);
+  let gathered: SkyField = low;
+  let gatheredTo = 0;
   let keep: readonly [number, number, number] = style.shadowKeep;
   let cloudiness = 0;
   let painted = "";
@@ -247,6 +267,11 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
     shapes,
     setAir(air) {
       cloudiness = air.cloud;
+      const reach = Math.ceil(cloudiness * GATHER_STEPS) / GATHER_STEPS;
+      if (reach !== gatheredTo) {
+        gatheredTo = reach;
+        gathered = reach === 0 ? low : { ...field, clouds: [...low.clouds, ...weather.filter((c) => (c.need ?? 0) < reach)].sort((a, b) => a.y - b.y || a.x - b.x) };
+      }
       // Shadows soften as the sky greys over and as the light goes.
       const soft = (1 - 0.85 * Math.max(air.overcast, air.cloud)) * (1 - 0.8 * air.night);
       const sk = style.shadowKeep;

@@ -232,23 +232,52 @@ export function makeField(seed: number, n: number, shapes: readonly CloudShape[]
   return { n, clouds: [...low, ...placed], wind };
 }
 
-/** Grid cells across the world in which weather clouds are scattered, per 6400 cells. */
-const WEATHER_COLS_AT_6400 = 30;
+/** Grid cells across the world in which the weather's heaps are set, and its puffs are scattered, per 6400 cells. */
+const WEATHER_HEAPS_AT_6400 = 22;
+const WEATHER_PUFFS_AT_6400 = 12;
+/** The share of heap cells that hold a heap. */
+const WEATHER_FILL = 0.88;
+/** A heap stands this far into its cell at the least, each way, so two never stand on one another. */
+const WEATHER_INSET = 0.2;
+/** The first puffs show at this much cloud; the last and greatest heaps need this much. */
+const NEED_FIRST = 0.03;
+const NEED_LAST = 0.9;
+/** The puffs have all come by this much cloud, and the first heaps come from this much. */
+const PUFFS_BY = 0.34;
+const HEAPS_FROM = 0.1;
+/** How far a heap's size sets its need (the rest is chance): the small come early, the great late. */
+const BY_SIZE = 0.6;
 
 /**
- * The clouds that come with the weather: heaps and puffs scattered over the whole world, each showing once the
- * cloud has built past its own `need`, so the sky fills as a shower nears and empties as it clears. Low layer, sorted
- * north to south as the field's own.
+ * The clouds that come with the weather, over the whole world: each shows once the cloud has built past its own
+ * `need`, so the sky fills as a shower nears and empties as it clears. First come a few puffs, the heralds; then
+ * heaps, the small ones early and the great ones last, so every view watches the sky close in by steps. Nearly all the
+ * cover is heaps, for a sky that looks like rain. They stand on a grid laid like bricks, each row half a cell along
+ * from the last, so every view holds its share and none is roofed over: the land shows between them. The grid is as
+ * close as the frame's budget allows (the sky walks the whole list each frame). Low layer, sorted north to south as
+ * the field's own.
  */
 export function weatherClouds(seed: number, n: number, shapes: readonly CloudShape[]): Cloud[] {
   const rng = rngFor(seed, "sky-weather");
-  const heaps = indices(shapes, "heap");
-  const puffs = indices(shapes, "puff");
+  // Heaps from the least to the greatest, and the puffs big enough to notice.
+  const heaps = indices(shapes, "heap").sort((a, b) => shapes[a].w * shapes[a].h - shapes[b].w * shapes[b].h);
+  const puffs = indices(shapes, "puff").sort((a, b) => shapes[a].w - shapes[b].w);
   const out: Cloud[] = [];
   if (heaps.length === 0 || puffs.length === 0) return out;
-  scatter(rng, n, Math.max(1, Math.round((WEATHER_COLS_AT_6400 * n) / 6400)), (x, y) => {
-    const roll = rng.float(), need = 0.08 + 0.86 * rng.float();
-    out.push({ shape: pick(rng, roll < 0.45 ? heaps : puffs), x, y, layer: "low", need });
+  const heralds = puffs.slice(puffs.length >> 1);
+  const cols = Math.max(1, Math.round((WEATHER_HEAPS_AT_6400 * n) / 6400)), cell = n / cols;
+  for (let gy = 0; gy < cols; gy++) for (let gx = 0; gx < cols; gx++) {
+    const roll = rng.float(), rank = rng.int(heaps.length), chance = rng.float();
+    const jx = rng.range(WEATHER_INSET, 1 - WEATHER_INSET), jy = rng.range(WEATHER_INSET, 1 - WEATHER_INSET);
+    if (roll >= WEATHER_FILL) continue;
+    const late = heaps.length > 1 ? BY_SIZE * (rank / (heaps.length - 1)) + (1 - BY_SIZE) * chance : chance;
+    out.push({
+      shape: heaps[rank], x: modN((gx + 0.5 * (gy & 1) + jx) * cell, n), y: modN((gy + jy) * cell, n), layer: "low",
+      need: HEAPS_FROM + (NEED_LAST - HEAPS_FROM) * late,
+    });
+  }
+  scatter(rng, n, Math.max(1, Math.round((WEATHER_PUFFS_AT_6400 * n) / 6400)), (x, y) => {
+    out.push({ shape: pick(rng, heralds), x, y, layer: "low", need: rng.range(NEED_FIRST, PUFFS_BY) });
   });
   out.sort((a, b) => a.y - b.y || a.x - b.x);
   return out;
