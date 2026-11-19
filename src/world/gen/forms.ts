@@ -38,14 +38,28 @@ const TABLE_SOFT = 1.6;
 const TABLE_RELIEF = 0.12;
 const TABLE_RIM = 12;
 /**
- * A fen's ground levels off at FEN_TOP. Meres stand in hollows MERE_DEPTH deep wherever a noise of MERE_CELLS rises
- * past MERE_AT; a hollow's bed never falls below MERE_BED, so the fen stays land and the hollow holds a lake.
+ * Meres stand in hollows MERE_DEPTH deep wherever a noise of MERE_CELLS rises past MERE_AT; a hollow's bed never falls
+ * below MERE_BED, so the fen stays land and the hollow holds a lake. A mere keeps MERE_SHORE cells clear of the sea,
+ * so it is not breached.
  */
-const FEN_TOP = 2.8;
-const MERE_CELLS = 150;
-const MERE_AT = 0.2;
-const MERE_DEPTH = 2.4;
-const MERE_BED = 0.35;
+const MERE_CELLS = 95;
+const MERE_AT = 0.1;
+const MERE_DEPTH = 2.1;
+const MERE_BED = 0.3;
+const MERE_SHORE = 50;
+/**
+ * A fen is a low island with a whole outline: its drowned valleys silted up long ago. The sea within FEN_CLOSE cells of
+ * its land on two sides (a closing of the land) is fen too, rising from FEN_FILL[0] at the new shore to FEN_FILL[1]
+ * FEN_CLOSE cells in, so the island reads as one body and not as arms.
+ */
+const FEN_CLOSE = 100;
+/** The peat floor a fen's inland stands on, its height at the shore, and how far in it reaches its full height. */
+const FEN_BASE = 2.2;
+const FEN_SHORE = 0.1;
+const FEN_BASE_REACH = 160;
+/** The most of the island's old relief a fen keeps over its floor. */
+const FEN_RELIEF = 0.9;
+const FEN_FILL: readonly [number, number] = [0.15, 1.4];
 /**
  * Lodes: LODES slow rivers wind across a fen to the sea, each at least LODE_MIN of its radius long, bending by up
  * to LODE_SWING (radians) every LODE_WAVE cells. The ground within LODE_BAND cells of one falls to it, its bed sinking
@@ -55,7 +69,7 @@ const MERE_BED = 0.35;
 const LODES: readonly [number, number] = [2, 3];
 const LODE_SWING = 1.05;
 const LODE_WAVE: readonly [number, number] = [140, 220];
-const LODE_BAND = 240;
+const LODE_BAND = 100;
 const LODE_BED: readonly [number, number] = [1.1, 0.12];
 const LODE_MIN = 0.45;
 
@@ -72,10 +86,11 @@ const WALL_REACH = 2.2 * WALL_PULL;
 const FEN_CALM = 0.85;
 const LAGOON_CALM = 0.95;
 /** Tidal flats round a fen reach FLATS cells out, from FLATS_DEPTH[0] at the shore to FLATS_DEPTH[1] at their edge. */
-const FLATS = 260;
-const FLATS_DEPTH: readonly [number, number] = [0.3, 3];
-/** Past the flats the bed falls FLATS_FALL a cell until it is as deep as the open sea gets (coast.bathy.max). */
-const FLATS_FALL = 0.06;
+const FLATS = 80;
+const FLATS_DEPTH: readonly [number, number] = [0.2, 2.4];
+/** Past the flats the bed falls FLATS_FALL a cell until it is as deep as the open sea gets (coast.bathy.max): a narrow
+ * band of sand and mud round the island, and then the sea, not a pale halo far out into it. */
+const FLATS_FALL = 0.22;
 /** A lagoon is the sea within LAGOON_REACH of a caldera's radius from its core that its islet stands in; its bed lies no deeper than LAGOON_DEPTH. */
 const LAGOON_REACH = 0.72;
 const LAGOON_DEPTH = 3.2;
@@ -214,7 +229,7 @@ function lodePath(gN: number, isSea: Uint8Array, core: Core, from: number, cpn: 
 }
 
 /** A fen: the ground levelled to a little above the sea, gathered into lodes, with meres in its hollows. */
-function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, core: Core, cpn: number, s: number, seed: number, rng: Rng): void {
+function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, core: Core, cpn: number, s: number, seed: number, rng: Rng, toSea: Float32Array): void {
   const n = gN * cpn, period = Math.max(1, Math.round(n / (MERE_CELLS * s)));
   const lodes: Float64Array[] = [];
   const want = LODES[0] + rng.int(LODES[1] - LODES[0] + 1);
@@ -225,7 +240,10 @@ function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, 
   const band = LODE_BAND * s;
   for (const i of nodes) {
     const x = i % gN, y = (i - x) / gN;
-    let level = FEN_TOP * softCap(h[i] / FEN_TOP);
+    // A fen is nearly flat: inland it stands on a peat floor FEN_BASE high that falls to the shore over FEN_BASE_REACH
+    // cells, and only FEN_RELIEF of the island's old relief rides on it, so a mere dug in it holds water.
+    const inland = smoothstep((toSea[i] * cpn) / (FEN_BASE_REACH * s));
+    let level = FEN_SHORE + (FEN_BASE - FEN_SHORE) * inland + FEN_RELIEF * softCap(h[i] / FEN_RELIEF);
     // The nearest lode, and how far along it.
     const px = torusDelta(core.x, (x + 0.5) * cpn, n), py = torusDelta(core.y, (y + 0.5) * cpn, n);
     let near = Infinity, along = 0;
@@ -250,7 +268,8 @@ function fen(h: Float64Array, gN: number, isSea: Uint8Array, nodes: Int32Array, 
     }
     const v = 1.6 * fbm(((x + 0.5) * cpn * period) / n, ((y + 0.5) * cpn * period) / n, period, 2, 0.5, seed);
     // Meres keep clear of the lodes, so the rivers are not drowned in them.
-    const dent = MERE_DEPTH * smoothstep((v - MERE_AT) / 0.12) * smoothstep((near - 0.15 * band) / (0.15 * band));
+    const shore = MERE_SHORE * s;
+    const dent = MERE_DEPTH * smoothstep((v - MERE_AT) / 0.12) * smoothstep((near - 0.15 * band) / (0.15 * band)) * smoothstep((toSea[i] * cpn - shore) / shore);
     h[i] = Math.max(Math.min(level, MERE_BED), level - dent);
   }
 }
@@ -312,6 +331,29 @@ function calderaWalls(h: Float64Array, was: Float64Array, gN: number, isSea: Uin
   }
 }
 
+/**
+ * Closes a fen's outline: the sea its own land holds within FEN_CLOSE cells on two sides becomes low fen, so its drowned
+ * valleys are silted up and its coast runs whole round it. `isSea` is updated to match.
+ */
+function closeFen(h: Float64Array, gN: number, isSea: Uint8Array, plan: Plan, k: number, cpn: number, s: number, seen: Uint8Array): void {
+  const core = plan.cores[k], cN = plan.n, nn = gN * gN;
+  const land = new Uint8Array(nn);
+  for (const i of islandNodes(h, gN, isSea, plan, k, cpn, 1.3 * core.radius, seen)) land[i] = 1;
+  const reach = (FEN_CLOSE * s) / cpn;
+  const near = nearestSource(gN, land).dist;
+  const out = new Uint8Array(nn);
+  for (let i = 0; i < nn; i++) if (near[i] > reach) out[i] = 1;
+  const inside = nearestSource(gN, out).dist;
+  for (let i = 0; i < nn; i++) {
+    if (!isSea[i] || inside[i] <= reach) continue;
+    const x = i % gN, y = (i - x) / gN;
+    if (plan.owner[(y >> 1) * cN + (x >> 1)] !== k) continue;
+    const t = smoothstep((inside[i] - reach) / reach);
+    h[i] = FEN_FILL[0] + (FEN_FILL[1] - FEN_FILL[0]) * t;
+    isSea[i] = 0;
+  }
+}
+
 export function shapeForms(h: Float64Array, gN: number, isSea: Uint8Array, plan: Plan, p: WorldParams, seed: number): void {
   const cpn = p.n / gN, s = lengthScale(p.n);
   const seen = new Uint8Array(gN * gN);
@@ -325,15 +367,23 @@ export function shapeForms(h: Float64Array, gN: number, isSea: Uint8Array, plan:
     const toLagoon = nearestSource(gN, lagoon), was = Float64Array.from(h);
     for (const core of calderas) calderaWalls(h, was, gN, isSea, core, cpn, s, toLagoon);
   }
+  // Every fen's drowned valleys silted up: its outline is closed before it is levelled.
+  const fens = plan.cores.map((c, k) => (c.form === FORM.fen ? k : -1)).filter((k) => k >= 0);
+  let fenSea: Uint8Array | null = null;
+  if (fens.length > 0) {
+    fenSea = Uint8Array.from(isSea);
+    for (const k of fens) closeFen(h, gN, fenSea, plan, k, cpn, s, seen);
+  }
   plan.cores.forEach((core, k) => {
     if (core.form !== FORM.cone && core.form !== FORM.table && core.form !== FORM.fen) return;
     const rng = rngFor(seed, `form-${k}`);
-    const nodes = islandNodes(h, gN, isSea, plan, k, cpn, 1.3 * core.radius, seen);
+    const sea = core.form === FORM.fen && fenSea !== null ? fenSea : isSea;
+    const nodes = islandNodes(h, gN, sea, plan, k, cpn, 1.3 * core.radius, seen);
     if (core.form === FORM.cone) crater(h, gN, isSea, nodes, core, cpn, s, rng, p.erode.eps);
     else if (core.form === FORM.table) {
       toSea ??= nearestSource(gN, isSea).dist;
       table(h, gN, nodes, core, cpn, s, toSea, rng, p.erode.eps);
-    } else fen(h, gN, isSea, nodes, core, cpn, s, mereSeed, rng);
+    } else fen(h, gN, sea, nodes, core, cpn, s, mereSeed, rng, nearestSource(gN, sea).dist);
   });
 }
 
@@ -388,6 +438,11 @@ export function formWaters(h: Float64Array, gN: number, plan: Plan, p: WorldPara
     }
     const x = i % gN, y = (i - x) / gN;
     if (plan.fjord[(y >> 1) * plan.n + (x >> 1)]) deep[i] = FJORD_DEEP * Math.min(1, Math.max(0, d - 0.5 * cpn) / (FJORD_SHELF * s));
+    // Past its flats a fen's sea falls away as the flats' own slope runs on, so the shallows are a rim and not a halo.
+    else if (toFen !== null && toFen[i] < Infinity) {
+      const f = toFen[i] * cpn;
+      if (f > flats) deep[i] = Math.min(p.coast.bathy.max, FLATS_DEPTH[1] + FLATS_FALL * (f - flats));
+    }
   }
   return { calm, shoal, deep };
 }
