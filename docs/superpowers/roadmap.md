@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-18.
+Last updated 2026-11-19.
 
 ## Where things are written down
 
@@ -62,6 +62,19 @@ Last updated 2026-11-18.
   pairs, sea arches, a drowned ria coast).
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
+- **Time of day and weather** (2026-11-19, `claude/gracious-hypatia-d55439`; three Fable agents over two critic
+  rounds). The light follows the visitor's own clock: sun phase from the local hour, with longer days in summer
+  (`sky/clock.ts`). The palette's day runs night, a deeper small hours, blue hour, dawn, golden hour, dusk, split-toned
+  (lit faces in the light's colour, shade in its own); noon is unchanged, and a new light recolours the land without a
+  re-bake (`StreamView.setLight`). The weather is the same for everyone flying at the same moment (`sky/weather.ts`:
+  20-minute slots from the wall clock and the seed; about one in four holds a shower whose clouds gather for 2.5
+  minutes first, about one in six a mist). At night the windows of lived-in buildings light from the builders' marks,
+  lanterns burn on quays, jetties and moored boats with reflections, the five lighthouses sweep warm beams that show
+  from afar, and stars glint on calm water (`live/night.ts`); the dragon keeps its own light. Rain falls in pixel
+  streaks under the clouds and the flier, with splashes; mist lies in drifting banks (`live/mist.ts`) and stills the
+  wind; every shadow follows the sun (`sunOn`). Rainbows need daylight and the town kite a fair day. `?time=` and
+  `?weather=` hold either still; `world:live --times --weathers`, `world-fly --query`. Seasons do not follow the clock
+  (coordinator, 2026-11-18): the page flies in summer.
 
 ## Next: the world comes alive
 
@@ -151,8 +164,8 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   About Me and the terminal (the Artificer).
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
-- **Time of day, seasons and weather** from the visitor's clock: palette swaps, lit windows at night, autumn leaves,
-  snow line moving, rain and mist.
+- **Seasons**, if the lore settles them by place (the months laid out north to south) rather than by the clock: the
+  palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
 - **Sound** (wind, sea, bells) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 
@@ -182,7 +195,7 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
 - Gamepad support, and steering toward the pointer on desktop.
 
 **Finding your way without a minimap**
-- Landmarks visible from afar: smoke columns, the lighthouse's sweeping beam, gulls circling towers, banners.
+- Landmarks visible from afar: smoke columns, ~~the lighthouse's sweeping beam~~ (done), gulls circling towers, banners.
 - The dragon glances toward the nearest unvisited tower; a compass rose inked in the page margin.
 - Signposts at crossroads, and roads and rivers that lead to towers.
 - The parchment map, for fun (a key, not always on): hand-drawn, revealing only explored land, with visited towers
@@ -193,7 +206,7 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
 - Shareable places: a link that opens the world at a tower or a view, so a recruiter can be sent straight to a project.
 - Photo mode: freeze, hide prompts, save a postcard with an ink border and caption.
 - Errands between towns (carry a letter from tower to tower) as a light way to tour the projects.
-- Time of day and weather from the visitor's clock; sound (wind, sea, bells), muted until turned on.
+- ~~Time of day and weather from the visitor's clock~~ (done); sound (wind, sea, bells, rain), muted until turned on.
 - Fly low to startle birds and skim water for spray; clouds muffle sound.
 
 **Site**
@@ -224,6 +237,18 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Sites painted into the land: a lighthouse pad cut down a sea cliff reads as a green box, and a road runs straight
   down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
+
+From time of day and weather (2026-11-19):
+- The sailing boats out in the bay carry no lanterns at night (they belong to the life layer); the marsh house's one lit
+  window is found by its light bytes, not by the wonder's type.
+- No moon: a sheen or glade on the sea needs a live layer (a palette cannot place it).
+- Rain cannot see the clouds, so there are no denser shafts under them.
+- The observatory's dome opens on its own clock; it could open only at night.
+- Frame budget: against the base build, run for run (`world-fly`, 4× throttle, the machine at a load of 10–30 from
+  other work), noon and night rain cost the same and night mist less (thick mist stills the wind, the dearest layer):
+  p95 4.0–4.6 ms for both builds under that load, where the base measured 3.6 on a quiet machine. Re-measure quiet.
+  In Node the night layer costs 18–24 µs a frame, rain and splashes about 22, the mist banks 79–86 at full mist, and
+  the gathered clouds about +80 on the sky.
 
 From the first-flight review:
 - Over land not painted yet, the dragon draws over hills that should hide it, and its shadow vanishes.
