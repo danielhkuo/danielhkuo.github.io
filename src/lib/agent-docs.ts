@@ -8,6 +8,7 @@
 import { EMAIL, LINKS, PROFILE } from "../components/terminal/content.ts";
 import {
   SITE_PAGES,
+  TEXT_PAGE,
   absoluteUrl,
   bareUrl,
   contactLinks,
@@ -20,7 +21,6 @@ import {
 } from "./site-content.ts";
 
 const LLMS_TXT = "/llms.txt";
-const TEXT_VERSION = "/recruiter";
 
 /** A repo description is one line on GitHub, but nothing enforces it; a break would split a list item. */
 function oneLine(text: string): string {
@@ -120,8 +120,8 @@ export function agentsMd(projects: readonly Project[]): string {
     "",
     "## Notes for agents",
     "",
-    `- Read the [text version](${absoluteUrl(TEXT_VERSION)}) or this file. The title menu, the flight and the terminal are interactive ways through the same content and add no facts of their own.`,
-    "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight and the terminal need JavaScript.",
+    `- Read the [text version](${absoluteUrl(TEXT_PAGE)}) or this file. The title menu and the flight are interactive ways through the same content and add no facts of their own. So is the command prompt at the foot of the text version: everything its commands print is already on that page.`,
+    "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight and that command prompt need JavaScript.",
     "- GitHub is the source of truth for the projects. This file is as current as the site's last build.",
     `- To reach ${PROFILE.name}, email [${EMAIL}](${LINKS.email}).`,
   ];

@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMAIL, LINKS, PROFILE } from "../components/terminal/content.ts";
 import {
+  SITE_PAGES,
+  TEXT_PAGE,
   absoluteUrl,
   bareUrl,
   contactLinks,
   formatDay,
+  personJsonLd,
   profileFacts,
   profileSummary,
   projectFacts,
@@ -48,7 +51,7 @@ test("an address is shown without its scheme, www or trailing slash", () => {
 });
 
 test("a path on the site becomes an address on the live site; other addresses are kept", () => {
-  assert.equal(absoluteUrl("/recruiter"), "https://danielhkuo.github.io/recruiter");
+  assert.equal(absoluteUrl("/minimal"), "https://danielhkuo.github.io/minimal");
   assert.equal(absoluteUrl("/"), "https://danielhkuo.github.io/");
   assert.equal(absoluteUrl("https://github.com/someone"), "https://github.com/someone");
   assert.equal(absoluteUrl("mailto:someone@example.com"), "mailto:someone@example.com");
@@ -112,4 +115,25 @@ test("the profile facts are every field of the profile but the name and title, l
   assert.ok(!values.includes(PROFILE.name) && !values.includes(PROFILE.title));
   assert.deepEqual(new Set(values), new Set([PROFILE.previously, PROFILE.school, PROFILE.location, PROFILE.building]));
   assert.equal(facts.find((f) => f.value === PROFILE.previously)?.label, "Previously");
+});
+
+test("the text version is a page of the site, at the address its route folder has", async () => {
+  const { existsSync } = await import("node:fs");
+  assert.ok(SITE_PAGES.some((page) => page.path === TEXT_PAGE && page.isText));
+  assert.ok(existsSync(new URL(`../app${TEXT_PAGE}/page.tsx`, import.meta.url)), `no page at src/app${TEXT_PAGE}`);
+});
+
+test("the terminal has no page of its own: the text version is where it is", () => {
+  assert.ok(!SITE_PAGES.some((page) => page.title === "Terminal"));
+  assert.match(SITE_PAGES.find((page) => page.path === TEXT_PAGE)?.summary ?? "", /terminal/);
+});
+
+test("the JSON-LD names the person, the title, the text version and the mailbox", () => {
+  const person = personJsonLd();
+  assert.equal(person["@type"], "Person");
+  assert.equal(person.name, PROFILE.name);
+  assert.equal(person.jobTitle, PROFILE.title);
+  assert.equal(person.url, `https://danielhkuo.github.io${TEXT_PAGE}`);
+  assert.equal(person.email, LINKS.email);
+  assert.deepEqual(person.sameAs, [LINKS.github]);
 });

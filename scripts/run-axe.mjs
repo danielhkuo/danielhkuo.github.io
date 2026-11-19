@@ -9,70 +9,19 @@
 // Exit status: 0 clean, 1 violations (or a page that would not load),
 // 2 nothing to check (no out/: run `npm run build` first).
 
-import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import path from "node:path";
 import puppeteer from "puppeteer";
+import { hasExport, origin as originOf, serveExport } from "./serve-export.mjs";
 
 /** The pages held to zero violations. Add a page here once it passes. */
-const PAGES = ["/recruiter"];
-
-const OUT = path.resolve("out");
+const PAGES = ["/minimal"];
 
 const VIEWPORTS = [
   { name: "phone", width: 375, height: 812, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   { name: "desktop", width: 1280, height: 800 },
 ];
 const SCHEMES = ["light", "dark"];
-
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-  ".pdf": "application/pdf",
-  ".webmanifest": "application/manifest+json",
-  ".wasm": "application/wasm",
-};
-
-/** The file GitHub Pages serves for a path: the file itself, else path.html, else path/index.html. */
-async function fileFor(urlPath) {
-  const pathname = decodeURIComponent(new URL(urlPath, "http://x").pathname);
-  const base = path.join(OUT, pathname);
-  if (base !== OUT && !base.startsWith(OUT + path.sep)) return null;
-  for (const candidate of [base, `${base}.html`, path.join(base, "index.html")]) {
-    try {
-      if ((await stat(candidate)).isFile()) return candidate;
-    } catch {
-      // Not this one; try the next.
-    }
-  }
-  return null;
-}
-
-/** A static server for out/ on a free local port. */
-async function serveExport() {
-  const server = createServer(async (req, res) => {
-    const file = await fileFor(req.url ?? "/");
-    if (!file) {
-      res.writeHead(404, { "Content-Type": TYPES[".html"] });
-      res.end(await readFile(path.join(OUT, "404.html")).catch(() => "Not found"));
-      return;
-    }
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream" });
-    res.end(await readFile(file));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return server;
-}
 
 /** One violation as a few readable lines: the rule, why, and where. */
 function describe(violation) {
@@ -86,9 +35,7 @@ function describe(violation) {
 }
 
 async function main() {
-  try {
-    await stat(path.join(OUT, "index.html"));
-  } catch {
+  if (!(await hasExport())) {
     console.error("No static export in out/. Run `npm run build` first.");
     return 2;
   }
@@ -98,7 +45,7 @@ async function main() {
   const axeSource = await readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
   const server = await serveExport();
-  const origin = `http://127.0.0.1:${server.address().port}`;
+  const origin = originOf(server);
   const browser = await puppeteer.launch();
   let failed = 0;
   try {

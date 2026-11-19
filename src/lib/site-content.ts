@@ -1,5 +1,5 @@
-// What every text view of the site shares: the page at /recruiter and the
-// agent files at /agents.md and /llms.txt. Everything here is derived from the
+// What every text view of the site shares: the text version (TEXT_PAGE) and
+// the agent files at /agents.md and /llms.txt. Everything here is derived from the
 // two content sources, the profile in terminal/content.ts and the pinned
 // GitHub repos; nothing is copied out of them. Pure, with no React, so
 // `node --test` runs it as it is.
@@ -24,9 +24,16 @@ export interface Project {
   updatedAt: string;
 }
 
+/**
+ * Where the text version lives: the one page that holds the whole site as
+ * text. It is set as a terminal session and can be typed into, so the
+ * terminal has no page of its own. The address is this one constant; a page
+ * at the old address forwards here.
+ */
+export const TEXT_PAGE = "/minimal";
+
 /** A page of the site, for the lists that tell people and agents where to go. */
 export interface SitePage {
-  /** Its path. The terminal has no page of its own and opens from the title menu, so it gives "/". */
   path: string;
   title: string;
   summary: string;
@@ -41,10 +48,10 @@ export interface SitePage {
  */
 export const SITE_PAGES: readonly SitePage[] = [
   {
-    path: "/recruiter",
+    path: TEXT_PAGE,
     title: "Text version",
     summary:
-      "The whole site as one plain page: profile, projects and contact. The quickest read on any device, and the one for screen readers.",
+      "The whole site as one page of plain text: profile, projects and contact, set as a terminal session that can also be typed into. The quickest read on any device, and the one for screen readers.",
     isText: true,
   },
   {
@@ -58,12 +65,6 @@ export const SITE_PAGES: readonly SitePage[] = [
     title: "Flight",
     summary:
       "Fly a dragon over an inked, procedurally generated realm. A canvas game that needs JavaScript; it has nothing to read that the text version lacks.",
-    isText: false,
-  },
-  {
-    path: "/",
-    title: "Terminal",
-    summary: "A shell whose files are this site, read with ls, cd, cat and open. It opens from the title menu.",
     isText: false,
   },
   {
@@ -117,6 +118,25 @@ export function contactLinks(): ContactLink[] {
     { label: "LinkedIn", href: LINKS.linkedin, text: bareUrl(LINKS.linkedin) },
     { label: "Résumé", href: LINKS.resume, text: LINKS.resume.slice(LINKS.resume.lastIndexOf("/") + 1) },
   ];
+}
+
+/**
+ * The profile as schema.org `Person` data, for the text version's JSON-LD:
+ * the name, the title, where this site is, the mailbox and the profiles
+ * elsewhere. Only GitHub is listed under `sameAs`: it is the one address
+ * content.ts does not mark as a guess.
+ */
+export function personJsonLd(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: PROFILE.name,
+    jobTitle: PROFILE.title,
+    description: profileSummary(),
+    url: absoluteUrl(TEXT_PAGE),
+    email: LINKS.email,
+    sameAs: [LINKS.github],
+  };
 }
 
 /** "Full-stack product builder & team architect. Rice University · CS, Houston, TX. Building …." */

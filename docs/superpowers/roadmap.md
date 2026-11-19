@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-18.
+Last updated 2026-11-19.
 
 ## Where things are written down
 
@@ -14,6 +14,7 @@ Last updated 2026-11-18.
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
+| The minimal version and the terminal as one page: design, and the Safari keyboard research behind it | `docs/superpowers/specs/2026-11-19-minimal-terminal-design.md`, `docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md` |
 | This roadmap | `docs/superpowers/roadmap.md` |
 
 ## Done
@@ -32,6 +33,12 @@ Last updated 2026-11-18.
   rainbow; and, very rarely (each about once in 11–16 minutes), a whale, a balloon, a fox, a heron, a tall ship and a
   monk, each logged as a discovery with a caption. The flier leaves a wake on water. Preview every rare sight with
   `/world?sights=all`.
+- **The minimal version and the terminal, as one page** (2026-11-19, Fable). `/minimal` is a Terminal window whose
+  scrollback is the whole site as static HTML (profile, projects, contact, the other pages), with a live prompt as
+  its last line. Every command can be typed or tapped. On a phone the document itself scrolls and nothing is pinned,
+  which is what keeps the prompt on Safari's keyboard bar; measured in the iOS Simulator. `/recruiter` forwards to
+  it. Checks: `npm run test:minimal` (Playwright, WebKit) and `npm run a11y`. Design:
+  `specs/2026-11-19-minimal-terminal-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
@@ -113,7 +120,10 @@ a seeded roll. Candidates, not yet picked:
   About Me and the terminal (the Artificer).
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
-- **Recruiter page** (text-only, generated from `content.ts` and GitHub) and **Herald** files (`agents.md`, `llms.txt`).
+- ~~**Recruiter page** and **Herald** files.~~ Built. The text page is now the minimal version (see Done); the
+  Herald files are `/agents.md` and `/llms.txt`.
+- **Minimal version: what's left.** The title menu's link to it; removing the old pop-up terminal and home page once
+  the title menu takes `/`; a pass on a real iPhone and on iOS 27.
 - **Time of day, seasons and weather** from the visitor's clock: palette swaps, lit windows at night, autumn leaves,
   snow line moving, rain and mist.
 - **Parchment map** for fast travel between landmarks.
@@ -156,6 +166,10 @@ From the first-flight review:
   throttle: 6.1 → 5.6 ms p95 with the dragon on).
 - **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
 - **Title menu wording** (rose-window look kept). Three option sets offered 2026-11-18: plain, storybook, game-menu.
+- **The minimal version** (2026-11-19). Eight decisions, each built to its recommended option: where the page lives
+  (`/minimal`, `/recruiter` or `/` under the title menu), what happens to `/recruiter`, the old pop-up terminal,
+  programs on a phone, text size, what `clear` clears, the contact form, the LinkedIn address
+  (`specs/2026-11-19-minimal-terminal-design.md`, section 11).
 - **A bigger map?** Today: 6400², a 107 s lap, 3.24 MB. `paramsFor` scales every length with size, so a larger `n`
   alone magnifies the same islands; more world means more islands at today's scale, a re-tune, and splitting
   `world.bin` into streamed region packs (9600² is about 7 MB).
@@ -163,4 +177,7 @@ From the first-flight review:
 ## Open checks
 
 - Owner: open `/world` in Safari (Chrome is measured; Safari is not).
-- `npm run a11y` points at `scripts/run-axe.mjs`, which was never committed: restore or remove the script.
+- Owner: open `/minimal` on a real iPhone and type at its prompt. The keyboard behaviour is measured in the iOS 26.5
+  Simulator only, with synthesised touches, and not on iOS 27.
+- `npm run a11y` now gates `/minimal` (the script is committed). `/` and `/world` still fail it; add each to its
+  `PAGES` list once it passes.

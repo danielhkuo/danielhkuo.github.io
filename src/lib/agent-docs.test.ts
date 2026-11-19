@@ -126,7 +126,7 @@ test("llms.txt folds a description that spans lines onto its project's line", ()
 
 test("llms.txt points to the text page and to agents.md", () => {
   const all = targets(llmsTxt(PROJECTS));
-  assert.ok(all.includes("https://danielhkuo.github.io/recruiter"));
+  assert.ok(all.includes("https://danielhkuo.github.io/minimal"));
   assert.ok(all.includes("https://danielhkuo.github.io/agents.md"));
 });
 
