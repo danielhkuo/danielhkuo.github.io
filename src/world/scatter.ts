@@ -4,6 +4,7 @@
 // come from a hash of the cell, which hides the mask's 256-cell period.
 // Blue noise has no clumps and no rows, so woods never look planted.
 
+import { climateShift, isTemperate, softNoise } from "./biome.ts";
 import { hash2 } from "./core/hash.ts";
 import { gradNoise } from "./core/noise.ts";
 import { HUE_CLASS, hueField, WORLD_N } from "./cover.ts";
@@ -37,6 +38,11 @@ export const DENSITY = {
   alderBank: 0.3,
   boulder: 0.02,
   flower: 0.02,
+  /** Spruce on the lichen floor of the northern taiga: apart, each with its shadow. */
+  lichenWood: 0.085,
+  bogTree: 0.012,
+  /** Dwarf birch and willow on the tundra, where they gather in thickets. */
+  dwarf: 0.012,
 } as const;
 
 /** One world height unit is one screen row and a world row is 0.8 of one, so a crown of height h hides 1.25 h cells to its north. */
@@ -58,6 +64,7 @@ const SCATTER_SEED = 0x5ca77e4;
 const DRIFT_SEED = 0xf10e4;
 const CLUMP_SEED = 0xc0b5e;
 const HEDGE_SEED = 0x4ed6e;
+const SPRUCE_SEED = 0x59c0e;
 /** Lone trees on upland pasture and meadow are this share of the lowland's, and stand only in their clumps. */
 const UPLAND_LONE = 0.45;
 /** Sparse scatter outside a clump is this share of its peak density. */
@@ -84,19 +91,26 @@ function vigour(c: CoverInput): number {
   return (0.55 + 0.45 * clamp01((c.moisture - 0.4) / 0.25)) * (0.4 + 0.6 * clamp01((0.6 - c.wind) / 0.2));
 }
 
-/** 0 well below the tree line … 1 at it: the cold score cover.ts uses, less the highland's lower line. */
-function altitude(c: CoverInput): number {
-  const cold = c.e / 100 + 0.1 * (c.formNorth === undefined ? c.northness : c.formNorth);
+/** 0 well below the tree line … 1 at it: the cold score cover.ts uses, less the highland's lower line. `shift` is the climate's offset of height. */
+function altitude(c: CoverInput, shift: number): number {
+  const cold = (c.e + shift) / 100 + 0.1 * (c.formNorth === undefined ? c.northness : c.formNorth);
   return clamp01((cold - 0.46 + 0.18 * (c.region[1] + c.region[3])) / 0.14);
 }
 
-/** Trees and bushes per cell on this ground. Monotone: more moisture never means fewer trees, more wind never more. */
-export function treeDensity(c: CoverInput, groundMat: number): number {
+/**
+ * Trees and bushes per cell on this ground. Monotone: more moisture never means fewer trees, more wind never more.
+ * `shift` is the climate's offset of height (biome.ts): 0 in the temperate climate.
+ */
+export function treeDensity(c: CoverInput, groundMat: number, shift: number = 0): number {
   // Woods thin toward the tree line: the last ten units of height below it carry half the trees.
-  if (groundMat === M.floorBroadleaf) return DENSITY.broadleaf * vigour(c) * (1 - 0.5 * altitude(c));
-  if (groundMat === M.floorConifer) return DENSITY.conifer * vigour(c) * (1 - 0.5 * altitude(c));
+  if (groundMat === M.floorBroadleaf) return DENSITY.broadleaf * vigour(c) * (1 - 0.5 * altitude(c, shift));
+  if (groundMat === M.floorConifer) return DENSITY.conifer * vigour(c) * (1 - 0.5 * altitude(c, shift));
+  // The cold's own ground: spruce standing apart on the lichen floor, a stunted one on the bog, dwarf birch on the tundra.
+  if (groundMat === M.floorLichen) return DENSITY.lichenWood * vigour(c) * (1 - 0.5 * altitude(c, shift));
+  if (groundMat === M.bog || groundMat === M.bogRed) return DENSITY.bogTree;
+  if (inTriple(groundMat, M.tundraCool)) return DENSITY.dwarf;
   // Lone trees are a lowland thing: on the hill they are rare, and none stand near the tree line.
-  const lone = c.region[0] > 0.5 ? 1 : UPLAND_LONE * (1 - altitude(c));
+  const lone = c.region[0] > 0.5 ? 1 : UPLAND_LONE * (1 - altitude(c, shift));
   if (inTriple(groundMat, M.pastureCool)) return DENSITY.pastureTree * vigour(c) * lone;
   if (inTriple(groundMat, M.meadowCool)) return DENSITY.meadowTree * vigour(c) * lone;
   if (groundMat === M.marsh) return DENSITY.marshTree;
@@ -109,6 +123,8 @@ export function treeDensity(c: CoverInput, groundMat: number): number {
 export function boulderDensity(c: CoverInput, groundMat: number): number {
   // Elsewhere stones lie only where debris reaches: no debris, no boulders.
   if (inTriple(groundMat, M.moorCool) || inTriple(groundMat, M.heathCool)) return DENSITY.boulder * 0.7 * clamp01(c.debris * 2);
+  // Tundra is strewn with erratics, debris or none.
+  if (inTriple(groundMat, M.tundraCool) || groundMat === M.lichen) return DENSITY.boulder * (0.25 + 0.5 * clamp01(c.debris * 2));
   if (inTriple(groundMat, M.alpineCool) || groundMat === M.snowLate) return DENSITY.boulder * 0.5 * clamp01(c.debris * 2);
   return 0;
 }
@@ -184,6 +200,7 @@ export function scatterAt(
   const cy = y + 0.5 + (u3 - 0.5) * 0.6;
   const north = riverDist ? riverDist.north : Infinity;
   const south = riverDist ? riverDist.south : Infinity;
+  const shift = isTemperate(c.temp) ? 0 : climateShift(c.temp as number, x, y, n);
 
   const treeRoll = maskAt(mask, x, y, TREE_OX, TREE_OY);
 
@@ -209,12 +226,12 @@ export function scatterAt(
     return { x: cx, y: cy, r, h, mat: tree ? M.broadleafMid : M.hedgeCrown, shape: 0 };
   }
 
-  let density = treeDensity(c, groundMat);
+  let density = treeDensity(c, groundMat, shift);
   // Sparse trees and bushes are gathered: a spinney's or a thicket's cells are dense, the sward between has next to none.
   if (density > 0 && density <= SPARSE) {
     density *= groundMat === M.marsh
       ? clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0)
-      : inTriple(groundMat, M.scrubCool)
+      : inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.tundraCool)
         ? gathered(x, y, n, THICKET_CELLS, 0.14, THICKET_PEAK, 0, 0.41)
         : gathered(x, y, n, SPINNEY_CELLS, 0.3, SPINNEY_PEAK, c.region[0] > 0.5 ? SPINNEY_FLOOR : 0, 0.17);
   }
@@ -223,12 +240,29 @@ export function scatterAt(
     let h: number;
     let mat: number;
     let shape = 0;
-    if (groundMat === M.floorConifer) {
-      r = 1 + 0.8 * u1;
-      h = 3 * r;
-      shape = 1;
+    if (groundMat === M.floorConifer || groundMat === M.floorLichen || groundMat === M.bog || groundMat === M.bogRed) {
       const v = hueField(x, y, HUE_CLASS.conifer, n) + (u4 - 0.5) * 1.1;
-      mat = M.coniferCool + (v < 0.5 ? 0 : v < 1.5 ? 1 : 2);
+      shape = 1;
+      // In the cold the conifer is spruce: a narrower, taller, darker spire. It takes over tree by tree as the latitude cools.
+      if (shift > 0 && shift > 12 + 14 * softNoise(x, y, n, 50, SPRUCE_SEED) + 10 * (u3 - 0.5)) {
+        const stunted = groundMat === M.bog || groundMat === M.bogRed;
+        r = stunted ? 0.7 + 0.3 * u1 : 0.85 + 0.6 * u1;
+        h = (stunted ? 2.6 : 3.6) * r;
+        mat = M.spruceCool + (v < 0.5 ? 0 : v < 1.5 ? 1 : 2);
+      } else {
+        r = 1 + 0.8 * u1;
+        h = 3 * r;
+        mat = M.coniferCool + (v < 0.5 ? 0 : v < 1.5 ? 1 : 2);
+      }
+    } else if (inTriple(groundMat, M.tundraCool)) {
+      r = 0.8 + 0.6 * u1;
+      h = 0.5 + 0.5 * u4;
+      mat = M.dwarfBirch;
+    } else if (shift > 0 && groundMat === M.floorBroadleaf && shift > 5 + 8 * softNoise(x, y, n, 40, SPRUCE_SEED + 1) + 6 * (u3 - 0.5)) {
+      // The cold's broadleaf is birch: small pale crowns, taller than wide.
+      r = 1.1 + 0.9 * u1 * u1;
+      h = 1.6 * r + 1.5;
+      mat = M.birch;
     } else if (inTriple(groundMat, M.scrubCool)) {
       r = 0.8 + 0.6 * u1;
       h = 1 + u4;

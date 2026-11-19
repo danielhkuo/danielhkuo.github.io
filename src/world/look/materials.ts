@@ -181,11 +181,56 @@ export const MATERIAL = {
   ivy: 100,
   /** Moss on stone that stands in the wet. */
   moss: 101,
+
+  // The climates (2026-11-18). New ids are added at the end: gen/sites.ts tests the older ones by range.
+
+  // Tundra: a mosaic of olive sedge-heath, ochre and russet dwarf heath, the three on consecutive ids.
+  tundraCool: 102,
+  tundraMid: 103,
+  tundraWarm: 104,
+  /** Reindeer lichen on the dry rises: pale, almost paper. */
+  lichen: 105,
+  /** Wet sedge of the cold flats and the bog's margins. */
+  sedge: 106,
+  /** Sphagnum bog (muskeg): ochre-green, with a red moss in its wettest hollows. */
+  bog: 107,
+  bogRed: 108,
+  /** A still, dark pool lying on wet flat ground: land to the bake, so nothing animates it. */
+  pool: 109,
+  /** The lines of frost polygons on the flattest tundra. */
+  frostNet: 110,
+  /** The pale lichen floor of the northern taiga, where the spruce stand apart. */
+  floorLichen: 111,
+  /** Spruce: darker and bluer than the temperate conifer, in narrow spires. */
+  spruceCool: 112,
+  spruceMid: 113,
+  spruceWarm: 114,
+  /** Birch: small pale crowns along water and wood edges in the cold. */
+  birch: 115,
+  /** Dwarf birch and willow of the tundra's hollows: low russet bushes. */
+  dwarfBirch: 116,
+
+  // Ice. Pack ice, lake ice and river ice lie on water cells but are land to the bake and the live layers: still.
+  packIce: 117,
+  /** Older, bluer floes and melt pools. */
+  packIceBlue: 118,
+  lakeIce: 119,
+  riverIce: 120,
+  /** The ice foot: where the ice of the land meets the sea. */
+  iceFoot: 121,
+  /** Bare glacier ice on the steep tongues of a snowfield. */
+  glacier: 122,
+  /** An iceberg. */
+  berg: 123,
+  /** Wind-scoured firn between the drifts of an ice cap: a shade bluer than its snow. */
+  firn: 124,
+  /** A crevasse: a blue crack where the ice bends. */
+  crevasse: 125,
 } as const;
 
 export type MaterialName = keyof typeof MATERIAL;
 
-export const MATERIAL_COUNT = 102;
+export const MATERIAL_COUNT = 126;
 
 /** Name of each id, for previews and test messages. */
 export const MATERIAL_NAMES: readonly string[] = (() => {
@@ -212,6 +257,7 @@ export const isWater: Uint8Array = flags([M.sea, M.seaClear, M.lake, M.river]);
 /** Stamped crowns: they take forest-edge ink against ground and none against each other. */
 export const isCanopy: Uint8Array = flags([
   ...triple(M.broadleafCool), ...triple(M.coniferCool), M.alder, M.shrub,
+  ...triple(M.spruceCool), M.birch, M.dwarfBirch,
 ]);
 
 /** Drawn as polylines in bake-pixel space; never inked. */
@@ -233,6 +279,8 @@ export const isVegetation: Uint8Array = flags([
   M.marsh, M.reeds,
   ...triple(M.meadowCool), ...triple(M.pastureCool), ...triple(M.scrubCool),
   M.hedge, M.hedgeCrown, M.bracken, M.duneGrass, M.saltmarsh, M.gorse,
+  // The climates. Only what is no lighter in shade than the palest field here: the river's lift must not rise.
+  ...triple(M.tundraCool), M.sedge, M.bog, M.bogRed, ...triple(M.spruceCool), M.birch, M.dwarfBirch,
 ]);
 
 /** Made things: buildings, walls and paving. */
@@ -248,4 +296,5 @@ export const isGrass: Uint8Array = flags([
   M.wheat, M.barley, M.ley, M.hay, M.reeds,
   M.wheatRow, M.barleyRow, M.leyStripe, M.hayRow,
   ...triple(M.meadowCool), ...triple(M.pastureCool), M.duneGrass,
+  M.sedge,
 ]);

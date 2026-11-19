@@ -3,6 +3,7 @@
 // material, light and cast shadows. Every output is a pure function of the
 // wrapped cell position, so any window equals the same crop of any other.
 
+import { TEMPERATE } from "../biome.ts";
 import { hash2 } from "../core/hash.ts";
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
@@ -653,8 +654,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const terr = new Uint8Array(count);
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
+  /** 1 where the cell's climate is not the temperate one. */
+  const foreign = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0, temp: undefined };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0, temp: undefined, stream: 0 };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cStride * (cWin ? cWin.h : cN);
   const rockW = new Float64Array(3);
@@ -775,6 +778,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         // Four equal corners give their own value, not a sum of weights: the temperate plateau stays the plateau to the bit.
         const t00 = temp[c00], t10 = temp[c10], t01 = temp[c01], t11 = temp[c11];
         c.temp = t00 === t10 && t00 === t01 && t00 === t11 ? t00 : w00 * t00 + w10 * t10 + w01 * t01 + w11 * t11;
+        if (c.temp !== TEMPERATE) foreign[i] = 1;
       }
       // The cover blends rock kinds where they meet; the flags keep the voted class.
       c.rock = rockW[1] + 2 * rockW[2];
@@ -790,6 +794,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
       c.shore = sh;
       c.water = water[i] ? water[i] : riv[i] === 0 ? 3 : 0;
+      c.stream = c.water === 3 && phase[i] === 8 ? 1 : 0;
       const m = look.cover(c, mask);
       gmat[i] = m;
       if (c.water !== 0) continue;
@@ -851,7 +856,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   if (stackTop !== null && look.turf !== undefined) {
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
       const i = (y + cOff) * W + x + cOff;
-      if (stackTop[i] === 1 && water[i] === 0 && slope[i] < 1) gmat[i] = look.turf;
+      // In another climate the cover has already dressed the top: snow in the cold, scrub in the heat.
+      if (stackTop[i] === 1 && water[i] === 0 && slope[i] < 1 && foreign[i] === 0) gmat[i] = look.turf;
     }
   }
   if (world.bars && look.barSand !== undefined) {

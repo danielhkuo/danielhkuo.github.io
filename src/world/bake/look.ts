@@ -16,6 +16,8 @@ export function noInkFlags(): Uint8Array {
   const out = new Uint8Array(256);
   for (let m = 0; m < 256; m++) if (isWater[m] || isCrop[m] || isLine[m]) out[m] = 1;
   for (const m of [M.sand, M.sandPale, M.shingle, M.marsh, M.reeds, M.flowerPale, M.flowerMauve, M.hedgeCrown, M.duneGrass, M.saltmarsh, M.saltCreek, M.screeStone]) out[m] = 1;
+  // The climates: wet flats, pools and every kind of floating ice.
+  for (const m of [M.sedge, M.bog, M.bogRed, M.pool, M.frostNet, M.packIce, M.packIceBlue, M.lakeIce, M.riverIce, M.crevasse]) out[m] = 1;
   return out;
 }
 
@@ -23,6 +25,8 @@ export function noInkFlags(): Uint8Array {
 export function stillFlags(): Uint8Array {
   const out = new Uint8Array(256);
   out[M.sea] = out[M.seaClear] = out[M.lake] = 1;
+  // Ice on the water is a shore too: land takes its coast line where it meets a floe or a frozen lake.
+  out[M.packIce] = out[M.packIceBlue] = out[M.lakeIce] = 1;
   return out;
 }
 
@@ -30,6 +34,7 @@ export function stillFlags(): Uint8Array {
 export function snowFlags(): Uint8Array {
   const out = new Uint8Array(256);
   out[M.snow] = out[M.snowLate] = 1;
+  out[M.glacier] = out[M.iceFoot] = out[M.firn] = 1;
   return out;
 }
 

@@ -55,6 +55,11 @@ export interface CoverInput {
   riverDx?: number;
   riverDy?: number;
   /**
+   * Optional: 1 on a river cell that is a one-cell stream, not a river with banks. A stream is the first water a
+   * climate takes: dry in a desert, lost under the snow on an ice cap.
+   */
+  stream?: number;
+  /**
    * Optional: 1 when the river in sight due north or south of this cell is at
    * least 2 cells wide. Only such rivers carry riverside trees; a line of
    * trees along every rill reads as a comb.

@@ -12,7 +12,7 @@ import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
 import { rngFor } from "../core/rng.ts";
 import { wrap, wrapIndex } from "../core/torus.ts";
 import { ARCHETYPE, paramsFor } from "../gen/params.ts";
-import { makeWorld, settleWorld } from "../gen/pipeline.ts";
+import { makeWorld, settleWorld, type World } from "../gen/pipeline.ts";
 import type { Settlement } from "../gen/settle.ts";
 import { cachedTerrain } from "./worldcache.ts";
 import type { Plan } from "../gen/plan.ts";
@@ -164,7 +164,11 @@ export interface RenderOptions {
   /** Extra viewpoints as "name:x:y". */
   extra?: Viewpoint[];
   /** Which viewpoints to render: the six chosen from the data, the reserved sites, or both (default). */
-  views?: "auto" | "sites" | "all";
+  views?: "auto" | "sites" | "all" | "none";
+  /** The land alone: no siting, so no sites, roads or buildings (and no site views). Seconds, not minutes, on a cached world. */
+  wild?: boolean;
+  /** Skip the gates (ink, tone, grid, repeat): they cost a minute a view, and a quick look does not need them. */
+  noGates?: boolean;
   /** Hamlets to add to the site viewpoints. */
   hamlets?: number;
   /** Read the land from .cache/world-gen/ (and write it there) instead of generating it every run. */
@@ -184,9 +188,12 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const { n, seed } = opts;
   const t0 = performance.now();
   const params = paramsFor(n);
-  const made = opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
-  for (const line of made.settlement.shortfall) log(`siting shortfall: ${line}`);
-  log(`${made.settlement.sites.length} sites, ${made.settlement.hamlets.length} hamlets, ${made.settlement.built.structures.length} structures, ${made.settlement.built.roads.length} road lines`);
+  // A wild world is its terrain alone; the bake draws no settlement where there is none.
+  const made = opts.wild ? (cachedTerrain(params, seed) as World) : opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
+  if (!opts.wild) {
+    for (const line of made.settlement.shortfall) log(`siting shortfall: ${line}`);
+    log(`${made.settlement.sites.length} sites, ${made.settlement.hamlets.length} hamlets, ${made.settlement.built.structures.length} structures, ${made.settlement.built.roads.length} road lines`);
+  }
   const plan = made.land.plan;
   const world = buildBakeWorld({ params, seed, world: made });
   log(`world ${n} seed ${seed}: ${Math.round(performance.now() - t0)} ms`);
@@ -199,8 +206,8 @@ export function renderWorld(opts: RenderOptions): RenderResult {
 
   const views = opts.views ?? "all";
   const points = [
-    ...(views !== "sites" ? autoViewpoints(world, plan, seed) : []),
-    ...(views !== "auto" ? siteViewpoints(made.settlement, opts.hamlets ?? 0) : []),
+    ...(views === "auto" || views === "all" ? autoViewpoints(world, plan, seed) : []),
+    ...((views === "sites" || views === "all") && !opts.wild ? siteViewpoints(made.settlement, opts.hamlets ?? 0) : []),
     ...(opts.extra ?? []),
   ];
   const frames: Uint32Array[] = [];
@@ -217,6 +224,10 @@ export function renderWorld(opts: RenderOptions): RenderResult {
     writeFileSync(join(dir, `${base}.png`), encodePng(bytes(out), VIEW_W, VIEW_H));
     writeFileSync(join(dir, `${base}@3x.png`), encodePng(bytes(upscale(out, VIEW_W, VIEW_H, 3)), VIEW_W * 3, VIEW_H * 3));
     files.push(join(dir, `${base}@3x.png`));
+    if (opts.noGates) {
+      log(`${base}: cell (${vp.x}, ${vp.y})`);
+      continue;
+    }
     // Gates, on the bake pixels of a 512 × 256 window on the same centre.
     const r = view.rect();
     const gx = r.x + (VIEW_W >> 1) - 256, gy = r.y + (VIEW_H >> 1) - 128;
@@ -252,7 +263,7 @@ export function main(argv: string[]): void {
   let n = 2048, seed = 7;
   const extra: Viewpoint[] = [];
   let outDir: string | undefined;
-  let views: RenderOptions["views"], hamlets = 0, cache = false;
+  let views: RenderOptions["views"], hamlets = 0, cache = false, wild = false, noGates = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--n") n = Number(argv[++i]);
@@ -261,11 +272,13 @@ export function main(argv: string[]): void {
     else if (a === "--views") views = argv[++i] as RenderOptions["views"];
     else if (a === "--hamlets") hamlets = Number(argv[++i]);
     else if (a === "--cache") cache = true;
+    else if (a === "--wild") wild = true;
+    else if (a === "--no-gates") noGates = true;
     else if (a === "--at") {
       const [name, x, y] = argv[++i].split(":");
       extra.push({ name, x: Number(x), y: Number(y), e: 0 });
     }
   }
-  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, log: (l) => console.log(l) });
+  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, wild, noGates, log: (l) => console.log(l) });
   console.log(res.dir);
 }

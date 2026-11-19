@@ -357,6 +357,41 @@ function buildSpecs(): Spec[] {
   set(M.ivy, evergreen([0.5, 0.068, 148]), BUILT);
   set(M.moss, evergreen([0.64, 0.055, 128]), BUILT);
 
+  // ---- The climates (2026-11-18). Nothing above this line is changed by them. -------------------------------
+  // None of these turns with the season unless its plant does. Warm grounds sit inside the reserved hues, so their
+  // chroma keeps under the cap; none of the vegetation here is lighter in shade than the palest field above, so
+  // the river's lift is what it was.
+
+  // Tundra: lighter and rustier than moor, never a green.
+  set(M.tundraCool, all([0.675, 0.052, 112]), UPLAND);
+  set(M.tundraMid, all([0.71, 0.056, 94]), UPLAND);
+  set(M.tundraWarm, all([0.645, 0.062, 62]), UPLAND);
+  set(M.lichen, all([0.86, 0.025, 128]), PALE);
+  set(M.sedge, [[0.7, 0.07, 118], [0.71, 0.072, 112], [0.7, 0.07, 92], [0.7, 0.05, 88]], LAND);
+  set(M.bog, all([0.66, 0.068, 98]), LAND);
+  set(M.bogRed, all([0.58, 0.06, 28]), LAND);
+  // A pool is dark still water seen from above: one flat tone, a little lighter where the sky is in it.
+  set(M.pool, all([0.5, 0.045, 238]), LINE);
+  set(M.frostNet, all([0.55, 0.045, 70]), LINE);
+  // Taiga: dark spires on a pale floor.
+  set(M.floorLichen, all([0.82, 0.03, 112]), LAND);
+  set(M.spruceCool, evergreen([0.31, 0.04, 192]), CANOPY);
+  set(M.spruceMid, evergreen([0.34, 0.043, 184]), CANOPY);
+  set(M.spruceWarm, evergreen([0.365, 0.046, 174]), CANOPY);
+  set(M.birch, [[0.7, 0.09, 122], [0.68, 0.08, 118], [0.74, 0.085, 92], [0.62, 0.02, 60]], CANOPY);
+  set(M.dwarfBirch, [[0.58, 0.07, 126], [0.55, 0.06, 120], [0.56, 0.075, 52], [0.54, 0.03, 45]], CANOPY);
+  // Ice. Floes are a shade bluer than snow and flat; old ice and glacier ice are the blue of the picture.
+  const FLOE = { drop: 0.2, rise: 0.6, cool: 0.03, coolHue: 250, warm: 0, ramp: "land" } as const;
+  set(M.packIce, all([0.925, 0.016, 232]), FLOE);
+  set(M.packIceBlue, all([0.86, 0.036, 224]), FLOE);
+  set(M.lakeIce, all([0.9, 0.022, 228]), FLOE);
+  set(M.riverIce, all([0.87, 0.03, 226]), FLOE);
+  set(M.iceFoot, all([0.86, 0.04, 222]), SNOWY);
+  set(M.glacier, all([0.82, 0.055, 218]), SNOWY);
+  set(M.berg, all([0.93, 0.022, 226]), SNOWY);
+  set(M.firn, all([0.905, 0.03, 238]), SNOWY);
+  set(M.crevasse, all([0.6, 0.06, 232]), LINE);
+
   return s;
 }
 
