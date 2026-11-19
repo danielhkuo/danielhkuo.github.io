@@ -117,7 +117,7 @@ const STRATA_SPACING = 5.5;
 /** Below this height nothing is ever snow, so the snowline is not worked out. */
 const SNOW_FLOOR = 62;
 /** Heather wants exposure: the form's convexity (CoverInput.curve) from which a crest begins to count, and at which it counts in full. */
-const HEATH_CREST: readonly [number, number] = [0.6, 2.2];
+const HEATH_CREST: readonly [number, number] = [0.9, 2.6];
 /** What a full crest adds to the heath's score, and what open ground that is no crest loses. */
 const HEATH_CREST_GAIN = 1.4;
 /** Height above the valley (CoverInput.hand) from which a broad top begins to count as exposed, and counts in full. */
@@ -332,7 +332,7 @@ function heathOrMoor(c: CoverInput, x: number, y: number, j: number, mask: Uint8
   const above = (c.hand - 18) / 30;
   const curve = c.curve === undefined ? 0 : c.curve;
   // A long spur is heather in patches along its back, not one stripe from top to foot.
-  const patch = 0.5 + 1.6 * soft(x, y, n, 17, HEATH_SEED + 7);
+  const patch = 0.2 + 1.6 * soft(x, y, n, 17, HEATH_SEED + 7);
   const ridge = (curve <= HEATH_CREST[0] ? 0 : curve >= HEATH_CREST[1] ? 1 : (curve - HEATH_CREST[0]) / (HEATH_CREST[1] - HEATH_CREST[0])) *
     (patch <= 0 ? 0 : patch >= 1 ? 1 : patch);
   // A broad top far above its valleys is as exposed as a crest; a face, however high, is not.

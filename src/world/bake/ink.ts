@@ -76,7 +76,7 @@ export const BED_HARD = 6;
 export const BED_TONE = 18;
 export const BED_TONE_HARD = 20;
 /** The lift of the sunlit ledge under a bedding line on a wall in shade, of 255. */
-export const LEDGE_LIFT = 26;
+export const LEDGE_LIFT = 20;
 /** A rock face takes its light from this many columns to either side, so it is lit as a face and not column by column. */
 export const FACE_REACH = 5;
 /** Steep rock that is not a wall takes it from this many: its ribs are broad, and lit one by one they stripe the face. */
@@ -617,7 +617,7 @@ export function rockFaces(p: Painted): void {
         // The ledge under a bedding line faces up, so it catches the sun even on a wall turned away from it: a pale
         // strip along each bed, which is what makes the beds read across a face in shade.
         // Not every bed has one, nor all along: the ledges come and go, and some are two pixels deep.
-        else if (wall[i] > (bedded ? LIP_BEDS_SOFT : LIP_BEDS) - 2 && (hb & 3) !== 0 && (hash2(X >> 2, band, 0x3bea) & 3) !== 0 && off < j && off >= j - ((hb >>> 3) & 1 ? 2 : 1)) d += l > 96 ? 14 : LEDGE_LIFT;
+        else if (wall[i] > (bedded ? LIP_BEDS_SOFT : LIP_BEDS) - 2 && (hb & 7) < 3 && (hash2(X >> 2, band, 0x3bea) & 3) !== 0 && off < j && off >= j - ((hb >>> 3) & 1 ? 2 : 1)) d += l > 96 ? 12 : LEDGE_LIFT;
         // Fissures: few, one to a slot of uneven width and each within one bed, jogging a column as it goes, so they break
         // the beds without ruling the face into columns.
         const P = bedded ? 29 : 19;

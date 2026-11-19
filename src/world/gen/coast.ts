@@ -251,7 +251,7 @@ const NOTCH_SLOPE = 0.6;
 /** The notches' steepness wanders over this many cells (of the 6400 world); where its noise is under NOTCH_SKIP, no notch is cut. */
 const NOTCH_CELLS = 90;
 /** The depth of a shoal's crest off a headland. */
-const SHOAL_TOP: readonly [number, number] = [2.6, 4.2];
+const SHOAL_TOP: readonly [number, number] = [3.6, 5.6];
 const NOTCH_SKIP = 0.22;
 /** Block size, in nodes, of the coarse height maxima used to bound a cap's reach. */
 const BLOCK = 8;
@@ -733,11 +733,11 @@ export function coast(hIn: Float64Array, n: number, ctx: CoastContext, p: WorldP
     let form: "delta" | "estuary" | "plain" = "plain";
     if (retreat[s] > 0 && cells >= coveMin) {
       const grow = Math.min(1, Math.sqrt(cells / (COVE_FULL * coveMin)));
-      // No two coves alike: the largest are not all cut to one length, and the mouth runs from a narrow gap to a
-      // bay open almost as wide as its head, so a cliffed shore is not a row of keyholes.
+      // No two coves alike: the largest are not all cut to one length, and the mouth is never a narrow gap into a
+      // round pool: a cliffed shore is not a row of keyholes.
       const len = Math.min(c.coveLen[1] * Math.min(1, rng.range(0.55, 1.1)), (c.coveLen[0] + (c.coveLen[1] - c.coveLen[0]) * grow) * rng.range(0.7, 1.3));
       const wide = len * rng.range(0.18, 0.36);
-      const neck = rng.range(0.5, 0.95);
+      const neck = rng.range(0.72, 0.95);
       const sand = rng.float() < c.coveBoulder ? 0 : rng.range(0.25, 0.42);
       const coveSeed = rng.next();
       // The cove lies along the stream's last reach, not along the shore's normal.

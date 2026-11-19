@@ -25,7 +25,7 @@ export const SNOW_LEAN = 1.1;
 /** A snow slope's aspect counts in full from this slope; a gentler one is lit more evenly, towards the flat tone. */
 export const SNOW_ASPECT = 0.32;
 /** Snow this far under the mean of the ground round it (light.ts relief) takes the full lilac of a hollow. */
-export const SNOW_HOLLOW = 7;
+export const SNOW_HOLLOW = 4.5;
 /** A steep snow face is in light only when it faces the sun's bearing by more than this cosine; short of it, in shade. */
 export const SNOW_TURN = 0.3;
 /** The least shade a steep face out of the light takes, so the whole face reads as one shaded face. */

@@ -17,18 +17,18 @@ const TIMES = [0.7, 2.3, 5.1] as const;
  * terrain polish, which repaints the land under the water (snow light, rock beds, upland colours) but not the water.
  */
 const GOLDEN: Record<string, string> = {
-  "start@0.7": "fc89a5d6f40a349a763e0ecc76d8788a8dd93b994bae4bcbb08ef7f497d63894",
-  "start@2.3": "9cfcbb73843ba4294b43e31f7b1d7e97fb955acbc9b04b8db0b0a439665f328a",
-  "start@5.1": "48473802dd5ded90e9d32e04cf5960decc50d2c0fa6e16b12d2f3142d5327008",
-  "sea@0.7": "4b76683e3c189cbdd9b5ac501740a4f2ca4d4115e81f0265c0f734696ebafce8",
-  "sea@2.3": "45ecac0f7c1991888e343d8c49bad90874c62b5a426e031a6bb839d36463e864",
-  "sea@5.1": "f7c82395b377b63e2f1c2eba144e3a71ce5c580e9bead25b210061d07f304c4a",
-  "falls@0.7": "93a1b315c198999be52beb2cb7f01fca54ee8a6526172cf0379cde86158fdfd2",
-  "falls@2.3": "b57fe9fa43cf867d653986264316422f984b8b913cf75019808305859bf3b705",
-  "falls@5.1": "3f0e270b6ea75edfe491daf8f09d91bec18ada14cc37e1bef767f2e8c800651d",
-  "peak@0.7": "73d55e13e00fd751323e15cbf22cba34bb91742750ce0c2aa93a168a5f05e3cb",
-  "peak@2.3": "c1859466c3649dcbd7014bd5d7e30d8a0e80add4ea53865b5eb039143e3069eb",
-  "peak@5.1": "9e099afd8a580736c377c08251296299533cb8609964ac2954a7978eb0176f26"
+  "start@0.7": "829b3edc0dc092f78a65bc4533128524b8e2d2e66f842303fa245b6b470a188d",
+  "start@2.3": "a72a1a5d0cf11ca649e682b85dc651cfb2a74f475bfc69c0341104873a3b1bc2",
+  "start@5.1": "8af21f0340cb4c8266dfbad54bb24db5acb64cad65fc9c56d3d660cc798366c8",
+  "sea@0.7": "45d6adcf155afd19fda8960411b3664af9d0ea706f40c568bda4d2cc81e2a381",
+  "sea@2.3": "1406d71960e5c6dc0c644e91e3e828e04f6953a2ae0462e5c97104012e9a9880",
+  "sea@5.1": "a81cb884aaa7a2cbe206a26a4d9963991922c9c1fc8d7c4cb7720e27af1e6c51",
+  "falls@0.7": "d61684ad0ba8f980274ecbdd4ef67024752b68fe57c19a6b9a0863c983e458bd",
+  "falls@2.3": "3febdb3a40bc66b6a892d19ef3ddcf99bc0eee439a1353d762aee9c592b3f781",
+  "falls@5.1": "2334585af2c06d2561034fc9a7d9885676a63ed2d1f089f6bad8161a64e4fe0d",
+  "peak@0.7": "5e22d6245940ba27fd70bbde29fccd32867394394d39410fcf7607fe94026975",
+  "peak@2.3": "8d8508004d5625fa684a002c107fe40fbd0502395fa9cc1c0d8cabc416029485",
+  "peak@5.1": "b44086e8ff0a081c53f301b9cec7e031fe5c45f93815a667495674ba28917967"
 };
 
 interface Fixture { frames: Record<string, LiveFrame>; seed: number }

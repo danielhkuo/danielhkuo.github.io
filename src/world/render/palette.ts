@@ -292,7 +292,7 @@ function buildSpecs(): Spec[] {
 
   // Wet ground.
   set(M.marsh, grass([0.62, 0.065, 128]), LAND);
-  set(M.reeds, [[0.66, 0.07, 115], [0.67, 0.065, 105], [0.7, 0.07, 85], [0.72, 0.06, 82]], LAND);
+  set(M.reeds, [[0.66, 0.07, 115], [0.69, 0.072, 90], [0.7, 0.07, 82], [0.72, 0.06, 80]], LAND);
 
   // The shore's own plants. Marram is a pale sage that bleaches in winter; saltmarsh a grey-green, its creeks wet mud.
   set(M.duneGrass, [[0.8, 0.05, 124], [0.81, 0.045, 118], [0.8, 0.045, 104], [0.79, 0.035, 96]], LAND);
