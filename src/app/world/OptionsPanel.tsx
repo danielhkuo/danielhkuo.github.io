@@ -6,8 +6,9 @@
 import Link from "next/link";
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DEFAULT_KEYS, REMAPPABLE, rebind, type Remappable } from "../../world/controls/bindings";
-import { keyCap, label, plate, text, VERMILION } from "../../world/controls/glyphs";
+import { INK_SOFT, keyCap, plate, slip, text, VERMILION } from "../../world/controls/glyphs";
 import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
+import type { PhaseKind } from "./session";
 import type { Options } from "../../world/controls/options";
 import styles from "./options.module.css";
 import PixelGlyph from "./PixelGlyph";
@@ -23,13 +24,23 @@ export interface OptionsPanelProps {
   onClose(): void;
 }
 
-/** Words drawn in the pixel font, with the same words for readers. */
-function Words({ children, px, say }: { children: string; px: number; say?: string }) {
+/** Words drawn in the pixel font (in palette slot `ink`), with the same words for readers. */
+function Words({ children, px, say, ink }: { children: string; px: number; say?: string; ink?: number }) {
   return (
     <>
-      <PixelGlyph sprite={text(children)} px={px} />
+      <PixelGlyph sprite={text(children, ink)} px={px} />
       <span className={styles.sr}>{say ?? children}</span>
     </>
+  );
+}
+
+/** The rubricated pilcrow before each action: soft at rest, vermilion under the pointer or the focus. */
+function Mark({ px }: { px: number }) {
+  return (
+    <span className={styles.mark}>
+      <PixelGlyph className={styles.markRest} sprite={text("¶", INK_SOFT)} px={px} />
+      <PixelGlyph className={styles.markHot} sprite={text("¶", VERMILION)} px={px} />
+    </span>
   );
 }
 
@@ -65,8 +76,8 @@ function Choice<T extends string>({ name, legend, value, choices, px, onPick }: 
 function Action({ children, onClick, px }: { children: ReactNode; onClick(): void; px: number }) {
   return (
     <button type="button" className={styles.action} onClick={onClick}>
+      <Mark px={px} />
       {children}
-      <PixelGlyph className={styles.mark} sprite={text("¶", VERMILION)} px={px} />
     </button>
   );
 }
@@ -133,10 +144,12 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
       <Choice name="pace" legend="pace" value={options.pace} px={px} choices={[["cruise", "Cruise at full speed"], ["gentle", "A gentler pace"]]} onPick={(pace) => set({ pace })} />
       <Choice name="motion" legend="motion" value={options.motion} px={px} choices={[["full", "Full motion"], ["reduced", "Reduced motion"]]} onPick={(motion) => set({ motion })} />
       <fieldset className={styles.keys}>
-        <legend className={styles.legend}>
-          <Words px={px}>keys</Words>
+        <legend className={styles.keysTitle}>
+          <Words px={px} ink={VERMILION}>
+            keys
+          </Words>
         </legend>
-        <ul>
+        <ul className={styles.keyGrid}>
           {REMAPPABLE.map((a) => (
             <li key={a} className={styles.keyRow}>
               <span className={styles.keyWord}>
@@ -154,9 +167,8 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
           ))}
         </ul>
         <p className={styles.note}>
-          <Words px={px} say="The arrow keys, Shift, Enter and Esc always work.">
-            arrows, shift, enter and esc always work
-          </Words>
+          <PixelGlyph sprite={text("arrows, shift, enter and esc always work")} px={px} />
+          <span className={styles.sr}>The arrow keys, Shift, Enter and Esc always work.</span>
         </p>
       </fieldset>
       <p className={styles.actions}>
@@ -167,8 +179,8 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
           <Words px={px}>show the lesson again</Words>
         </Action>
         <Link className={styles.action} href="/">
+          <Mark px={px} />
           <Words px={px}>leave the world</Words>
-          <PixelGlyph className={styles.mark} sprite={text("¶", VERMILION)} px={px} />
         </Link>
         <Action px={px} onClick={() => dialog.current?.close()}>
           <Words px={px} say="Close the options">close</Words>
@@ -181,30 +193,32 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
 export interface CornerProps {
   px: number;
   device: Device;
+  /** Esc leaves only while flying: coming down it pulls up, and landed it takes off. */
+  phase: PhaseKind;
   /** Shown while the pointer moves, for a while after the page opens, and always on a touch screen. */
   shown: boolean;
   onOpen(): void;
 }
 
 /**
- * The ways out of the flight from the corner of the world: "[esc] leave" and "[O] options" by keyboard, the pad's own
- * buttons by gamepad, and on a touch screen one plate that opens the options (where Leave is).
+ * The ways out of the flight from the corner of the world: "[esc] leave" (while flying) and "[O] options" by keyboard,
+ * the pad's own buttons by gamepad, and on a touch screen one plate that opens the options (where Leave is).
  */
-export function Corner({ px, device, shown, onOpen }: CornerProps) {
+export function Corner({ px, device, phase, shown, onOpen }: CornerProps) {
   const touch = device === "touch";
   const pad = device === "gamepad";
   return (
     <nav className={`${styles.corner} ${shown || touch ? styles.cornerShown : ""}`} style={pxVar(px)} aria-label="Leave or open the options">
-      {touch ? null : (
+      {touch || phase !== "flying" ? null : (
         <Link className={styles.cornerItem} href="/" aria-keyshortcuts="Escape">
           <PixelGlyph sprite={pad ? plate("view") : keyCap("Escape")} px={px} />
-          <PixelGlyph sprite={label("leave")} px={px} />
+          <PixelGlyph sprite={slip("leave")} px={px} />
           <span className={styles.sr}>Leave the world</span>
         </Link>
       )}
       <button type="button" className={styles.cornerItem} onClick={onOpen} aria-keyshortcuts="O">
         <PixelGlyph sprite={touch ? plate("options") : pad ? plate("menu") : keyCap("o")} px={px} />
-        {touch ? null : <PixelGlyph sprite={label("options")} px={px} />}
+        {touch ? null : <PixelGlyph sprite={slip("options")} px={px} />}
         <span className={styles.sr}>Options</span>
       </button>
     </nav>

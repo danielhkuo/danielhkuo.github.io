@@ -12,7 +12,7 @@
 
 .panel {
   max-height: calc(100vh - 2rem);
-  padding: calc(var(--px) * 6) calc(var(--px) * 8) calc(var(--px) * 7);
+  padding: calc(var(--px) * 5) calc(var(--px) * 7) calc(var(--px) * 6);
   overflow: auto;
   background: var(--paper);
   border: var(--px) solid var(--ink);
@@ -32,14 +32,14 @@
 }
 
 .title {
-  margin: 0 0 calc(var(--px) * 5);
+  margin: 0 0 calc(var(--px) * 4);
   line-height: 0;
 }
 
 .row,
 .keys {
   min-width: 0;
-  margin: 0 0 calc(var(--px) * 4);
+  margin: 0 0 calc(var(--px) * 2);
   padding: 0;
   border: 0;
 }
@@ -58,9 +58,13 @@
   line-height: 0;
 }
 
-.keys .legend {
-  float: none;
-  margin-bottom: calc(var(--px) * 2);
+/* The keys are a section of their own, headed in vermilion over a dotted rule, as the Codex heads its register. */
+.keysTitle {
+  width: 100%;
+  margin: calc(var(--px) * 2) 0 calc(var(--px) * 2);
+  padding: 0 0 calc(var(--px) * 1);
+  line-height: 0;
+  border-bottom: var(--px) dotted rgb(46 42 36 / 0.45);
 }
 
 .choices {
@@ -74,12 +78,18 @@
   cursor: pointer;
 }
 
+/* The five keys two to a row, each name with its cap. */
+.keyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--px) * 1) calc(var(--px) * 10);
+}
+
 .keyRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: calc(var(--px) * 8);
-  margin-bottom: calc(var(--px) * 1);
+  gap: calc(var(--px) * 4);
 }
 
 .keyWord {
@@ -99,6 +109,8 @@
 }
 
 .note {
+  display: grid;
+  gap: calc(var(--px) * 1);
   margin: calc(var(--px) * 2) 0 0;
   line-height: 0;
   opacity: 0.7;
@@ -106,32 +118,45 @@
 
 .actions {
   display: grid;
+  grid-template-columns: 1fr 1fr;
   justify-items: start;
-  gap: calc(var(--px) * 3);
-  margin: calc(var(--px) * 6) 0 0;
+  gap: calc(var(--px) * 3) calc(var(--px) * 10);
+  margin: calc(var(--px) * 5) 0 0;
 }
 
 .action {
   display: inline-flex;
-  flex-direction: row-reverse;
   align-items: center;
-  gap: calc(var(--px) * 2);
+  gap: calc(var(--px) * 3);
 }
 
-/* A rubricated pilcrow marks the line under the pointer or the focus. */
+/* A pilcrow before each action, so it reads as something to press: soft at rest, rubricated under the pointer. */
 .mark {
+  display: inline-grid;
+  line-height: 0;
+}
+
+.markRest,
+.markHot {
+  grid-area: 1 / 1;
+}
+
+.markHot,
+.action:hover .markRest,
+.action:focus-visible .markRest {
   visibility: hidden;
 }
 
-.action:hover .mark,
-.action:focus-visible .mark {
+.action:hover .markHot,
+.action:focus-visible .markHot {
   visibility: visible;
 }
 
+/* Focus is an ink ring with a paper gap, so it never reads as a choice (choices are vermilion). */
 .choice:has(input:focus-visible),
 .key:focus-visible,
 .action:focus-visible {
-  outline: var(--px) solid var(--vermilion);
+  outline: var(--px) solid var(--ink);
   outline-offset: var(--px);
 }
 
@@ -176,8 +201,16 @@
 }
 
 .cornerItem:focus-visible {
-  outline: var(--px) solid var(--vermilion);
+  outline: var(--px) solid var(--ink);
   outline-offset: var(--px);
+}
+
+/* A finger needs more than the plate: pad the target without moving what is drawn. */
+@media (pointer: coarse) {
+  .cornerItem {
+    padding: calc(var(--px) * 4);
+    margin: calc(var(--px) * -4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

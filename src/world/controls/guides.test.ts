@@ -54,7 +54,7 @@ test("the lesson fades in and out, and under reduced motion simply shows and goe
 const lit = { keys: new Set<string>(), turn: false, boost: false, slow: false, south: false, east: false };
 const base: GuideState = {
   device: "keyboard", phase: "flying", offer: null, lesson: { ...newLesson(false), stage: "steer", t: 5 }, keys: DEFAULT_KEYS,
-  family: null, pad: "xbox", lit, reduced: false,
+  family: null, pad: "xbox", lit, reduced: false, landedPrompt: true,
 };
 
 test("a prompt for each phase, in the glyphs of the device in hand", () => {
@@ -66,6 +66,7 @@ test("a prompt for each phase, in the glyphs of the device in hand", () => {
   assert.equal(guideFor({ ...base, device: "gamepad", phase: "landing" })?.say, "Press the right face button to pull up.");
   assert.equal(guideFor({ ...base, device: "touch", phase: "landed" })?.say, "Tap here to take off.");
   assert.equal(guideFor({ ...base, keys: { ...DEFAULT_KEYS, land: "e" }, offer: "" })?.say, "Press E to land.");
+  assert.equal(guideFor({ ...base, phase: "landed", landedPrompt: false }), null, "the Codex's own button does it");
 });
 
 test("the prompt takes the place of the lesson; the lesson shows only while it is being taught, and not on touch", () => {
@@ -100,8 +101,8 @@ test("guides stand clear of the body: below by default, beside the head when the
 });
 
 test("slots sit GAP from the head, and a guide is kept inside the frame", () => {
-  assert.deepEqual(slotAt("below", { x: 100, y: 50 }, 20, 10), { x: 90, y: 62 });
-  assert.deepEqual(slotAt("left", { x: 100, y: 50 }, 20, 10), { x: 68, y: 45 });
+  assert.deepEqual(slotAt("below", { x: 100, y: 50 }, 20, 10), { x: 90, y: 64 });
+  assert.deepEqual(slotAt("left", { x: 100, y: 50 }, 20, 10), { x: 66, y: 45 });
   assert.deepEqual(clampInto({ x: -5, y: 230 }, 20, 10, 400, 225), { x: 2, y: 213 });
 });
 

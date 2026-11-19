@@ -36,14 +36,15 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   if (flight.failed) return <LoadFailed />;
 
   const at = flight.phase.at;
-  // The panel and the corner button share the world's pixel, kept between 2 and 3 CSS pixels so the panel stays small.
-  const px = Math.max(2, Math.min(3, Math.round(scale)));
+  // The panel and the corner draw their glyphs a step finer than the world's pixel, 2 or 3 CSS pixels, so the panel
+  // stays small on any window.
+  const px = Math.max(2, Math.min(3, Math.round(scale) - 1));
   const stage = { width: FRAME_W * scale, height: FRAME_H * scale } as CSSProperties;
   return (
     <div className={styles.page} data-motion={options.motion}>
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} width={FRAME_W} height={FRAME_H} className={styles.canvas} />
-        {panel.open ? null : <Corner px={px} device={flight.device} shown={revealed} onOpen={panel.show} />}
+        {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
       </div>
       <GuideLine say={flight.say} />
       <DiscoveryCaption caption={flight.caption} />

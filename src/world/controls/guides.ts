@@ -4,7 +4,7 @@
 
 import { REMAPPABLE, type KeyFamily, type Keys } from "./bindings.ts";
 import { padNames, type PadFamily } from "./gamepad.ts";
-import { column, keyCap, label, padFace, padStick, padTrigger, plate, row, touchTap, type Sprite } from "./glyphs.ts";
+import { column, keyCap, label, padFace, padStick, padTrigger, plate, row, slip, touchTap, type Sprite } from "./glyphs.ts";
 import { lessonAlpha, type Lesson } from "./lesson.ts";
 
 export type Device = "keyboard" | "gamepad" | "touch";
@@ -33,6 +33,11 @@ export interface GuideState {
   pad: PadFamily;
   lit: Lit;
   reduced: boolean;
+  /**
+   * Landed, whether the dragon offers to take off: not on a touch screen, where the Codex's own button is the thing to
+   * tap, nor where the Codex is a sheet over the foot of the frame and would hide it.
+   */
+  landedPrompt: boolean;
 }
 
 /** What a click or tap on the guide does. */
@@ -53,6 +58,10 @@ const NAME_MAX = 18;
 
 function short(name: string): string {
   return name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1)}…` : name;
+}
+
+function capital(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 /** A key as a sentence names it. */
@@ -96,7 +105,7 @@ function prompt(s: GuideState, what: "land" | "back", verb: string, name: string
   const id = `prompt|${g.id}|${words}`;
   return {
     id,
-    sprite: memo(id, () => row([g.sprite(), label(words)], 2)),
+    sprite: memo(id, () => row([g.sprite(), slip(words)], 1)),
     alpha: 1,
     tap,
     say: `${g.word} to ${verb}${name ? `: ${name}` : ""}.`,
@@ -109,9 +118,9 @@ function caps(s: GuideState, keys: readonly string[]): { id: string; sprite: () 
   return { id: keys.map((k, i) => `${k}${on[i] ? "*" : ""}`).join("+"), sprite: () => row(keys.map((k, i) => keyCap(k, on[i])), 1) };
 }
 
-/** A line of a lesson: glyphs, then a word. */
+/** A line of a lesson: glyphs, then a word on its slip. */
 function line(parts: { id: string; sprite: () => Sprite }[], word: string): { id: string; sprite: () => Sprite } {
-  return { id: `${parts.map((p) => p.id).join(",")}:${word}`, sprite: () => row([...parts.map((p) => p.sprite()), label(word)], 2) };
+  return { id: `${parts.map((p) => p.id).join(",")}:${word}`, sprite: () => row([...parts.map((p) => p.sprite()), slip(word)], 1) };
 }
 
 function orWord(): { id: string; sprite: () => Sprite } {
@@ -141,7 +150,7 @@ function lessonGuide(s: GuideState): Guide | null {
         line([{ id: `plate-${names.leave}`, sprite: () => plate(names.leave) }], "leave"),
         line([{ id: `plate-${names.options}`, sprite: () => plate(names.options) }], "options"),
       ];
-      say = `Press ${names.leave} to leave the world, ${names.options} for the options.`;
+      say = `Press ${capital(names.leave)} to leave the world, ${capital(names.options)} for the options.`;
     }
   } else if (l.stage === "steer") {
     const letters = caps(s, [k.left, k.right]);
@@ -171,7 +180,7 @@ function lessonGuide(s: GuideState): Guide | null {
 
 /** The guide to draw by the dragon now, or null for none. */
 export function guideFor(s: GuideState): Guide | null {
-  if (s.phase === "landed") return prompt(s, "land", "take off", "", "takeOff");
+  if (s.phase === "landed") return s.landedPrompt ? prompt(s, "land", "take off", "", "takeOff") : null;
   if (s.phase === "landing") return prompt(s, "back", "pull up", "", "pullUp");
   if (s.offer !== null) return prompt(s, "land", "land", s.offer, "land");
   return lessonGuide(s);
@@ -186,9 +195,9 @@ export const SLOTS: readonly Slot[] = ["below", "right", "above", "left"];
 export const SLOTS_HIGH: readonly Slot[] = ["above", "right", "left", "below"];
 
 /** How far a guide stands from the dragon's head, px. */
-export const GAP = 12;
+export const GAP = 14;
 /** How near a joint of the body may come to a guide before it counts as covering it, px. */
-const BODY_R = 4;
+const BODY_R = 5;
 
 /** The top-left of a w × h guide standing in `slot` round `head`. */
 export function slotAt(slot: Slot, head: { x: number; y: number }, w: number, h: number, gap = GAP): { x: number; y: number } {

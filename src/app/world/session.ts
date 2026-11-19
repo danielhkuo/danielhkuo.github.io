@@ -349,6 +349,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         pad: asked.pad,
         lit: asked.lit,
         reduced,
+        landedPrompt: phase.kind !== "landed" || (asked.device !== "touch" && window.innerWidth >= NARROW),
       });
       if (guide) {
         const onScreen = (x: number, y: number, alt: number) => ({

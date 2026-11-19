@@ -4,7 +4,7 @@ import { blit } from "./blit.ts";
 import { ROWS, textWidth } from "./font.ts";
 import {
   CAP_H, CAP_MIN_W, COLOURS, FACE, INK, keyCap, keycap, keyLegend, label, padDpad, padFace, padStick, padTrigger, PAPER, row,
-  column, SKIRT, text, touchButton, touchStick, touchTap, VERMILION, VERMILION_DARK, type Sprite,
+  column, SKIRT, slip, text, touchButton, touchStick, touchTap, VERMILION, VERMILION_DARK, type Sprite,
 } from "./glyphs.ts";
 
 function count(s: Sprite, slot: number): number {
@@ -61,6 +61,14 @@ test("labels are ink with a paper halo, a pixel wider each side", () => {
   assert.ok(count(l, PAPER) > count(l, INK));
 });
 
+test("a slip is a paper plate as tall as a cap, its words inked on it", () => {
+  const s = slip("land");
+  assert.deepEqual([s.w, s.h], [textWidth("land") + 6, CAP_H]);
+  assert.equal(s.px[0], 0, "corners clipped");
+  assert.equal(s.px[1], INK);
+  assert.equal(count(s, INK) - (2 * (s.w - 2) + 2 * (CAP_H - 2)), count(text("land"), INK));
+});
+
 test("rows and columns lay sprites out with their gaps", () => {
   const a = keycap("A");
   const b = label("steer");
@@ -71,12 +79,12 @@ test("rows and columns lay sprites out with their gaps", () => {
   assert.equal(c.px[1], INK, "flush left: the cap's rim starts at column 1");
 });
 
-test("pad and touch glyphs: the button to press is filled, lit is vermilion", () => {
-  const south = padFace("south");
-  const lit = padFace("south", true);
-  assert.equal(south.px[10 * 13 + 6], INK);
-  assert.equal(lit.px[10 * 13 + 6], VERMILION);
-  assert.equal(padFace("north").px[10 * 13 + 6], FACE);
+test("pad and touch glyphs: the button to press is filled vermilion, darker while held; the rest are pale", () => {
+  const centre = 12 * 15 + 7;
+  assert.equal(padFace("south").px[centre], VERMILION);
+  assert.equal(padFace("south", true).px[centre], VERMILION_DARK);
+  assert.equal(padFace("north").px[centre], FACE);
+  assert.equal(padFace("north").px[10 * 15 + 7], INK, "every button is ringed in ink");
   assert.ok(count(padStick(true), VERMILION) > 0 && count(padStick(), VERMILION) === 0);
   assert.ok(count(padDpad(["left"], true), VERMILION) > 0);
   assert.ok(count(padTrigger("RT"), INK) > 0);

@@ -105,6 +105,25 @@ export function label(t: string, c = INK): Sprite {
   return haloed(text(t, c));
 }
 
+/**
+ * Words on a slip of paper: a flat paper plate with an inked rim and clipped corners, as tall as a key-cap, the words
+ * sitting on their x-height in the middle. It reads over sea, forest, cliff and cloud alike, and beside a cap it reads
+ * as the cap's own label (flat, where the cap stands up on its skirt).
+ */
+export function slip(t: string): Sprite {
+  const words = text(t);
+  const w = words.w + 6;
+  const s = blank(w, CAP_H);
+  for (let y = 0; y < CAP_H; y++) {
+    for (let x = 0; x < w; x++) {
+      if ((x === 0 || x === w - 1) && (y === 0 || y === CAP_H - 1)) continue;
+      set(s, x, y, x === 0 || y === 0 || x === w - 1 || y === CAP_H - 1 ? INK : PAPER);
+    }
+  }
+  stamp(s, words, 3, 1);
+  return s;
+}
+
 /** Rows of `s` that hold anything: [first, last], or [0, -1] when it is empty. */
 function inkRows(s: Sprite): [number, number] {
   let top = -1;
@@ -209,16 +228,15 @@ function round(s: Sprite, x: number, y: number, d: number, rim: number, fill: nu
 export type FaceButton = "south" | "east" | "west" | "north";
 
 /**
- * The four face buttons as a diamond, by position, so no maker's letters are needed: the one to press is filled ink
- * (vermilion while held), the others are pale rings.
+ * The four face buttons as a diamond, by position, so no maker's letters are needed: each an inked ring, the one to
+ * press filled vermilion (darker while held), the others pale.
  */
 export function padFace(which: FaceButton, lit = false): Sprite {
-  const s = blank(13, 13);
-  const at: Record<FaceButton, [number, number]> = { north: [4, 0], west: [0, 4], east: [8, 4], south: [4, 8] };
+  const s = blank(15, 15);
+  const at: Record<FaceButton, [number, number]> = { north: [5, 0], west: [0, 5], east: [10, 5], south: [5, 10] };
   for (const b of ["north", "west", "east", "south"] as const) {
     const [x, y] = at[b];
-    if (b === which) round(s, x, y, 5, INK, lit ? VERMILION : INK);
-    else round(s, x, y, 5, INK_SOFT, FACE);
+    round(s, x, y, 5, INK, b === which ? (lit ? VERMILION_DARK : VERMILION) : FACE);
   }
   return s;
 }
