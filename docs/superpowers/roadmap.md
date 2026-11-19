@@ -77,7 +77,9 @@ Last updated 2026-11-18.
   touch glyphs; drawn into the frame by `blit`, into the DOM by `PixelGlyph`) for the mobile work to reuse. O, the
   pad's Menu or the corner button opens a small pixel options panel: hold or toggle boost, a gentle pace, reduced motion
   (no boost streaks, a camera cut), rebinding the five letter keys, the lesson again, and leaving. The flight page was
-  first split into a session and hooks (React Doctor 81 → 100). Design: `specs/2026-11-18-teaching-the-controls-design.md`.
+  first split into a session and hooks (React Doctor 81 → 100). The guides cost 0.1 ms p95 at 4× (`world-fly.mjs`
+  reports `guideMs`); a Fable critic judged two rounds of renders. Design:
+  `specs/2026-11-18-teaching-the-controls-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
