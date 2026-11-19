@@ -7,7 +7,7 @@ import { EMAIL, LINKS, PROFILE } from "./content.ts";
 import { HOME, absPath, completions, lookup, strerror, tildePath, type DirNode, type Path } from "./fs.ts";
 import { ls } from "./ls.ts";
 import { isWebLink, renderMarkdown } from "./markdown.ts";
-import type { Command, CommandMap, TerminalApi, TerminalLine, TextRun } from "./types";
+import type { Command, CommandContext, CommandMap, TerminalApi, TerminalLine, TextRun } from "./types";
 
 /** The shell's place in the filesystem, as the path commands read and move it. */
 export interface Session {
@@ -86,6 +86,12 @@ export function buildCommands(api: TerminalApi, session: Session): CommandMap {
   /** Tab completion for a path argument. */
   const paths = (only?: "dir") => (typed: string) => completions(session.root, session.cwd(), typed, only);
 
+  /** Print a markdown file: as a document where the host sets one, in rows of cells otherwise. */
+  const show = (source: string, ctx: CommandContext) => {
+    if (ctx.doc) ctx.doc(source);
+    else ctx.text(renderMarkdown(source, ctx.cols));
+  };
+
   const cat: Command = {
     desc: "read a file",
     usage: "<file>",
@@ -100,7 +106,7 @@ export function buildCommands(api: TerminalApi, session: Session): CommandMap {
         if ("errno" in found) ctx.err(`cat: ${operand}: ${strerror(found.errno)}`);
         else if (found.node.kind === "dir") ctx.err(`cat: ${operand}: Is a directory`);
         else if (found.node.text === undefined) ctx.err(`cat: ${operand}: not a text file — try \`open ${operand}\``);
-        else ctx.text(renderMarkdown(found.node.text, ctx.cols));
+        else show(found.node.text, ctx);
       }
     },
   };
@@ -189,16 +195,18 @@ export function buildCommands(api: TerminalApi, session: Session): CommandMap {
           if ("errno" in found) ctx.err(`The file ${target} does not exist.`);
           else if (found.node.url) api.openUrl(found.node.url);
           // A text file with nothing behind it opens in the only viewer there is.
-          else if (found.node.kind === "file" && found.node.text !== undefined) {
-            ctx.text(renderMarkdown(found.node.text, ctx.cols));
-          } else ctx.err(`No application knows how to open ${tildePath(found.path)}.`);
+          else if (found.node.kind === "file" && found.node.text !== undefined) show(found.node.text, ctx);
+          else ctx.err(`No application knows how to open ${tildePath(found.path)}.`);
         }
       },
     },
 
     neofetch: {
       desc: "who this is, at a glance",
-      run: (_args, ctx) => ctx.text(neofetch(api)),
+      run: (_args, ctx) => {
+        if (ctx.neofetch) ctx.neofetch();
+        else ctx.text(neofetch(api));
+      },
     },
 
     work: {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderMarkdown } from "./markdown.ts";
+import { isSitePath, parse, renderMarkdown, spans } from "./markdown.ts";
 import type { TextRun } from "./types";
 
 /** The rows as plain text. */
@@ -131,4 +131,51 @@ test("the document stops at 80 columns however wide the window is", () => {
   // 15 words and the 14 spaces between them are 74 cells; a 16th would pass
   // the 76 between the margins.
   assert.equal(widest, 2 + 74);
+});
+
+// ---- parse and spans: what a document view starts from --------------------------
+
+test("a file parses to its headings, paragraphs and lists, in order", () => {
+  assert.deepEqual(parse("# Title\n\nOne\ntwo.\n\n- a\n- b\n  more\n\n## Sub\n"), [
+    { kind: "heading", level: 1, text: "Title" },
+    { kind: "para", text: "One two." },
+    { kind: "list", items: ["a", "b more"] },
+    { kind: "heading", level: 2, text: "Sub" },
+  ]);
+});
+
+test("a line splits into its plain text, code, strong text and links", () => {
+  assert.deepEqual(spans("Run `ls` now, **please**, or see [the repo](https://example.com/x)."), [
+    { kind: "text", text: "Run " },
+    { kind: "code", text: "ls" },
+    { kind: "text", text: " now, " },
+    { kind: "strong", text: "please" },
+    { kind: "text", text: ", or see " },
+    { kind: "link", text: "the repo", href: "https://example.com/x" },
+    { kind: "text", text: "." },
+  ]);
+});
+
+test("a link may go to the web, a mailbox or a path on this site", () => {
+  for (const href of ["https://example.com", "http://example.com", "mailto:a@example.com", "/world", "/resume.pdf", "/"]) {
+    assert.deepEqual(spans(`[x](${href})`), [{ kind: "link", text: "x", href }], href);
+  }
+});
+
+test("any other target leaves the label as plain text", () => {
+  for (const href of ["javascript:void0", "//evil.example/x", "data:text/html,x", "relative/path", "#top"]) {
+    assert.deepEqual(spans(`[x](${href})`), [{ kind: "text", text: "x" }], href);
+  }
+});
+
+test("a site path starts with one slash", () => {
+  assert.equal(isSitePath("/world"), true);
+  assert.equal(isSitePath("/"), true);
+  assert.equal(isSitePath("//example.com"), false);
+  assert.equal(isSitePath("world"), false);
+});
+
+test("plain text is one span, and an empty line none", () => {
+  assert.deepEqual(spans("just words"), [{ kind: "text", text: "just words" }]);
+  assert.deepEqual(spans(""), []);
 });

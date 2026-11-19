@@ -21,12 +21,13 @@ const HEADING: Style = { fg: 39, bold: true };
 const CODE: Style = { fg: 203, bg: 235 };
 const LINK: Style = { fg: 35, bold: true, underline: true };
 
-type Block =
+export type Block =
   | { kind: "heading"; level: number; text: string }
   | { kind: "para"; text: string }
   | { kind: "list"; items: string[] };
 
-function parse(source: string): Block[] {
+/** A file as its blocks, in order: what both the cell layout below and a document view start from. */
+export function parse(source: string): Block[] {
   const blocks: Block[] = [];
   // The paragraph or list that the next plain line would continue.
   let open: Block | null = null;
@@ -72,7 +73,42 @@ export function isWebLink(target: string): boolean {
   return /^(https?:\/\/|mailto:)/i.test(target);
 }
 
+/** A path on this site ("/world", "/resume.pdf"): safe as a link, and not an address on another host ("//…"). */
+export function isSitePath(target: string): boolean {
+  return /^\/(?!\/)/.test(target);
+}
+
 const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+/** A stretch of a line as a document view sets it. */
+export type Span =
+  | { kind: "text"; text: string }
+  | { kind: "code"; text: string }
+  | { kind: "strong"; text: string }
+  | { kind: "link"; text: string; href: string };
+
+/**
+ * A line of text as spans: its `code`, **strong** and [links](url) named, the
+ * rest plain. A link is kept only to the web, a mailbox or a path on this
+ * site; any other target leaves its label as text.
+ */
+export function spans(source: string): Span[] {
+  const out: Span[] = [];
+  const plain = (text: string) => {
+    if (text) out.push({ kind: "text", text });
+  };
+  let at = 0;
+  for (const m of source.matchAll(INLINE)) {
+    plain(source.slice(at, m.index));
+    if (m[1] !== undefined) out.push({ kind: "code", text: m[1] });
+    else if (m[2] !== undefined) out.push({ kind: "strong", text: m[2] });
+    else if (isWebLink(m[4]) || isSitePath(m[4])) out.push({ kind: "link", text: m[3], href: m[4] });
+    else plain(m[3]);
+    at = m.index + m[0].length;
+  }
+  plain(source.slice(at));
+  return out;
+}
 
 /** A line of text as styled pieces, its `code`, **strong** and [links](url) taken out of `base`. */
 function inline(source: string, base: Style = {}): Piece[] {
