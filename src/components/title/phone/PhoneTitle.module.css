@@ -419,6 +419,38 @@
   }
 }
 
+/* Sideways on a short screen (landscape Safari with its tab bar shows 292 px): each lead card sets its hint and its
+   meta on one line, and the page's margins tighten, so the whole contents page fits without a scroll. */
+@media (orientation: landscape) and (max-height: 360px) {
+  .root {
+    padding-top: max(env(safe-area-inset-top), 0.5rem);
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+
+  .list {
+    gap: 0.35rem;
+  }
+
+  .card {
+    min-height: 0;
+    padding-block: 0.35rem 0.4rem;
+  }
+
+  .card .words {
+    grid-template-columns: auto 1fr;
+    column-gap: 0.7rem;
+    align-items: baseline;
+  }
+
+  .card .label {
+    grid-column: 1 / -1;
+  }
+
+  .row {
+    min-height: 2.75rem;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .card,
   .row {

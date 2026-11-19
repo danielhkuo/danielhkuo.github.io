@@ -115,6 +115,8 @@ async function fly(browser, origin, opts, label, rate) {
   if (rate > 1) await page.emulateCPUThrottling(rate);
   const t0 = Date.now();
   await page.goto(`${origin}world?stats`, { waitUntil: "load" });
+  // Under phone emulation the navigation lands in a fresh renderer that drops the throttle: set it again.
+  if (opts.phone && rate > 1) await page.emulateCPUThrottling(rate);
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
   const boot = await page.evaluate(() => ({ ...window.__flight, frameMs: undefined }));
   if (boot.error) throw new Error(`${label}: page error ${boot.error}`);

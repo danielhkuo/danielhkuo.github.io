@@ -741,4 +741,17 @@ Tests, as §9 asks:
   touch cancel, upright and level, played sideways, no zoom or scroll, Back, hidden and blur, landing, Android
   fullscreen and lock, an iPhone asking for neither, the lock lifting on leaving, and a desktop unchanged.
 - **Renders.** `npm run world:controls` draws the controls over the world. `scripts/world-mobile-shots.mjs` takes the
-  phone screenshots.
+  phone screenshots. `scripts/title-phone-shots.mjs` shoots the front door on phones and desktops.
+- **Frame budget.** `node scripts/world-fly.mjs` runs on desktop. Against the base build in alternating runs, 4×
+  throttle p50 was 2.5–2.7 ms and p95 3.8–3.9 ms, against 2.6–2.8 and 4.0. `--phone` flies by touch as an iPhone 17
+  in landscape. At 4×, phones hold 60 fps with p50 3.6 ms and p95 4.8 ms; the controls and guide take 0.8 ms p95.
+  The phone gate is 8 ms.
+- **Desktop unchanged.** At 700, 1280 and 1600 px every element of `/` has the same box as in the base build, and the
+  phone title is not in the accessibility tree. axe on `/`: the phone side passes in light and dark, where the base
+  build failed. The desktop side keeps the base build's two findings (`.kbd` contrast, no `h1`), left alone so
+  desktops get exactly today's page.
+- **Real WebKit.** In the iOS 26.5 Simulator (iPhone 17, Safari), checked by hand:
+  - the phone title opens on `/`, and the Wayfarer card leads to Before you fly;
+  - Take wing while upright shows the turn card, and turning to landscape shows Paused, with the Home Screen hint;
+  - after Fly on, a drag on the stick steers to the abbey, where Land joins the cluster;
+  - a pinch and a long-press do nothing, and the lesson moves on to the touch speed glyphs.

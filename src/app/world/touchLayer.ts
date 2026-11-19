@@ -103,6 +103,21 @@ export function createTouchLayer(setup: TouchLayerSetup): TouchLayer {
     return layout;
   };
 
+  // The layout is worked out again only when what it depends on changes, or once a second in case the frame moved on
+  // the page: reading the canvas's rectangle every frame can force a style and layout pass.
+  let layoutKey = "";
+  let layoutAt = 0;
+  const currentLayout = () => {
+    const v = setup.view();
+    const o = setup.options();
+    const key = `${v.w}x${v.h}:${v.turn}:${v.insets.top},${v.insets.right},${v.insets.bottom},${v.insets.left}:${o.hand}:${o.size}:${land}`;
+    const now = performance.now();
+    if (layout && key === layoutKey && now - layoutAt < 1000) return layout;
+    layoutKey = key;
+    layoutAt = now;
+    return relayout();
+  };
+
   const point = (e: PointerEvent) => {
     const v = setup.view();
     return toLayer(e.clientX, e.clientY, v.screenW, v.screenH, v.turn);
@@ -161,7 +176,7 @@ export function createTouchLayer(setup: TouchLayerSetup): TouchLayer {
 
   return {
     frame(dt) {
-      relayout();
+      currentLayout();
       const o = setup.options();
       motion(o.tilt === "on" && live);
       const read = live ? touch.read() : { stick: { x: 0, y: 0, mag: 0 }, boost: false, brake: false };
