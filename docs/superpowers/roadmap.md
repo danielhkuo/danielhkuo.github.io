@@ -242,9 +242,19 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
 
 From landing (2026-11-18):
+- Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
+  (the chain forgot its path), the tail hanging in the air, stiff whiskers and a rolled body at rest; and the dragon is
+  now about 78 % of its first size. See the landing design.
+- A lighthouse stands on a cliff's edge, so its coil is draped from the sea up over the rock behind the tower. A coil
+  wound up the tower itself, held by it, would be the better picture there.
+- Take-off, from the render critic: where the coil is a closed ring (the harbour, a lighthouse) the head crosses its
+  own tail for about half a second as it leaves; at the ruined cathedral the wooded bank in front cuts the rising body
+  in two for a moment. Both pass; a take-off that leaves outward, and climbs faster where it is hidden, would cure them.
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
   could part round a landed site.
-- In the town the coil lies among the houses round the bell tower, and the houses hide some of it.
+- ~~In the town the coil lies among the houses round the bell tower, and the houses hide some of it.~~ The town now
+  lands in its harbour. A landmark close behind trees or a bank can still hide part of the resting body (the head is
+  kept in view).
 - `Flight.tsx` grew with landing (React Doctor's giant-component warning was already there); the page's slim-project
   mapping for the terminal repeats the home page's.
 

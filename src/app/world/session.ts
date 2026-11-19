@@ -15,7 +15,7 @@ import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import { createSky } from "../../world/sky/sky";
 import { styleFrom } from "../../world/sky/styles";
-import { anchorOf, restRadius, type Anchor } from "../../world/sites/anchor";
+import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, kindName, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { blit } from "../../world/controls/blit";
@@ -257,15 +257,13 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     worldN = regions.n;
     groundHeight = (x, y) => view.groundHeight(x, y);
 
-    // The landmarks the build placed, if they belong to this world: each coils round its own building.
+    // The landmarks the build placed, if they belong to this world: each coils round its own building, the town
+    // in its harbour (sites/anchor.ts).
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
-      const structures = loaded.core.world.built?.built.structures ?? [];
-      for (const l of landmarks.landmarks) {
-        const a = anchorOf(l, structures, worldN);
-        byId.set(l.id, l);
-        anchors.set(l.id, a);
-        targets.push({ id: l.id, x: a?.x ?? l.x, y: a?.y ?? l.y, radius: restRadius(a, l.type) });
-      }
+      const places = restingPlaces(landmarks.landmarks, loaded.core.world.built?.built, worldN);
+      for (const l of landmarks.landmarks) byId.set(l.id, l);
+      for (const t of places.targets) targets.push(t);
+      for (const [id, a] of places.anchors) anchors.set(id, a);
     }
 
     // ?at=<site id> starts just south of a site, heading for it: a preview, like ?sights=all.
