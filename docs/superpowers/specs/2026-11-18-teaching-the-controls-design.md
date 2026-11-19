@@ -82,7 +82,7 @@ pixel-art touch controls can use either.
 - **Stage 1, steer:** `[A][D] or [←][→] steer`. It is learned once left and right have each been held for 0.35 s.
 - **Stage 2, speed:** the inverted T with `boost`, `slow` and `[shift] boost`. It is learned after 0.6 s of boost and
   0.6 s of slow. Once the visitor has used only one family (arrows or letters), only that family is shown.
-- **Stage 3, leave:** `[esc] leave`, shown for 4 s.
+- **Stage 3, leave:** `[esc] leave` and `[O] options`, shown for 4 s.
 - A stage that has shown for 20 s fades and moves on, so nobody is nagged. When the last stage ends, `world:lesson`
   is written.
 - On a pad, stage 1 shows the stick and stage 2 the triggers.
@@ -99,15 +99,19 @@ pixel-art touch controls can use either.
 | Landed | `[space] take off` | `(south) take off` | `(tap) take off` |
 
 - The name is the project's, or "about me" at the abbey. An unclaimed landmark has none.
-- Prompts are placed 20 px below the dragon's head, centred and clamped to the frame. The head is the frame's centre
-  while flying, so they hold still in flight and follow the dragon as it comes down.
+- **Placement.** A guide (prompt or lesson) stands 12 px from the dragon's head, in one of four slots: below, right,
+  above or left. The first slot in that order wins unless the body covers it. The body's joints are projected to the
+  screen and counted under each slot, and leaving the frame costs heavily. A slot is kept while at most one joint
+  crosses it, and a move between slots glides (a cut under reduced motion). The head is the frame's centre while
+  flying, so a guide holds still in flight and follows the dragon as it comes down.
+- Over the narrow Codex (a bottom sheet) the order is above, right, left, below.
 - A click or tap on a prompt's rectangle acts on it: the canvas hit-tests the rectangles the guides report each
   frame.
 - A visually hidden `aria-live="polite"` line says the same thing in words, e.g. "Press Space to land at the
   lighthouse: leaf".
-- **Esc · leave** is in the lesson's last stage. It also shows in the top-right page margin with `[o] options` for 4 s
-  after load and whenever the pointer moves (fading after 2 s still). On touch, that corner is a button that opens
-  the options, where Leave is.
+- **Esc · leave** is in the lesson's last stage. The canvas's top-right corner also holds `[esc] leave` and
+  `[O] options` (the pad's View and Menu on a gamepad) for 4 s after load and for 4 s after each pointer move. On
+  touch, the corner is a single plate that opens the options, where Leave is, and it stays shown.
 
 ### Options (`options.ts`, `OptionsPanel.tsx`)
 
@@ -117,8 +121,9 @@ pixel-art touch controls can use either.
 - **Gentle pace:** cruise × 0.6. `FlightInput` gains `pace`.
 - **Reduced motion:** no boost streaks, a camera cut in place of the landing swoop, and no fades or pulses in the
   guides.
-- **Opening it:** `O`, the pad's Menu, or the corner button. It is a modal `<dialog>`, so Esc closes it. While it is
-  open the session ignores flight keys, and the dragon cruises on.
+- **Opening it:** `O`, the pad's Menu, or the corner button. It is a modal `<dialog>`, so Esc closes it (the pad's
+  Menu or east button too). While it is open the session ignores flight keys, and the dragon cruises on.
+- **Glyph pixels** are the world's pixel scale, held between 2 and 3 CSS px, so the panel stays small.
 - **Rows:** Boost (hold or toggle), Pace (cruise or gentle), Motion (full or reduced), the five keys, Show the
   lesson again, Leave the world, and Close.
 

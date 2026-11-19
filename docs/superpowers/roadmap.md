@@ -12,6 +12,7 @@ Last updated 2026-11-18.
 | What the site is becoming, and the rules every change follows | `.claude/CLAUDE.md` |
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
 | Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
+| Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -67,6 +68,16 @@ Last updated 2026-11-18.
   description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
   is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
   discovery, by repository. Preview a site with `/world?at=<site id>`.
+- **Teaching the controls** (2026-11-18, `claude/unruffled-jones-c0c8ed`). Guides drawn into the world beside the
+  dragon's head, in the slot its body leaves clearest: a first-flight lesson (steer, then speed, then leave and
+  options) whose pixel key-caps light as they are pressed and fade once learned (`world:lesson`), and prompts to land,
+  pull up and take off that replace the hint line. A click or tap on a prompt acts on it; a live region says it in
+  words. Glyphs follow the device used last: key-caps, a gamepad (stick, triggers, face buttons by position; the pad
+  flies, lands and takes off) or a tapping hand. One glyph set (`src/world/controls/`: our own pixel font, caps, pad and
+  touch glyphs; drawn into the frame by `blit`, into the DOM by `PixelGlyph`) for the mobile work to reuse. O, the
+  pad's Menu or the corner button opens a small pixel options panel: hold or toggle boost, a gentle pace, reduced motion
+  (no boost streaks, a camera cut), rebinding the five letter keys, the lesson again, and leaving. The flight page was
+  first split into a session and hooks (React Doctor 81 → 100). Design: `specs/2026-11-18-teaching-the-controls-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
@@ -180,12 +191,9 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
   controls, and a real-device pass.
 
 **Teaching the controls (desktop and mobile)**
-- A first-flight lesson drawn in the world: pixel key-caps (WASD or arrows, Shift) that light as they are pressed and
-  fade once learned, remembered in localStorage.
-- Device-aware prompts: keyboard glyphs, gamepad glyphs when a pad connects (Gamepad API), touch glyphs on phones.
-- Contextual prompts by the dragon, not a HUD: "E to land" near a tower, "Space to take off", "M for the map".
-- Options: remap keys, hold or toggle boost, a slower cruise, reduced motion.
-- Gamepad support, and steering toward the pointer on desktop.
+- ~~Lesson, device-aware prompts, contextual prompts, options, gamepad.~~ Done (see Done). Left: touch flight itself
+  (the mobile work, with the touch glyphs already in `controls/glyphs.ts`), "M for the map" once there is a map, and
+  steering toward the pointer on desktop.
 
 **Finding your way without a minimap**
 - Landmarks visible from afar: smoke columns, the lighthouse's sweeping beam, gulls circling towers, banners.
@@ -206,7 +214,7 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
 - A pixel loading scene while the core loads (1.5 MB); a clear fallback to the text page if the world fails.
 - OpenGraph postcards per tower; Continue where you left off.
 - An end-to-end suite: title → world → land → Codex → back, on desktop and mobile emulation.
-- Split the flight page component into hooks before the controls and mobile work lands.
+- ~~Split the flight page component into hooks before the controls and mobile work lands.~~ Done: `session.ts` and hooks.
 
 ## Backlog: cosmetic and look
 
