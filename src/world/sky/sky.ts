@@ -32,13 +32,26 @@ function imageOn(world: number, origin: number, period: number, view: number, sp
 }
 
 /**
+ * Whether a box `sprite` wide whose near edge is about `u` past the view's origin (on a ring of `period`) could touch a
+ * view `view` wide: a cheap test that never says no to a box imageOn would put on the frame. The exact place rounds
+ * the position (half a pixel) and takes it round the ring with `%` (a hair of float error); the two-pixel margin
+ * covers both, so only boxes well clear of the frame are passed over.
+ */
+function mayShow(u: number, period: number, view: number, sprite: number): boolean {
+  const s = u - period * Math.floor(u / period);
+  return s < view + 2 || s > period - sprite - 2;
+}
+
+/**
  * Draws every cloud of `layer` that touches `rect` at time `t`. A cloud's sprite has its top-left at screen
  * (round(x) − rect.x, round(0.8·y) − alt − rect.y), using the torus image nearest the view (x wraps every n,
  * bake rows every 0.8·n). Each channel: out += (sprite − out) · a, with a = alpha · layerAlpha / 255². Pixels
- * outside the frame are skipped, never wrapped onto its other side.
+ * outside the frame are skipped, never wrapped onto its other side. `cull` (default) passes over clouds far from the
+ * frame before placing them exactly; false places every cloud, the plain path the tests hold it to.
  */
 export function drawClouds(
   out: Uint32Array, rect: ViewRect, field: SkyField, sprites: readonly Sprite[], t: number, layer: CloudLayer, layerAlpha: number,
+  cull = true,
 ): void {
   if (layerAlpha <= 0) return;
   const n = field.n;
@@ -49,6 +62,9 @@ export function drawClouds(
   const clouds = field.clouds;
   const fw = rect.w;
   const fh = rect.h;
+  // The wind's drift, the same for every cloud.
+  const wx = (wind.x * t) % n;
+  const wy = (wind.y * t) % n;
 
   for (let i = 0; i < clouds.length; i++) {
     const c = clouds[i];
@@ -56,8 +72,10 @@ export function drawClouds(
     const sprite = sprites[c.shape];
     const sw = sprite.w;
     const sh = sprite.h;
-    const x = ((c.x + ((wind.x * t) % n)) % n + n) % n;
-    const y = ((c.y + ((wind.y * t) % n)) % n + n) % n;
+    // Most clouds are far off: pass them over before the exact place, which takes six `%` of floats.
+    if (cull && (!mayShow(c.x + wx - rect.x, n, fw, sw) || !mayShow(0.8 * (c.y + wy) - alt - rect.y, yPeriod, fh, sh))) continue;
+    const x = ((c.x + wx) % n + n) % n;
+    const y = ((c.y + wy) % n + n) % n;
     const sx = Math.round(imageOn(Math.round(x), rect.x, n, fw, sw));
     const bake = Math.round(y * 0.8) - alt;
     const sy = Math.round(imageOn(bake, rect.y, yPeriod, fh, sh));
@@ -100,10 +118,11 @@ export function drawClouds(
 /**
  * Draws the shadow of every cloud of `layer` on level ground: the shape's shadow box, moved from the sprite's
  * top-left by (shadow.dx + round(SHADOW_SLOPE·alt), shadow.dy + round((1 + 0.8·SHADOW_SLOPE)·alt)), which is where the
- * sun (the flier's sun) throws it. A shaded pixel keeps keep[k]/256 of red, green and blue.
+ * sun (the flier's sun) throws it. A shaded pixel keeps keep[k]/256 of red, green and blue. `cull` as for drawClouds.
  */
 export function drawShadows(
   out: Uint32Array, rect: ViewRect, field: SkyField, shapes: readonly CloudShape[], t: number, layer: CloudLayer, keep: readonly [number, number, number],
+  cull = true,
 ): void {
   const n = field.n;
   const yPeriod = n * 0.8;
@@ -114,6 +133,8 @@ export function drawShadows(
   const fh = rect.h;
   const ax = Math.round(SHADOW_SLOPE * alt), ay = Math.round((1 + 0.8 * SHADOW_SLOPE) * alt) - alt;
   const kr = keep[0], kg = keep[1], kb = keep[2];
+  const wx = (wind.x * t) % n;
+  const wy = (wind.y * t) % n;
 
   for (let i = 0; i < clouds.length; i++) {
     const c = clouds[i];
@@ -121,8 +142,9 @@ export function drawShadows(
     const shadow = shapes[c.shape].shadow;
     const sw = shadow.w;
     const sh = shadow.h;
-    const x = ((c.x + ((wind.x * t) % n)) % n + n) % n;
-    const y = ((c.y + ((wind.y * t) % n)) % n + n) % n;
+    if (cull && (!mayShow(c.x + wx + shadow.dx + ax - rect.x, n, fw, sw) || !mayShow(0.8 * (c.y + wy) + shadow.dy + ay - rect.y, yPeriod, fh, sh))) continue;
+    const x = ((c.x + wx) % n + n) % n;
+    const y = ((c.y + wy) % n + n) % n;
     const sx = Math.round(imageOn(Math.round(x) + shadow.dx + ax, rect.x, n, fw, sw));
     const sy = Math.round(imageOn(Math.round(y * 0.8) + shadow.dy + ay, rect.y, yPeriod, fh, sh));
     if (sx >= fw || sy >= fh || sx + sw <= 0 || sy + sh <= 0) continue;
@@ -158,20 +180,23 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
   for (let i = 0; i < shapes.length; i++) sprites[i] = style.paint(shapes[i]);
   const field = makeField(seed, n, shapes, opening);
   const shadows = style.shadowKeep[0] < 256 || style.shadowKeep[1] < 256 || style.shadowKeep[2] < 256;
+  // Each layer's clouds on their own, in the field's order, so a pass over the few banks does not walk every low cloud.
+  const low: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "low") };
+  const banks: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "bank") };
   return {
     field,
     shapes,
     draw(out, rect, t, pass) {
       if (pass === "below") {
         if (shadows) {
-          drawShadows(out, rect, field, shapes, t, "bank", style.shadowKeep);
-          drawShadows(out, rect, field, shapes, t, "low", style.shadowKeep);
+          drawShadows(out, rect, banks, shapes, t, "bank", style.shadowKeep);
+          drawShadows(out, rect, low, shapes, t, "low", style.shadowKeep);
         }
-        drawClouds(out, rect, field, sprites, t, "low", 255);
-        drawClouds(out, rect, field, sprites, t, "bank", 255);
+        drawClouds(out, rect, low, sprites, t, "low", 255);
+        drawClouds(out, rect, banks, sprites, t, "bank", 255);
         return;
       }
-      drawClouds(out, rect, field, sprites, t, "bank", style.veil);
+      drawClouds(out, rect, banks, sprites, t, "bank", style.veil);
     },
   };
 }

@@ -65,9 +65,36 @@ function grainTile(seed: number): Uint8Array {
   return out;
 }
 
+/**
+ * The runs of each row of the field at `floor` or more, as [start, end) pairs in `runs`, row r's from at[r] to at[r + 1].
+ * At GUST − FEATHER (below which even the grain cannot lift a pixel to GUST) they are where the wind can move anything:
+ * about a third of the field, so the layer looks at only that share of the frame.
+ */
+function gustRuns(gust: Uint8Array, floor: number): { at: Int32Array; runs: Int32Array } {
+  const at = new Int32Array(GH + 1);
+  const list: number[] = [];
+  for (let r = 0; r < GH; r++) {
+    at[r] = list.length;
+    for (let x = 0; x < GW; ) {
+      if (gust[r * GW + x] < floor) { x++; continue; }
+      const start = x;
+      while (x < GW && gust[r * GW + x] >= floor) x++;
+      list.push(start, x);
+    }
+  }
+  at[GH] = list.length;
+  return { at, runs: Int32Array.from(list) };
+}
+
+export interface WindOptions {
+  /** Look at every pixel of the frame, not only those under the gusts: the plain path the tests hold the fast one to. */
+  plain?: boolean;
+}
+
 /** The wind in the grass and the trees. `seed` is the world's. */
-export function windLayer(seed: number): LiveLayer {
+export function windLayer(seed: number, opts: WindOptions = {}): LiveLayer {
   const gust = gustField(seed);
+  const { at: runAt, runs } = gustRuns(gust, opts.plain ? 0 : GUST - FEATHER);
   const grain = grainTile(seed);
   /** Which patches of crown lean on which beat: 64 × 64 patches of 8 × 6 pixels. */
   const turn = new Uint8Array(4096);
@@ -80,38 +107,46 @@ export function windLayer(seed: number): LiveLayer {
       const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
       const shift = Math.floor(t * GUST_SPEED);
       const beat = Math.floor(t / SWAY) % 3;
+      // The tables, as locals: read through the closure, each would be fetched again on every pixel.
+      const field = gust, at = runAt, spans = runs, feather = grain, turns = turn, kindOf = KIND;
       for (let py = 0; py < h; py++) {
         const by = ry + py;
         const half = by >> 1;
-        const row = (half & (GH - 1)) * GW;
+        const fieldRow = half & (GH - 1);
+        const row = fieldRow * GW;
         const grainRow = (by & 255) << 8;
         const turnRow = (Math.floor(by / 6) & 63) << 6;
-        // The fronts lean: the field is sheared a pixel for every two rows.
-        let g = modP(rx + half - shift, GW);
-        let i = py * w;
-        for (let px = 0; px < w; px++, i++) {
-          const level = gust[row + g];
-          if (++g === GW) g = 0;
-          if (level < GUST - FEATHER) continue;
-          const v = bake[i];
-          const k = KIND[v & 255];
-          if (k === 0) continue;
-          const light = (v >>> 8) & 255;
-          // Ink is a drawn line: it stays.
-          if (light >= 64) continue;
-          if (k === K_GRASS) {
-            const tone = light & 15;
-            if (tone === 15) continue;
-            const lifted = level + grain[grainRow | ((rx + px) & 255)];
-            if (lifted < GUST) continue;
-            out[i] = palette[(((v & 255) << 8) | light) + (lifted >= HEART && tone < 14 ? 2 : 1)];
-          } else {
-            if (level < GUST || px === 0) continue;
-            if (turn[turnRow | (((rx + px) >> 3) & 63)] !== beat) continue;
-            const u = bake[i - 1];
-            const ul = (u >>> 8) & 255;
-            if (KIND[u & 255] !== K_CROWN || ul >= 64) continue;
-            out[i] = palette[((u & 255) << 8) | ul];
+        // The fronts lean: the field is sheared a pixel for every two rows. Pixel px reads the field at g0 + px, wrapped.
+        const g0 = modP(rx + half - shift, GW);
+        const line = py * w;
+        // Each run, and its copies a field further on, against the frame's span of the field [g0, g0 + w).
+        for (let q = at[fieldRow], qEnd = at[fieldRow + 1]; q < qEnd; q += 2) {
+          for (let copy = 0; spans[q] + copy - g0 < w; copy += GW) {
+            const lo = spans[q] + copy - g0, hi = spans[q + 1] + copy - g0;
+            const px0 = lo < 0 ? 0 : lo, px1 = hi > w ? w : hi;
+            for (let px = px0, i = line + px0, g = row + px0 + g0 - copy; px < px1; px++, i++, g++) {
+              const level = field[g];
+              const v = bake[i];
+              const k = kindOf[v & 255];
+              if (k === 0) continue;
+              const light = (v >>> 8) & 255;
+              // Ink is a drawn line: it stays.
+              if (light >= 64) continue;
+              if (k === K_GRASS) {
+                const tone = light & 15;
+                if (tone === 15) continue;
+                const lifted = level + feather[grainRow | ((rx + px) & 255)];
+                if (lifted < GUST) continue;
+                out[i] = palette[(((v & 255) << 8) | light) + (lifted >= HEART && tone < 14 ? 2 : 1)];
+              } else {
+                if (level < GUST || px === 0) continue;
+                if (turns[turnRow | (((rx + px) >> 3) & 63)] !== beat) continue;
+                const u = bake[i - 1];
+                const ul = (u >>> 8) & 255;
+                if (kindOf[u & 255] !== K_CROWN || ul >= 64) continue;
+                out[i] = palette[((u & 255) << 8) | ul];
+              }
+            }
           }
         }
       }

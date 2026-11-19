@@ -52,6 +52,20 @@ function setTurn(heading: number): void {
 export function drawStack(
   out: Uint32Array, rect: ViewRect, view: Pick<WorldView, "depthAt">, s: Stack, x: number, y: number, alt: number, heading: number, n: number,
 ): void {
+  stack(out, rect, view, s, x, y, alt, heading, n, false);
+}
+
+/** drawStack done the plain way, slice by slice from the bottom, every opaque sample depth-tested: what the tests hold drawStack to. */
+export function drawStackSlices(
+  out: Uint32Array, rect: ViewRect, view: Pick<WorldView, "depthAt">, s: Stack, x: number, y: number, alt: number, heading: number, n: number,
+): void {
+  stack(out, rect, view, s, x, y, alt, heading, n, true);
+}
+
+function stack(
+  out: Uint32Array, rect: ViewRect, view: Pick<WorldView, "depthAt">, s: Stack, x: number, y: number, alt: number, heading: number, n: number,
+  bySlices: boolean,
+): void {
   const w = s.w;
   const h = s.h;
   const layers = s.layers;
@@ -85,15 +99,85 @@ export function drawStack(
   if (px1 >= fw) px1 = fw - 1;
   if (px0 > px1) return;
 
+  // Slice k (centre row scy = baseSy − k) covers frame rows top[k] … bottom[k], and its pixel (px, py) samples the slice
+  // at (ox, oy) = (px − scx, py − scy) turned back by the heading. Both bounds fall as k rises, so the slices over any
+  // one row are a run of k.
+  if (scratch.top.length < layers) {
+    scratch.top = new Int32Array(layers);
+    scratch.bottom = new Int32Array(layers);
+  }
+  const top = scratch.top, bottom = scratch.bottom;
+  let rowTop = fh, rowBottom = -1, oyLow = Infinity, oyHigh = -Infinity;
   for (let k = 0; k < layers; k++) {
     const scy = baseSy - k;
     let py0 = Math.ceil(scy - extY - 1e-6);
     let py1 = Math.floor(scy + extY + 1e-6);
     if (py0 < 0) py0 = 0;
     if (py1 >= fh) py1 = fh - 1;
+    top[k] = py0;
+    bottom[k] = py1;
     if (py0 > py1) continue;
+    if (py0 < rowTop) rowTop = py0;
+    if (py1 > rowBottom) rowBottom = py1;
+    if (py0 - scy < oyLow) oyLow = py0 - scy;
+    if (py1 - scy > oyHigh) oyHigh = py1 - scy;
+  }
+  if (rowTop > rowBottom) return;
+
+  // Every slice is turned the same way, so where a pixel samples its slice depends only on px and oy. On a whole-pixel
+  // centre (as the world always gives: oy = py + k − baseSy is then whole) one table of samples serves every slice,
+  // filled once with exactly the sums and rounding a slice-by-slice draw makes per pixel; −1 where the sample falls off
+  // the slice. Otherwise draw slice by slice.
+  if (bySlices || !Number.isInteger(baseSy)) {
+    drawSlices(out, fw, view, s, scx, baseSy, cos, sin, cx, cy, px0, px1, top, bottom, depthCut);
+    return;
+  }
+  const gw = px1 - px0 + 1, gh = oyHigh - oyLow + 1;
+  if (scratch.at.length < gw * gh) scratch.at = new Int32Array(gw * gh);
+  const at = scratch.at;
+  for (let oy = oyLow, t = 0; oy <= oyHigh; oy++) {
+    const oySin = oy * sin;
+    const oyCos = oy * cos;
+    for (let px = px0; px <= px1; px++, t++) {
+      const ox = px - scx;
+      const ix = Math.round(ox * cos + oySin + cx);
+      const iy = Math.round(-ox * sin + oyCos + cy);
+      at[t] = ix < 0 || iy < 0 || ix >= w || iy >= h ? -1 : iy * w + ix;
+    }
+  }
+
+  // Drawn bottom slice first, a pixel ends as the highest slice opaque there, if the land in front lets it show. The
+  // land's depth does not depend on the slice, so each pixel takes its highest opaque slice, found from the top down,
+  // and one depth test.
+  for (let py = rowTop; py <= rowBottom; py++) {
+    let kHigh = layers - 1, kLow = 0;
+    while (kHigh >= 0 && (py < top[kHigh] || py > bottom[kHigh])) kHigh--;
+    while (kLow < kHigh && (py < top[kLow] || py > bottom[kLow])) kLow++;
+    if (kHigh < 0) continue;
+    const row = py * fw;
+    // The table row of the highest slice: oy = py − (baseSy − kHigh); each slice down is one row up the table.
+    const first = (py - (baseSy - kHigh) - oyLow) * gw - px0;
+    for (let px = px0; px <= px1; px++) {
+      for (let k = kHigh, t = first + px, base = kHigh * stride; k >= kLow; k--, t -= gw, base -= stride) {
+        const sp = at[t];
+        if (sp < 0 || alpha[base + sp] === 0) continue;
+        if (!(view.depthAt(px, py) > depthCut)) out[row + px] = rgba[base + sp];
+        break;
+      }
+    }
+  }
+}
+
+/** drawStack slice by slice, bottom first: for a centre off the pixel grid. */
+function drawSlices(
+  out: Uint32Array, fw: number, view: Pick<WorldView, "depthAt">, s: Stack, scx: number, baseSy: number, cos: number, sin: number,
+  cx: number, cy: number, px0: number, px1: number, top: Int32Array, bottom: Int32Array, depthCut: number,
+): void {
+  const w = s.w, h = s.h, stride = w * h, rgba = s.rgba, alpha = s.alpha;
+  for (let k = 0; k < s.layers; k++) {
+    const scy = baseSy - k;
     const base = k * stride;
-    for (let py = py0; py <= py1; py++) {
+    for (let py = top[k]; py <= bottom[k]; py++) {
       const oy = py - scy;
       const row = py * fw;
       const oySin = oy * sin;
@@ -111,6 +195,9 @@ export function drawStack(
     }
   }
 }
+
+/** drawStack's scratch: the frame rows each slice covers, and the table of samples. */
+const scratch = { top: new Int32Array(0), bottom: new Int32Array(0), at: new Int32Array(0) };
 
 /**
  * The shadow of `s` on the ground: the union of all slices' footprints, turned by `heading`, centred on the ground point
