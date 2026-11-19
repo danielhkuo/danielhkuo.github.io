@@ -3,7 +3,10 @@
 // the start view was ready, main-thread ms per frame (and the sky's share), chunks baked a second, and
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
-//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly]
+//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--sound]
+//
+// --sound flies with the sound on (the stored choice set to "on", autoplay allowed, the first key press unlocking it)
+// and also reports the main-thread ms the sound took each frame.
 //
 // The page reports through window.__flight (set only with ?stats).
 
@@ -22,13 +25,14 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly" };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", sound: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
     else if (a === "--seconds") o.seconds = Number(argv[++i]);
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
+    else if (a === "--sound") o.sound = true;
     else throw new Error(`unknown argument ${a}`);
   }
   return o;
@@ -78,6 +82,15 @@ async function fly(browser, origin, opts, label, rate) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   if (rate > 1) await page.emulateCPUThrottling(rate);
+  if (opts.sound) {
+    await page.evaluateOnNewDocument(() => {
+      try {
+        localStorage.setItem("world.sound", "on");
+      } catch {
+        // storage blocked: the page starts muted
+      }
+    });
+  }
   const t0 = Date.now();
   await page.goto(`${origin}world?stats`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
@@ -90,7 +103,13 @@ async function fly(browser, origin, opts, label, rate) {
     await canvas.screenshot({ path: file });
     shots.push(file);
   };
-  await page.evaluate(() => { window.__flight.frameMs.length = 0; window.__flight.skyMs.length = 0; window.__flight.hazeFrames = 0; window.__flight.frames = 0; });
+  await page.evaluate(() => {
+    window.__flight.frameMs.length = 0;
+    window.__flight.skyMs.length = 0;
+    if (window.__flight.soundMs) window.__flight.soundMs.length = 0;
+    window.__flight.hazeFrames = 0;
+    window.__flight.frames = 0;
+  });
   const bakedAt0 = (await page.evaluate(() => window.__flight.baked())) ?? 0;
   await shot("00s");
   const start = Date.now();
@@ -104,7 +123,15 @@ async function fly(browser, origin, opts, label, rate) {
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
-  const res = await page.evaluate(() => ({ frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked() }));
+  const res = await page.evaluate(() => ({
+    frameMs: [...window.__flight.frameMs],
+    skyMs: [...window.__flight.skyMs],
+    soundMs: window.__flight.soundMs ? [...window.__flight.soundMs] : [],
+    soundState: window.__flight.soundState ?? null,
+    hazeFrames: window.__flight.hazeFrames,
+    frames: window.__flight.frames,
+    baked: window.__flight.baked(),
+  }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
   return {
@@ -112,6 +139,7 @@ async function fly(browser, origin, opts, label, rate) {
     frames: res.frames, fps: res.frames / secs,
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
+    ...(opts.sound ? { soundMsP50: pct(res.soundMs, 0.5), soundMsP95: pct(res.soundMs, 0.95), soundMsMax: pct(res.soundMs, 1), soundState: res.soundState } : {}),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
   };
 }
@@ -120,7 +148,7 @@ const opts = parseArgs(process.argv.slice(2));
 mkdirSync(opts.out, { recursive: true });
 const server = await listen(opts.port);
 const origin = `http://127.0.0.1:${opts.port}/`;
-const browser = await puppeteer.launch({ headless: "shell" });
+const browser = await puppeteer.launch({ headless: "shell", args: opts.sound ? ["--autoplay-policy=no-user-gesture-required"] : [] });
 try {
   const results = [await fly(browser, origin, opts, "plain", 1), await fly(browser, origin, opts, `throttled-x${opts.rate}`, opts.rate)];
   writeFileSync(path.join(opts.out, "result.json"), JSON.stringify(results, null, 2));
