@@ -2,8 +2,8 @@
 // edge to edge in hard pixels at desktop and phone sizes, with nothing to scroll.
 
 import type { Page } from "@playwright/test";
-import { fitFrame, FRAME_PIXELS } from "../src/world/runtime/fit.ts";
-import { expect, openWorld, probe, skipLesson, test } from "./support";
+import { fitFrame, FRAME_PIXELS } from "../../src/world/runtime/fit.ts";
+import { expect, openWorld, probe, skipLesson, takeWing, test } from "../support";
 
 /** The window's sizes the frame is checked at on a desktop; a phone is checked upright and turned. */
 const DESKTOP = [
@@ -80,9 +80,10 @@ function colours(page: Page) {
 }
 
 test.describe("opening the world", () => {
-  test("loads, and shows the land with no haze", { tag: "@phone" }, async ({ page }) => {
+  test("loads, and shows the land with no haze", { tag: "@phone" }, async ({ page, isMobile }) => {
     await skipLesson(page);
     await openWorld(page);
+    if (isMobile) await takeWing(page);
     // The first full view is in; within a few seconds a whole second goes by with every frame clear of haze.
     await expect
       .poll(
@@ -104,10 +105,20 @@ test.describe("opening the world", () => {
     await skipLesson(page);
     await openWorld(page);
     await expectFills(page);
-    const first = page.viewportSize();
-    if (!first) throw new Error("no viewport");
-    const sizes = isMobile ? [{ width: first.height, height: first.width }, first] : DESKTOP;
-    for (const size of sizes) {
+    if (isMobile) {
+      // Upright behind the first card, sideways in flight, and upright again under "turn your phone". (Take wing puts
+      // an Android phone in fullscreen, locked sideways: only an iPhone can be turned back.)
+      const upright = page.viewportSize();
+      if (!upright) throw new Error("no viewport");
+      await takeWing(page);
+      await expectFills(page);
+      if (await page.evaluate(() => document.fullscreenElement !== null)) return;
+      await page.setViewportSize(upright);
+      await expect(page.getByRole("dialog", { name: "turn your phone" })).toBeVisible();
+      await expectFills(page);
+      return;
+    }
+    for (const size of DESKTOP) {
       await page.setViewportSize(size);
       await expectFills(page);
     }

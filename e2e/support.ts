@@ -21,10 +21,26 @@ export interface FlierState {
   heading: number;
   speed: number;
   phase: string;
+  /** Held still: behind a card on a phone, or while the options are open there. */
+  paused: boolean;
 }
 
 /** The world at noon in clear weather, so a run does not depend on the hour it is run at. */
 export const WORLD = "/world?stats&time=noon&weather=clear";
+
+/**
+ * Pages linked before they exist on this branch. Their 404s, from a visit or from a link's prefetch, are not counted as
+ * errors; pages.spec.ts fails once one of them exists, so it comes off this list. `/recruiter` is the minimal page,
+ * linked from the phone's first card.
+ */
+export const NOT_YET = ["/recruiter"];
+
+/** True for the console's report of a 404 for a page in NOT_YET. */
+function notYet(text: string, url: string): boolean {
+  if (!/^Failed to load resource: .*\b404\b/.test(text) || !URL.canParse(url)) return false;
+  const path = new URL(url).pathname;
+  return NOT_YET.some((p) => path === p || path.startsWith(`${p}.`) || path.startsWith(`${p}/`));
+}
 
 export const test = base.extend<{ errors: string[] }>({
   // Every page is checked: a console error or an uncaught exception fails the test. A test that expects one takes it
@@ -33,7 +49,10 @@ export const test = base.extend<{ errors: string[] }>({
     async ({ page }, use) => {
       const errors: string[] = [];
       page.on("console", (m) => {
-        if (m.type() === "error") errors.push(`console: ${m.text()}`);
+        if (m.type() !== "error" || notYet(m.text(), m.location().url)) return;
+        // A failed load does not name what failed in its text; its location does.
+        const what = m.text().startsWith("Failed to load resource") ? ` <${m.location().url}>` : "";
+        errors.push(`console: ${m.text()}${what}`);
       });
       page.on("pageerror", (e) => errors.push(`exception: ${e.message}`));
       await use(errors);
@@ -119,4 +138,19 @@ export function turned(a: number, b: number): number {
   if (d > Math.PI) d -= 2 * Math.PI;
   if (d <= -Math.PI) d += 2 * Math.PI;
   return d;
+}
+
+/**
+ * On a phone the flight waits behind its first card, "before you fly". A visitor turns the phone sideways, as the card
+ * asks, and taps Take wing; then the dragon flies.
+ */
+export async function takeWing(page: Page): Promise<void> {
+  const card = page.getByRole("dialog", { name: "before you fly" });
+  await expect(card).toBeVisible();
+  const size = page.viewportSize();
+  if (size && size.height > size.width) await page.setViewportSize({ width: size.height, height: size.width });
+  await card.getByRole("button", { name: "Take wing: start flying" }).tap();
+  await expect(card).toBeHidden();
+  await expect.poll(async () => (await flier(page)).paused, { message: "held still after Take wing" }).toBe(false);
+  await expect.poll(async () => (await flier(page)).speed, { message: "speed after Take wing" }).toBeGreaterThan(0);
 }

@@ -1,6 +1,6 @@
 // The site's other pages load, in their fonts, with no console errors.
 
-import { expect, offline, test } from "./support";
+import { expect, NOT_YET, offline, test } from "../support";
 
 test.describe("pages", () => {
   test("the home page", { tag: "@phone" }, async ({ page }) => {
@@ -27,6 +27,13 @@ test.describe("pages", () => {
     const res = await request.get("/fish.json");
     expect(res.status()).toBe(200);
     expect(Object.keys(await res.json()).length).toBeGreaterThan(0);
+  });
+
+  test("pages linked before they exist are still missing", async ({ request }) => {
+    for (const path of NOT_YET) {
+      const res = await request.get(path);
+      expect(res.status(), `${path} exists now: take it off NOT_YET in e2e/support.ts`).toBe(404);
+    }
   });
 
   test("a page that does not exist", { tag: "@phone" }, async ({ page, errors }) => {

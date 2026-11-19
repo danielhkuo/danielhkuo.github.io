@@ -3,8 +3,8 @@
 // terminal.
 
 import type { Page } from "@playwright/test";
-import { PROFILE } from "../src/components/terminal/content.ts";
-import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "./support";
+import { PROFILE } from "../../src/components/terminal/content.ts";
+import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "../support";
 
 /** The first landmark that holds `holds` ("project" or "about"), read from the world's probe. */
 async function landmark(page: Page, holds: string): Promise<{ id: string; name: string | null }> {

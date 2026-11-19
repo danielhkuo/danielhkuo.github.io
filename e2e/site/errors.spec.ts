@@ -2,8 +2,8 @@
 // loaded, with a way back to the site, instead of showing a blank frame.
 
 import type { Page, Route } from "@playwright/test";
-import { LOAD_FAILED } from "../src/world/runtime/load.ts";
-import { expect, test, WORLD, type Probe } from "./support";
+import { LOAD_FAILED } from "../../src/world/runtime/load.ts";
+import { expect, test, WORLD, type Probe } from "../support";
 
 /** A request the browser logs as an error when its reply is not OK: expected here, and nothing else is. */
 const FAILED_LOAD = /^console: Failed to load resource/;

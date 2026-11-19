@@ -7,22 +7,26 @@ and what only a real Safari or iPhone can confirm.
 
 ## The suite
 
-`npm run e2e` builds the static export and runs `e2e/` against `out/`, served as GitHub Pages would serve it
-(`scripts/serve-out.mjs`). `npx playwright test` runs against an `out/` that is already built, and
+`npm run e2e` builds the static export and runs the site's suite, `e2e/site/`, against `out/`, served as GitHub Pages
+would serve it (`scripts/serve-out.mjs`). `npx playwright test` runs against an `out/` that is already built, and
 `--project=webkit` runs one engine. Install the browsers once per machine with `npx playwright install chromium webkit`.
+Each suite is a folder under `e2e/` with projects of its own in `playwright.config.ts`, so another (the minimal page's)
+joins without touching this one; `e2e/support.ts` holds what they share.
 
 | Spec | What it checks |
 |---|---|
-| `world-open` | `/world` loads, and within a few seconds a whole second of frames passes with no haze. The canvas shows land (many colours, none covering half the frame). The frame covers the window from its top-left corner, at whole device pixels per frame pixel, overhanging by less than a frame pixel. Sizes checked: 1920×1080, 1440×900 and 2560×1080, and phones upright and turned. Nothing scrolls. |
+| `world-open` | `/world` loads, and within a few seconds a whole second of frames passes with no haze. The canvas shows land (many colours, none covering half the frame). The frame covers the window from its top-left corner, at whole device pixels per frame pixel, overhanging by less than a frame pixel. Sizes checked: 1920×1080, 1440×900 and 2560×1080. On a phone the visitor turns it sideways and taps Take wing on the first card, "before you fly"; the frame is checked upright behind the card, sideways in flight, and on the iPhone upright again under "turn your phone" (Take wing leaves an Android phone fullscreen, locked sideways). Nothing scrolls. |
 | `flight` | Left and D turn the dragon, Up and S set its speed, and it crosses the world. The first-flight lesson steps through steering, speed and leaving, then fades and is stored. The options panel opens with O and the corner button, and closes with Esc and Close; each of its choices sits on one line. Esc leaves the world. |
 | `landing` | `?at=<site>` shows "Press Space to land: …". Space opens the Codex, named for the project and set in IM Fell English, and Space takes off again. At the abbey, the arrow keys read down the Codex. The terminal runs `help`, the first Esc puts it away, and the second takes off. |
 | `errors` | A garbled `current.json`, a missing manifest, or a `core.bin` that fails its checksum each show "The realm could not be loaded." with a link home. |
-| `pages` | `/` in its fonts, with third parties stubbed. `/world-bench` with its workers ready. `/fish.json`, and the 404 page. |
+| `pages` | `/` in its fonts, with third parties stubbed. `/world-bench` with its workers ready. `/fish.json`, and the 404 page. Pages linked before they exist on the branch (`NOT_YET` in `e2e/support.ts`) still 404. |
 
-Any console error or uncaught exception fails a test. The suite reads the world through `window.__flight`, which the
-page sets with `?stats`. It gains two fields for the suite: `state()` (position, heading, speed and phase) and
-`landmarks` (what each landmark holds). The light is held at noon in clear weather (`?time=noon&weather=clear`). The
-run is 40 tests and takes about a minute after a 10-second build, two pages at a time (`E2E_WORKERS` changes that).
+Any console error or uncaught exception fails a test, except a 404 for a page in `NOT_YET`: today `/recruiter`, the
+minimal page, which the phone's first card links to (and which its link prefetches) before it is on this branch. The
+suite reads the world through `window.__flight`, which the page sets with `?stats`: `state()` (position, heading,
+speed, phase, and whether a phone holds the flight still) and `landmarks` (what each landmark holds). The light is held
+at noon in clear weather (`?time=noon&weather=clear`). The run is 42 tests and takes about a minute after a 10-second
+build, two pages at a time (`E2E_WORKERS` changes that).
 
 ## What WebKit showed
 
@@ -90,10 +94,12 @@ run is 40 tests and takes about a minute after a 10-second build, two pages at a
 
 ## Notes for the merge
 
-- **The probe.** The mobile branch adds a fuller `probe.state()` (it also has paused, workers and rate). It contains
-  this one, so its version should win the conflict in `session.ts`; keep `landmarks` beside it.
-- **The phone shell.** The mobile branch's "Before you fly" card and "Take wing" will change what `/world` shows first
-  on a phone. The `@phone` world tests will then need to pass the card, or use a query that skips it.
+- **The mobile branch** is merged in. Its `probe.state()` won in `session.ts`, with `landmarks` kept beside it, and the
+  `@phone` world tests tap through its first card as a visitor would.
+- **The minimal page.** When `/recruiter` lands, `pages.spec.ts` fails until it comes off `NOT_YET`. Its own suite
+  joins as projects of its own under `e2e/`. It drives plain `playwright` 1.65.1; this suite pins `@playwright/test`
+  1.63.0, whose Chromium (1243) and WebKit (2359) were already cached here. One version has to serve both: 1.65.1
+  needs Chromium 1255 downloaded (its WebKit, 2388, is cached).
 - **The title menu.** When it lands at `/`, the home page test changes with it.
 - **hCaptcha.** On `/`, hCaptcha logs a console error in Chromium: "hl: Language was not provided". It comes from the
   contact form, and the suite stubs third parties.

@@ -1,9 +1,9 @@
 // Flight by keyboard: the keys steer and set the speed, the first-flight guide teaches and fades, the options panel
 // opens and closes, and Esc leaves the world.
 
-import { LESSON_KEY } from "../src/world/controls/lesson.ts";
-import { CRUISE } from "../src/world/runtime/flight.ts";
-import { expect, flier, guide, hold, offline, openWorld, skipLesson, test, turned } from "./support";
+import { LESSON_KEY } from "../../src/world/controls/lesson.ts";
+import { CRUISE } from "../../src/world/runtime/flight.ts";
+import { expect, flier, guide, hold, offline, openWorld, skipLesson, test, turned } from "../support";
 
 test.describe("flight", () => {
   test("the keys steer the dragon and set its speed", async ({ page }) => {
