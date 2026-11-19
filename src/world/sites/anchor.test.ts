@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchorOf, restRadius, type StructureLike } from "./anchor.ts";
+import { anchorOf, harbourOf, restingPlaces, restRadius, type StructureLike } from "./anchor.ts";
 
 const N = 10240;
 
@@ -59,4 +59,45 @@ test("without a building, the radius goes by the kind of landmark", () => {
     const r = restRadius(null, t);
     assert.ok(r >= 8 && r <= 26, `${t}: ${r}`);
   }
+});
+
+test("a town's anchor is its harbour: the widest dredged basin near it, where the coil lies on open water", () => {
+  const conforms = [
+    { kind: "raise", x: 1000, y: 1050, rx: 50, ry: 18 },
+    { kind: "dredge", x: 1000, y: 1068, rx: 32, ry: 12 },
+    { kind: "dredge", x: 987, y: 1071, rx: 20, ry: 10 },
+    { kind: "dredge", x: 1023, y: 1084, rx: 7, ry: 7 },
+    { kind: "dredge", x: 3000, y: 3000, rx: 60, ry: 40 },
+  ];
+  const h = harbourOf({ x: 1000, y: 1000 }, conforms, N)!;
+  assert.deepEqual(h, { x: 1000, y: 1068, halfW: 32, halfD: 12, height: 0, inside: true });
+  // The coil lies inside it, clear of its quays: never wider than the basin is deep.
+  assert.equal(restRadius(h, "town"), 9);
+  assert.equal(harbourOf({ x: 5000, y: 5000 }, conforms, N), null);
+});
+
+test("resting places: each landmark's target is its building, and the town's is its harbour", () => {
+  const structures = [block(997, 997, 7, 7, 34), block(1997, 1997, 7, 7, 34)];
+  const conforms = [{ kind: "dredge", x: 2000, y: 2068, rx: 32, ry: 12 }];
+  const places = restingPlaces(
+    [
+      { id: "lighthouse-0", type: "lighthouse", x: 1000, y: 1000 },
+      { id: "town-0", type: "town", x: 2000, y: 2000 },
+      { id: "yew-0", type: "yew", x: 4000, y: 4000 },
+    ],
+    { structures, conforms },
+    N,
+  );
+  assert.deepEqual(places.targets, [
+    { id: "lighthouse-0", x: 1000.5, y: 1000.5, radius: 8 },
+    { id: "town-0", x: 2000, y: 2068, radius: 9 },
+    { id: "yew-0", x: 4000, y: 4000, radius: 21 },
+  ]);
+  assert.equal(places.anchors.get("town-0")?.inside, true);
+  assert.equal(places.anchors.get("yew-0"), null);
+  // A town with no harbour falls back to its tallest building: the bell tower.
+  const dry = restingPlaces([{ id: "town-0", type: "town", x: 2000, y: 2000 }], { structures, conforms: [] }, N);
+  assert.deepEqual(dry.targets, [{ id: "town-0", x: 2000.5, y: 2000.5, radius: 8 }]);
+  // Without the built world at all, the sites' own points.
+  assert.deepEqual(restingPlaces([{ id: "town-0", type: "town", x: 2000, y: 2000 }], undefined, N).targets, [{ id: "town-0", x: 2000, y: 2000, radius: 8 }]);
 });

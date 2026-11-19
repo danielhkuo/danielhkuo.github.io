@@ -12,7 +12,8 @@
 //   a-turn.png         held in a right turn and in a left, at 4×
 //   a-boost.png        a boost held for 2 s and let go, at 4×: the wind of it growing in and fading out
 //   a-boost-1x.png     the same moments at 1×
-//   a-landing.png      down onto a lighthouse and the abbey, landed, at rest for 1 s and 20 s, and off again, at 3×
+//   a-landing.png      down onto a lighthouse, the abbey and the town's harbour, landed, at rest for 1 s and 20 s,
+//                      and off again, at 3×
 //   sheet.png          everything on one contact sheet
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,9 +29,9 @@ import { createWorldBakeHost } from "../runtime/bakeHost.ts";
 import { CRUISE, startState, stepFlight, type FlightInput, type FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { createStreamView, type StreamView } from "../runtime/stream.ts";
-import { anchorOf, restRadius } from "../sites/anchor.ts";
+import { restingPlaces } from "../sites/anchor.ts";
 import type { LandmarkType } from "../sites/assign.ts";
-import { advance, land, offered, restShare, takeOff, type Phase, type Target } from "../sites/landing.ts";
+import { advance, land, offered, restShare, takeOff, type Phase } from "../sites/landing.ts";
 import { createSky, type Sky } from "../sky/sky.ts";
 import { styleFrom } from "../sky/styles.ts";
 import { namedViews } from "./live.ts";
@@ -362,16 +363,12 @@ export async function main(argv: readonly string[]): Promise<number> {
   {
     const LW = 84, LH = 80, LDT = 1 / 120;
     const KINDS: readonly string[] = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"];
-    const structures = shipped.world.built?.built.structures ?? [];
-    const targets: Target[] = manifest.sites.filter((q) => KINDS.includes(q.type)).map((q) => {
-      const type = q.type as LandmarkType;
-      const a = anchorOf({ x: q.x, y: q.y, type }, structures, st.n);
-      return { id: q.id, x: a?.x ?? q.x, y: a?.y ?? q.y, radius: restRadius(a, type) };
-    });
-    const picks = ["lighthouse", "abbey"].flatMap((kind) => targets.find((q) => q.id.startsWith(kind)) ?? []);
+    const landmarks = manifest.sites.filter((q) => KINDS.includes(q.type)).map((q) => ({ ...q, type: q.type as LandmarkType }));
+    const { targets } = restingPlaces(landmarks, shipped.world.built?.built, st.n);
+    const picks = ["lighthouse", "abbey", "town"].flatMap((kind) => targets.find((q) => q.id.startsWith(kind)) ?? []);
     const captions = ["DOWN 1.2 S", "DOWN 2.4 S", "LANDED", "REST 1 S", "REST 20 S", "OFF 0.3 S", "OFF 0.6 S", "OFF 1.0 S"];
     const landing = sheet(captions.length * (LW * 3 + GAP) - GAP, LINE + picks.length * (LH * 3 + LINE));
-    label(landing, 0, 2, "A LANDING AT 3×: DOWN ONTO A LIGHTHOUSE AND THE ABBEY, AT REST, AND OFF AGAIN");
+    label(landing, 0, 2, "A LANDING AT 3×: DOWN ONTO A LIGHTHOUSE, THE ABBEY AND THE HARBOUR, AT REST, AND OFF AGAIN");
     const idle: FlightInput = { turn: 0, boost: false, brake: false };
     picks.forEach((target, row) => {
       const dragon = createDragon(st.n);
@@ -396,6 +393,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       // Fly up to it as the page would, and land when it is on offer.
       for (let k = 0; k < 6 / LDT && !offered(phase, s.x, s.y, targets, st.n); k++) steps(LDT);
       steps(0.4);
+      // As on the page, the view is on the flier when it lands, so the landing can see what the land would hide.
+      st.view.setCamera(s.x, s.y - s.alt / 0.8);
+      for (let k = 0; k < 10 && !st.view.ready(); k++) st.view.update(0, 0);
       phase = land(phase, s, targets, st.n);
       steps(1.2);
       shoot();

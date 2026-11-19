@@ -1,8 +1,10 @@
 // A landmark's anchor: its own building, which the dragon coils round when it lands. Read from the structures the core
-// carries (gen/built.ts), so it is the building as baked, wherever on its pad it stands.
+// carries (gen/built.ts), so it is the building as baked, wherever on its pad it stands. A town's anchor is its
+// harbour: round its bell tower the coil would lie among the houses, which hide all but scraps of it.
 
 import { torusDelta, wrap } from "../core/torus.ts";
 import type { LandmarkType } from "./assign.ts";
+import type { Target } from "./landing.ts";
 
 /** The parts of a structure (gen/built.ts) the anchor reads. */
 export interface StructureLike {
@@ -27,6 +29,18 @@ export interface Anchor {
   halfD: number;
   /** Its tallest cell over its own base. */
   height: number;
+  /** The coil lies inside it (a harbour's water), not round it. */
+  inside?: boolean;
+}
+
+/** The parts of a conform (gen/built.ts) the harbour reads. */
+export interface ConformLike {
+  kind: string;
+  /** Centre and half-sizes, cells. */
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
 }
 
 /** How far from the site's point its building may stand, cells. The town's point is its pad, not its bell tower. */
@@ -39,6 +53,9 @@ const FALLBACK: Record<LandmarkType, number> = { abbey: 22, town: 8, lighthouse:
 const CLEAR = 3;
 export const REST_MIN = 8;
 export const REST_MAX = 26;
+/** A town's harbour lies within this of its point, cells; and the widest a coil lies on its water. */
+const HARBOUR_REACH = 150;
+const HARBOUR_MAX = 10;
 
 /**
  * The tallest standing structure (its tallest cell over its own base) whose footprint centre lies within the site's
@@ -62,8 +79,51 @@ export function anchorOf(site: { x: number; y: number; type: LandmarkType }, str
   return best;
 }
 
-/** Where the coil comes to rest: the building's half-diagonal plus the body's width, within [REST_MIN, REST_MAX]. */
+/**
+ * A town's harbour: the widest dredged basin (by area) whose centre lies within HARBOUR_REACH of the site, on the
+ * torus. Null when none is.
+ */
+export function harbourOf(site: { x: number; y: number }, conforms: readonly ConformLike[], n: number): Anchor | null {
+  let best: Anchor | null = null;
+  let bestArea = 0;
+  for (const c of conforms) {
+    if (c.kind !== "dredge") continue;
+    const dx = torusDelta(site.x, c.x, n), dy = torusDelta(site.y, c.y, n);
+    if (Math.abs(dx) > HARBOUR_REACH || Math.abs(dy) > HARBOUR_REACH) continue;
+    const area = c.rx * c.ry;
+    if (area <= bestArea) continue;
+    best = { x: wrap(site.x + dx, n), y: wrap(site.y + dy, n), halfW: c.rx, halfD: c.ry, height: 0, inside: true };
+    bestArea = area;
+  }
+  return best;
+}
+
+/**
+ * Where the coil comes to rest. Round a building: its half-diagonal plus the body's width, within [REST_MIN,
+ * REST_MAX]. Inside a harbour: the body's width clear of its quays, within [REST_MIN, HARBOUR_MAX].
+ */
 export function restRadius(anchor: Anchor | null, type: LandmarkType): number {
+  if (anchor?.inside) return Math.min(HARBOUR_MAX, Math.max(REST_MIN, Math.min(anchor.halfW, anchor.halfD) - CLEAR));
   const r = anchor ? Math.sqrt(anchor.halfW * anchor.halfW + anchor.halfD * anchor.halfD) + CLEAR : FALLBACK[type];
   return Math.min(REST_MAX, Math.max(REST_MIN, r));
+}
+
+/**
+ * Every landmark's resting place: the target the landing aims at, and the anchor it was taken from (null when the
+ * built world has nothing there, and the site's own point stands in). A town rests in its harbour when it has one.
+ */
+export function restingPlaces(
+  landmarks: readonly { id: string; type: LandmarkType; x: number; y: number }[],
+  built: { structures: readonly StructureLike[]; conforms: readonly ConformLike[] } | undefined,
+  n: number,
+): { targets: Target[]; anchors: Map<string, Anchor | null> } {
+  const targets: Target[] = [];
+  const anchors = new Map<string, Anchor | null>();
+  for (const l of landmarks) {
+    const harbour = built && l.type === "town" ? harbourOf(l, built.conforms, n) : null;
+    const a = harbour ?? (built ? anchorOf(l, built.structures, n) : null);
+    anchors.set(l.id, a);
+    targets.push({ id: l.id, x: a?.x ?? l.x, y: a?.y ?? l.y, radius: restRadius(a, l.type) });
+  }
+  return { targets, anchors };
 }

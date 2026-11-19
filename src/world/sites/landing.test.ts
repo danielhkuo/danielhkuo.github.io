@@ -227,3 +227,19 @@ test("taking off, it climbs no steeper than its body can follow, and comes up to
   }
   assert.ok(Math.abs(s.alt - (5 + CLEARANCE)) < 0.5, `flying at ${s.alt}`);
 });
+
+test("where the land would hide its head at the south point, it comes to rest at the nearest point round that shows", () => {
+  // A view that says anything drawn low in a strip 12 cells wide, south of the tower, is behind nearer land (a wooded bank).
+  const rect = { x: 4800, y: Math.round(0.8 * 5000) - 112, w: 400, h: 225 };
+  const bank: Terrain & { depthAt(px: number, py: number): number; rect(): typeof rect } = {
+    ...FLAT,
+    rect: () => rect,
+    depthAt: (px, py) => (Math.abs(rect.x + px - 5000) < 6 && rect.y + py > 0.8 * 5004 - 20 ? Infinity : -Infinity),
+  };
+  const { s, phase } = comeDown(flier(TOWER.x + 60, TOWER.y, Math.PI / 2), TOWER, bank);
+  assert.equal(phase.kind, "landed");
+  // South, and a sixteenth of a turn either side, are hidden; an eighth round to the west shows.
+  const at = (3 * Math.PI) / 4;
+  const x = TOWER.x + TOWER.radius * Math.cos(at), y = TOWER.y + TOWER.radius * Math.sin(at);
+  assert.ok(Math.hypot(delta(x, s.x), delta(y, s.y)) < 3, `rests at (${s.x.toFixed(1)}, ${s.y.toFixed(1)}), wanted (${x.toFixed(1)}, ${y.toFixed(1)})`);
+});

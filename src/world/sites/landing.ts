@@ -59,6 +59,16 @@ export interface Target {
   radius: number;
 }
 
+/**
+ * What the page's view can also tell the landing, when it is the terrain it is given: the land drawn at a pixel of the
+ * frame (its world row; larger is nearer the viewer) and the frame's place in bake space. With these the head comes to
+ * rest where the land does not hide it.
+ */
+export interface Sight {
+  depthAt(px: number, py: number): number;
+  rect(): { x: number; y: number; w: number; h: number };
+}
+
 /** A landing in progress. */
 export interface Approach {
   id: string;
@@ -194,6 +204,48 @@ function ringAt(ring: readonly number[], phi: number): number {
   return ring[i] + (ring[(i + 1) % RING_POINTS] - ring[i]) * f;
 }
 
+/** Sixteenths of a turn from the south point, nearest first, at which the head may come to rest: the front half of the ring. */
+const REST_AT = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+
+/**
+ * True when the view draws no nearer land over the point (x, y) `alt` up, nor over its crown 3 higher: the whole head
+ * shows there. A point outside the frame, or a terrain that is not a view, hides nothing.
+ */
+function shows(terrain: Terrain & Partial<Sight>, x: number, y: number, alt: number, n: number): boolean {
+  if (!terrain.depthAt || !terrain.rect) return true;
+  const rect = terrain.rect(), rows = 0.8 * n;
+  let px = (((Math.round(x) - rect.x) % n) + n) % n;
+  if (px >= rect.w) px -= n;
+  if (px < 0) return true;
+  for (const up of [0, 3]) {
+    const bake = Math.round(0.8 * y - alt - up);
+    const py = (((bake - rect.y) % rows) + rows) % rows;
+    if (py >= rect.h) continue;
+    // The point's row on the turn of the world the frame shows.
+    const row = y + Math.round((rect.y + py - bake) / rows) * n;
+    if (terrain.depthAt(px, py) > row + 1.5) return false;
+  }
+  return true;
+}
+
+/**
+ * The approach with its ring measured, its sweep ending where the head will show: the south point if the land does
+ * not hide it there, else the nearest point round the front of the ring that shows (south again if none does).
+ */
+function surveyed(a: Approach, terrain: Terrain & Partial<Sight>, n: number): Approach {
+  const ring = ringHeights(a, terrain, n);
+  let end = PI / 2;
+  for (const k of REST_AT) {
+    const at = PI / 2 + (k * TAU) / 16;
+    if (!shows(terrain, wrap(a.cx + a.radius * pcos(at), n), wrap(a.cy + a.radius * psin(at), n), ringAt(ring, at) + REST_LIFT, n)) continue;
+    end = at;
+    break;
+  }
+  let sweep = (((a.dir * (end - a.phi)) % TAU) + TAU) % TAU;
+  if (sweep < SWEEP_MIN * TAU) sweep += TAU;
+  return { ...a, ring, sweep };
+}
+
 /**
  * One step of the coil. The orbit's radius eases from r0 to the rest radius by SHRINK_END of the sweep; the head aims
  * along the orbit's tangent, bent toward it by atan((r − r*) / LOOK), turning no faster than MAX_TURN. Its speed is the
@@ -201,7 +253,9 @@ function ringAt(ring: readonly number[], phi: number): number {
  * the last REST_PART. Its height sinks onto the coil's ring by SINK_END and follows it round, REST_LIFT over it: a
  * cliff's edge is a ramp, not a jump. Done when the sweep is, or at LANDING_CAP: then it stops.
  */
-function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain, n: number): { s: FlightState; a: Approach; done: boolean } {
+function stepApproach(s: FlightState, from: Approach, dt: number, terrain: Terrain & Partial<Sight>, n: number): { s: FlightState; a: Approach; done: boolean } {
+  // The first step measures the ring, and ends the sweep where the head will show.
+  const a = from.ring ? from : surveyed(from, terrain, n);
   const step = clamp(dt, 0, DT_MAX);
   const dx = torusDelta(a.cx, s.x, n), dy = torusDelta(a.cy, s.y, n);
   const r = Math.sqrt(dx * dx + dy * dy);
@@ -225,7 +279,7 @@ function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain,
 
   const x = wrap(s.x + pcos(heading) * speed * step, n);
   const y = wrap(s.y + psin(heading) * speed * step, n);
-  const ring = a.ring ?? ringHeights(a, terrain, n);
+  const ring = a.ring ?? [];
   const altStar = a.alt0 + (ringAt(ring, phi) + REST_LIFT - a.alt0) * smooth(u / SINK_END);
   // No faster than the flight model climbs, and no steeper than the body bends along the path it will lie on.
   const most = Math.min(CLIMB, SETTLE_SLOPE * speed) * step;
@@ -263,7 +317,7 @@ export function pullUp(phase: Phase): Phase {
  * is no steeper than RISE_SLOPE, so a take-off draws the body up after the head.
  */
 export function advance(
-  phase: Phase, s: FlightState, input: FlightInput, dt: number, terrain: Terrain, n: number, targets: readonly Target[],
+  phase: Phase, s: FlightState, input: FlightInput, dt: number, terrain: Terrain & Partial<Sight>, n: number, targets: readonly Target[],
 ): { phase: Phase; s: FlightState; landed: string | null } {
   if (phase.kind === "flying") {
     let next = stepFlight(s, input, dt, terrain, n);
