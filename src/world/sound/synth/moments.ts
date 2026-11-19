@@ -131,3 +131,62 @@ export function pop(seed: number, k: number, sampleRate: number): Float32Array {
   const hz = 95 - 8 * k;
   return shot(seconds, sampleRate, (i, t) => (Math.sin(2 * Math.PI * hz * t) + 0.8 * low(x[i])) * ease(t / 0.006) * Math.exp(-t / 0.035) * ease((seconds - t) / 0.03));
 }
+
+/** The ferry's horn, Hz: two notes a major third apart. */
+export const HORN_HZ: readonly [number, number] = [290, 366];
+export const HORN_SHORT_S = 1, HORN_LONG_S = 3;
+
+/**
+ * The ferry's horn: two reedy notes (each every harmonic, falling as 1/n, dulled above 1.8 kHz, eased into a soft
+ * clip). It speaks over 120 ms, coming up 25 cents as it does, holds, and lets go over 250 ms.
+ */
+export function horn(seed: number, seconds: number, sampleRate: number): Float32Array {
+  const phase = [0, 0];
+  const rng = rngFor(seed, `sound/horn/${seconds}`);
+  // Each harmonic at its own phase: in step they make a pulse a period.
+  const lead = [0, 1].map(() => Array.from({ length: 16 }, () => 2 * Math.PI * rng.float()));
+  return shot(seconds, sampleRate, (_i, t) => {
+    const cents = -25 * (1 - ease(t / 0.12));
+    const env = ease(t / 0.12) * ease((seconds - t) / 0.25);
+    let v = 0;
+    for (let k = 0; k < 2; k++) {
+      const hz = HORN_HZ[k] * Math.pow(2, cents / 1200);
+      phase[k] += (2 * Math.PI * hz) / sampleRate;
+      for (let n = 1; n <= 16; n++) {
+        const f = n * hz;
+        v += ((k === 0 ? 1 : 0.63) / n / Math.sqrt(1 + Math.pow(f / 1800, 4))) * Math.sin(n * phase[k] + lead[k][n - 1]);
+      }
+    }
+    // A light push into the clip: enough to thicken it, not enough to square it (squared, every edge is a tick).
+    return Math.tanh(0.45 * v) * env;
+  });
+}
+
+/** Beats in the ferry's engine loop, and beats a second. */
+export const THUMP_BEATS = 8, THUMP_RATE = 5.5;
+
+/** The ferry's engine: a seamless loop of eight slow thumps (5.5 a second), each a low note that speaks and dies with a puff of dull noise; every fourth is harder. */
+export function thump(seed: number, sampleRate: number): Float32Array {
+  const n = Math.round((THUMP_BEATS / THUMP_RATE) * sampleRate);
+  const out = new Float32Array(n);
+  const noise = gaussianInto(new Float32Array(n), rngFor(seed, "sound/thump"));
+  const low = filter(coefficients({ type: "lowpass", hz: 300, q: -3.01 }, sampleRate));
+  // The noise runs twice round, so the filter has settled where the loop joins.
+  for (let i = 0; i < n; i++) low(noise[i]);
+  const puff = new Float32Array(n);
+  for (let i = 0; i < n; i++) puff[i] = low(noise[i]);
+  const len = Math.round(0.17 * sampleRate);
+  for (let b = 0; b < THUMP_BEATS; b++) {
+    const at = Math.round((b / THUMP_BEATS) * n), level = (b & 3) === 0 ? 1.26 : 1;
+    for (let i = 0; i < len; i++) {
+      const t = i / sampleRate;
+      const env = ease(t / 0.03) * Math.exp(-Math.max(0, t - 0.03) / 0.039) * ease((0.17 - t) / 0.03);
+      const j = (at + i) % n;
+      out[j] += level * env * (Math.sin(2 * Math.PI * 62 * t) + 0.35 * Math.sin(2 * Math.PI * 124 * t + 1) + 0.2 * Math.sin(2 * Math.PI * 186 * t + 2) + 2.5 * puff[j]);
+    }
+  }
+  let peak = 0;
+  for (const v of out) peak = Math.max(peak, Math.abs(v));
+  for (let i = 0; i < n; i++) out[i] *= 0.5 / peak;
+  return out;
+}

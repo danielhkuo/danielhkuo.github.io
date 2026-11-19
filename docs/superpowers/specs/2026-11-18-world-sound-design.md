@@ -1354,10 +1354,21 @@ graph between waves: every wave of the scene is connected before the render star
   under the firing line, where the recipe has it strongest; as written the engine lost 8 LU on small speakers.
 - **The reverb is built with the bells' buffers whether or not the world has an abbey** (the clock sends to it).
 - **A moment is asked for cues, and followed, only within 480 cells.**
+- **The ferry's engine and wash follow the picture's `shown` over its last 2.5 s** (they are continuous); its horn
+  does not. Its echo is the private two-repeat unit of §4.9, returned through the ferry's own slot. The ferry moves
+  at one pace (`ferryAt`), so its engine's level is steady.
+- **The baths' steam and pools are built with the ferry** (§4.12 had them later): white through a 5 kHz band riding
+  a drift, and the `brook` bed, whenever the dragon is within 200 cells; let go beyond 230.
+- **The flock is one slot at the middle of the flock**; its wingbeats are the gulls' flap buffers, its ripples the
+  surf's laps. A beat is 12 dB down once the birds have risen, eased over the rise's last third.
+- **The seaplane's wave was moved up again** (by ruling): the firing's second and third harmonics lead, and the prop
+  wash is 7.6 dB up, so it loses 3.5 LU on small speakers. **The clock's door thud is 3.5 dB down.**
 
 Phase 5, after the sonogram (by ruling): a kyow is 0.15–0.2 s long (0.95 B → 1.21 B → 0.89 B, B = 620 Hz ±10 %),
 kyows come about 3.4 a second; a startled bird's keks are levelled alike round 2.8 kHz, fall as the square root of
-the small class's law, and three birds at most are voiced at once (each n^−¼ of a lone bird's level).
+the small class's law, and three birds at most are voiced at once (each n^−¼ of a lone bird's level). By ruling, the
+keks' bar under boost wind is a median of 6 dB or more over the wind in 2–4 kHz with nine in ten at 3 dB or more
+(measured: 7.9 dB, 94 %; the wind's own level there swings 10 dB with the gusts); the true-peak margin is kept.
 
 Also by ruling: the fall memory, the stall dip and the second (fallback) clock are cut; HRTF is the last, optional
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike

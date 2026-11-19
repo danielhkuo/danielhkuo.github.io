@@ -9,7 +9,7 @@ import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
 import { gullCues, type Colony } from "../schedule/gulls.ts";
-import { planeCues, trainCues } from "../schedule/moments.ts";
+import { ferryCues, flockCues, planeCues, trainCues } from "../schedule/moments.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
 import { torusDelta } from "../../core/torus.ts";
@@ -31,7 +31,7 @@ import { buildBells, buildReverb, type Bells } from "./bells.ts";
 import { buildFalls, type Falls } from "./falls.ts";
 import { buildGulls, type Gulls } from "./gulls.ts";
 import { buildHub, type Hub } from "./hub.ts";
-import { buildClock, buildPlane, buildTrain, type Moment } from "./moments.ts";
+import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
 import { buildRiverBed } from "./river.ts";
 import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
@@ -238,7 +238,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const forced = opts.forced === true;
   const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
   const hotel = opts.wonders?.find((w) => w.type === "cove-hotel");
-  const wantMoments = (opts.towns?.length ?? 0) > 0 || !!railway || !!hotel;
+  const bathsAt = opts.wonders?.find((w) => w.type === "baths");
+  const church = opts.wonders?.find((w) => w.type === "drowned-church");
+  const wantMoments = (opts.towns?.length ?? 0) > 0 || !!railway || !!hotel || !!bathsAt || !!church;
   /** A moment is asked for cues, and followed, only within this many cells (the medium class is gone by 450). */
   const MOMENT_REACH = 480;
   const inReach = (m: Moment) => {
@@ -411,7 +413,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (!offline) return;
     }
     if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch });
-    if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river")) {
+    if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river") && kit.ready("gulls")) {
       momentsBuilt = true;
       const o = {
         kit, master, n, seed: opts.seed, forced, at: now,
@@ -440,6 +442,16 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         const plane = buildPlane(ctx, { ...o, pontoon: hotel.anchors.pontoon ?? [hotel.x, hotel.y] });
         moments.set("plane", plane);
         sources.push({ kind: "plane", lookBack: 0, cues: (a, b, out) => (inReach(plane) ? planeCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (bathsAt) {
+        const ferry = buildFerry(ctx, { ...o, quay: bathsAt.anchors.quay ?? [bathsAt.x, bathsAt.y], baths: bathsAt, level: bathsAt.level, drift: hub.drift });
+        moments.set("ferry", ferry);
+        sources.push({ kind: "ferry", lookBack: 0, cues: (a, b, out) => (inReach(ferry) ? ferryCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (church) {
+        const flock = buildFlock(ctx, { ...o, tower: church.anchors.tower ?? [church.x, church.y], level: church.level });
+        moments.set("flock", flock);
+        sources.push({ kind: "flock", lookBack: 0, cues: (a, b, out) => (inReach(flock) ? flockCues(opts.seed, forced, a, b, out) : undefined) });
       }
       for (const m of moments.values()) nodes += m.nodes;
       work |= WORK.build;

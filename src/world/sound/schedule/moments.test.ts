@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CLOCK_LASTS, figureOut, figureP, momentSpan, momentWindow, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, trainAt, trainPlace, WORLD_HOUR } from "../../live/moments.ts";
+import { CLOCK_LASTS, ferryAt, figureOut, figureP, flockAt, flockPlace, momentSpan, momentWindow, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, trainAt, trainPlace, WORLD_HOUR } from "../../live/moments.ts";
 import { CHIME_NAMES } from "../synth/chimes.ts";
 import type { Cue } from "../types.ts";
 import { hourNumber } from "./bells.ts";
 import { CHIME, CLACK, clockCues, COUNT_AT, COUNT_GAP, RATCHET, WHIRR } from "./chimes.ts";
-import { appearance, BEAT_DB, CHUFF, CHUFF_CELLS, CLICK, PLANE_POPS, PLANE_RUNDOWN, planeCues, planeRpm, POP, SPLASH, trainCues, trainRun, WHISTLE_LONG, WHISTLE_SHORT } from "./moments.ts";
+import { appearance, BEAT_DB, CHUFF, CHUFF_CELLS, CLICK, ferryCues, ferrySpeed, FLAP, flockCues, HORN_LONG, HORN_SHORT, RIPPLE, PLANE_POPS, PLANE_RUNDOWN, planeCues, planeRpm, POP, SPLASH, trainCues, trainRun, WHISTLE_LONG, WHISTLE_SHORT } from "./moments.ts";
 import { BAR_S, melodySemitones, parsons, QUAVER_S, TUNE, tuneNotes } from "./tune.ts";
 
 const SEED = 3, N = 10240;
@@ -173,4 +173,63 @@ test("the seaplane: its splashes fall as the picture's floats reach the water, i
   assert.ok(Math.abs(planeRpm(PLANE_MOORED * span.lasts + PLANE_RUNDOWN - 1e-6, span.lasts) - 300) < 1);
   assert.equal(planeRpm(PLANE_MOORED * span.lasts + PLANE_RUNDOWN + 0.1, span.lasts), 0);
   for (let t = 0.1; t < PLANE_DOWN * span.lasts; t += 0.1) assert.ok(planeRpm(t, span.lasts) <= planeRpm(t - 0.1, span.lasts));
+});
+
+test("the ferry's horn: a short blast 2 s before the quay, a long one 2.5 s after leaving; the picture has it at the quay half-way", () => {
+  const span = momentSpan(SEED, "ferry");
+  let start = 0;
+  for (let t = 0; ; t++) {
+    const at = momentWindow(SEED, "ferry", t);
+    if (at >= 0) {
+      start = t - at;
+      break;
+    }
+  }
+  const cues: Cue[] = [];
+  ferryCues(SEED, false, start, start + span.lasts, cues);
+  assert.deepEqual(cues.map((c) => [c.variant, Math.round((c.t - start) * 100) / 100]), [[HORN_SHORT, span.lasts / 2 - 2], [HORN_LONG, span.lasts / 2 + 2.5]]);
+  // Nearest the quay (2 cells off) at the middle; 42 cells off at each end; one pace throughout.
+  const quay: [number, number] = [5000, 5000];
+  assert.ok(Math.abs(ferryAt(span.lasts / 2, span.lasts, quay) - 5002) < 1e-9);
+  assert.ok(Math.abs(ferryAt(0, span.lasts, quay) - 5042) < 1e-9);
+  assert.ok(Math.abs((ferryAt(10, span.lasts, quay) - ferryAt(11, span.lasts, quay)) - ferrySpeed(span.lasts)) < 1e-9);
+});
+
+test("the flock's wingbeats fall on the picture's downstrokes: each bird's flap is where its drawn wing frame turns to wings-down", () => {
+  const span = momentSpan(SEED, "church");
+  let start = 0;
+  for (let t = 0; ; t++) {
+    const at = momentWindow(SEED, "church", t);
+    if (at >= 0) {
+      start = t - at;
+      break;
+    }
+  }
+  const cues: Cue[] = [];
+  flockCues(SEED, false, start, start + span.lasts, cues);
+  const flaps = cues.filter((c) => c.variant === FLAP), laps = cues.filter((c) => c.variant === RIPPLE);
+  const tower: [number, number] = [5000, 5000];
+  for (const c of flaps) {
+    const at = c.t - start;
+    flockAt(at + 1e-6, span.lasts, c.bird ?? 0, tower, 0);
+    assert.equal(flockPlace.frame, 2, `bird ${c.bird} at ${at.toFixed(3)} s`);
+    flockAt(at - 1e-6 < 0 ? 0 : at - 1e-6, span.lasts, c.bird ?? 0, tower, 0);
+    if (at > 1e-6) assert.equal(flockPlace.frame, 1);
+  }
+  // Five birds at 1.75 beats a second each: 8.75 a second between them.
+  assert.ok(Math.abs(flaps.length / span.lasts - 8.75) < 0.15);
+  for (let b = 0; b < 5; b++) {
+    const mine = flaps.filter((c) => c.bird === b);
+    // The lift's clatter: its first three beats 6 dB up, at full level from the first (nothing of the picture's fade); 12 dB down once risen.
+    assert.deepEqual(mine.slice(0, 3).map((c) => c.db), [6, 6, 6]);
+    assert.equal(mine[3].db, 0);
+    assert.equal(mine[mine.length - 1].db, -12);
+    for (let i = 1; i < mine.length; i++) assert.ok(Math.abs(mine[i].t - mine[i - 1].t - 4 / 7) < 1e-9);
+  }
+  // Ripples: a lap every 1.2–2 s.
+  for (let i = 1; i < laps.length; i++) assert.ok(laps[i].t - laps[i - 1].t >= 1.2 - 1e-9 && laps[i].t - laps[i - 1].t <= 2 + 1e-9);
+  assert.ok(laps.length >= 20);
+  const parts: Cue[] = [];
+  for (let t = start; t < start + span.lasts; t += 0.23) flockCues(SEED, false, t, Math.min(start + span.lasts, t + 0.23), parts);
+  assert.deepEqual(parts.map((c) => c.key).sort(), cues.map((c) => c.key).sort());
 });

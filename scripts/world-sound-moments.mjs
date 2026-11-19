@@ -11,9 +11,9 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { figureOut, momentSpan, PLANE_DOWN } from "../src/world/live/moments.ts";
 import { LIMITER_DELAY_S } from "../src/world/sound/levels.ts";
-import { CHUFF_CELLS, planeRpm } from "../src/world/sound/schedule/moments.ts";
+import { CHUFF_CELLS, HORN_AFTER, HORN_BEFORE, planeRpm } from "../src/world/sound/schedule/moments.ts";
 import { BAR_S, melodySemitones, parsons } from "../src/world/sound/schedule/tune.ts";
-import { MOMENT_PAD, WHISTLE_HZ } from "../src/world/sound/synth/moments.ts";
+import { HORN_HZ, MOMENT_PAD, THUMP_RATE, WHISTLE_HZ } from "../src/world/sound/synth/moments.ts";
 import { readWav } from "./world-sound-check.mjs";
 
 const args = process.argv.slice(2);
@@ -139,18 +139,94 @@ function lineAt(x, rate, t, seconds, lo, hi, step) {
     const lasts = momentSpan(3, "plane").lasts;
     const splashes = st.momentCues.filter((c) => c.kind === "plane" && c.variant === 0).map((c) => c.at - 2), pops = st.momentCues.filter((c) => c.kind === "plane" && c.variant === 1).map((c) => c.at - 2);
     console.log(`seaplane: splashes at ${splashes.map((t) => t.toFixed(2)).join(", ")} s (the picture's floats touch at ${(PLANE_DOWN * lasts).toFixed(2)} s)${flag(Math.abs(splashes[0] - PLANE_DOWN * lasts) < 0.01)}; last pops at ${pops.map((t) => t.toFixed(2)).join(", ")} s`);
-    // The engine's firing line (nine to the half-order: rpm × 9 / 120) at a few moments, against its designed speed.
+    // The engine's strongest line (the firing's second harmonic, eighteen to the half-order: rpm × 18 / 120) at a few moments, against its designed speed.
     const rows = [];
     let ok = true;
     for (const at of [1, 3, 5, 6.5, 10]) {
-      const want = (planeRpm(at + 0.15, lasts) * 9) / 120;
-      const hz = lineAt(m.x, m.rate, 2 + at + LIMITER_DELAY_S, 0.3, want * 0.8, want * 1.25, 0.25);
-      rows.push(`${at} s: ${hz.toFixed(1)} Hz (${((hz * 120) / 9).toFixed(0)} rpm; designed ${planeRpm(at + 0.15, lasts).toFixed(0)})`);
+      const want = (planeRpm(at + 0.15, lasts) * 18) / 120;
+      const hz = lineAt(m.x, m.rate, 2 + at + LIMITER_DELAY_S, 0.3, want * 0.94, want * 1.06, 0.25);
+      rows.push(`${at} s: ${hz.toFixed(1)} Hz (${((hz * 120) / 18).toFixed(0)} rpm; designed ${planeRpm(at + 0.15, lasts).toFixed(0)})`);
       if (Math.abs(hz / want - 1) > 0.04) ok = false;
     }
-    console.log(`  its engine's firing note: ${rows.join("; ")}${flag(ok)}`);
+    console.log(`  its engine's note (twice the firing rate): ${rows.join("; ")}${flag(ok)}`);
     const marks = row("seaplane")?.marks ?? [];
     console.log(`  levels: ${marks.map((x) => `${x.name} ${x.lufs} LUFS`).join("; ")} (target: the approach at 60 cells −24); lost through small speakers ${row("seaplane")?.smallSpeakerLossLu} LU`);
+  }
+}
+
+// ── The ferry ────────────────────────────────────────────────────────────────────────────────────────────────────────
+{
+  const st = stats("ferry"), m = mono("ferry");
+  if (st && m) {
+    const lasts = momentSpan(3, "ferry").lasts;
+    const horns = st.momentCues.filter((c) => c.kind === "ferry").map((c) => ({ long: c.variant === 1, at: c.at - 2 }));
+    const ok = horns.length === 2 && Math.abs(horns[0].at - (lasts / 2 - HORN_BEFORE)) < 0.01 && Math.abs(horns[1].at - (lasts / 2 + HORN_AFTER)) < 0.01;
+    console.log(`ferry: at the quay ${(lasts / 2).toFixed(1)} s in (the picture's ferryAt is nearest then); ${horns.map((h) => `${h.long ? "long" : "short"} blast at ${h.at.toFixed(2)} s`).join(", ")}${flag(ok)}`);
+    // The engine's beat, heard: the level's autocorrelation under 300 Hz would need a filter; the loop's beat shows in the whole level too.
+    const step = Math.round(0.005 * m.rate), env = [];
+    for (let i = Math.round(8 * m.rate); i + step < 20 * m.rate; i += step) {
+      let e = 0;
+      for (let k = 0; k < step; k++) e += m.x[i + k] * m.x[i + k];
+      env.push(Math.sqrt(e / step));
+    }
+    const mean = env.reduce((a, b) => a + b, 0) / env.length;
+    let best = 0, bestV = -1;
+    for (let lag = 24; lag <= 52; lag++) {
+      let s2 = 0;
+      for (let i = 0; i + lag < env.length; i++) s2 += (env[i] - mean) * (env[i + lag] - mean);
+      if (s2 > bestV) {
+        bestV = s2;
+        best = lag;
+      }
+    }
+    console.log(`  its engine, heard coming in: a beat every ${(best * 5).toFixed(0)} ms (${(1000 / (best * 5)).toFixed(2)} a second; designed ${THUMP_RATE})${flag(Math.abs(best * 0.005 - 1 / THUMP_RATE) < 0.006)}`);
+    // The echo: the horn's lower note 0.9 s and 1.7 s after the short blast has ended, against the blast itself.
+    const short = horns.find((h) => !h.long);
+    if (short) {
+      const t0 = 2 + short.at + MOMENT_PAD + LIMITER_DELAY_S;
+      const level = (t) => {
+        let re = 0, im = 0;
+        const n = Math.round(0.25 * m.rate), from = Math.round(t * m.rate), w = (2 * Math.PI * HORN_HZ[0]) / m.rate;
+        for (let i = 0; i < n; i++) {
+          const h = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+          re += h * m.x[from + i] * Math.cos(w * i);
+          im += h * m.x[from + i] * Math.sin(w * i);
+        }
+        return 20 * Math.log10(Math.hypot(re, im) / n + 1e-12);
+      };
+      const direct = level(t0 + 0.4), one = level(t0 + 0.9 + 0.55), two = level(t0 + 1.7 + 0.55);
+      console.log(`  the short blast's ${HORN_HZ[0]} Hz note: ${direct.toFixed(1)} dB; its echoes, heard after the blast has ended: ${(one - direct).toFixed(1)} dB at 0.9 s and ${(two - direct).toFixed(1)} dB at 1.7 s (designed −12 and −18)${flag(Math.abs(one - direct + 12) < 3 && Math.abs(two - direct + 18) < 3.5)}`);
+    }
+    const marks = row("ferry")?.marks ?? [];
+    console.log(`  levels: ${marks.map((x) => `${x.name} ${x.lufs} LUFS`).join("; ")} (target: the horn at 80 cells −20; here it is 68 cells off, 1.4 dB nearer)`);
+  }
+  const pass = mono("ferry-pass-alone"), ps = stats("ferry-pass-alone");
+  if (pass && ps) {
+    const h = ps.momentCues.find((c) => c.kind === "ferry" && c.variant === 1);
+    if (h) {
+      const t0 = h.at + MOMENT_PAD + LIMITER_DELAY_S, cents = [];
+      // The horn's upper note (the lower one's second harmonic lies clear of it), through its hold.
+      for (let t = 0.3; t <= 2.6; t += 0.15) cents.push(1200 * Math.log2(lineAt(pass.x, pass.rate, t0 + t - 0.06, 0.12, HORN_HZ[1] * 0.94, HORN_HZ[1] * 1.06, 0.2) / HORN_HZ[1]));
+      const hi = Math.max(...cents), lo = Math.min(...cents);
+      console.log(`ferry-pass: the horn's ${HORN_HZ[1]} Hz note every 150 ms through its hold: ${cents.map((c) => c.toFixed(0)).join(", ")} cents; it moves ${(hi - lo).toFixed(0)} cents in all (under a semitone)${flag(hi - lo < 100 && hi - lo > 5)}`);
+    }
+  }
+}
+
+// ── The church's flock ───────────────────────────────────────────────────────────────────────────────────────────────
+{
+  const st = stats("church-flock");
+  if (st) {
+    const lasts = momentSpan(3, "church").lasts;
+    const flaps = st.momentCues.filter((c) => c.kind === "flock" && c.variant === 0).map((c) => c.at - 2).sort((a, b) => a - b), laps = st.momentCues.filter((c) => c.kind === "flock" && c.variant === 1).map((c) => c.at - 2);
+    // Every flap on a step of the picture's wing frames (seven a second).
+    const off = Math.max(...flaps.map((t) => Math.abs(t * 7 - Math.round(t * 7)) / 7));
+    const gaps = laps.slice(1).map((t, i) => t - laps[i]);
+    console.log(`church-flock: ${flaps.length} wingbeats in ${lasts} s (${(flaps.length / lasts).toFixed(2)} a second; five birds at 1.75 each give 8.75)${flag(Math.abs(flaps.length / lasts - 8.75) < 0.2)}; each within ${(1000 * off).toFixed(1)} ms of a step of the picture's wing frames${flag(off < 0.002)}; the first at ${flaps[0].toFixed(3)} s`);
+    console.log(`  ripples: ${laps.length} laps, ${Math.min(...gaps).toFixed(2)}–${Math.max(...gaps).toFixed(2)} s apart${flag(Math.min(...gaps) >= 1.19 && Math.max(...gaps) <= 2.01)}`);
+    const marks = row("church-flock")?.marks ?? [];
+    const lift = marks.find((x) => x.name === "the lift"), circling = marks.find((x) => x.name === "circling");
+    if (lift && circling) console.log(`  levels: the lift ${lift.lufs} LUFS from its first beat (target −30 at 60 cells; nothing of the picture's fade)${flag(Math.abs(lift.lufs + 30) <= 1.5)}; circling ${circling.lufs} LUFS (${(lift.lufs - circling.lufs).toFixed(1)} LU down: 12 dB by design, and no clatter)`);
   }
 }
 

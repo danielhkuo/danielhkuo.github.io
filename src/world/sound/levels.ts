@@ -240,11 +240,15 @@ export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158 };
 // ── The clock and the moments (§4.8–4.10) ────────────────────────────────────────────────────────────────────────────
 
 /** The town clock: a chime, a clack, the doors' thud, the ratchet's loop, the whirr, and the reverb send. Calibrated: the tune 60 cells off at −27 LUFS. */
-export const K_CLOCK = { chime: 0.4, clack: 0.2, thud: 0.3, ratchet: 0.05, whirr: 0.04, send: 0.1 };
+export const K_CLOCK = { chime: 0.4, clack: 0.2, thud: 0.2, ratchet: 0.05, whirr: 0.04, send: 0.1 };
 /** The train: a chuff, a wheel click, the steam swell, the whistle, the spray at 18 cells a second. Calibrated 60 cells off: chuffs at −26 LUFS, the whistle at −21. */
 export const K_TRAIN = { chuff: 1.0, click: 0.15, swell: 0.3, whistle: 0.75, spray: 0.09 };
 /** The seaplane: its engine, the prop wash (against the engine), the purl under its floats, a splash, a last pop. Calibrated: its approach 60 cells off at −24 LUFS. */
-export const K_PLANE = { engine: 0.5, wash: 0.5, purl: 0.15, splash: 0.6, pop: 0.5 };
+export const K_PLANE = { engine: 0.5, wash: 1.2, purl: 0.15, splash: 0.6, pop: 0.5 };
+/** The ferry: its engine's thump, the bow wash, the horn; the baths' steam and the brook of their pools. Calibrated: the horn 80 cells off at −20 LUFS. */
+export const K_FERRY = { thump: 0.6, wash: 0.1, horn: 0.82, steam: 0.006, pools: 0.012 };
+/** The church's flock: a wingbeat, a ripple's lap. Calibrated: the lift 60 cells off at −30 LUFS. */
+export const K_FLOCK = { flap: 0.4, lap: 0.15 };
 
 // ── Smoothing (§3.5): time constants in seconds ──────────────────────────────────────────────────────────────────────
 

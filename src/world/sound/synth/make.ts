@@ -7,7 +7,7 @@ import { BELL_RATIOS, ring, ringName, strike, strikeName } from "./bells.ts";
 import { flap, flapName, FLAPS, GULL_NOTES, GULL_VOICES, gullName, gullNote } from "./gulls.ts";
 import { impulseResponse } from "./ir.ts";
 import { chime, CHIME_NAMES, chimeName, clack, clackName, CLACKS, ratchet, thud } from "./chimes.ts";
-import { chuff, chuffName, click, clickName, pop, splash, swell, whistle, WHISTLE_LONG_S, WHISTLE_SHORT_S } from "./moments.ts";
+import { chuff, chuffName, click, clickName, horn, HORN_LONG_S, HORN_SHORT_S, pop, splash, swell, thump, whistle, WHISTLE_LONG_S, WHISTLE_SHORT_S } from "./moments.ts";
 import { BROOK, bubbleBed, FLOW, lap, PLUNGE, velvet } from "./bubbles.ts";
 import { CONTROL_RATE, makeControls } from "./controls.ts";
 import { A_HIGHPASS_HZ, A_PEAK, B_SHELF, C_HIGHPASS_HZ, E_BAND, E_LOWPASS_HZ, Q_FLAT_DB } from "../levels.ts";
@@ -107,6 +107,9 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
       swell: { rate: sampleRate, channels: [swell(seed, sampleRate)] },
       splash0: { rate: sampleRate, channels: [splash(seed, 0, sampleRate)] },
       splash1: { rate: sampleRate, channels: [splash(seed, 1, sampleRate)] },
+      hornShort: { rate: sampleRate, channels: [horn(seed, HORN_SHORT_S, sampleRate)] },
+      hornLong: { rate: sampleRate, channels: [horn(seed, HORN_LONG_S, sampleRate)] },
+      thump: { rate: sampleRate, channels: [thump(seed, sampleRate)] },
     };
     for (let i = 0; i < CHIME_NAMES.length; i++) out[chimeName(i)] = { rate: sampleRate, channels: [chime(seed, i, sampleRate)] };
     for (let k = 0; k < CLACKS; k++) out[clackName(k)] = { rate: sampleRate, channels: [clack(seed, k, sampleRate)] };

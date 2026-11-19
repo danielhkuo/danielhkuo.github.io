@@ -16,11 +16,12 @@
 // One-shots are never faded by the picture's `shown`: a moment's opening sounds at full level.
 
 import { torusDelta } from "../../core/torus.ts";
-import { CARRIAGE_BEHIND, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, trainAt, trainPlace } from "../../live/moments.ts";
-import { K_CLOCK, K_PLANE, K_TRAIN, TAU } from "../levels.ts";
+import { CARRIAGE_BEHIND, ferryAt, flockAt, flockPlace, PLANE_DOWN, PLANE_MOORED, planeAt, planePlace, shown, trainAt, trainPlace } from "../../live/moments.ts";
+import { K_CLOCK, K_FERRY, K_FLOCK, K_PLANE, K_TRAIN, TAU } from "../levels.ts";
 import { CHIME, CLACK, RATCHET, THUD, WHIRR, WHIRR_DOWN, WHIRR_END } from "../schedule/chimes.ts";
-import { appearance, CHUFF, CLICK, PLANE_RUNDOWN, planeRpm, POP, SPLASH, SWELL, trainRun, WHISTLE_LONG, WHISTLE_SHORT } from "../schedule/moments.ts";
-import { airCutoff, cutoffCents, dbToGain, distanceGain, dopplerCents, MEDIUM, panOf, panPair, reverbSend, southCutoff, southGain, southOf, type DistanceClass } from "../space.ts";
+import { appearance, CHUFF, CLICK, ferrySpeed, FLAP, HORN_LONG, HORN_SHORT, PLANE_RUNDOWN, planeRpm, POP, RIPPLE, SPLASH, SWELL, trainRun, WHISTLE_LONG, WHISTLE_SHORT } from "../schedule/moments.ts";
+import { airCutoff, cutoffCents, dbToGain, distanceGain, dopplerCents, MEDIUM, panOf, panPair, reverbSend, SMALL, southCutoff, southGain, southOf, type DistanceClass } from "../space.ts";
+import { flapName } from "../synth/gulls.ts";
 import { chimeName, clackName, RATCHET_S, RATCHET_TICKS } from "../synth/chimes.ts";
 import { chuffName, clickName } from "../synth/moments.ts";
 import type { Cue, Pose } from "../types.ts";
@@ -357,18 +358,21 @@ export const CARRIAGE_CELLS = CARRIAGE_BEHIND;
 
 /** The engine's wave: harmonics of the half-order. 4 is the blade pass (with 8, 12, 16), 9 the firing (with 18, 27); the small ones are its unevenness. */
 function planeWave(ctx: Ctx): PeriodicWave {
-  const real = new Float32Array(28), imag = new Float32Array(28);
+  const real = new Float32Array(37), imag = new Float32Array(37);
   const set = (h: number, db: number) => {
     imag[h] = Math.pow(10, db / 20);
   };
   // (The blade pass itself lies near 50 Hz, under what small speakers give: its overtones and the firing carry the note.)
-  set(4, -9);
-  set(8, -5);
+  // and they lean upward, so the note is still an engine on a laptop's speakers: the firing's second and third
+  // harmonics (near 250 and 380 Hz on the approach) are the strongest lines.
+  set(4, -12);
+  set(8, -8);
   set(12, -5);
-  set(16, -8);
-  set(9, 0);
-  set(18, -5);
-  set(27, -9);
+  set(16, -4);
+  set(9, -6);
+  set(18, 0);
+  set(27, -2);
+  set(36, -6);
   set(1, -22);
   set(2, -18);
   set(3, -24);
@@ -497,6 +501,173 @@ export function buildPlane(ctx: Ctx, o: MomentOptions & { pontoon: [number, numb
     stopAll(at) {
       stopRunning(engine, at);
       engine = null;
+      slot.sentGain = NaN;
+    },
+  };
+}
+
+// ── The ferry, and the baths it serves ───────────────────────────────────────────────────────────────────────────────
+
+export function buildFerry(ctx: Ctx, o: MomentOptions & { quay: [number, number]; baths: { x: number; y: number }; level: number; drift: ChannelSplitterNode }): Moment {
+  const slot = makeSlot(ctx, o.master, { doppler: true, send: false, at: o.at });
+  const detune = slot.cents as AudioNode;
+  // The horn's echo off the hills: two repeats, 0.9 s on (12 dB down, dull) and 1.7 s on (18 dB down, duller).
+  const echoIn = gain(ctx, 1);
+  for (const [seconds, hz, level] of [[0.9, 900, 0.25], [1.7, 600, 0.126]] as const) {
+    const delay = ctx.createDelay(2);
+    delay.delayTime.value = seconds;
+    const dull = lowpass(ctx, hz);
+    const back = gain(ctx, level);
+    echoIn.connect(delay);
+    delay.connect(dull);
+    dull.connect(back);
+    back.connect(slot.in);
+  }
+  // The baths: steam off the pools and the trickle between them, whenever the dragon is within 200 cells.
+  const baths = makeSlot(ctx, o.master, { doppler: false, send: false, at: o.at });
+  let steam: Running | null = null;
+  let engine: Running | null = null;
+  return {
+    x: o.quay[0], y: o.quay[1], nodes: 30,
+    cue(cue, when, offset) {
+      if (offset > 0) return;
+      const buffer = o.kit.buffer(cue.variant === HORN_LONG ? "hornLong" : "hornShort");
+      if (cue.variant !== HORN_LONG && cue.variant !== HORN_SHORT) return;
+      o.play(buffer, slot.in, when, K_FERRY.horn, { detune });
+      o.play(buffer, echoIn, when, K_FERRY.horn, { detune });
+    },
+    update(pose, dt, now, at, calm) {
+      let sends = 0;
+      // The baths.
+      const dx = torusDelta(pose.x, o.baths.x, o.n), dy = torusDelta(pose.y, o.baths.y, o.n);
+      const near = dx * dx + dy * dy;
+      if (near < 200 * 200) {
+        sends += follow(baths, pose, o.baths.x, o.baths.y, o.level, o.n, 1, SMALL, 0, dt, now, calm);
+        if (!steam) {
+          const white = loop(ctx, o.kit.buffer("white0")), brook = loop(ctx, o.kit.buffer("brook"));
+          const band = bandpass(ctx, 5000, 0.5);
+          // Slow swells: the steam's level rides the drift.
+          const swell = gain(ctx, K_FERRY.steam);
+          const depth = gain(ctx, 0.5 * K_FERRY.steam);
+          o.drift.connect(depth, 0);
+          depth.connect(swell.gain);
+          const pools = gain(ctx, K_FERRY.pools);
+          const env = gain(ctx, 0);
+          env.gain.setValueAtTime(0, now);
+          env.gain.linearRampToValueAtTime(1, now + 1);
+          white.connect(band);
+          band.connect(swell);
+          swell.connect(env);
+          brook.connect(pools);
+          pools.connect(env);
+          env.connect(baths.in);
+          white.start(now, 1.3);
+          brook.start(now, 2.1);
+          white.onended = () => {
+            white.disconnect();
+            brook.disconnect();
+            env.disconnect();
+            try {
+              o.drift.disconnect(depth, 0);
+            } catch {
+              // already gone
+            }
+          };
+          steam = { sources: [white, brook], end: Infinity, key: 0 };
+        }
+      } else if (steam && near > 230 * 230) {
+        rest(baths, now);
+        stopRunning(steam, now + 0.4);
+        steam = null;
+      }
+      // The ferry.
+      const a = appearance(o.seed, "ferry", pose.t, o.forced);
+      if (!a) {
+        rest(slot, now);
+        return sends;
+      }
+      const y = ferryAt(pose.t - a.start, a.lasts, o.quay);
+      sends += follow(slot, pose, o.quay[0], y, o.level + 2, o.n, 1, MEDIUM, 0, dt, now, calm);
+      const key = Math.round(a.start * 10);
+      if ((!engine || engine.key !== key) && slot.sentGain > 1e-4) {
+        // Its engine's thump and its bow wash, for as long as it is in sight: in over half a second, out with the
+        // picture's fade over its last 2.5 s (these are continuous: they do follow `shown` at the end).
+        stopRunning(engine, now);
+        const S = at(a.start), end = S + a.lasts;
+        if (end - now > 0.5) {
+          const from = Math.max(now, S);
+          const k = Math.min(1.5, ferrySpeed(a.lasts) / 1.57);
+          const beat = loop(ctx, o.kit.buffer("thump")), purl = loop(ctx, o.kit.buffer("flow")), pink = loop(ctx, o.kit.buffer("pink0"));
+          const band = bandpass(ctx, 1200, 0.7);
+          const thumpGain = gain(ctx, K_FERRY.thump * k), wash = gain(ctx, K_FERRY.wash * k), washNoise = gain(ctx, 0.6);
+          const env = gain(ctx, 0);
+          env.gain.setValueAtTime(0, from);
+          env.gain.linearRampToValueAtTime(1, from + 0.5);
+          if (end - 2.5 > from + 0.5) env.gain.setValueAtTime(1, end - 2.5);
+          // The picture's own fade, in four straight pieces.
+          for (let i = 1; i <= 4; i++) env.gain.linearRampToValueAtTime(shown(a.lasts - 2.5 + (2.5 * i) / 4, a.lasts), Math.max(from + 0.5, end - 2.5) + ((end - Math.max(from + 0.5, end - 2.5)) * i) / 4);
+          beat.connect(thumpGain);
+          thumpGain.connect(env);
+          purl.connect(wash);
+          pink.connect(band);
+          band.connect(washNoise);
+          washNoise.connect(wash);
+          wash.connect(env);
+          env.connect(slot.in);
+          detune.connect(beat.detune);
+          const sources = [beat, purl, pink];
+          for (const s of sources) {
+            s.start(from, s === beat ? 0 : (key * 0.29) % 3);
+            s.stop(end + 0.05);
+          }
+          beat.onended = () => {
+            for (const s of sources) s.disconnect();
+            env.disconnect();
+            try {
+              detune.disconnect(beat.detune);
+            } catch {
+              // already gone
+            }
+          };
+          engine = { sources, end: end + 0.05, key };
+        }
+      }
+      return sends;
+    },
+    stopAll(at) {
+      stopRunning(engine, at);
+      stopRunning(steam, at);
+      engine = null;
+      steam = null;
+      slot.sentGain = NaN;
+      baths.sentGain = NaN;
+    },
+  };
+}
+
+// ── The drowned church's flock ───────────────────────────────────────────────────────────────────────────────────────
+
+export function buildFlock(ctx: Ctx, o: MomentOptions & { tower: [number, number]; level: number }): Moment {
+  const slot = makeSlot(ctx, o.master, { doppler: false, send: false, at: o.at });
+  return {
+    x: o.tower[0], y: o.tower[1], nodes: 6,
+    cue(cue, when, offset) {
+      if (offset > 0) return;
+      const level = dbToGain(cue.db ?? 0);
+      if (cue.variant === FLAP) o.play(o.kit.buffer(flapName(cue.k ?? 0)), slot.in, when, K_FLOCK.flap * level, { low: true });
+      else if (cue.variant === RIPPLE) o.play(o.kit.buffer(`lap${(cue.k ?? 0) & 3}`), slot.in, when, K_FLOCK.lap * level, { low: true, onset: true });
+    },
+    update(pose, dt, now, _at, calm) {
+      const a = appearance(o.seed, "church", pose.t, o.forced);
+      if (!a) {
+        rest(slot, now);
+        return 0;
+      }
+      // The flock's middle bird stands for the flock.
+      flockAt(pose.t - a.start, a.lasts, 2, o.tower, o.level);
+      return follow(slot, pose, o.tower[0] + (flockPlace.x - o.tower[0]) * 0.5, o.tower[1], flockPlace.alt, o.n, 1, SMALL, 0, dt, now, calm);
+    },
+    stopAll() {
       slot.sentGain = NaN;
     },
   };

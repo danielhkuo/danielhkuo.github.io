@@ -3,7 +3,8 @@
 // (an engine's note, a wash) are not cues: each voice shapes those from `at` and `lasts`. Pure.
 
 import { ringDelta } from "../../live/art.ts";
-import { momentSpan, momentWindow, PLANE_DOWN, PLANE_MOORED } from "../../live/moments.ts";
+import { hash2 } from "../../core/hash.ts";
+import { FLOCK_BIRDS, FLOCK_RISE, momentSpan, momentWindow, PLANE_DOWN, PLANE_MOORED } from "../../live/moments.ts";
 import type { Cue } from "../types.ts";
 
 /** The appearance of `kind` under way at world time t: when it began and how long it lasts; null between appearances. */
@@ -132,4 +133,69 @@ export function planeRpm(at: number, lasts: number): number {
   }
   if (at < down + PLANE_RUNDOWN) return 850 + (300 - 850) * ((at - down) / PLANE_RUNDOWN);
   return 0;
+}
+
+// ── The ferry ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const HORN_SHORT = 0, HORN_LONG = 1;
+/** The short blast comes this long before the quay; the long one this long after leaving it. */
+export const HORN_BEFORE = 2, HORN_AFTER = 2.5;
+
+/** Every cue of the ferry that starts in [t0, t1): one short blast as it nears the quay (the middle of its appearance), one long one after it leaves. */
+export function ferryCues(seed: number, forced: boolean, t0: number, t1: number, out: Cue[]): void {
+  eachAppearance(seed, "ferry", forced, t0, t1, (S, lasts) => {
+    const push = (at: number, variant: number, cueLasts: number, tag: string) => {
+      const t = S + at;
+      if (t < t0 || t >= t1) return;
+      out.push({ t, kind: "ferry", key: `${Math.round(S * 10)}:${tag}`, variant, k: 0, db: 0, lasts: cueLasts, anchor: S });
+    };
+    push(lasts / 2 - HORN_BEFORE, HORN_SHORT, 1.1, "short");
+    push(lasts / 2 + HORN_AFTER, HORN_LONG, 3.1, "long");
+  });
+}
+
+/** The ferry's speed, cells a second: 40 cells in and 40 out, at one pace. */
+export function ferrySpeed(lasts: number): number {
+  return 40 / (lasts / 2);
+}
+
+// ── The church's flock ───────────────────────────────────────────────────────────────────────────────────────────────
+
+export const FLAP = 0, RIPPLE = 1;
+const unit = (h: number) => h / 4294967296;
+
+/**
+ * Every cue of the drowned church's flock that starts in [t0, t1): each bird's wingbeat on its drawn downstroke (the
+ * picture shows bird b's wing frame (floor(at · 7) + b) & 3, and frame 2 is the wings down), and a ripple's lap
+ * every 1.2–2 s. The first three beats of each bird are the clatter of the lift (+6 dB); once they have risen (the
+ * first 18 % of the appearance) their beats are 12 dB down, eased over the rise's last third.
+ */
+export function flockCues(seed: number, forced: boolean, t0: number, t1: number, out: Cue[]): void {
+  const first = out.length;
+  eachAppearance(seed, "church", forced, t0, t1, (S, lasts) => {
+    const key = Math.round(S * 10);
+    for (let b = 0; b < FLOCK_BIRDS; b++) {
+      // floor(at · 7) + b ≡ 2 (mod 4): frame steps m = 4j + ((2 − b) mod 4).
+      let beat = 0;
+      for (let m = (((2 - b) % 4) + 4) % 4; m / 7 < lasts; m += 4, beat++) {
+        const at = m / 7, t = S + at;
+        if (t < t0 || t >= t1) continue;
+        const p = at / lasts;
+        const settled = p <= (FLOCK_RISE * 2) / 3 ? 0 : p >= FLOCK_RISE ? 1 : (p - (FLOCK_RISE * 2) / 3) / (FLOCK_RISE / 3);
+        out.push({ t, kind: "flock", key: `${key}:${b}:${beat}`, variant: FLAP, k: (b + beat) % 3, bird: b, db: (beat < 3 ? 6 : 0) - 12 * settled, lasts: 0.15, anchor: S });
+      }
+    }
+    // Ripples round the tower: a lap now and then.
+    let at = 0.4 + unit(hash2(key, 0, seed ^ 0xf10c));
+    for (let i = 0; at < lasts - 0.5; i++) {
+      const t = S + at;
+      if (t >= t0 && t < t1) out.push({ t, kind: "flock", key: `${key}:lap:${i}`, variant: RIPPLE, k: i & 3, db: 0, rate: 0.85 + 0.3 * unit(hash2(key, i + 100, seed ^ 0xf10c)), lasts: 0.3, anchor: S });
+      at += 1.2 + 0.8 * unit(hash2(key, i + 1, seed ^ 0xf10c));
+    }
+  });
+  if (out.length - first > 1) {
+    const added = out.splice(first);
+    added.sort((a, b) => a.t - b.t);
+    for (const c of added) out.push(c);
+  }
 }

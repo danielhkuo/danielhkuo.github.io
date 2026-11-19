@@ -205,7 +205,7 @@ const mono = (name) => {
     const all = keks.map((k) => bandAt(birds.x, birds.rate, k.at - 0.01, 2000, 4000) - bandAt(wind.x, wind.rate, k.at - 0.01, 2000, 4000)).sort((a, b) => a - b);
     console.log(
       `gulls-lowpass: ${keks.length} keks in first runs; in 2–4 kHz, each kek against the wind at that moment: the nearer half (within ${near} cells, ${over.length} keks) ` +
-        `least ${over[0].toFixed(1)} dB, median ${over[over.length >> 1].toFixed(1)} dB, most ${over[over.length - 1].toFixed(1)} dB${flag(over[0] >= 3)}; all of them: least ${all[0].toFixed(1)}, median ${all[all.length >> 1].toFixed(1)} dB, ${Math.round((100 * all.filter((v) => v >= 3).length) / all.length)} % at 3 dB or more`,
+        `least ${over[0].toFixed(1)} dB, median ${over[over.length >> 1].toFixed(1)} dB, most ${over[over.length - 1].toFixed(1)} dB; all of them: least ${all[0].toFixed(1)}, median ${all[all.length >> 1].toFixed(1)} dB, ${Math.round((100 * all.filter((v) => v >= 3).length) / all.length)} % at 3 dB or more (the bar: a median of 6 dB or more, and nine in ten at 3 dB or more)${flag(all[all.length >> 1] >= 6 && all.filter((v) => v >= 3).length >= 0.9 * all.length)}`,
     );
   }
 }

@@ -276,7 +276,10 @@ function firstAppearance(kind: string): number {
   }
   return 0;
 }
-const TRAIN_AT = firstAppearance("train"), PLANE_AT = firstAppearance("plane");
+const TRAIN_AT = firstAppearance("train"), PLANE_AT = firstAppearance("plane"), FERRY_AT = firstAppearance("ferry"), CHURCH_AT = firstAppearance("church");
+/** The baths, their quay 10 cells south of them (the ferry comes in from 42 cells further south); a drowned church's tower. */
+const BATHS: Places = { ...NO_GULLS, wonders: [{ type: "baths", x: 5000, y: 4990, level: 0, height: 0, anchors: { quay: [5000, 5000] } }] };
+const CHURCH: Places = { ...NO_GULLS, wonders: [{ type: "drowned-church", x: 5000, y: 5000, level: 0, height: 0, anchors: { tower: [5000, 5000] } }] };
 const WEST = Math.PI;
 
 /** The bench's abbey, and the places that hold it alone. */
@@ -632,6 +635,35 @@ export const SCENES: Scene[] = [
     t0: PLANE_AT - 2,
     at: hover(25, PLANE_AT - 2, 4940, 5000),
     marks: [{ name: "the approach", t0: 2.5, t1: 8.5 }],
+  }),
+  scene({
+    name: "ferry",
+    set: NO_WIND,
+    seconds: 55,
+    about: "Still, 60 cells west of the ferry's way: its engine's slow thump and its bow wash coming in, a short blast before the quay, a long one as it leaves, each with its echo; the baths' steam and pools faint behind.",
+    places: BATHS,
+    t0: FERRY_AT - 2,
+    at: hover(55, FERRY_AT - 2, 4940, 5020),
+    marks: [{ name: "the engine and wash", t0: 8, t1: 20 }, { name: "the long horn", t0: 30.05, t1: 33 }],
+  }),
+  scene({
+    name: "ferry-pass-alone",
+    set: NO_WIND,
+    seconds: 14,
+    about: "A cruise pass 35 cells south of the ferry as it sounds its long blast: the horn bends by less than a semitone.",
+    places: BATHS,
+    t0: FERRY_AT + 22,
+    at: flown(14, FERRY_AT + 22, startAt(4550, 5040, 0), LEVEL),
+  }),
+  scene({
+    name: "church-flock",
+    set: NO_WIND,
+    seconds: 47,
+    about: "Still, 60 cells south of the drowned church: the flock's lift (a clatter of wings at full level from the first beat), then wingbeats thinning as it circles, and ripples lapping at the tower.",
+    places: CHURCH,
+    t0: CHURCH_AT - 2,
+    at: hover(47, CHURCH_AT - 2, 5000, 5060),
+    marks: [{ name: "the lift", t0: 2, t1: 5 }, { name: "circling", t0: 15, t1: 40 }],
   }),
   scene({
     name: "bell-stroke",
