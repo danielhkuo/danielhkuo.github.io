@@ -369,7 +369,13 @@ test("alpine meadow: highland or lake country, cold, gentle; in patches, never a
 test("heath: wind-blown ground and the tops of valley country; heather where dry or slaty, moor where wet", () => {
   family({ wind: 0.95, moisture: 0.05, region: SLATE }, M.heathCool);
   for (const id of patch({ wind: 0.8, moisture: 0.95, e: 30 })) assert.ok(openMoor(id), MATERIAL_NAMES[id]);
-  family({ wind: 0.2, hand: 45, region: SLATE, moisture: 0.3 }, M.heathCool);
+  // Heather keeps to the tops, in patches: a slaty top high over its valleys is mostly heath, the open slope under it
+  // grass moor.
+  const heather = (id: number): boolean => id >= M.heathCool && id <= M.heathWarm;
+  const top = shareOf({ wind: 0.2, hand: 45, region: SLATE, moisture: 0.3, curve: 1.6 }, heather);
+  assert.ok(top > 0.4 && top < 0.95, `heather on ${top.toFixed(2)} of a slaty top`);
+  const slope = shareOf({ wind: 0.2, hand: 45, region: SLATE, moisture: 0.3, curve: 0 }, heather);
+  assert.ok(slope < 0.25 && slope < top / 2, `heather on ${slope.toFixed(2)} of the slope below`);
   // High HAND alone is not heath outside valley country.
   none({ wind: 0.2, hand: 45 }, M.heathCool, M.moorWarm);
 });
