@@ -6,12 +6,10 @@ import type { PhoneEntry } from "./PhoneTitle";
 
 /**
  * The minimal version: the whole site as readable text on one terminal-style page, with the terminal folded in. Its
- * route is not fixed yet: change it here, and the phone title and the world's "short version" link follow.
+ * route is not fixed yet: change it here, and the phone title, the world's "short version" link and the abbey's
+ * terminal on a phone follow.
  */
 export const MINIMAL_PAGE = "/recruiter";
-
-/** On a phone the terminal has its own page, upright, where a keyboard leaves room to read. */
-export const TERMINAL_PAGE = "/artificer#terminal";
 
 export const PHONE_TAGLINE = "a portfolio you can fly through";
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { PHONE_QUERY } from "./phone.ts";
-import { MINIMAL_PAGE, PHONE_DEFAULT, phoneEntries, TERMINAL_PAGE } from "./copy.ts";
+import { MINIMAL_PAGE, PHONE_DEFAULT, phoneEntries } from "./copy.ts";
 
 test("the switch's CSS uses the phone query, and hides the other side with display: none", () => {
   const css = readFileSync(new URL("./PhoneSwitch.module.css", import.meta.url), "utf8");
@@ -26,5 +26,5 @@ test("the minimal version leads the phone's ways in and opens preselected; flyin
   assert.equal(phoneEntries(0)[1].meta, "turn sideways");
   assert.equal(e[2].href, "/agents.md");
   // The terminal is folded into the minimal version: no way in of its own.
-  assert.ok(e.every((x) => x.href !== TERMINAL_PAGE));
+  assert.ok(e.every((x) => !/terminal|artificer/i.test(`${x.label} ${x.href}`)));
 });

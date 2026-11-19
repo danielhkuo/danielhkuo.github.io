@@ -733,7 +733,10 @@ the build departs from the sections above:
   at the noindex bench route `/phone-title`, where Fable judged it.
 - **Its entries (coordinator, 2026-11-19).** The terminal is folded into the minimal version, so the ways in are
   "Minimal version" (preselected), "Enter world" and "agents.md". The minimal version's route is one constant,
-  `MINIMAL_PAGE` in `title/phone/copy.ts`, which the world's "Read the short version" link also reads.
+  `MINIMAL_PAGE` in `title/phone/copy.ts`, which the world's "Read the short version" link also reads. On a phone the
+  abbey's terminal opens it too, in place of decision 11's `/artificer#terminal`; a desktop keeps the in-world
+  terminal drawer. Settings joins the phone title at the joint mount, from the desktop title's `settings.ts`, with no
+  second record.
 - **Not yet the front door (coordinator, 2026-11-19).** The owner is picking the desktop title after all, so the two
   are to be mounted on `/` together. `PhoneSwitch` is ready for it: one wrapper with the phone title on one side and
   the desktop page on the other. CSS chooses on the title's phone query (`phone.ts`, held to the CSS by a test). The
@@ -741,17 +744,16 @@ the build departs from the sections above:
   `display: none`, out of the accessibility tree. A trial mount (commit `9b608f4`, reverted afterwards) checked this
   element by element against the base build at 700, 1280 and 1600 px, and axe passed the phone side. The desktop
   title's `copy.ts` and `title/phone/copy.ts` name the ways in separately, so they should become one list when mounted.
-- **Links into other branches.** "Read the short version" goes to `MINIMAL_PAGE`, for now `/recruiter` (on
-  `feat/dragon-world`), and on a phone the abbey's terminal opens `/artificer#terminal`, which exists only once the
-  title-menu work lands.
+- **Links into other branches.** `MINIMAL_PAGE` is for now `/recruiter`, which is on `feat/dragon-world`.
 
 Tests, as §9 asks:
 - **Unit, `npm test`.** `controls/{stick,steer,touch,options-touch,guides}`; `mobile/{layout,turned,lifecycle,perf,tilt,art}`.
   The steering test flies the real flight model from 16 headings toward 8 directions. The art test pins the controls'
   pixels by hashing twelve scenes.
-- **Browser, `npm run test:mobile`.** Fourteen flows in phone emulation with real multi-touch: the gate, two fingers,
-  touch cancel, upright and level, played sideways, no zoom or scroll, Back, hidden and blur, landing, Android
-  fullscreen and lock, an iPhone asking for neither, the lock lifting on leaving, and a desktop unchanged.
+- **Browser, `npm run test:mobile`.** Fifteen flows in phone emulation with real multi-touch: the gate, two fingers,
+  touch cancel, upright and level, played sideways, no zoom or scroll, Back, hidden and blur, landing, the abbey's
+  terminal opening the minimal version, Android fullscreen and lock, an iPhone asking for neither, the lock lifting on
+  leaving, and a desktop unchanged.
 - **Renders.** `npm run world:controls` draws the controls over the world. `scripts/world-mobile-shots.mjs` takes the
   phone screenshots. `scripts/title-phone-shots.mjs` shoots the front door on phones and desktops.
 - **Frame budget.** `node scripts/world-fly.mjs` runs on desktop. Against the base build in alternating runs, 4×

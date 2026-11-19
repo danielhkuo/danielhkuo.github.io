@@ -113,7 +113,7 @@ Last updated 2026-11-18.
   strips. Upright phones pause behind a "turn your phone" card, which can play sideways when rotation is locked. Hiding
   the page, a blur, a stall, Back or a lost fullscreen pauses; Fly on resumes. Nothing zooms, scrolls, refreshes or
   selects on `/world`. Phones bake with two workers and step down to 30 fps when frames run long. Hand, size, fade, one
-  thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (14 flows, real multi-touch in
+  thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (15 flows, real multi-touch in
   phone emulation). The phone's own title screen (a rose-window contents page, the minimal version first) is built at the
   noindex bench `/phone-title`, to be mounted on `/` together with the desktop title.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
@@ -222,9 +222,10 @@ locked down, its own test suite, researched first); clearer interactivity with s
 minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see Done); what is left is listed below.
 
 **Mobile (optional; phones get the minimal page by default)**
-- Left: mounting the phone title on `/` with the desktop title (`PhoneSwitch` is ready); trimming the workers after a
-  long hide; a real-phone pass (feel, heat, memory, the edge swipe); sound unlocked
-  on Take wing once there is sound; one copy list for the phone and desktop titles when the desktop title lands.
+- Left: mounting the phone title on `/` with the desktop title (`PhoneSwitch` is ready), when the phone title gains
+  Settings from the desktop title's `settings.ts`; trimming the workers after a long hide; a real-phone pass (feel,
+  heat, memory, the edge swipe); sound unlocked on Take wing once there is sound; one copy list for the phone and
+  desktop titles when the desktop title lands.
 - ~~A "Fly anyway" opt-in from the text page; a separate, simpler mobile title screen.~~
 - ~~Touch flight: a floating joystick where the left thumb lands, boost and brake buttons on the right, tap a prompt to
   land; tilt steering as an option. All drawn as pixel-art controls.~~

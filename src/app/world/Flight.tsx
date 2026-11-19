@@ -15,13 +15,14 @@ import { useFrameFit } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
 import { phoneFrame, usePhoneFlight } from "./usePhoneFlight";
 import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
-import { TERMINAL_PAGE } from "../../components/title/phone/copy";
+import { MINIMAL_PAGE } from "../../components/title/phone/copy";
 
 /** The corner shows this long after the page opens and after the pointer last moved, ms. */
 const REVEAL_MS = 4000;
 
+/** On a phone the abbey's terminal is the minimal version's: the terminal is folded into that page. */
 function openTerminalPage(): void {
-  window.location.href = TERMINAL_PAGE;
+  window.location.href = MINIMAL_PAGE;
 }
 
 export interface FlightProps {

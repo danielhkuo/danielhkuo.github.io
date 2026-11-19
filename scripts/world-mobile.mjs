@@ -13,6 +13,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+import { MINIMAL_PAGE } from "../src/components/title/phone/copy.ts";
 import { layoutControls } from "../src/world/mobile/layout.ts";
 import { toScreen } from "../src/world/mobile/turned.ts";
 
@@ -309,10 +310,10 @@ test("a hidden page pauses, a blur pauses, and each comes back to Fly on", async
   await page.close();
 });
 
-test("near a landmark Land joins the cluster, and a tap on it lands; Take off flies on", async () => {
-  const { page } = await phone(IPHONE, "&at=abbey-0");
+/** Takes wing from south of the abbey (`&at=abbey-0`) and taps Land until the dragon is down and the Codex is open. */
+async function landAtAbbey(page, device) {
   await act(page, "take-wing");
-  const { layout } = await controls(page, IPHONE);
+  const { layout } = await controls(page, device);
   await page.waitForFunction(() => window.__flight.state().phase === "flying", { timeout: 5000 });
   // Flying north from 150 cells south of the abbey, it comes into reach within a couple of seconds.
   let landed = false;
@@ -324,9 +325,24 @@ test("near a landmark Land joins the cluster, and a tap on it lands; Take off fl
   assert.ok(landed, "the Land tap started a landing");
   await page.waitForFunction(() => window.__flight.state().phase === "landed", { timeout: 20000 });
   await page.waitForSelector("dialog[open]", { timeout: 5000 });
+}
+
+test("near a landmark Land joins the cluster, and a tap on it lands; Take off flies on", async () => {
+  const { page } = await phone(IPHONE, "&at=abbey-0");
+  await landAtAbbey(page, IPHONE);
   const takeOff = await page.evaluateHandle(() => [...document.querySelectorAll("dialog[open] button")].find((b) => /take off/i.test(b.textContent ?? "")));
   await takeOff.asElement().tap();
   await page.waitForFunction(() => window.__flight.state().phase === "flying", { timeout: 5000 });
+  await page.close();
+});
+
+test("on a phone the abbey's terminal opens the minimal version, where the terminal now lives", async () => {
+  const { page } = await phone(IPHONE, "&at=abbey-0");
+  await landAtAbbey(page, IPHONE);
+  const trigger = "dialog[open] [data-terminal-trigger]";
+  await page.waitForSelector(trigger, { timeout: 5000 });
+  await Promise.all([page.waitForNavigation({ timeout: 10000 }), page.tap(trigger)]);
+  assert.equal(new URL(page.url()).pathname, MINIMAL_PAGE);
   await page.close();
 });
 
