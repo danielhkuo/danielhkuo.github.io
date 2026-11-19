@@ -187,7 +187,7 @@ function evergreen(c: Lch): Seasons {
 const LAND = { drop: 0.5, rise: 0.58, cool: 0.046, coolHue: 240, warm: 0.03, thin: 0.5, ramp: "land" } as const;
 // Upland turf, heather and moor: a deeper, bluer shade and a light that stays a colour, so a lit crest is gold-green
 // and not a mint rim, and lit and shaded faces part in value.
-const UPLAND = { drop: 0.55, rise: 0.5, cool: 0.04, coolHue: 252, warm: 0.03, thin: 0.6, ramp: "land" } as const;
+const UPLAND = { drop: 0.55, rise: 0.5, cool: 0.04, coolHue: 236, warm: 0.03, thin: 0.6, ramp: "land" } as const;
 const CANOPY = { drop: 0.54, rise: 0.5, cool: 0.06, coolHue: 228, warm: 0.04, thin: 0.15, ramp: "land" } as const;
 const STONE = { drop: 0.5, rise: 0.6, cool: 0.075, coolHue: 278, warm: 0.075, ramp: "land" } as const;
 const TALUS = { drop: 0.26, rise: 0.6, cool: 0.012, coolHue: 278, warm: 0.06, ramp: "land" } as const;
@@ -244,13 +244,13 @@ function buildSpecs(): Spec[] {
     set(M.alpineCool + v, [g[0], g[1], g[2], SNOW], UPLAND);
   }
   // Heather blooms purple in summer and is brown the rest of the year.
-  const heathBloom: Lch[] = [[0.62, 0.062, 328], [0.635, 0.052, 358], [0.66, 0.05, 92]];
+  const heathBloom: Lch[] = [[0.62, 0.058, 326], [0.64, 0.042, 345], [0.65, 0.032, 15]];
   const heathBrown: Lch[] = [[0.56, 0.035, 25], [0.575, 0.04, 58], [0.6, 0.045, 85]];
   for (let v = 0; v < 3; v++) {
     const b = heathBrown[v];
     set(M.heathCool + v, [[b[0] + 0.01, b[1], b[2] + 20], heathBloom[v], b, [b[0] + 0.04, b[1] - 0.012, b[2]]], UPLAND);
   }
-  const moor: Lch[] = [[0.69, 0.075, 127], [0.71, 0.082, 117], [0.73, 0.088, 106]];
+  const moor: Lch[] = [[0.69, 0.076, 137], [0.705, 0.082, 130], [0.72, 0.086, 123]];
   for (let v = 0; v < 3; v++) {
     const g = grass(moor[v]);
     set(M.moorCool + v, [g[0], g[1], g[2], [g[3][0] + 0.05, g[3][1], g[3][2]]], UPLAND);
@@ -321,7 +321,7 @@ function buildSpecs(): Spec[] {
   set(M.path, all([0.82, 0.035, 80]), LINE);
   // A hedge's ground is rough grass; the hedge itself is the row of crowns scatter plants on it.
   set(M.hedge, grass([0.68, 0.09, 138]), LAND);
-  set(M.bracken, [[0.63, 0.075, 98], [0.675, 0.095, 113], [0.63, 0.095, 58], [0.57, 0.06, 55]], LAND);
+  set(M.bracken, [[0.63, 0.075, 98], [0.67, 0.092, 122], [0.63, 0.095, 58], [0.57, 0.06, 55]], LAND);
   // Gorse blooms gold in spring and keeps a little of it all summer.
   set(M.gorse, [[0.66, 0.105, 100], [0.6, 0.09, 108], [0.55, 0.07, 122], [0.53, 0.06, 125]], LAND);
   set(M.hedgeCrown, [[0.56, 0.1, 138], [0.48, 0.085, 146], [0.57, 0.08, 95], [0.48, 0.025, 45]], CANOPY);
