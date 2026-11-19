@@ -1,10 +1,11 @@
 # Flying on a phone: design
 
-Status: proposal, 2026-11-18. Nothing is built.
+Status: approved 2026-11-18. The owner took every recommended option (section 11). Nothing is built.
 
 - **Evidence:** `docs/superpowers/research/2026-11-18-mobile-web-game-controls.md` ("the research doc"), including
   measurements taken in the iOS 26.5 Simulator.
-- **[Owner]** marks a decision that is the owner's; the recommended option is listed first.
+- **[Owner]** marks a decision that was the owner's. All are settled, and the option listed first (marked
+  "recommended") is the one chosen.
 - **[Call]** marks Claude's call, which the owner can overturn.
 - ***tune*** marks a starting number, to be set on a real phone.
 
@@ -663,9 +664,11 @@ Each phase is a `world/<topic>` branch off `feat/dragon-world`.
 | 7 | `world/phone-options` | handedness, size, solid, Boost toggles, one thumb, vibration, tilt | Cursor | 3 |
 | 8 | `world/phone-perf` | the frame-rate ladder, worker count, hidden trim, memory count, `putImageData` check, phone perf gate, Simulator pass | Cursor; Claude runs the Simulator | 2 |
 
-## 11. Decisions for the owner
+## 11. Decisions (settled 2026-11-18)
 
-| # | Decision | Recommended | Other options |
+The owner took every recommended answer. The phones in decision 10 are still to be named.
+
+| # | Decision | Chosen | Not chosen |
 |---|---|---|---|
 | 1 | Front door on a phone | a phone title with the Recruiter first | straight to `/recruiter`; or Recruiter first until the visitor has flown |
 | 2 | The picture on a phone | fill the screen, controls over the corners | keep 16:9 with the controls in paper margins |
