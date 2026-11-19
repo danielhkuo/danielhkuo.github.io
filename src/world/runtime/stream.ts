@@ -9,7 +9,7 @@ import { wrap } from "../core/torus.ts";
 import type { Palette } from "../look/contract.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import type { FlightData } from "../pack/world.ts";
-import { compose, paperGrain, type ViewRect } from "../render/compose.ts";
+import { composeArea, paperGrain, type ViewRect } from "../render/compose.ts";
 import { hazeOf } from "../render/haze.ts";
 import { runLayers, type Flier, type LiveLayer } from "../live/live.ts";
 import type { BakePool, ChunkWant } from "./pool.ts";
@@ -33,6 +33,11 @@ export interface StreamOptions {
   layers?: readonly LiveLayer[];
   /** Hears a live layer that failed; it is skipped from then on. */
   onLayerError?: (name: string, message: string) => void;
+  /**
+   * Keep the last frame's land and, after a short slide, compose only the strips it exposed (default true). False
+   * composes the whole view every frame: the plain path the tests hold the kept land to.
+   */
+  slideLand?: boolean;
 }
 
 export interface StreamView extends WorldView {
@@ -74,6 +79,14 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
   const groundSample = new Float32Array(1);
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
   const bakeBuffer = new Uint32Array(width * height);
+  // The land of the last frame, composed (palette colours, before the live layers), with bakeBuffer to match. A frame
+  // whose rect slid less than its own size slides both and composes only the strips it exposed. It holds while the
+  // chunks are the ones it was composed from (no chunk arrived or left since: `received`) and it showed no haze.
+  const land = new Uint32Array(width * height);
+  let landX = 0, landY = 0;
+  let landVersion = -1;
+  let landWhole = false;
+  const slideLand = opts.slideLand !== false;
   const disabled = new Set<string>();
   /** depthAt's last chunk found (unwrapped coordinates). */
   let depthCx = NaN, depthCy = NaN;
@@ -105,10 +118,51 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
     return hit;
   };
 
+  /** Cached pixels for an unwrapped chunk, or null, without counting it as a use. */
+  const peek = (cx: number, cy: number): Uint32Array | null => cache.get(keyOf(cx, cy)) ?? null;
+
   const eachChunk = (x: number, y: number, w: number, h: number, fn: (cx: number, cy: number) => void): void => {
     const cx0 = Math.floor(x / CHUNK), cx1 = Math.floor((x + w - 1) / CHUNK);
     const cy0 = Math.floor(y / CHUNK), cy1 = Math.floor((y + h - 1) / CHUNK);
     for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) fn(cx, cy);
+  };
+
+  /** Composes the view's land into `land` and bakeBuffer: only the strips a short slide exposed, when it can. */
+  const composeLand = (): void => {
+    // Every chunk under the view counts as used, in the order a whole compose asks for them, so the cache keeps and
+    // drops the same chunks however little is composed.
+    const cx0 = Math.floor(rect.x / CHUNK), cx1 = Math.floor((rect.x + width - 1) / CHUNK);
+    const cy0 = Math.floor(rect.y / CHUNK), cy1 = Math.floor((rect.y + height - 1) / CHUNK);
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) read(cx, cy);
+    const dx = rect.x - landX, dy = rect.y - landY;
+    if (slideLand && landWhole && landVersion === received && dx > -width && dx < width && dy > -height && dy < height) {
+      if (dx !== 0 || dy !== 0) {
+        // Pixel (c, r) takes the old (c + dx, r + dy). Moving the whole buffer by dy rows and dx pixels does that for
+        // every pixel whose old place was on the frame; the rest wrapped round a row edge, and are composed again.
+        const d = dy * width + dx, size = width * height;
+        if (d > 0) {
+          land.copyWithin(0, d, size);
+          bakeBuffer.copyWithin(0, d, size);
+        } else {
+          land.copyWithin(-d, 0, size + d);
+          bakeBuffer.copyWithin(-d, 0, size + d);
+        }
+        const ry0 = dy > 0 ? height - dy : 0, ry1 = dy > 0 ? height : -dy;
+        let whole = composeArea(peek, palette, rect, land, 0, ry0, width, ry1, haze, bakeBuffer);
+        if (dx !== 0) {
+          // The columns the slide exposed, on the rows the strip above did not cover.
+          const cx0s = dx > 0 ? width - dx : 0, cx1s = dx > 0 ? width : -dx;
+          const ky0 = dy > 0 ? 0 : -dy, ky1 = dy > 0 ? height - dy : height;
+          whole = composeArea(peek, palette, rect, land, cx0s, ky0, cx1s, ky1, haze, bakeBuffer) && whole;
+        }
+        landWhole = whole;
+      }
+    } else {
+      landWhole = composeArea(peek, palette, rect, land, 0, 0, width, height, haze, bakeBuffer);
+    }
+    landX = rect.x;
+    landY = rect.y;
+    landVersion = received;
   };
 
   return {
@@ -117,7 +171,8 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
       rect.y = Math.floor(0.8 * y) - (height >> 1);
     },
     frame(out, t, flier) {
-      compose(read, palette, rect, out, undefined, haze, bakeBuffer);
+      composeLand();
+      out.set(land);
       runLayers(
         opts.layers ?? [],
         { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier },
@@ -127,6 +182,12 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
       if (opts.paper !== false) paperGrain(out, rect, mask);
     },
     depthAt(px, py) {
+      // The frame just drawn holds the bake pixel under each of its pixels: read it there while the view and the chunks
+      // are as they were then (a 0 may be haze, so it is looked up in the chunk as before).
+      if (landVersion === received && rect.x === landX && rect.y === landY && (px | 0) === px && (py | 0) === py && px >= 0 && py >= 0 && px < width && py < height) {
+        const v = bakeBuffer[py * width + px];
+        if (v !== 0) return Math.floor((rect.y + py) / CHUNK) * CHUNK_ROWS + (v >>> 16) / 8;
+      }
       const bx = rect.x + Math.floor(px), by = rect.y + Math.floor(py);
       const cx = Math.floor(bx / CHUNK), cy = Math.floor(by / CHUNK);
       // Sprites ask for thousands of pixels a frame, mostly in one chunk. Reuse the last chunk found rather than build a

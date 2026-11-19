@@ -77,6 +77,8 @@ export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figu
     mask = new Uint8Array(fw * fh);
     touched = new Int32Array(fw * fh);
   }
+  // Locals: a module-level binding is read again (and checked) on every use in the loops below.
+  const seen = mask, hit = touched;
   let hits = 0;
   const yPeriod = n * 0.8;
   for (let p = 0; p < f.count; p++) {
@@ -102,17 +104,17 @@ export function castShadow(out: Uint32Array, rect: ViewRect, view: Land, f: Figu
         const ix = Math.floor(ox * cos + oy * sin + cx + 0.5), iy = Math.floor(-ox * sin + oy * cos + cy + 0.5);
         if (ix < 0 || iy < 0 || ix >= w || iy >= h || foot[iy * w + ix] === 0) continue;
         const di = py * fw + px;
-        if (mask[di] !== 0) continue;
+        if (seen[di] !== 0) continue;
         if (Math.abs(view.depthAt(px, py) - row0) > 3) continue;
-        mask[di] = 1;
-        touched[hits++] = di;
+        seen[di] = 1;
+        hit[hits++] = di;
       }
     }
   }
   const keep = STACK_SHADOW_KEEP;
   for (let i = 0; i < hits; i++) {
-    const di = touched[i], dst = out[di];
-    mask[di] = 0;
+    const di = hit[i], dst = out[di];
+    seen[di] = 0;
     const r = ((dst & 255) * keep) >>> 8, g = (((dst >>> 8) & 255) * keep) >>> 8, b = (((dst >>> 16) & 255) * keep) >>> 8;
     out[di] = (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
   }
