@@ -811,7 +811,7 @@ const BRIDGE_TOWN: Kind = {
         for (let q = 0; q < 16; q++) for (const d of [ring / 3, (2 * ring) / 3, ring]) {
           const nx = Math.floor(gx + 0.5 + RX[q] * d), ny = Math.floor(gy + 0.5 + RY[q] * d), j = at(c, nx, ny);
           looked++;
-          if (isDry(c, j) && c.slope[j] < 0.15 && isFarmable(coverAtNode(c, nx, ny))) farm++;
+          if (isDry(c, j) && c.slope[j] < 0.15 && worked(coverAtNode(c, nx, ny))) farm++;
         }
         if (farm / looked < r.bridgeTown.farm) continue;
         tally.pass(L4);
@@ -977,14 +977,20 @@ const OBSERVATORY: Kind = {
 
 /**
  * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
- * score: the great oak and the bridge town in temperate or Mediterranean country, the drowned church in a lake that
- * is not frozen, the marsh house off the tundra and the jungle; the baths lean to the cold and the hotel to the warm.
+ * score: the great oak in temperate country, the bridge town from the steppe through the Mediterranean and the warm
+ * forest (wherever it finds its farmland), the drowned church in a lake that is not frozen, the marsh house off the
+ * ice and the deep jungle; the baths lean to the cold and the hotel to the warm.
  */
+/** Land that feeds a town: fields and meadows, and in dry country the sage and steppe that are grazed. */
+function worked(m: number): boolean {
+  return isFarmable(m) || (m >= M.sageCool && m <= M.sageWarm) || (m >= M.steppeCool && m <= M.steppeWarm);
+}
+
 const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
   "great-oak": { lo: 0.44, hi: 0.62 },
-  "bridge-town": { lo: 0.44, hi: 0.66 },
+  "bridge-town": { lo: 0.3, hi: 0.8 },
   "drowned-church": { lo: 0.32, hi: 1 },
-  "marsh-house": { lo: 0.3, hi: 0.75 },
+  "marsh-house": { lo: 0.25, hi: 0.85 },
   baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
   "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
   // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
@@ -1029,9 +1035,11 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
     const names = bounded ? [...kind.rules(rules), inClimate] : kind.rules(rules);
     const tally = new Tally(names);
     const found = kind.candidates(land, rules, tally);
-    // Each keeps to its climate, and leans to the one it likes best.
+    // Each keeps to its climate, and leans to the one it likes best. None stands on the home island: the opening
+    // flight is the abbey's and the town's, and stays as it is however the rest of the world is grown.
     const cands: Cand[] = [];
     for (const q of found) {
+      if (c.island[wrap(Math.floor(q.y / 4), c.gN) * c.gN + wrap(Math.floor(q.x / 4), c.gN)] === c.home) continue;
       const t = tempAt(c, q.x, q.y);
       if (t < climate.lo || t > climate.hi) continue;
       if (bounded) tally.pass(inClimate);

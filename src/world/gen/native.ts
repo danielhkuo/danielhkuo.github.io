@@ -17,7 +17,7 @@ import type { Core } from "./plan.ts";
 import type { Reach, RiversResult } from "./rivers.ts";
 
 /** Bump when a recipe or the way L1 is grown changes: the cache keeps L1 under this. */
-export const NATIVE_VERSION = 1;
+export const NATIVE_VERSION = 2;
 
 export type Recipe = "keep" | "ice" | "tundraWet" | "tundraDry" | "taiga" | "steppe" | "mediterranean" | "desert" | "savanna" | "warmForest" | "jungle";
 
@@ -78,8 +78,17 @@ function reformable(form: number): boolean {
   return form === FORM.belts || form === FORM.fjord || form === FORM.fen || form === FORM.table;
 }
 
-/** The spec an island of this recipe is built from, at world size n. */
-export function recipeSpec(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
+/**
+ * The spec an island of this recipe is built from, at world size n. A table island stays a table, as a mesa in dry
+ * country and a tepui in the tropics: a table is too small to carry belts.
+ */
+export function recipeSpec(recipe: Exclude<Recipe, "keep">, n: number, form: number = FORM.belts): ArchetypeSpec {
+  const spec = recipeBase(recipe, n);
+  if (form !== FORM.table) return spec;
+  return { ...spec, form: FORM.table, aspect: [0.55, 0.9], ridges: [1, 1], rugged: 0, plateau: undefined, lowland: undefined, bite: undefined, grain: undefined, stripeWidth: [3000 * lengthScale(n), 3000 * lengthScale(n)] };
+}
+
+function recipeBase(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
   const s = lengthScale(n), A = ARCHETYPE, F = FORM;
   const stripes: [number, number] = [300 * s, 600 * s];
   const base = { count: [1, 1] as const, diameter: [0, 0] as const, stripeWidth: stripes };
@@ -98,19 +107,19 @@ export function recipeSpec(recipe: Exclude<Recipe, "keep">, n: number): Archetyp
       return { ...base, id: A.highland, form: F.fjord, look: [[A.highland, 0.55], [A.lakes, 0.45]], aspect: [0.5, 0.62], turn: 0.4, peak: 105, rugged: 0.85, rockBias: [0.85, 0.15, 0], ridges: [2, 3] };
     // The steppe: a plain. A wide lowland ramp, low swells, smooth slopes and a smooth coast.
     case "steppe":
-      return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.5, 0.75], turn: 0.9, peak: 20, rugged: 0, d: 0.035, rockBias: [0.2, 0.5, 0.3], ridges: [2, 3], plateau: 0, lowland: 0.45, bite: 0.45, grain: 0.4 };
+      return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.4, 0.62], turn: 0.9, peak: 30, rugged: 0, d: 0.03, rockBias: [0.2, 0.5, 0.3], ridges: [2, 3], plateau: 0.75, bite: 0.5, grain: 0.35 };
     // The Mediterranean: rugged limestone ridges, the coast in peninsulas, cliffs and coves.
     case "mediterranean":
-      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 1]], aspect: [0.38, 0.6], turn: 0.9, peak: 85, rugged: 0.75, d: 0.006, rockBias: [0.85, 0.15, 0], ridges: [3, 5], bite: 1.55 };
+      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 1]], aspect: [0.38, 0.6], turn: 0.9, peak: 85, rugged: 0.75, d: 0.006, rockBias: [0.85, 0.15, 0], ridges: [3, 5], bite: 1.3 };
     // The desert: a plateau with a broad flat top over lowland plains, hard beds over soft, a straight coast.
     case "desert":
-      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.5], [A.slate, 0.5]], aspect: [0.5, 0.75], turn: 0.9, peak: 70, rugged: 0, d: 0.004, rockBias: [0.5, 0, 0.5], ridges: [1, 2], plateau: 0.8, lowland: 0.22, bite: 0.7, grain: 0.5 };
+      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.5], [A.slate, 0.5]], aspect: [0.4, 0.62], turn: 0.9, peak: 70, rugged: 0, d: 0.004, rockBias: [0.5, 0, 0.5], ridges: [1, 2], plateau: 0.8, lowland: 0.08, bite: 0.75, grain: 0.5 };
     // The savanna: a plain, its rock domes added by the landforms.
     case "savanna":
-      return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.5, 0.75], turn: 0.9, peak: 26, rugged: 0, d: 0.03, rockBias: [0.6, 0.4, 0], ridges: [2, 3], plateau: 0, lowland: 0.42, bite: 0.55, grain: 0.5 };
+      return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.4, 0.62], turn: 0.9, peak: 34, rugged: 0.1, d: 0.025, rockBias: [0.6, 0.4, 0], ridges: [2, 3], plateau: 0.7, bite: 0.55, grain: 0.45 };
     // The warm forest: steep ridges and deep valleys, the coast in rias.
     case "warmForest":
-      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.karst, 0.4]], aspect: [0.38, 0.6], turn: 0.9, peak: 95, rugged: 1, d: 0.0015, rockBias: [0.5, 0.5, 0], ridges: [3, 5], bite: 1.7 };
+      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.karst, 0.4]], aspect: [0.38, 0.6], turn: 0.9, peak: 95, rugged: 1, d: 0.0015, rockBias: [0.5, 0.5, 0], ridges: [3, 5], bite: 1.35 };
     // The jungle: rugged limestone mountains over wide coastal plains (the towers stand on them).
     case "jungle":
       return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.58], [A.home, 0.42]], aspect: [0.4, 0.65], turn: 0.9, peak: 90, rugged: 0.9, d: 0.002, rockBias: [0.8, 0.2, 0], ridges: [3, 4], lowland: 0.3, bite: 1.2 };
@@ -155,7 +164,7 @@ export function nativePlan(land: Land, climate: Climate, views: readonly { x: nu
       specs.push(null);
     } else {
       kept.push(false);
-      specs.push(reformable(core.form) ? recipeSpec(recipe, n) : null);
+      specs.push(reformable(core.form) ? recipeSpec(recipe, n, core.form) : null);
     }
   });
   return { recipes, kept, specs };
@@ -199,9 +208,36 @@ function reachIn(r: Reach, mask: Uint8Array, gN: number): boolean {
   return mask[nodeAt(v[m], v[m + 1], gN)] === 1;
 }
 
+/** G nodes either side of the join over which the sea bed is blended. */
+export const SEAM_BLEND = 30;
+
+/** Each G node's distance in nodes (8-neighbour steps) to the nearest node on the other side of the join, up to `reach` + 1. */
+export function seamDistance(mask: Uint8Array, gN: number, reach: number): Uint8Array {
+  const far = reach + 1, d = new Uint8Array(gN * gN).fill(far), queue = new Int32Array(gN * gN);
+  let qt = 0;
+  for (let y = 0; y < gN; y++) for (let x = 0; x < gN; x++) {
+    const i = y * gN + x, m = mask[i];
+    if (mask[y * gN + wrap(x + 1, gN)] !== m || mask[y * gN + wrap(x - 1, gN)] !== m || mask[wrap(y + 1, gN) * gN + x] !== m || mask[wrap(y - 1, gN) * gN + x] !== m) {
+      d[i] = 0;
+      queue[qt++] = i;
+    }
+  }
+  for (let qh = 0; qh < qt; qh++) {
+    const i = queue[qh], x = i % gN, y = (i - x) / gN, next = d[i] + 1;
+    if (next > reach) continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const j = wrap(y + dy, gN) * gN + wrap(x + dx, gN);
+      if (d[j] > next) { d[j] = next; queue[qt++] = j; }
+    }
+  }
+  return d;
+}
+
 /**
  * The world joined from two grown lands: every node, lake, river reach, stamp and glacial feature of a kept island
- * from L0, the rest from L1. L0's lakes and reaches keep their numbers; L1's are numbered after them.
+ * from L0, the rest from L1. L0's lakes and reaches keep their numbers; L1's are numbered after them. The two lands'
+ * sea beds differ, so within SEAM_BLEND nodes of the join, where both are sea, the bed is blended across it: at the
+ * join half and half, at SEAM_BLEND wholly its own side's. The join runs through open sea, far from home's views.
  */
 export function joinTerrain(t0: Grown, t1: Grown, kept: readonly boolean[]): Grown {
   const l0 = t0.land, l1 = t1.land, p = l0.p, gN = p.gN;
@@ -269,6 +305,23 @@ export function joinTerrain(t0: Grown, t1: Grown, kept: readonly boolean[]): Gro
     hand: pick(mask, h0.hand, h1.hand),
   };
 
+  // The sea bed across the join.
+  const seam = seamDistance(mask, gN, SEAM_BLEND);
+  const beds: [Float64Array | Float32Array, ArrayLike<number>, ArrayLike<number>][] = [
+    [land.g, l0.g, l1.g], [land.base, l0.base, l1.base], [hydro.ground, h0.ground, h1.ground], [hydro.surface, h0.surface, h1.surface],
+    [land.shoreDist, l0.shoreDist, l1.shoreDist],
+  ];
+  const rivGround = pick(mask, t0.rivers.ground, t1.rivers.ground);
+  beds.push([rivGround, t0.rivers.ground, t1.rivers.ground]);
+  for (let i = 0; i < seam.length; i++) {
+    if (seam[i] > SEAM_BLEND || !l0.isSea[i] || !l1.isSea[i]) continue;
+    const t = seam[i] / SEAM_BLEND, own = 0.5 + 0.5 * t * t * (3 - 2 * t);
+    for (const [out, a, b] of beds) {
+      const mine = mask[i] ? a[i] : b[i], theirs = mask[i] ? b[i] : a[i];
+      out[i] = own * mine + (1 - own) * theirs;
+    }
+  }
+
   const r0 = t0.rivers, r1 = t1.rivers;
   let offR = 0;
   for (const r of r0.reaches) if (r.id >= offR) offR = r.id + 1;
@@ -286,7 +339,7 @@ export function joinTerrain(t0: Grown, t1: Grown, kept: readonly boolean[]): Gro
     falls: [...r0.falls.filter((f) => keep0.has(f.reach)), ...r1.falls.filter((f) => keep1.has(f.reach)).map((f) => ({ ...f, reach: f.reach + offR }))],
     oxbows: [...r0.oxbows.filter((o) => keep0.has(o.reach)), ...r1.oxbows.filter((o) => keep1.has(o.reach)).map((o) => ({ ...o, reach: o.reach + offR }))],
     bars: [...r0.bars.filter((b) => keep0.has(b.reach)), ...r1.bars.filter((b) => keep1.has(b.reach)).map((b) => ({ ...b, reach: b.reach + offR }))],
-    ground: pick(mask, r0.ground, r1.ground),
+    ground: rivGround,
   };
   return { land, hydro, rivers };
 }

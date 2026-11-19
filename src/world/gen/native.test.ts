@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type IslandClimate, joinTerrain, keptMask, recipeOf } from "./native.ts";
+import { type IslandClimate, joinTerrain, keptMask, recipeOf, SEAM_BLEND, seamDistance } from "./native.ts";
 import { paramsFor } from "./params.ts";
 import { climateStage, type Grown, growNative, growTerrain, nativeTerrain, type Terrain } from "./pipeline.ts";
 
@@ -50,9 +50,12 @@ test("home and the kept islands are today's to the bit: land, coast, water, rive
     ["debris", j.land.debris, g0.land.debris], ["hand", j.hydro.hand, g0.hydro.hand], ["lakeId", j.hydro.lakeId, g0.hydro.lakeId],
     ["surface", j.hydro.surface, g0.hydro.surface], ["rain", j.hydro.rain, g0.hydro.rain], ["rivers", j.rivers.ground, g0.rivers.ground],
   ];
+  // The sea bed is blended across the join, in open sea; everything else of the kept land is L0's.
+  const seam = seamDistance(mask, P.gN, SEAM_BLEND);
+  const blended = (i: number) => seam[i] <= SEAM_BLEND && g0.land.isSea[i] === 1 && g1.land.isSea[i] === 1;
   for (const [name, a, b] of fields) {
     let differ = 0;
-    for (let i = 0; i < mask.length; i++) if (mask[i] && a[i] !== b[i]) differ++;
+    for (let i = 0; i < mask.length; i++) if (mask[i] && !blended(i) && a[i] !== b[i]) differ++;
     assert.equal(differ, 0, `${name}: ${differ} kept nodes differ`);
   }
   // Every reach of the kept land is today's, with its own number.
@@ -72,6 +75,22 @@ test("home and the kept islands are today's to the bit: land, coast, water, rive
     assert.equal(t.climate.arid![i], t0.climate.arid![i]);
   }
   assert.ok(checked > 100, `home nodes checked: ${checked}`);
+});
+
+test("the sea bed is continuous across the join", () => {
+  const { g0, g1 } = worlds();
+  const kept = g1.native!.kept, mask = keptMask(g0.land, kept), j = joinTerrain(g0, g1, kept);
+  const gN = P.gN;
+  // The largest step between two sea neighbours across the join, against the largest between sea neighbours anywhere.
+  let across = 0, anywhere = 0;
+  for (let y = 0; y < gN; y++) for (let x = 0; x < gN; x++) {
+    const i = y * gN + x, k = y * gN + ((x + 1) % gN);
+    if (!j.land.isSea[i] || !j.land.isSea[k]) continue;
+    const step = Math.abs(j.land.g[i] - j.land.g[k]);
+    if (mask[i] !== mask[k]) across = Math.max(across, step);
+    else anywhere = Math.max(anywhere, step);
+  }
+  assert.ok(across <= anywhere, `step across the join ${across}, anywhere else ${anywhere}`);
 });
 
 test("islands grown again differ from today's and stay in their own water", () => {
