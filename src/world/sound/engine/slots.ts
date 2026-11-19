@@ -4,7 +4,8 @@
 // was started, so nothing stale can play on return. The pooled chains for point sources join this file with the surf.
 
 import { TAU } from "../levels.ts";
-import type { Ctx } from "./graph.ts";
+import { cutoffCents, panPair } from "../space.ts";
+import { gain, lowpass, panner, type Ctx, type Pan } from "./graph.ts";
 
 interface Live {
   source: AudioBufferSourceNode;
@@ -79,10 +80,8 @@ export function createOneShots(ctx: Ctx, cap: number): OneShots {
     },
     prune(now) {
       for (let i = live.length - 1; i >= 0; i--) {
-        if (live[i].end < now) {
-          live[i].gain.disconnect();
-          live.splice(i, 1);
-        }
+        // Forgotten, not disconnected: a timeline scheduled ahead of its render prunes long before the source plays.
+        if (live[i].end < now) live.splice(i, 1);
       }
     },
     get live() {
@@ -93,6 +92,61 @@ export function createOneShots(ctx: Ctx, cap: number): OneShots {
     },
     get dropped() {
       return dropped;
+    },
+  };
+}
+
+/** A pooled chain for one point source: gain → low-pass (air) → pan pair. */
+interface Chain {
+  gain: GainNode;
+  air: BiquadFilterNode;
+  pan: Pan;
+  /** Audio time it is busy until. */
+  until: number;
+}
+
+export interface Pool {
+  /**
+   * A free chain, set for a source at this gain, air (Hz) and pan, and held until audio time `until`; null when every
+   * chain is busy. The chain is silent when it is taken, so its values are set outright.
+   */
+  take(now: number, until: number, level: number, hz: number, pan: number): AudioNode | null;
+  readonly size: number;
+}
+
+/**
+ * The pool of chains point sources play through. For now each is set once for a short one-shot (a lap); following a
+ * source as it moves, and stealing, come with the voices that need them.
+ */
+export function createPool(ctx: Ctx, count: number, out: AudioNode): Pool {
+  const chains: Chain[] = [];
+  const make = (): Chain => {
+    const g = gain(ctx, 0);
+    const air = lowpass(ctx, 1000);
+    const pan = panner(ctx, 0);
+    g.connect(air);
+    air.connect(pan.left);
+    air.connect(pan.right);
+    pan.out.connect(out);
+    return { gain: g, air, pan, until: -Infinity };
+  };
+  return {
+    size: count,
+    take(now, until, level, hz, pan) {
+      let c: Chain | undefined = chains.find((x) => x.until <= now);
+      // Chains are made as they are first needed, so a quiet scene builds none.
+      if (!c && chains.length < count) {
+        c = make();
+        chains.push(c);
+      }
+      if (!c) return null;
+      c.until = until;
+      const [l, r] = panPair(pan);
+      c.gain.gain.setValueAtTime(level, now);
+      c.air.detune.setValueAtTime(cutoffCents(hz), now);
+      c.pan.left.gain.setValueAtTime(l, now);
+      c.pan.right.gain.setValueAtTime(r, now);
+      return c.gain;
     },
   };
 }

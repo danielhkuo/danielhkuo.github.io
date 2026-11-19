@@ -44,9 +44,13 @@ test("with a worker: jobs are asked for in order, adopted as they arrive, and wi
   while (kit.step());
   assert.ok(kit.ready("noise") && !kit.ready("controls") && !kit.done());
   w.onmessage!({ data: { job: "controls", buffers: make("controls", 3, 8000) } });
+  w.onmessage!({ data: { job: "surf", buffers: make("surf", 3, 8000) } });
   w.onmessage!({ data: { job: "probe", buffers: make("probe", 3, 8000) } });
   while (kit.step());
   assert.ok(kit.done());
+  // Bytes that are not sound (the warp tile) are kept as they came.
+  assert.equal(kit.bytes("warp").length, 65536);
+  assert.equal(kit.buffer("env13").numberOfChannels, 9);
 });
 
 test("a worker that fails hands the rest to the main thread", () => {

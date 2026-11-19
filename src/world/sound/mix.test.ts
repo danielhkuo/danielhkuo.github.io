@@ -76,16 +76,21 @@ test("the swell on the hiss comes only while speed rises", () => {
   for (let t = 4.5; t < 7.9; t += 0.1) assert.ok(at(t) <= 1 + 1e-6, `slowing at ${t}: ${at(t)}`);
 });
 
-test("a 50 ms tap leaves the whoosh shut; a 150 ms turn opens it (through the real stepFlight)", () => {
+test("a 50 ms tap leaves the whoosh shut; a turn blooms with no step and then holds about 10 dB under its peak (through the real stepFlight)", () => {
   const tap = fly(start(NORTH), 2, (t) => ({ turn: t >= 0.5 && t < 0.55 ? 1 : 0, boost: false, brake: false }));
   for (const r of tap) assert.equal(r.v[T.W_GAIN], 0);
-  const turn = fly(start(NORTH), 2, (t) => ({ turn: t >= 0.5 && t < 0.65 ? 1 : 0, boost: false, brake: false }));
-  const peak = Math.max(...turn.map((r) => r.v[T.W_GAIN]));
-  assert.ok(peak > 0.2 * K_WIND.w, `the turn blooms (${peak / K_WIND.w})`);
-  // A held turn keeps a faint pressure, well under the bloom's ceiling.
-  const held = fly(start(NORTH), 3, (t) => ({ turn: t >= 0.5 ? 1 : 0, boost: false, brake: false }));
-  const tail = held[held.length - 1].v[T.W_GAIN];
-  near(tail / K_WIND.w, 0.3, 0.02);
+  const brief = fly(start(NORTH), 2, (t) => ({ turn: t >= 0.5 && t < 0.65 ? 1 : 0, boost: false, brake: false }));
+  assert.ok(Math.max(...brief.map((r) => r.v[T.W_GAIN])) > 0, "a 150 ms turn opens the gate");
+  const held = fly(start(NORTH), 4, (t) => ({ turn: t >= 0.5 ? 1 : 0, boost: false, brake: false }));
+  const g = held.map((r) => r.v[T.W_GAIN] / K_WIND.w);
+  const peak = Math.max(...g), at = held[g.indexOf(peak)].t;
+  // The key goes down at 0.5 s and the bank has settled by 1.0 s; the swell tops out as it does.
+  assert.ok(at > 1.0 && at < 1.4, `the bloom peaks as the bank settles (${at})`);
+  // No step: from one mix to the next (1/30 s) the target never moves by more than a fifth of the peak.
+  for (let i = 1; i < g.length; i++) assert.ok(Math.abs(g[i] - g[i - 1]) < 0.2 * peak, `step at ${held[i].t}`);
+  const hold = g[g.length - 1];
+  const under = 20 * Math.log10(peak / hold);
+  assert.ok(under >= 9 && under <= 12, `the hold is ${under} dB under the peak`);
 });
 
 test("the whoosh and the louder ear go to the outside wing as seen on screen", () => {
@@ -205,4 +210,46 @@ test("take-off and touchdown: the wind's level never moves faster than 10 dB a s
 test("ordinary flight is never held back by that limit for long", () => {
   const run = fly(start(NORTH), 6, (t) => ({ turn: 0, boost: t >= 1 && t < 3, brake: t >= 4 }));
   for (const r of run) near(r.v[T.B_GAIN], K_WIND.b * (r.s.speed / 60), K_WIND.b * 0.08);
+});
+
+const area = (e: number, ux = 0, uy = 0, d = 100) => ({ e, dx: e * ux, dy: e * uy, d });
+const hearing = (o: Partial<ReturnType<typeof emptyHearing>>) => ({ ...emptyHearing(), ...o });
+
+test("the surf bed: energies by kind feed the four bands; nothing heard, nothing sounds, and every target is finite", () => {
+  const quiet = one(pose());
+  for (const i of [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE, T.OPEN]) assert.equal(quiet[i], 0);
+  assert.equal(quiet[T.BED_PAN_A], -quiet[T.BED_PAN_B], "with nothing to point at, the halves sit apart about the middle");
+  for (const x of quiet) assert.ok(Number.isFinite(x));
+  const beach = mix(pose(), hearing({ surf: [area(16, 1, 0, 60), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  const shingle = mix(pose(), hearing({ surf: [area(0), area(16, 1, 0, 60), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  const rock = mix(pose(), hearing({ surf: [area(0), area(0), area(16, 1, 0, 60)] }), EMPTY_CENSUS, PREFS).targets;
+  assert.equal(beach[T.BED_RATTLE], 0);
+  assert.ok(shingle[T.BED_RATTLE] > 0 && rock[T.BED_RATTLE] === 0, "only shingle rattles");
+  assert.ok(beach[T.BED_HISS] > shingle[T.BED_HISS] && shingle[T.BED_HISS] > rock[T.BED_HISS], "sand hisses most, rock least");
+  assert.ok(rock[T.BED_RUMBLE] > beach[T.BED_RUMBLE], "rock rumbles most");
+  // Energy is power: four times the shore is twice the gain.
+  const more = mix(pose(), hearing({ surf: [area(64, 1, 0, 60), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  near(more[T.BED_BODY] / beach[T.BED_BODY], 2, 1e-5);
+});
+
+test("the bed's direction: a beach to the east sits right and together; a cove opens out; far surf alone still points", () => {
+  const east = mix(pose(), hearing({ surf: [area(16, 1, 0, 60), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  assert.ok(east[T.BED_PAN_A] > 0.8 && east[T.BED_PAN_B] > 0.8, "both halves to the east");
+  const cove = mix(pose(), hearing({ surf: [area(16, 0.02, 0.01, 60), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  assert.ok(cove[T.BED_PAN_A] < -0.95 && cove[T.BED_PAN_B] > 0.95, "all round: hard left and right");
+  // Only far surf, to the west: the direction comes from it alone.
+  const far = mix(pose(), hearing({ far: area(4, -0.9, 0, 250) }), EMPTY_CENSUS, PREFS).targets;
+  assert.ok(far[T.BED_PAN_A] < -0.5 && far[T.BED_PAN_B] < 0, "far surf to the west sits left");
+  assert.ok(far[T.BED_RUMBLE] > 0 && far[T.BED_BODY] > 0 && far[T.BED_HISS] === 0, "far surf is rumble and body, no hiss");
+  // The hiss is duller the further off the surf that makes it.
+  const nearBy = mix(pose(), hearing({ surf: [area(16, 1, 0, 30), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  const farOff = mix(pose(), hearing({ surf: [area(16, 1, 0, 400), area(0), area(0)] }), EMPTY_CENSUS, PREFS).targets;
+  assert.ok(nearBy[T.BED_AIR_HZ] > 2 * farOff[T.BED_AIR_HZ]);
+});
+
+test("open sea comes in between three tenths and nine tenths of the frame", () => {
+  const at = (sea: number) => mix(pose(), hearing({ sea }), EMPTY_CENSUS, PREFS).targets[T.OPEN];
+  assert.equal(at(0.3), 0);
+  assert.ok(at(0.6) > 0 && at(0.6) < at(0.9));
+  assert.equal(at(0.9), at(1));
 });

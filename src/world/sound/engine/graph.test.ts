@@ -35,11 +35,13 @@ test("every low-pass and high-pass has Q −3.01 dB, in the master chain and in 
   fly({ ctx, engine }, 0, 0.1);
   const filters = ctx.nodes.filter((n) => n.kind === "biquad");
   const flat = filters.filter((f) => f.type === "lowpass" || f.type === "highpass");
-  assert.ok(flat.length >= 7, `${flat.length} low-passes and high-passes`);
+  assert.ok(flat.length >= 7 + 8 * 4, `${flat.length} low-passes and high-passes`);
   for (const f of flat) assert.equal((f.Q as FakeParam).value, Q_FLAT_DB, `${f.type} at ${(f.frequency as FakeParam).value} Hz`);
-  // The band-passes and the peak carry linear Qs, each a number the design names.
+  // The band-passes and the peak carry linear Qs, each a number the design names: the wind's seven, and for each of
+  // the eight wave emitters the crash's band (0.8) and the rattle and slosh band (1.5).
   const others = filters.filter((f) => f.type !== "lowpass" && f.type !== "highpass" && f.type !== "highshelf").map((f) => (f.Q as FakeParam).value).sort((a, b) => a - b);
-  assert.deepEqual(others, [0.5, 0.7, 1.1, 1.2, 30, 38, 45]);
+  const want = [0.5, 0.7, 1.1, 1.2, 30, 38, 45, ...new Array<number>(8).fill(0.8), ...new Array<number>(8).fill(1.5)].sort((a, b) => a - b);
+  assert.deepEqual(others, want);
 });
 
 test("every pan is a gain pair into a merger: no panner node is ever made", () => {
@@ -47,9 +49,10 @@ test("every pan is a gain pair into a merger: no panner node is ever made", () =
   engine.enable(true);
   fly({ ctx, engine }, 0, 0.1);
   assert.equal(ctx.nodes.filter((n) => n.kind === "stereoPanner" || n.kind === "panner").length, 0);
-  // Each merger is fed on input 0 and input 1 by gains (the buffet's two ears, the whistles' pans, the whoosh's).
+  // Each merger is fed on input 0 and input 1 by gains (the buffet's two ears, the whistles' pans, the whoosh's, and
+  // each of the eight wave emitters').
   const mergers = ctx.nodes.filter((n) => n.kind === "merger");
-  assert.equal(mergers.length, 3);
+  assert.equal(mergers.length, 3 + 8);
   for (const m of mergers) {
     const feeds = ctx.nodes.flatMap((n) => n.outs.filter((o) => o.to === m).map((o) => ({ n, input: o.input })));
     assert.ok(feeds.every((f) => f.n.kind === "gain"));
@@ -182,4 +185,50 @@ test("a re-enable waits for the fade-out to finish, so sound always returns from
   assert.ok(!e.engine.live);
   fly(e, 3.21, 0.02);
   assert.ok(e.engine.live);
+});
+
+/** A Hearing with one beach cell due east, 25 cells off, heavy enough to take a lane at once. */
+function byABeach(): ReturnType<typeof emptyHearing> {
+  const h = emptyHearing();
+  h.shores.push({ sector: 0, cell: 77, kind: 1, bend: 40, x: 25, y: 0, w: 10 });
+  return h;
+}
+
+test("a wave is one envelope source started on a free emitter, whose chain is set outright only while it is silent", () => {
+  const e = engineOn();
+  e.engine.enable(true);
+  const h = byABeach();
+  const run = (t0: number, seconds: number) => {
+    for (let k = 0; k < seconds * 60; k++) {
+      const t = t0 + k / 60;
+      e.ctx.currentTime = t;
+      e.engine.frame(pose(t, { speed: 0 }), h, PREFS, { now: t, o: 0 });
+    }
+  };
+  run(100, 12);
+  const st = e.engine.stats();
+  assert.ok(st.waves.length >= 3, `${st.waves.length} waves in twelve seconds`);
+  assert.equal(e.engine.laneMask(), 1, "the eastern sector holds a lane");
+  // Envelope sources: not loops, played at a tenth of their rate, each into a splitter.
+  const envs = e.ctx.nodes.filter((n) => n.kind === "bufferSource" && !n.loop && (n.playbackRate as FakeParam).value === 0.1);
+  assert.equal(envs.length, st.waves.length);
+  for (const env of envs) {
+    assert.ok(env.started);
+    assert.equal((env.outs[0].to as FakeNode).kind, "splitter");
+  }
+  // A wave found ahead starts at its own time, not now.
+  const fresh = st.waves.filter((w) => w.lasts === 4);
+  assert.ok(fresh.length >= 2);
+  for (const w of fresh) assert.ok(Math.abs(w.when - w.t) < 1e-9);
+  // No emitter's chain was set outright while a wave of its own was sounding.
+  const sets = e.ctx.calls().filter((c) => c.method === "setValueAtTime" && c.param.owner.kind === "gain" && c.args[1] >= 100.1);
+  assert.ok(sets.length >= st.waves.length);
+  // Hidden: every envelope is stopped just after the ramp, and the next frames start none until sound is back.
+  e.engine.hide(112);
+  for (const env of envs) if (env.started![0] > 108) assert.ok(Math.abs(env.stopped! - 112.21) < 1e-9);
+  const before = e.engine.stats().waves.length;
+  e.engine.enable(false);
+  run(116, 1);
+  const back = e.engine.stats().waves.slice(before);
+  assert.ok(back.some((w) => w.lasts < 4), "a wave already breaking is joined part-way");
 });

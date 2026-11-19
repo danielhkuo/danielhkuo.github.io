@@ -2,7 +2,7 @@
 // high-pass gets Q_FLAT_DB here, and every pan is a gain pair into a merger (one code path in every browser; a
 // StereoPannerNode stays the documented fallback behind `panner`).
 
-import { CLIP_KNEE, LIMITER, LIMITER_TRIM_DB, MASTER_HIGHPASS_HZ, Q_FLAT_DB, WORLD_LOWPASS_HZ } from "../levels.ts";
+import { CLIP_KNEE, LIMITER, LIMITER_TRIM_DB, MASTER_HIGHPASS_HZ, Q_FLAT_DB, WIND_HIGHPASS_HZ, WORLD_LOWPASS_HZ } from "../levels.ts";
 import { dbToGain, panPair } from "../space.ts";
 
 export type Ctx = BaseAudioContext;
@@ -114,6 +114,8 @@ export type Bus = (typeof BUSES)[number];
 export interface Master {
   /** Where each family of voices connects. Wind goes round the world bus: it is at the listener. */
   bus: Record<Bus, GainNode>;
+  /** Where the wind's layers connect: a high-pass that leads into the wind bus. */
+  windIn: AudioNode;
   /** The reverb's send bus (the convolver joins it with the bells). */
   send: GainNode;
   world: GainNode;
@@ -134,6 +136,8 @@ export interface Master {
 export function buildMaster(ctx: Ctx): Master {
   const bus = {} as Record<Bus, GainNode>;
   for (const name of BUSES) bus[name] = gain(ctx, 1);
+  const windIn = highpass(ctx, WIND_HIGHPASS_HZ);
+  windIn.connect(bus.wind);
   const world = gain(ctx, 1);
   const worldLow = lowpass(ctx, WORLD_LOWPASS_HZ);
   const send = gain(ctx, 1);
@@ -162,7 +166,7 @@ export function buildMaster(ctx: Ctx): Master {
   trim.connect(clip);
   clip.connect(mute);
   mute.connect(ctx.destination);
-  return { bus, send, world, sum, volume, limiter, mute, nodes: [...BUSES.map((b) => bus[b]), world, worldLow, send, sum, rumble, volume, limiter, trim, clip, mute] };
+  return { bus, windIn, send, world, sum, volume, limiter, mute, nodes: [...BUSES.map((b) => bus[b]), windIn, world, worldLow, send, sum, rumble, volume, limiter, trim, clip, mute] };
 }
 
 /** One target of the mix bound to the parameters that carry it. */

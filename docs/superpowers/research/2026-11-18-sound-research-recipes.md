@@ -239,6 +239,26 @@ rising 15 % over 40 ms, plus a 70 ms noise tick through bandpass 1.5 kHz Q 2) at
 **Open sea**: one stereo pink noise → bandpass 700 Hz Q 0.4 → gain (0.5 + 0.5·slow random at 0.1 Hz). −30 dB under a
 near beach. No clock: the swell is drawn bending everywhere, and a pulsing open sea would sound like a machine.
 
+**As built (phase 2, 2026-11-19; tuned by loudness and spectrogram, not by ear).** Values are in
+`src/world/sound/levels.ts`; the shapes are in `src/world/sound/synth/envelopes.ts`.
+
+- A wave is fresh noise (a Gaussian loop times a sign loop) shaped by a prerendered envelope, one per kind and
+  strength; nothing about a wave is a frozen take but the rock's slosh. Ten minutes at one beach: the largest
+  cross-correlation between any two of 204 waves is 0.06 (a copied wave reads 1.00).
+- Beach: rumble low-pass 260 / 200 / 150 Hz by strength; crash 500 Hz → 1100 / 850 / 650 Hz over u 0.35–0.5, in over
+  0.38 s; hiss high-pass 1.2 → 3 → 4.5 kHz, peak at u 0.55. Part levels (low, mid, high) 3.2, 1.6, 0.9; strengths
+  −8 / −4 / 0 dB. Twenty-five cells off, the big wave peaks at −19.6 LUFS momentary and the lull is 14 LU under it.
+- Rock: boom low-pass 110 Hz, 40 ms in, τ 0.45 s (level 11.5: a first try at 5 was hidden under the bed's rumble);
+  spray high-pass 2.8 kHz; slosh from u 0.55 at 0.5, its band wandering 300–800 Hz. No 52 Hz sine. Peak −19.7.
+- Shingle: on the rock's clock; rattle from u 0.52, fullest at 0.70, 5 → 2.6 kHz. **The grain is not impulses.**
+  Single-sample velvet (1500 a second) is clicks by construction, and bumps of 2.5 ms still counted as clicks; the
+  grain is noise times a smooth random gain (0.3–1, up to 90 Hz). Rougher than hiss, less stony than the recipe.
+  Peak −20.5.
+- The foam's sizzle is the live flutter (0.8 + 0.45 · flutter) on the hiss.
+- Surf bed: `kBody` 0.066 and `kRumble` 0.014 put far surf (250 cells) at about −38.5 LUFS; with the rumble on top, as first
+  tried, it sat under every wave as a wall below 200 Hz. Open sea `kO` 0.05: −46.1 LUFS.
+- Laps: about two a second at a quay (one cell in each of the two heaviest calm lanes).
+
 ### Distance and stereo
 
 A near beach (within ~30 cells) is individual waves, each a moving event: start the break 0.3 pan units to one side and

@@ -2,8 +2,13 @@
 // mix and engine. Scenes that move drive the real stepFlight (and advance, for the landing) with scripted keys.
 
 import { CRUISE, BRAKE, stepFlight, type FlightInput, type FlightState } from "../../runtime/flight.ts";
+import { warpTile } from "../../live/water.ts";
+import { MATERIAL as M } from "../../look/materials.ts";
 import { advance, cameraAt, easeFocus, land, restShare, takeOff, type Phase, type Target } from "../../sites/landing.ts";
-import { emptyHearing, type Hearing, type Places, type Pose, type Prefs } from "../types.ts";
+import { createEar } from "../ear.ts";
+import { createLanes } from "../engine/lanes.ts";
+import { copyHearing, emptyHearing, type Hearing, type Places, type Pose, type Prefs } from "../types.ts";
+import { coastEast, coastOfKinds, coastWest, cove, frameOf, gridOf, islet, OPEN_SEA, type FlatWorld } from "./land.ts";
 
 export type Action =
   /** "on" is the first enable (the slow fade); a scene without one starts already on. */
@@ -46,6 +51,12 @@ export interface Scene {
   marks?: Mark[];
   /** Level constants replaced for this scene's renders (as "K_WIND.a": 0): how one layer is heard alone. */
   set?: Record<string, number>;
+  /** Only the waves' hiss path sounds. */
+  hissOnly?: boolean;
+  /** The repetition check (bench/repeat.ts) is run over the render's waves. */
+  repeat?: boolean;
+  /** Seconds of the render to hand back as sound (the rest is rendered and measured, then let go). */
+  keep?: number;
 }
 
 export const BENCH_PREFS: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
@@ -90,6 +101,59 @@ function flown(seconds: number, t0: number, start: FlightState, keys: Keys, rese
 
 const LEVEL: Keys = () => key();
 
+/** The seed the bench's stand-in world is drawn with: the shipped world's, so its waves bend as the picture's do. */
+const SEED = 3;
+let warp: Uint8Array | null = null;
+
+/** A dragon holding still at (x, y), 30 units up: no wind but the breeze, so the water is heard alone. */
+function hover(seconds: number, t0: number, x: number, y: number, rest = 0): (t: number) => SceneFrame {
+  return (t) => ({ pose: { t: t0 + Math.min(seconds, Math.max(0, Math.round(t * FPS) / FPS)), dt: 1 / FPS, x, y, alt: 30, heading: NORTH, speed: 0, bank: 0, rest }, hearing: QUIET });
+}
+
+/**
+ * A timeline over a stand-in world: the real ear makes a pass ten times a second over the frame the camera would
+ * see, with the lane mask the real lane logic would hand it, and each frame carries the Hearing then in force.
+ */
+function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFrame, touch = false): (t: number) => SceneFrame {
+  let hearings: Hearing[] | null = null;
+  const build = () => {
+    warp ??= warpTile(SEED);
+    const ear = createEar();
+    ear.setWorld({ n: world.n, land: gridOf(world) });
+    ear.setWarp(warp);
+    const lanes = createLanes({ lanes: touch ? 2 : 4, emitters: touch ? 4 : 8, seed: SEED });
+    const out: Hearing[] = [];
+    const buffer = new Uint32Array(400 * 225);
+    let last: Hearing = QUIET, lastT = NaN;
+    for (let k = 0; k <= seconds * FPS; k++) {
+      const pose = flight(k / FPS).pose;
+      if (k % 6 === 0) {
+        // In flight the camera centres on the dragon itself, alt / 0.8 cells north of its ground point.
+        const seen = frameOf(world, pose.x, pose.y - pose.alt / 0.8, buffer);
+        // Twice at the start: the second pass knows where the first found shore.
+        if (k === 0) ear.pass(pose, seen, 0);
+        last = copyHearing(ear.pass(pose, seen, lanes.mask()));
+        out.push(last);
+      }
+      lanes.step(last, pose.t, lastT === lastT ? pose.t - lastT : 0, 0.25, [], []);
+      lastT = pose.t;
+    }
+    return out;
+  };
+  return (t) => {
+    hearings ??= build();
+    const k = Math.min(seconds * FPS, Math.max(0, Math.round(t * FPS)));
+    const f = flight(t);
+    return { pose: f.pose, hearing: hearings[Math.floor(k / 6)], camera: f.camera };
+  };
+}
+
+/** Cruising south, 40 cells off a coast that runs north–south at x = 5040. */
+const alongCoast = (seconds: number, t0: number, y0 = 3000) => flown(seconds, t0, startAt(5000, y0, SOUTH), LEVEL);
+const BEACH_COAST = coastEast(5040, M.sand);
+/** The water alone: the still surf scenes are solo, so their levels can be read against §3.6. */
+const NO_WIND = { "K_WIND.a": 0, "K_WIND.b": 0, "K_WIND.c": 0, "K_WIND.d": 0, "K_WIND.e": 0, "K_WIND.w": 0 };
+
 /** brake 6, cruise 6, boost 8, cruise 4, brake 6. */
 const SPEEDS: Keys = (t) => (t < 6 ? key(0, false, true) : t < 12 ? key() : t < 20 ? key(0, true) : t < 24 ? key() : key(0, false, true));
 
@@ -122,6 +186,9 @@ function turnMarks(at: number, tag: string): Mark[] {
     { name: `${tag} left turn`, t0: at + 1.05, t1: at + 1.65 },
     { name: `${tag} right turn`, t0: at + 6.05, t1: at + 6.65 },
     { name: `${tag} taps`, t0: at + 13, t1: at + 15 },
+    // The long right turn: its bloom, and the pressure it holds once the bank has settled.
+    { name: `${tag} right bloom`, t0: at + 6.3, t1: at + 7.6 },
+    { name: `${tag} right hold`, t0: at + 8.6, t1: at + 9.9 },
   ];
 }
 
@@ -232,32 +299,100 @@ export const SCENES: Scene[] = [
     at: landing(30, 100),
   }),
   scene({
+    name: "surf-beach",
+    set: NO_WIND,
+    seconds: 48,
+    about: "Still, 25 cells off a beach, the whole nine-wave set: build, crash, hiss changing colour, backwash; the big ones; the lull.",
+    at: heard(coastEast(5025, M.sand), 48, hover(48, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "surf-shingle",
+    set: NO_WIND,
+    seconds: 30,
+    about: "The same at shingle: the crash, then stones dragging in the backwash, falling in pitch.",
+    at: heard(coastEast(5025, M.shingle), 30, hover(30, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "surf-rock",
+    set: NO_WIND,
+    seconds: 30,
+    about: "The same at a cliff: a boom, spray thrown up and hissing back, the gully gurgling as it drains.",
+    at: heard(coastEast(5025, M.cliffHard), 30, hover(30, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "surf-calm",
+    set: NO_WIND,
+    seconds: 20,
+    about: "At a quay: sparse laps, each its own.",
+    at: heard(coastEast(5025, M.cobble), 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "open-sea",
+    set: NO_WIND,
+    seconds: 20,
+    about: "Far offshore: a faint wide wash, coming and going, with no clock in it.",
+    at: heard(OPEN_SEA, 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "surf-far",
+    // Far surf alone: the dragon is over open water here, and the sea's own wash would be heard under it.
+    set: { ...NO_WIND, "K_SURF.open": 0 },
+    seconds: 30,
+    about: "250 cells off a long coast to the west: a low wandering rumble on the left.",
+    at: heard(coastWest(4750, M.sand), 30, hover(30, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "cove",
+    set: NO_WIND,
+    beds: true,
+    seconds: 30,
+    about: "Still, in a cove with shore on every side: surf all round, none missing where no lane is.",
+    at: heard(cove(5000, 5000, 90, M.sand), 30, hover(30, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "coast-run",
+    seconds: 45,
+    about: "Cruise 40 cells off a coast: beach, shingle, cliff, 15 s each. One shore changing character; each crash left behind where it broke.",
+    beds: true,
+    at: heard(coastOfKinds(5040, [M.sand, M.shingle, M.cliffHard], 3000, 900), 45, alongCoast(45, 100)),
+  }),
+  scene({
+    name: "sea-to-coast",
+    seconds: 40,
+    about: "From 600 cells out, straight in, across the beach, inland: far rumble first; waves resolve; they pass under and fall behind, duller.",
+    beds: true,
+    at: heard(coastEast(5000, M.sand), 40, flown(40, 100, startAt(4400, 5000, 0), LEVEL)),
+  }),
+  scene({
+    name: "surf-repeat",
+    seconds: 600,
+    about: "Landed by one short beach for ten minutes, only the waves' hiss sounding: the repetition check. No two waves may share a stretch of noise. (The sound kept is the first minute.)",
+    hissOnly: true,
+    repeat: true,
+    keep: 60,
+    // One short beach, so one lane: about 230 waves in the ten minutes.
+    at: heard(islet(5025, 5000, 16, M.sand), 600, hover(600, 100, 5000, 5000, 1)),
+  }),
+  scene({
     name: "toggle",
     seconds: 16,
-    about: "On at 0, off at 6, on at 9, off at 13: a slow first rise; clean stops; nothing old on return.",
-    probe: true,
+    about: "Cruising along a beach: on at 0, off at 6, on at 9, off at 13. A slow first rise; clean stops; nothing old on return.",
     actions: [{ at: 0, do: "on" }, { at: 6, do: "mute" }, { at: 9, do: "unmute" }, { at: 13, do: "mute" }],
-    at: flown(16, 100, startAt(5000, 5000, NORTH), LEVEL),
+    at: heard(BEACH_COAST, 16, alongCoast(16, 100)),
   }),
   scene({
     name: "hide-show",
     seconds: 16,
-    about: "Hide at 5, show at 9. No click, no stale tail; what should be sounding at the new time is, once.",
-    probe: true,
-    // The stand-in tails start at 2.5, 6.5, 10.5 s: one is cut by the hide, one starts unseen and is joined at the show.
-    t0: 234.5,
+    about: "Cruising along a beach: hide at 5, show at 9. No click, no stale wave; the waves that should be breaking at the new time are, once, joined part-way.",
     actions: [{ at: 5, do: "hide" }, { at: 9, do: "show" }],
-    at: flown(16, 234.5, startAt(5000, 5000, NORTH), LEVEL),
+    at: heard(BEACH_COAST, 16, alongCoast(16, 100)),
   }),
   scene({
     name: "stall",
     seconds: 12,
-    about: "A 0.6 s gap in the frames at 5 s: no hole after it, nothing doubled.",
-    probe: true,
-    // The stand-in tails start at 1.4, 5.4, 9.4 s: one sounds into the gap (not doubled), one starts inside it (joined).
-    t0: 235.6,
+    about: "Cruising along a beach: a 0.6 s gap in the frames at 5 s. No hole after it, nothing doubled.",
     actions: [{ at: 5, do: "stall", for: 0.6 }],
-    at: flown(12, 235.6, startAt(5000, 5000, NORTH), LEVEL),
+    at: heard(BEACH_COAST, 12, alongCoast(12, 100)),
     marks: [
       { name: "before the gap", t0: 4, t1: 5 },
       { name: "after the gap", t0: 5.6, t1: 6.6 },

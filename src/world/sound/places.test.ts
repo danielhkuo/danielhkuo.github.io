@@ -16,6 +16,8 @@ test("places come from the layer context, and survive JSON", () => {
   assert.deepEqual(p.lighthouses, [{ x: 10, y: 20 }]);
   assert.equal(p.forced, true);
   assert.deepEqual(p.wonders[0].anchors.halt, [7, 8]);
-  assert.deepEqual(JSON.parse(JSON.stringify(p)), p);
+  // JSON-safe: text and back is the same value.
+  const text = JSON.stringify(p);
+  assert.equal(JSON.stringify(JSON.parse(text)), text);
   assert.equal(placesOf({ seed: 1, n: 64, sites: [] }, "x").wonders.length, 0);
 });

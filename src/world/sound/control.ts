@@ -13,12 +13,13 @@ import type { LiveFrame, LiveLayer } from "../live/live.ts";
 import type { LayerContext } from "../live/registry.ts";
 import { placesOf } from "./places.ts";
 import { readPrefs, writeVolume, writeWanted, type PrefStore } from "./prefs.ts";
-import type { Hearing, Places, Pose, Prefs, SoundState } from "./types.ts";
+import { copyHearing, type Hearing, type Places, type Pose, type Prefs, type SoundState } from "./types.ts";
 
 /** The slice of the lazy module the control uses (engine/engine.ts). */
 export interface SoundRuntime {
   frame(pose: Pose, prefs: Prefs, seen: { bake: Uint32Array | null; rect: { x: number; y: number; w: number; h: number } | null; t: number }): void;
   kitMs(): number;
+  work(): number;
   hearing(): Hearing;
   enable(first: boolean): void;
   mute(): void;
@@ -28,7 +29,7 @@ export interface SoundRuntime {
 }
 
 export interface SoundModule {
-  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number }): SoundRuntime;
+  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null }): SoundRuntime;
 }
 
 /** The slice of AudioContext the control uses. */
@@ -92,6 +93,8 @@ export interface SoundControl {
   frame(t: number, flight: FlightLike, rest: number): number;
   /** The kit's share of the last frame's ms. */
   kitMs(): number;
+  /** What the last frame did, as bits (engine WORK): 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample, 128 the waves' turn. */
+  work(): number;
   state(): SoundState;
   /** The toggle's activation: off → on (the context is made here, in the gesture); waiting → start; on → off. */
   toggle(): void;
@@ -170,7 +173,8 @@ export function createSoundControl(env: ControlEnv): SoundControl {
   let hidden = env.doc.visibilityState === "hidden";
   let armed = false;
   let disposed = false;
-  let seed = 0;
+  /** The world, once it has loaded: the engine is not made before it (its kit is seeded by the world's seed). */
+  let land: { seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null } | null = null;
   let suspendTimer: unknown = null;
   let disposeTimer: unknown = null;
   let recoverTimer: unknown = null;
@@ -182,6 +186,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
   const prefs: Prefs = { volume, headphones: false, calm: false, touch: env.touch };
   let lastT = NaN;
   let kitMs = 0;
+  let lastWork = 0;
 
   const record: SoundLog | null = env.log ? { v: 1, worldId: "", places: null, prefs: { ...prefs }, frames: [], hearings: [] } : null;
   let logFrom = NaN;
@@ -268,9 +273,9 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         clear(suspendTimer);
         clear(disposeTimer);
         suspendTimer = disposeTimer = null;
-        if (mod && ctx) {
+        if (mod && ctx && land) {
           const first = rt === null;
-          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed });
+          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed: land.seed, n: land.n, land: land.land });
           if (!enabled) rt.enable(first);
           enabled = true;
           started = true;
@@ -418,7 +423,8 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       },
     },
     world(layers, worldId) {
-      seed = layers.seed;
+      land = { seed: layers.seed, n: layers.n, land: layers.land ?? null };
+      check();
       if (record) {
         record.worldId = worldId;
         record.places = placesOf(layers, worldId);
@@ -439,11 +445,13 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       pose.bank = flight.bank;
       pose.rest = rest;
       kitMs = 0;
+      lastWork = 0;
       if (live && rt) {
         prefs.volume = volume;
         prefs.calm = env.calm();
         rt.frame(pose, prefs, seen);
         kitMs = rt.kitMs();
+        lastWork = rt.work();
       }
       if (record) {
         if (logFrom !== logFrom) logFrom = t;
@@ -452,7 +460,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
           if (h && h !== lastHearing) {
             // The log copies: the ear reuses its Hearings.
             lastHearing = h;
-            record.hearings.push(JSON.parse(JSON.stringify(h)) as Hearing);
+            record.hearings.push(copyHearing(h));
           }
           const r = (v: number, k: number) => Math.round(v * k) / k;
           record.frames.push([r(t, 1e4), r(pose.dt, 1e4), r(pose.x, 100), r(pose.y, 100), r(pose.alt, 100), r(pose.heading, 1e4), r(pose.speed, 100), r(pose.bank, 1e4), r(rest, 1e4), record.hearings.length - 1]);
@@ -461,6 +469,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       return env.now() - a;
     },
     kitMs: () => kitMs,
+    work: () => lastWork,
     state,
     toggle() {
       if (disposed) return;

@@ -126,6 +126,18 @@ async function fly(browser, origin, opts, label, rate) {
     window.__flight.skyMs.length = 0;
     if (window.__flight.soundMs) window.__flight.soundMs.length = 0;
     if (window.__flight.soundKit) window.__flight.soundKit.length = 0;
+    if (window.__flight.soundWork) window.__flight.soundWork.length = 0;
+    // The noise floor of the measure itself: a fixed, tiny piece of work timed each frame. Under CPU throttling the
+    // main thread is paused in slices, so even this reads long now and then; nothing shorter than it can be told.
+    window.__null = [];
+    const tick = () => {
+      const a = performance.now();
+      let x = 0;
+      for (let i = 0; i < 300; i++) x += i;
+      window.__null.push(performance.now() - a + x * 0);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
     window.__flight.hazeFrames = 0;
     window.__flight.frames = 0;
   });
@@ -147,6 +159,8 @@ async function fly(browser, origin, opts, label, rate) {
     skyMs: [...window.__flight.skyMs],
     soundMs: window.__flight.soundMs ? [...window.__flight.soundMs] : [],
     soundKit: window.__flight.soundKit ? [...window.__flight.soundKit] : [],
+    soundWork: window.__flight.soundWork ? [...window.__flight.soundWork] : [],
+    nullMs: [...window.__null],
     soundState: window.__flight.soundState ?? null,
     audioContexts: window.__audioContexts ?? 0,
     hazeFrames: window.__flight.hazeFrames,
@@ -162,6 +176,11 @@ async function fly(browser, origin, opts, label, rate) {
   await page.close();
   // The sound's ms with the kit's share taken out, frame by frame.
   const soundNoKit = res.soundMs.map((ms, i) => Math.max(0, ms - (res.soundKit[i] ?? 0)));
+  // The unlock frame is the first in which the sound did anything; the longest frames after it, with what they did
+  // (bits: 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample).
+  const unlock = res.soundMs.findIndex((ms, i) => ms > 0 || (res.soundWork[i] ?? 0) !== 0);
+  const after = res.soundMs.map((ms, i) => ({ ms, frame: i - unlock, work: res.soundWork[i] ?? 0, kit: res.soundKit[i] ?? 0 })).filter((f) => f.frame > 0);
+  const longest = [...after].sort((a, b) => b.ms - a.ms).slice(0, 6).map((f) => ({ ms: Number(f.ms.toFixed(2)), frame: f.frame, work: f.work, kitMs: Number(f.kit.toFixed(2)) }));
   return {
     label, rate, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
     frames: res.frames, fps: res.frames / secs,
@@ -171,10 +190,28 @@ async function fly(browser, origin, opts, label, rate) {
       ? {
           soundMsP50: pct(res.soundMs, 0.5), soundMsP95: pct(res.soundMs, 0.95), soundMsMax: pct(res.soundMs, 1),
           soundNoKitMsP50: pct(soundNoKit, 0.5), soundNoKitMsP95: pct(soundNoKit, 0.95), soundNoKitMsMax: pct(soundNoKit, 1),
+          soundMsMean: res.soundMs.reduce((a, b) => a + b, 0) / Math.max(1, res.soundMs.length),
           soundKitFrames: res.soundKit.filter((ms) => ms > 0).length,
+          soundMsUnlockFrame: unlock >= 0 ? res.soundMs[unlock] : null,
+          soundMsMaxAfterUnlock: after.length ? Math.max(...after.map((f) => f.ms)) : 0,
+          soundFramesOver1ms: after.filter((f) => f.ms > 1).length,
+          soundLongest: longest,
+          // Once everything is built (from 5 s after the unlock): the figure the game lives with.
+          soundSteady: (() => {
+            const from = unlock + Math.round(5 * (res.frames / secs));
+            const ms = res.soundMs.slice(from), work = res.soundWork.slice(from);
+            const mean = (xs) => (xs.length ? Number((xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(4)) : null);
+            const of = (pick) => ms.filter((_, i) => pick(work[i]));
+            return {
+              frames: ms.length, p95: pct(ms, 0.95), max: pct(ms, 1), mean: mean(ms), over1ms: ms.filter((x) => x > 1).length,
+              meanPlain: mean(of((w) => (w & 132) === 0)), meanMix: mean(of((w) => (w & 4) !== 0)), meanWaves: mean(of((w) => (w & 128) !== 0)),
+              shareMix: Number((of((w) => (w & 4) !== 0).length / Math.max(1, ms.length)).toFixed(3)),
+            };
+          })(),
         }
       : { soundMsMax: res.soundMs.length ? Math.max(...res.soundMs) : 0 }),
     soundState: res.soundState, audioContexts: res.audioContexts,
+    nullMsP95: pct(res.nullMs, 0.95), nullMsMax: pct(res.nullMs, 1), nullFramesOver1ms: res.nullMs.filter((ms) => ms > 1).length,
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
   };
 }

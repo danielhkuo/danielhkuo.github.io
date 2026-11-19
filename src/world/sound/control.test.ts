@@ -24,6 +24,7 @@ function world(opts: { stored?: string | null; storage?: boolean; resumes?: bool
   const runtime: SoundRuntime = {
     frame: () => void calls.push("frame"),
     kitMs: () => 0.01,
+    work: () => 4,
     hearing: () => emptyHearing(),
     enable: (first) => void calls.push(first ? "enable:first" : "enable:again"),
     mute: () => void calls.push("mute"),
@@ -138,6 +139,7 @@ test("missing or unreadable storage is off: no context, no engine, no listeners,
 test("a stored on waits for a gesture: the engine is fetched, listeners are armed, no context is made", () => {
   const w = world({ stored: "on" });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   assert.equal(c.state(), "waiting");
   assert.equal(w.loads, 1);
   assert.ok(w.armed());
@@ -148,6 +150,7 @@ test("a stored on waits for a gesture: the engine is fetched, listeners are arme
 test("Shift, Control and Escape do not unlock, and do not disarm the listeners", () => {
   const w = world({ stored: "on" });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   for (const key of ["Shift", "Control", "Alt", "Meta", "Escape", "CapsLock"]) w.key(key);
   assert.equal(w.contexts.length, 0);
   assert.ok(w.armed());
@@ -156,7 +159,7 @@ test("Shift, Control and Escape do not unlock, and do not disarm the listeners",
 
 test("events inside the sound UI are ignored by the unlock listeners", () => {
   const w = world({ stored: "on" });
-  createSoundControl(w.env);
+  createSoundControl(w.env).world({ seed: 3, n: 10240, sites: [] }, "w");
   w.key("Enter", inUi);
   w.fire("click", { target: inUi });
   w.fire("pointerup", { target: inUi });
@@ -167,6 +170,7 @@ test("events inside the sound UI are ignored by the unlock listeners", () => {
 test("a context that is not running keeps the listeners armed, and every later gesture resumes again", async () => {
   const w = world({ stored: "on", resumes: false });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   await w.loaded();
   w.key("ArrowUp");
   assert.equal(w.contexts.length, 1);
@@ -188,6 +192,7 @@ test("a context that is not running keeps the listeners armed, and every later g
 test("a key press unlocks; frames then reach the engine and report its time", async () => {
   const w = world({ stored: "on" });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   w.key("ArrowUp");
   assert.equal(c.state(), "running");
   assert.ok(!w.armed());
@@ -203,6 +208,7 @@ test("a key press unlocks; frames then reach the engine and report its time", as
 test("a click on the toggle while waiting ends running, not off", async () => {
   const w = world({ stored: "on" });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   await w.loaded();
   assert.equal(c.state(), "waiting");
   c.toggle();
@@ -214,6 +220,7 @@ test("a click on the toggle while waiting ends running, not off", async () => {
 test("the toggle from off makes the context in the gesture and remembers the choice", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   let changes = 0;
   c.subscribe(() => changes++);
   c.toggle();
@@ -229,6 +236,7 @@ test("the toggle from off makes the context in the gesture and remembers the cho
 test("off: the mute fade, the device suspended after 300 ms, the engine let go after 30 s still off", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   c.toggle();
@@ -249,6 +257,7 @@ test("off: the mute fade, the device suspended after 300 ms, the engine let go a
 test("on again while the engine is alive: resume and a quick fade, no rebuild", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   c.toggle();
@@ -264,6 +273,7 @@ test("on again while the engine is alive: resume and a quick fade, no rebuild", 
 test("tab hidden: the hide fade in the handler, suspend at 250 ms; shown: resume and a quick fade", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   w.doc.visibilityState = "hidden";
@@ -284,6 +294,7 @@ test("tab hidden: the hide fade in the handler, suspend at 250 ms; shown: resume
 test("a return that does not recover lets the engine go and waits for a gesture again", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   w.doc.visibilityState = "hidden";
@@ -310,6 +321,7 @@ test("a return that does not recover lets the engine go and waits for a gesture 
 test("an interruption stops everything at once and is a suspension; running again fades back in", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   w.contexts[0].set("interrupted");
@@ -323,6 +335,7 @@ test("an interruption stops everything at once and is a suspension; running agai
 test("pagehide that is not for the back/forward cache disposes", async () => {
   const w = world();
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.toggle();
   await w.loaded();
   w.fire("pagehide", { persisted: false });
@@ -334,6 +347,7 @@ test("pagehide that is not for the back/forward cache disposes", async () => {
 test("dispose removes every listener and closes the context", async () => {
   const w = world({ stored: "on" });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   w.key("ArrowUp");
   await w.loaded();
   c.dispose();
@@ -345,6 +359,7 @@ test("dispose removes every listener and closes the context", async () => {
 test("?soundlog records the flight whether sound is on or off, for at most 120 s", () => {
   const w = world({ log: true });
   const c = createSoundControl(w.env);
+  c.world({ seed: 3, n: 10240, sites: [] }, "w");
   c.world({ seed: 3, n: 10240, sites: [{ id: "abbey-0", type: "abbey", x: 5, y: 6 }] }, "abc");
   for (let k = 0; k < 10; k++) c.frame(10 + k / 60, { ...FLIGHT, x: k }, 0.25);
   c.frame(10 + 121, FLIGHT, 0);

@@ -70,31 +70,34 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
     whistle = control("whistle");
   });
 
-  // A: the ear buffet.
+  // A: the ear buffet, in two steps.
+  let aSplit: ChannelSplitterNode, aLow: BiquadFilterNode;
   v.steps.push(() => {
-    const flutter = control("flutter");
     const src = noise("brown0");
     const high = keep(highpass(ctx, A_HIGHPASS_HZ));
-    const low = keep(lowpass(ctx, A_CUT_HZ));
+    aLow = keep(lowpass(ctx, A_CUT_HZ));
     const peak = keep(peaking(ctx, A_PEAK.hz, A_PEAK.db, A_PEAK.q));
-    const split = keep(ctx.createChannelSplitter(2));
-    const merge = keep(ctx.createChannelMerger(2));
+    aSplit = keep(ctx.createChannelSplitter(2));
     src.connect(high);
-    high.connect(low);
-    low.connect(peak);
-    peak.connect(split);
+    high.connect(aLow);
+    aLow.connect(peak);
+    peak.connect(aSplit);
+  });
+  v.steps.push(() => {
+    const flutter = control("flutter");
+    const merge = keep(ctx.createChannelMerger(2));
     const levels: GainNode[] = [];
     for (let ear = 0; ear < 2; ear++) {
       const flap = keep(gain(ctx, A_FLUTTER[0]));
       drive(flutter, ear, A_FLUTTER[1], flap.gain);
       const lev = keep(gain(ctx, 0));
-      split.connect(flap, ear);
+      aSplit.connect(flap, ear);
       flap.connect(lev);
       lev.connect(merge, 0, ear);
       levels.push(lev);
     }
     merge.connect(out);
-    v.bindings.push(bind(T.A_L, [levels[0].gain]), bind(T.A_R, [levels[1].gain]), bindHz(T.A_HZ, [low], A_CUT_HZ));
+    v.bindings.push(bind(T.A_L, [levels[0].gain]), bind(T.A_R, [levels[1].gain]), bindHz(T.A_HZ, [aLow], A_CUT_HZ));
   });
 
   // B: the rush. The filter's own frequency sits at the bottom of the gust's reach; the gust (0 … 1) lifts it.
@@ -131,29 +134,33 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
 
   // D: three whistles off one source, each opened by its own squall and bent by its own gust.
   if (!opts.touch) {
+    let dSrc: AudioBufferSourceNode, dMerge: ChannelMergerNode;
+    const bands: BiquadFilterNode[] = [];
     v.steps.push(() => {
-      const src = noise("pink1");
-      const merge = keep(ctx.createChannelMerger(2));
-      const lev = keep(gain(ctx, 0));
-      const bands: BiquadFilterNode[] = [];
-      for (let i = 0; i < 3; i++) {
+      dSrc = noise("pink1");
+      dMerge = keep(ctx.createChannelMerger(2));
+    });
+    for (let i = 0; i < 3; i++) {
+      v.steps.push(() => {
         const band = keep(bandpass(ctx, D_HZ[i], D_Q[i]));
         drive(whistle, 2 * i, cents(D_GUST), band.detune);
         const open = keep(gain(ctx, 0));
-        const squall = whistle;
-        squall.connect(open.gain, 2 * i + 1);
-        const pan = panner(ctx, D_PAN[i], merge);
+        whistle.connect(open.gain, 2 * i + 1);
+        const pan = panner(ctx, D_PAN[i], dMerge);
         keep(pan.left);
         keep(pan.right);
-        src.connect(band);
+        dSrc.connect(band);
         band.connect(open);
         intoPan(open, pan);
         bands.push(band);
-      }
-      merge.connect(lev);
-      lev.connect(out);
-      v.bindings.push(bind(T.D_GAIN, [lev.gain]), bind(T.D_RATIO, bands.map((b) => b.detune), (ratio) => 1200 * Math.log2(ratio)));
-    });
+        if (i === 2) {
+          const lev = keep(gain(ctx, 0));
+          dMerge.connect(lev);
+          lev.connect(out);
+          v.bindings.push(bind(T.D_GAIN, [lev.gain]), bind(T.D_RATIO, bands.map((b) => b.detune), (ratio) => 1200 * Math.log2(ratio)));
+        }
+      });
+    }
   }
 
   // E: the ground breeze, riding the wind the third whistle hears (unrelated to the main gust).

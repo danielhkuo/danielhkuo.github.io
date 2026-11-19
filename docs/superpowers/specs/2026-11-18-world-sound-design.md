@@ -343,7 +343,7 @@ integrated LUFS ±1.5 unless marked) and then pinned by the checker:
 | Train chuff / whistle at 60 | −26 / −21 |
 | Ferry horn at 80; seaplane approach at 60 | −20; −24 |
 | Flock lift (later: airship, dome, cart −36; oak gust −30) | −30 |
-| Inland at brake | −40 ±3 |
+| Inland at brake | −34 ±2 (calm country is the wind alone: the same figure as wind at brake) |
 | Three-minute flight | −22 ±2, momentary never above −12 |
 
 The busiest scene decides the master trim: its true peak must stay under −4.5 dBTP.
@@ -1233,6 +1233,34 @@ by the judge's ruling.
 | 28 | Flaps and ratchet off the picture | Flaps on the drawn down-wing frame (1.75 a second a bird); figures unchanged; the ratchet plays only where no chime sounds (§4.8, §4.11, §5.4). |
 | 29 | Second train at −3 dB | Dropped (§4.3). |
 | 30 | Smaller points | North/south from world `dy`; a private echo for whistle and horn; HRTF swaps chains in the same context; gain-pair panning chosen for v1 with StereoPanner as the fallback; batched offline builds; Firefox gaps in §6.9; iPad by `maxTouchPoints` and "silent mode" wording; startles checked at 30 Hz with a 0.3 s window, `flee` applied to wheelers; the teal focus ring with a paper halo; the recorded flight stores its `worldId`. |
+
+After the build's first phases (2026-11-19), by the judge's ruling: §3.6's "inland at brake −40 ±3" contradicted
+"wind at brake −34" (inland, the wind is all there is). It is now −34 ±2.
+
+**As built, phase 2 (surf), where it differs from the text above** (each with its reason; the numbers are in
+`src/world/sound/levels.ts` and the recipes note):
+
+- **Crossings are read off squares of four samples** (§2.1, §2.2), not off left–right and upper–lower pairs: a straight
+  side counts its length, a corner cut off counts half the square's diagonal. Pairs count a diagonal shore by its
+  staircase (+41 %); squares hold every direction within 0.5 dB, in the bake scan and in the coast scan alike.
+- **Shore cells are kept per sector** (§2.1): a 32-pixel cell that straddles two sectors is reported in each, with a
+  point of its own. With one point a cell, a beach 25 cells off had no point in the sector it was nearest in.
+- **The shingle's grain is a rough gain, not impulses** (§4.3): noise multiplied by a smooth random signal that moves
+  up to 90 times a second. Single-sample "velvet" impulses are clicks by construction and the checker counts them;
+  short bumps were tried and still counted.
+- **The rock's spray has no separate patter** (the grain and slosh share one band-pass, as §4.3 draws it; a rock wave
+  uses it for the slosh).
+- **The bed's two halves pan apart by an eased spread**, hard left and right when the surf is all round (§3.2 had
+  0.8 · spread, which leaves the halves correlated at 0.31 at best, over the 0.3 the cove is held to; and a coast on
+  one side must stay together to hold the 0.6 that far surf is held to).
+- **Laps come from one cell in each of the two heaviest calm lanes** (§4.3): with every lane's cells lapping, a quay
+  made seven laps a second.
+- **An emitter is taken only when it is free now**, not merely by the time the new wave starts, and emitters are taken
+  in turn (so every stream of noise is used).
+- **Rivers and falls are not in the ear yet**: they join the bake scan with their phase (4).
+- **The whoosh rises in a straight line in decibels** (18 dB a second from a fifth of its fullest), from the roll rate
+  smoothed twice (§3.3 had the rate term at τ 60 ms and a 70 ms rise): a swell with no step.
+- **A second high-pass (75 Hz) on the wind bus** (§4.1): under 8 % of the wind's power lies below 60 Hz at boost.
 
 Also by ruling: the fall memory, the stall dip and the second (fallback) clock are cut; HRTF is the last, optional
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike

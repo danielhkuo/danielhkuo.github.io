@@ -15,7 +15,7 @@ test("every scene is deterministic, has finite poses on the frame clock, and say
     assert.ok(!names.has(s.name), s.name);
     names.add(s.name);
     assert.ok(s.about.length > 20 && s.seconds > 0);
-    for (let k = 0; k <= s.seconds * 60; k += 7) {
+    for (let k = 0; k <= s.seconds * 60; k += s.seconds > 100 ? 601 : 7) {
       const t = k / 60;
       const a = s.at(t), b = s.at(t);
       assert.deepEqual(a.pose, b.pose);
@@ -25,7 +25,7 @@ test("every scene is deterministic, has finite poses on the frame clock, and say
     for (const m of s.marks ?? []) assert.ok(m.t0 >= 0 && m.t1 <= s.seconds && m.t1 > m.t0, `${s.name}: ${m.name}`);
     for (const a of s.actions ?? []) assert.ok(a.at >= 0 && a.at < s.seconds);
   }
-  for (const want of ["calibration", "toggle", "hide-show", "stall", "wind-cruise", "wind-speeds", "turns", "reduced-motion", "landing"]) assert.ok(names.has(want), want);
+  for (const want of ["calibration", "toggle", "hide-show", "stall", "wind-cruise", "wind-speeds", "turns", "reduced-motion", "landing", "surf-beach", "surf-shingle", "surf-rock", "surf-calm", "open-sea", "surf-far", "surf-repeat", "coast-run", "sea-to-coast", "cove"]) assert.ok(names.has(want), want);
 });
 
 test("wind-speeds visits brake, cruise and boost; reduced-motion flies the same keys calm", () => {
@@ -94,7 +94,35 @@ test("scenes that act: the toggle, the hide and the stall", () => {
   assert.deepEqual(byName("toggle").actions, [{ at: 0, do: "on" }, { at: 6, do: "mute" }, { at: 9, do: "unmute" }, { at: 13, do: "mute" }]);
   assert.deepEqual(byName("hide-show").actions, [{ at: 5, do: "hide" }, { at: 9, do: "show" }]);
   assert.deepEqual(byName("stall").actions, [{ at: 5, do: "stall", for: 0.6 }]);
-  for (const n of ["toggle", "hide-show", "stall"]) assert.ok(byName(n).probe);
+  // Each flies along a beach, so there are real waves to stop, to rejoin and not to double.
+  for (const n of ["toggle", "hide-show", "stall"]) assert.ok(byName(n).at(3).hearing.shores.some((p) => p.kind === 1), n);
+});
+
+test("the surf scenes hear what their names say, through the real ear", () => {
+  const at = (name: string, t: number) => byName(name).at(t).hearing;
+  const beach = at("surf-beach", 10);
+  assert.ok(beach.shores.length > 0 && beach.shores.every((p) => p.kind === 1));
+  assert.ok(beach.lanes !== 0, "lanes are held, and the ear was told");
+  assert.ok(at("surf-shingle", 10).shores.every((p) => p.kind === 2));
+  assert.ok(at("surf-rock", 10).shores.every((p) => p.kind === 3));
+  assert.ok(at("surf-calm", 10).shores.every((p) => p.kind === 0));
+  const open = at("open-sea", 10);
+  assert.ok(open.sea > 0.95 && open.shores.length === 0);
+  const far = at("surf-far", 10);
+  assert.ok(far.far.e > 0 && far.far.dx < 0, "far surf, to the west");
+  assert.equal(far.surf[0].e, 0, "beyond the frame the bake hears nothing");
+  assert.ok(new Set(at("cove", 10).shores.map((p) => p.sector)).size >= 6);
+  // coast-run: beach, then shingle, then cliff, 15 s each.
+  const kinds = (t: number) => new Set(at("coast-run", t).shores.map((p) => p.kind));
+  assert.ok(kinds(7).has(1) && kinds(22).has(2) && kinds(38).has(3));
+  // sea-to-coast: only far surf at first, the frame's own beach by 9 s, nothing in the frame once well inland.
+  const run = byName("sea-to-coast");
+  // (The coast scan reaches 448 cells: nothing at 600, far surf by 360.)
+  assert.equal(run.at(0.5).hearing.far.e, 0);
+  assert.ok(run.at(4).hearing.far.e > 0 && run.at(4).hearing.surf[0].e === 0);
+  assert.ok(run.at(9).hearing.surf[0].e > 0);
+  assert.equal(run.at(39).hearing.shores.length, 0);
+  assert.ok(byName("surf-repeat").hissOnly && byName("surf-repeat").repeat && byName("surf-repeat").seconds === 600);
 });
 
 test("render names: each scene, and a -beds twin where it has one", () => {

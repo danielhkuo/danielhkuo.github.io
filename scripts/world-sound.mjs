@@ -88,8 +88,8 @@ const origin = opts.origin ?? `http://127.0.0.1:${opts.port}/`;
 const FIREFOX = "/Applications/Firefox.app/Contents/MacOS/firefox";
 const browser =
   opts.browser === "firefox"
-    ? await puppeteer.launch({ browser: "firefox", executablePath: process.env.FIREFOX_BIN ?? FIREFOX, headless: true })
-    : await puppeteer.launch({ headless: "shell" });
+    ? await puppeteer.launch({ browser: "firefox", executablePath: process.env.FIREFOX_BIN ?? FIREFOX, headless: true, protocolTimeout: 1_800_000 })
+    : await puppeteer.launch({ headless: "shell", protocolTimeout: 1_800_000 });
 let failed = false;
 try {
   const page = await browser.newPage();
@@ -100,6 +100,7 @@ try {
   });
   await page.goto(`${origin}world-sound?render`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__sound?.scenes, { timeout: 60000 });
+  page.setDefaultTimeout(0);
   const all = await page.evaluate(() => window.__sound.scenes);
   const wanted = opts.scenes.length ? all.filter((s) => opts.scenes.includes(s.name)) : all;
   if (opts.scenes.length && wanted.length !== opts.scenes.length) {
@@ -131,10 +132,13 @@ try {
     console.log(
       `${scene.name.padEnd(28)} ${String(row.lufs).padStart(6)} LUFS  tp ${String(row.truePeakDb).padStart(6)}  clip ${row.clipped}  ` +
         `M +${row.loudnessSteps.rise}/−${row.loudnessSteps.fall}  corr ${row.correlation}  bal ${row.balanceDb}  clicks ${row.clicks.length}  ` +
-        `lim ${row.stats?.limiterMinDb ?? "?"}  (${row.stats?.mode ?? "?"}, ${row.renderMs} ms)${row.fails.length ? `  FAIL: ${row.fails.join("; ")}` : ""}`,
+        `lim ${typeof row.stats?.limiterMinDb === "number" ? row.stats.limiterMinDb.toFixed(3) : "?"}  hp200 −${row.smallSpeakerLossLu}  (${row.stats?.mode ?? "?"}, ${row.renderMs} ms)${row.fails.length ? `  FAIL: ${row.fails.join("; ")}` : ""}`,
     );
+    const st = row.stats ?? {};
+    if (st.wavesPerMinute?.length) console.log(`    waves a minute, by lane: ${st.wavesPerMinute.join(", ")}; closest two of one train in a lane: ${st.closestTrainGap === null ? "—" : st.closestTrainGap.toFixed(2)} s`);
+    if (typeof st.repeatMax === "number") console.log(`    repeatMax ${st.repeatMax.toFixed(4)} over ${st.repeatPairs} pairs of ${st.repeatWaves} waves; control (one wave copied over another) ${st.repeatControl?.toFixed(4)}`);
     for (const m of row.marks ?? []) {
-      console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB`);
+      console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB${m.lowShares ? `  <60 Hz ${(m.lowShares[0] * 100).toFixed(1)} % 60–120 ${(m.lowShares[1] * 100).toFixed(1)} %` : ""}`);
     }
   }
   writeFileSync(path.join(opts.out, "render.json"), JSON.stringify({ origin, browser: opts.browser, mode: opts.mode, rows: rows.map(({ file, renderMs }) => ({ file, renderMs })), broken, errors }, null, 2));

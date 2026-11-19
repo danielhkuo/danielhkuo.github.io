@@ -24,7 +24,11 @@ scope.onmessage = (event: MessageEvent) => {
   try {
     const buffers = make(req.job, req.seed, req.sampleRate);
     const transfer: Transferable[] = [];
-    for (const name of Object.keys(buffers)) for (const c of buffers[name].channels) transfer.push(c.buffer as ArrayBuffer);
+    for (const name of Object.keys(buffers)) {
+      for (const c of buffers[name].channels) transfer.push(c.buffer as ArrayBuffer);
+      const bytes = buffers[name].bytes;
+      if (bytes) transfer.push(bytes.buffer as ArrayBuffer);
+    }
     scope.postMessage({ job: req.job, buffers } satisfies KitReply, transfer);
   } catch (e) {
     scope.postMessage({ job: req.job, error: e instanceof Error ? e.message : String(e) } satisfies KitReply, []);

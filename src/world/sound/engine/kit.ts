@@ -25,12 +25,16 @@ export interface Kit {
   readonly sampleRate: number;
   /** At most one slice of work. True when it did some. */
   step(): boolean;
+  /** True when the last step made an AudioBuffer (an allocation of megabytes): the frame should do no more kit work. */
+  heavy(): boolean;
   /** True once every buffer of `job` is adopted. */
   ready(job: Job): boolean;
   /** True once every job is. */
   done(): boolean;
   /** A buffer by name; throws when it is not adopted yet (ask `ready` first). */
   buffer(name: string): AudioBuffer;
+  /** Plain bytes by name (the warp tile); throws when they have not arrived. */
+  bytes(name: string): Uint8Array;
   /** Resolves when every job is adopted, stepping on a timer: for the bench, never for the game's frame loop. */
   whenDone(): Promise<void>;
   dispose(): void;
@@ -50,6 +54,7 @@ export function spawnWorker(): KitWorker | null {
 export function createKit(opts: KitOptions): Kit {
   const makeBuffer = opts.makeBuffer ?? ((channels, length, rate) => new AudioBuffer({ numberOfChannels: channels, length, sampleRate: rate }));
   const buffers = new Map<string, AudioBuffer>();
+  const blobs = new Map<string, Uint8Array>();
   const adopted = new Set<Job>();
   /** Arrived from the worker, waiting to be adopted. */
   const arrived: { job: Job; raws: Record<string, Raw> }[] = [];
@@ -59,6 +64,7 @@ export function createKit(opts: KitOptions): Kit {
   let inline: Job[] = [];
   let worker: KitWorker | null = null;
   let disposed = false;
+  let heavy = false;
 
   try {
     worker = opts.spawn ? opts.spawn() : null;
@@ -86,6 +92,7 @@ export function createKit(opts: KitOptions): Kit {
   }
 
   const step = (): boolean => {
+    heavy = false;
     if (disposed) return false;
     if (!current) {
       const next = arrived.shift();
@@ -112,8 +119,14 @@ export function createKit(opts: KitOptions): Kit {
     }
     const name = c.names[c.name];
     const raw = c.raws[name];
+    if (raw.bytes) {
+      blobs.set(name, raw.bytes);
+      c.name++;
+      return true;
+    }
     if (!c.buffer) {
       c.buffer = makeBuffer(raw.channels.length, raw.channels[0].length, raw.rate);
+      heavy = true;
       c.channel = 0;
       c.at = 0;
       return true;
@@ -139,10 +152,16 @@ export function createKit(opts: KitOptions): Kit {
   return {
     sampleRate: opts.sampleRate,
     step,
+    heavy: () => heavy,
     ready: (job) => adopted.has(job),
     done,
     buffer(name) {
       const b = buffers.get(name);
+      if (!b) throw new Error(`kit: ${name} is not ready`);
+      return b;
+    },
+    bytes(name) {
+      const b = blobs.get(name);
       if (!b) throw new Error(`kit: ${name} is not ready`);
       return b;
     },

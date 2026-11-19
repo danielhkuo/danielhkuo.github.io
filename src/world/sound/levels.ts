@@ -38,7 +38,7 @@ export const LIMITER_IDLE_DB = -0.5;
 /** Layer gains at cruise (linear). Calibrated: wind alone reads −34 / −27 / −21 LUFS at brake / cruise / boost. */
 export const K_WIND = {
   /** A, the ear buffet (per ear). */
-  a: 0.32,
+  a: 0.36,
   /** B, the rush. */
   b: 0.32,
   /** C, the hiss. */
@@ -48,7 +48,7 @@ export const K_WIND = {
   /** E, the ground breeze. */
   e: 0.038,
   /** The turn whoosh at its fullest. */
-  w: 0.5,
+  w: 0.25,
 };
 
 /**
@@ -61,6 +61,11 @@ export const WIND_SLEW = 1;
 export const WIND_FLOOR = 0.12;
 /** A: a high-pass (Q_FLAT_DB, Hz) under the buffet, so it has weight without the sub-bass that eats headroom. */
 export const A_HIGHPASS_HZ = 45;
+/**
+ * A second high-pass (Q_FLAT_DB, Hz) on the whole wind bus: with A's own it falls 24 dB an octave under the buffet's
+ * body (80–250 Hz), so less than 8 % of the wind's power lies under 60 Hz even at boost.
+ */
+export const WIND_HIGHPASS_HZ = 75;
 /** A: low-pass (Q_FLAT_DB) cutoff per unit of s, and its clamp, Hz; then a peaking bump (LINEAR Q). */
 export const A_CUT_HZ = 110;
 export const A_CUT_RANGE: [number, number] = [40, 260];
@@ -108,10 +113,73 @@ export const W_HZ: [number, number] = [500, 900];
 export const W_PAN = 0.3;
 /** The whoosh opens between these banks: a 50 ms tap reaches 0.27 (shut), a 150 ms turn 0.61 (open). */
 export const W_GATE: [number, number] = [0.35, 0.6];
+/**
+ * The whoosh is a bloom on the change of bank and a faint pressure through a held turn. The bloom is the roll rate
+ * (|d bank/dt|) smoothed twice at W_BLOOM_TAU seconds, so it swells and falls with no step, over W_BLOOM_FULL (a
+ * roll rate; the smoothed rate of one full turn's entry reaches about this). The hold is W_HOLD · |bank| · s: about
+ * 10 dB under the bloom's peak.
+ */
+export const W_BLOOM_TAU = 0.3;
+export const W_BLOOM_FULL = 1.1;
+export const W_HOLD = 0.28;
+/**
+ * The whoosh rises in a straight line in decibels, W_RISE e-folds a second (2.1 is 18 dB a second), counted from
+ * W_FLOOR of its fullest: a swell with no step. (On its own it must cross 15 LU from silence to its peak, and a rise
+ * that a momentary meter reads as under 3 LU per 100 ms cannot do that in less than half a second.)
+ */
+export const W_RISE = 2.1;
+export const W_FLOOR = 0.2;
 
 /** At boost the world yields this much to the wind, and under the Codex this much more, dB. */
 export const WORLD_BOOST_DB = -2;
 export const WORLD_REST_DB = -6;
+
+// ── Surf (§3.2, §4.3) ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How loud each part of a wave is, by shore kind: low (rumble, boom), mid (crash, body), high (hiss, spray), grain
+ * (the shingle's rattle), slosh (the rock's gully). Linear; baked into the envelope buffers. Calibrated 25 cells off:
+ * the big beach wave peaks at −20 LUFS momentary, the rock's boom at −19, shingle at −21.
+ */
+export const K_SURF = {
+  beach: [3.2, 1.6, 0.9, 0, 0],
+  shingle: [2.0, 1.2, 0.8, 1.6, 0],
+  rock: [11.5, 2.0, 1.1, 0, 0.5],
+  /** A wave emitter's chain gain at its nearest. */
+  wave: 0.85,
+  /** A lap, and the lap that stands for a lull (dB under a lap). */
+  lap: 0.12,
+  /** The surf bed: hiss, body, rumble, rattle (each × the square root of an energy sum). */
+  bedHiss: 0.004,
+  bedBody: 0.066,
+  bedRumble: 0.014,
+  bedRattle: 0.01,
+  /** The open sea's wash at its fullest. */
+  open: 0.05,
+};
+
+/** The emitter's fixed filters: the hiss's top (low-pass, Q_FLAT_DB), the crash's band (LINEAR Q), the rattle and slosh band (LINEAR Q). */
+export const WAVE_HISS_TOP_HZ = 9000;
+export const WAVE_MID_Q = 0.8;
+export const WAVE_BAND_Q = 1.5;
+/** The foam's sizzle: the hiss's gain is SIZZLE[0] + SIZZLE[1] · flutter, about ±2 dB at 8–14 Hz, live, so it never repeats. */
+export const SIZZLE: [number, number] = [0.8, 0.45];
+
+/** The surf bed's bands: rumble low-pass (Q_FLAT_DB), body band-pass (LINEAR Q), hiss high-pass (Q_FLAT_DB), rattle band-pass (LINEAR Q). */
+export const BED = { rumbleHz: 180, bodyHz: 600, bodyQ: 0.6, hissHz: 2500, rattleHz: 3600, rattleQ: 1.5 };
+/** The bed's two halves each wander by this share on their own slow drift (about ±1.5 dB). */
+export const BED_WANDER = 0.17;
+/**
+ * How far apart the bed's two halves are panned when the surf is all round (spread 1): hard left and right. (The
+ * design had 0.8, which leaves the halves correlated at 0.31 at best, over the 0.3 the cove is held to.)
+ */
+export const BED_SPREAD = 1;
+/** The open sea: band-pass (LINEAR Q). */
+export const OPEN = { hz: 700, q: 0.4 };
+/** A bed is stopped when every gain has been under BED_OFF for BED_OFF_S seconds, and built again when one passes BED_ON. */
+export const BED_OFF = 1e-3;
+export const BED_ON = 2e-3;
+export const BED_OFF_S = 2;
 
 // ── Smoothing (§3.5): time constants in seconds ──────────────────────────────────────────────────────────────────────
 

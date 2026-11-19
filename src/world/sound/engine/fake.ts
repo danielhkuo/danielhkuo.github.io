@@ -133,14 +133,16 @@ export class FakeContext {
 }
 
 /** A kit whose every buffer is ready: enough of an AudioBuffer for the graph to be built on. */
-export function fakeKit(): { sampleRate: number; step(): boolean; ready(): boolean; done(): boolean; buffer(name: string): AudioBuffer; whenDone(): Promise<void>; dispose(): void } {
-  const channels: Record<string, number> = { brown0: 2, pink7: 2, white7: 2, pink1: 1, gust: 1, flutter: 2, whistle: 6, drift: 2, pip: 1, tail: 1 };
+export function fakeKit(): { sampleRate: number; step(): boolean; heavy(): boolean; ready(): boolean; done(): boolean; buffer(name: string): AudioBuffer; bytes(name: string): Uint8Array; whenDone(): Promise<void>; dispose(): void } {
+  const channels: Record<string, number> = { brown0: 2, pink7: 2, white7: 2, pink1: 1, gust: 1, flutter: 2, whistle: 6, drift: 2, pip: 1, tail: 1, waveA: 2, velvet: 2, pink0: 2, white0: 2 };
   return {
     sampleRate: 48000,
     step: () => false,
+    heavy: () => false,
     ready: () => true,
     done: () => true,
     buffer: (name) => ({ duration: name === "pip" ? 0.12 : 5, numberOfChannels: channels[name] ?? 1, sampleRate: 48000, length: 240000 }) as unknown as AudioBuffer,
+    bytes: () => new Uint8Array(65536),
     whenDone: () => Promise.resolve(),
     dispose() {},
   };

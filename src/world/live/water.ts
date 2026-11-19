@@ -22,8 +22,8 @@ import type { LiveFrame, LiveLayer } from "./live.ts";
 /** Seconds from one wave reaching a shore to the next. */
 export const WAVE_PERIOD = 5.2;
 /** How strongly each wave of a set runs in (0 a lull … 3 the big one); the set repeats. */
-const SETS = 9;
-const SET = [2, 3, 3, 1, 2, 3, 2, 0, 1] as const;
+export const SETS = 9;
+export const SET = [2, 3, 3, 1, 2, 3, 2, 0, 1] as const;
 /** Bake pixels between swell crests on open water, and how fast they travel (pixels a second). */
 const SWELL_LENGTH = 51.2;
 const SWELL_SPEED = 3.2;
@@ -31,7 +31,7 @@ const SWELL_SPEED = 3.2;
 const FLOW_SPEED = 5;
 const FLOW_SPEED_STEEP = 9;
 /** Height lost per pixel (in eighths of a unit) from which a reach counts as steep. */
-const STEEP = 5;
+export const STEEP = 5;
 /** Falling water, pixels a second. */
 const FALL_SPEED = 15;
 /** A fall this many pixels tall or more gets the wide spray. */
@@ -156,7 +156,7 @@ const WARP = 256;
 const STREAKS = 512;
 
 /** Smooth noise 0–255, 256² and wrapping: it bends the wave fronts and the swell so no two stretches keep time. */
-function warpTile(seed: number): Uint8Array {
+export function warpTile(seed: number): Uint8Array {
   const raw = new Float32Array(WARP * WARP);
   let lo = Infinity, hi = -Infinity;
   for (let y = 0; y < WARP; y++) for (let x = 0; x < WARP; x++) {

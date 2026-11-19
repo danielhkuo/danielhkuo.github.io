@@ -125,6 +125,11 @@ export interface Cue {
   lasts?: number;
   /** A soft cue found late starts at once; a sharp one (the default) more than 30 ms late is dropped. */
   soft?: boolean;
+  /** A wave's shore cell, its train (0 or 1), its number in the train, and its strength (0 a lull … 3 the big one). */
+  cell?: number;
+  train?: number;
+  k?: number;
+  strength?: number;
   /** Kind-specific numbers (variant, level in dB, rate …). */
   variant?: number;
   db?: number;
@@ -158,3 +163,17 @@ export function emptyHearing(t = 0): Hearing {
 }
 
 export const EMPTY_CENSUS: Census = { sources: [] };
+
+/** A Hearing of its own, sharing nothing with `h`: the ear reuses its Hearings, so whoever keeps one copies it. */
+export function copyHearing(h: Hearing): Hearing {
+  const area = (a: Area): Area => ({ e: a.e, dx: a.dx, dy: a.dy, d: a.d });
+  return {
+    t: h.t, ready: h.ready, lanes: h.lanes,
+    surf: [area(h.surf[0]), area(h.surf[1]), area(h.surf[2])],
+    far: area(h.far), sea: h.sea,
+    river: area(h.river), stream: area(h.stream), white: area(h.white),
+    shores: h.shores.map((s) => ({ ...s })),
+    falls: h.falls.map((f) => ({ ...f })),
+    startled: h.startled.map((s) => ({ ...s })),
+  };
+}

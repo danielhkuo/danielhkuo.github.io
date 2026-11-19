@@ -70,6 +70,8 @@ interface FlightProbe {
   /** Main-thread ms the sound took, per frame (0 while it is off), and the kit's share of it. */
   soundMs: number[];
   soundKit: number[];
+  /** What the sound did each frame, as bits (see SoundControl.work). */
+  soundWork: number[];
   soundState: SoundState;
   /** The flight as recorded for the sound bench, with ?soundlog. */
   soundLog: SoundLog | null;
@@ -150,7 +152,7 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
     const statsOn = params.has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], soundMs: [], soundKit: [], soundState: "off", soundLog: null, hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], soundMs: [], soundKit: [], soundWork: [], soundState: "off", soundLog: null, hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     // Sound: off until asked for; with ?stats&soundlog the flight is recorded for the sound bench.
@@ -398,6 +400,7 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
           if (probe) {
             probe.soundMs.push(soundMs);
             probe.soundKit.push(soundControl.kitMs());
+            probe.soundWork.push(soundControl.work());
             probe.soundState = soundControl.state();
           }
           const skyStart = performance.now();

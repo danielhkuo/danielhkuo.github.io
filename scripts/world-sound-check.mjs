@@ -361,6 +361,63 @@ function midBand(x, sampleRate, lo = 450, hi = 2500) {
   return out;
 }
 
+/** In-place radix-2 FFT of (re, im). */
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = a + len / 2;
+        const xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - xr; im[b] = im[a] - xi;
+        re[a] += xr; im[a] += xi;
+        const t = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = t;
+      }
+    }
+  }
+}
+
+/** The share of the power of x[a, b) (both channels summed) that lies in each band [lo, hi) Hz. */
+function bandShares(l, r, a, b, sampleRate, bands) {
+  const N = 65536;
+  const power = new Float64Array(N / 2);
+  for (const x of [l, r]) {
+    for (let from = a; from + N <= b; from += N / 2) {
+      const re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < N; i++) re[i] = x[from + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+      fft(re, im);
+      for (let k = 0; k < N / 2; k++) power[k] += re[k] * re[k] + im[k] * im[k];
+    }
+  }
+  let all = 0;
+  for (let k = 1; k < N / 2; k++) all += power[k];
+  return bands.map(([lo, hi]) => {
+    let s = 0;
+    for (let k = Math.max(1, Math.ceil((lo * N) / sampleRate)); k < Math.min(N / 2, Math.ceil((hi * N) / sampleRate)); k++) s += power[k];
+    return all > 0 ? round(s / all, 4) : 0;
+  });
+}
+
+/** How much integrated loudness the file loses through a second-order 200 Hz high-pass: what a small speaker keeps. */
+function smallSpeakerLoss(file, lufs) {
+  const run = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-filter_complex", "highpass=f=200:p=2,ebur128", "-f", "null", "-"], { encoding: "utf8" });
+  const thin = parseLoudness(`${run.stdout ?? ""}${run.stderr ?? ""}`).lufs;
+  return thin === null || lufs === null ? null : round(lufs - thin, 1);
+}
+
 /**
  * Each mark measured on its own: integrated loudness of the stretch, its momentary mean and max, its L−R balance, and
  * the balance and level of its mid band alone (450 Hz–2.5 kHz).
@@ -394,6 +451,8 @@ function measureMarks(file, marks, l, r, sampleRate, momentary) {
       balanceDb: round(db(Math.sqrt(sl)) - db(Math.sqrt(sr))),
       midBalanceDb: round(db(Math.sqrt(tl)) - db(Math.sqrt(tr))),
       midDb: round(db(Math.sqrt((tl + tr) / (2 * Math.max(1, b - a))))),
+      /** Share of the power under 60 Hz and at 60–120 Hz (marks of 1.4 s or longer). */
+      lowShares: b - a >= 65536 ? bandShares(l, r, a, b, sampleRate, [[0, 60], [60, 120], [80, 250]]) : null,
     };
   });
 }
@@ -408,6 +467,13 @@ function everySceneFails(row) {
   if (row.correlation < -0.05) fails.push(`correlation ${row.correlation}`);
   const lim = row.stats?.limiterMinDb;
   if (typeof lim === "number" && lim < -0.5) fails.push(`limiter worked ${lim} dB`);
+  // Waves: none may repeat a stretch of noise (and the check must be able to find one that does); a lane keeps the
+  // picture's pace.
+  const st = row.stats ?? {};
+  if (typeof st.repeatMax === "number" && st.repeatMax >= 0.3) fails.push(`waves repeat: repeatMax ${round(st.repeatMax, 3)}`);
+  if (typeof st.repeatControl === "number" && st.repeatControl <= 0.9) fails.push(`the repetition check missed a copied wave (${round(st.repeatControl, 3)})`);
+  if (typeof st.closestTrainGap === "number" && st.closestTrainGap < 2.6 - 1e-3) fails.push(`two waves of one train ${round(st.closestTrainGap, 2)} s apart in a lane`);
+  if (/^coast-run\.wav$/.test(row.file) && Array.isArray(st.wavesPerMinute) && st.wavesPerMinute.some((n) => n < 14 || n > 30)) fails.push(`waves a minute ${st.wavesPerMinute.join(", ")}`);
   return fails;
 }
 
@@ -442,6 +508,9 @@ export function checkWav(file) {
     lra: loud.lra,
     loudnessSteps: steps(loud.momentary),
     momentaryMax: round(momentaryMax, 1),
+    /** LU lost through a 200 Hz high-pass (a small speaker), and the shares of power under 60, at 60–120 and at 80–250 Hz. */
+    smallSpeakerLossLu: smallSpeakerLoss(file, loud.lufs),
+    lowShares: l.length >= 65536 ? bandShares(l, r, 0, l.length, sampleRate, [[0, 60], [60, 120], [80, 250]]) : null,
     momentary: loud.momentary.map(([t, m]) => [round(t, 1), round(m, 1)]),
     truePeakDb: loud.truePeakDb,
     peakDb: per.map((c) => round(db(c.peak))),

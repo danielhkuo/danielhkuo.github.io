@@ -12,7 +12,8 @@
 
 import { createEngine } from "../engine/engine.ts";
 import type { Kit } from "../engine/kit.ts";
-import { K_WIND } from "../levels.ts";
+import { K_SURF, K_WIND } from "../levels.ts";
+import { repeatCheck } from "./repeat.ts";
 import type { Pose } from "../types.ts";
 import type { Action, Mark, Scene } from "./scenes.ts";
 
@@ -28,7 +29,7 @@ export interface RenderOptions {
 }
 
 /** The level tables a calibration render may touch. */
-const TABLES: Record<string, Record<string, number>> = { K_WIND };
+const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number> };
 
 /** Runs `run` with some level constants replaced, and puts them back: how a layer is soloed to calibrate it. */
 export async function withLevels<R>(set: Record<string, number> | undefined, run: () => Promise<R>): Promise<R> {
@@ -62,6 +63,14 @@ export interface RenderStats {
   nodes: number;
   sends: number;
   marks: Mark[];
+  /** Waves started a minute in each lane that started any, and the closest two starts of one train in one lane, seconds. */
+  wavesPerMinute: number[];
+  closestTrainGap: number | null;
+  /** The repetition check, where the scene asks for it: see bench/repeat.ts. `control` is the same check with one wave copied over another: it must find it. */
+  repeatMax?: number;
+  repeatPairs?: number;
+  repeatWaves?: number;
+  repeatControl?: number;
 }
 
 export interface RenderResult {
@@ -92,7 +101,9 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
   const pre = actions.some((a) => a.do === "on") ? 0 : PRE;
   const total = pre + scene.seconds;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * rate), rate);
-  const engine = createEngine(ctx, kit, { touch: scene.prefs.touch, seed: 3, offline: true, probe: scene.probe, beds: opts.beds, tone: scene.tone });
+  const engine = createEngine(ctx, kit, {
+    touch: scene.prefs.touch, seed: 3, offline: true, probe: scene.probe, beds: opts.beds, tone: scene.tone, hissOnly: scene.hissOnly, n: scene.places?.n,
+  });
   /** Audio time minus world time: exact offline. */
   const o = pre - scene.t0;
   const pose: Pose = { t: 0, dt: 0, x: 0, y: 0, alt: 0, heading: 0, speed: 0, bank: 0, rest: 0 };
@@ -152,13 +163,43 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
 
   function finish(buffer: AudioBuffer, renderMs: number, wallMs: number): RenderResult {
     const cut = Math.round(pre * rate);
-    const channels = [0, 1].map((c) => buffer.getChannelData(c).slice(cut));
+    const whole = [0, 1].map((c) => buffer.getChannelData(c));
     const st = engine.stats();
     engine.dispose();
+    // Pace: waves a minute in each lane, and the closest two starts of one train in one lane.
+    const minutes = scene.seconds / 60;
+    const wavesPerMinute = st.wavesByLane.filter((n) => n > 0).map((n) => Math.round((n / minutes) * 10) / 10);
+    let closest: number | null = null;
+    const lastOf = new Map<string, number>();
+    for (const w of st.waves) {
+      const key = `${w.lane}:${w.train}`;
+      const prev = lastOf.get(key);
+      if (prev !== undefined && (closest === null || w.t - prev < closest)) closest = w.t - prev;
+      lastOf.set(key, w.t);
+    }
+    let repeat: { repeatMax?: number; repeatPairs?: number; repeatWaves?: number; repeatControl?: number } = {};
+    if (scene.repeat) {
+      const mono = new Float32Array(whole[0].length);
+      for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (whole[0][i] + whole[1][i]);
+      const starts = st.waves.filter((w) => w.lasts > 3.9).map((w) => w.when);
+      const r = repeatCheck(mono, rate, starts);
+      // The control: the same check with one wave's four seconds copied over another's. It must be found.
+      let control: number | undefined;
+      const len = 4 * rate;
+      const other = starts.findIndex((t) => t - starts[0] >= 4 && Math.round(t * rate) + len <= mono.length);
+      if (other > 0) {
+        const a = Math.round(starts[0] * rate), b = Math.round(starts[other] * rate);
+        mono.copyWithin(b, a, a + len);
+        control = repeatCheck(mono, rate, [starts[0], starts[other]]).repeatMax;
+      }
+      repeat = { repeatMax: r.repeatMax, repeatPairs: r.pairs, repeatWaves: r.waves, repeatControl: control };
+    }
+    const keep = Math.round(Math.min(scene.keep ?? scene.seconds, scene.seconds) * rate);
+    const channels = whole.map((c) => c.slice(cut, cut + keep));
     return {
       sampleRate: rate,
       channels,
-      onsets: st.onsets.map((t) => t - pre).filter((t) => t >= 0 && t < scene.seconds),
+      onsets: st.onsets.map((t) => t - pre).filter((t) => t >= 0 && t < keep / rate),
       stats: {
         mode,
         limiterMinDb: st.limiterMinDb,
@@ -169,6 +210,9 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
         nodes: st.nodes,
         sends: st.sends,
         marks: scene.marks ?? [],
+        wavesPerMinute,
+        closestTrainGap: closest,
+        ...repeat,
       },
     };
   }
