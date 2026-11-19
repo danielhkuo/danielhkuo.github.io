@@ -1011,15 +1011,19 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
     const cands = kind.candidates(land, rules, tally);
     // Best first; ties keep the order the land was scanned in, so the order is the same on every run.
     const order = sortIndicesBy(Float64Array.from(cands, (q) => -q.score));
-    const why = { spacing: 0, free: 0, seen: 0, cap: 0 };
+    let why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     let placed = 0;
+    // A crowded world may leave a wonder no place at the full spacing; it then takes the best place at half of it.
+    for (const reach of [rules.spacing, rules.spacing / 2]) {
+    if (placed >= rules.counts[type]) break;
+    why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     for (const k of order) {
       const q = cands[k];
       if (placed >= rules.counts[type]) break;
       let apart = true;
       for (const t of held) {
         const dx = torusDelta(t.x, q.x, n), dy = torusDelta(t.y, q.y, n);
-        if (dx * dx + dy * dy < rules.spacing * rules.spacing) { apart = false; break; }
+        if (dx * dx + dy * dy < reach * reach) { apart = false; break; }
       }
       if (!apart) { why.spacing++; continue; }
       if (!free(land, q.box)) { why.free++; continue; }
@@ -1031,9 +1035,10 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
       held.push({ x: q.x, y: q.y });
       placed++;
     }
+    }
     if (placed < rules.counts[type]) {
       const reason = cands.length === 0 ? `nowhere has ${tally.failed()}`
-        : `${cands.length} places suit it, but ${why.spacing} are within ${Math.round(rules.spacing)} cells of a landmark or wonder, ${why.free} are built on, ${why.seen} are hidden from the camera and ${why.cap} are over the height cap`;
+        : `${cands.length} places suit it, but ${why.spacing} are within ${Math.round(rules.spacing / 2)} cells of a landmark or wonder, ${why.free} are built on, ${why.seen} are hidden from the camera and ${why.cap} are over the height cap`;
       skipped.push(`${type}: ${placed} of ${rules.counts[type]} placed: ${reason}`);
     }
   }

@@ -42,8 +42,9 @@ test("siting is deterministic: the same land gives the same wonders and the same
   assert.deepEqual(a.built.conforms, b.built.conforms);
 });
 
-test("wonders keep their spacing from every landmark and from each other, and each is placed or named as skipped", () => {
-  const s = settleWorld(terrain()).settlement, spacing = wonderRules(N).spacing;
+test("wonders keep at least half the spacing from every landmark and from each other, and each is placed or named as skipped", () => {
+  // Half: a wonder that finds no place at the full spacing falls back to the best place at half of it.
+  const s = settleWorld(terrain()).settlement, spacing = wonderRules(N).spacing / 2;
   assert.ok(spacing > 0);
   for (const w of s.wonders) {
     assert.ok(w.x >= 0 && w.x < N && w.y >= 0 && w.y < N);
@@ -60,13 +61,19 @@ test("wonders keep their spacing from every landmark and from each other, and ea
   }
 });
 
-test("a wonder is never placed within the spacing of a landmark", () => {
+test("a wonder is never placed within half the spacing of a landmark, and takes the full spacing where it can", () => {
   const l = bare(terrain());
   const free = placeWonders(l, []);
   assert.ok(free.wonders.length > 0);
-  // Every place a wonder took becomes a landmark: none may stand within the spacing of them now.
+  // Every place a wonder took becomes a landmark: none may stand within half the spacing of them now.
   const again = placeWonders(l, free.wonders);
   for (const w of again.wonders) for (const o of free.wonders) {
+    assert.ok(Math.hypot(torusDelta(w.x, o.x, N), torusDelta(w.y, o.y, N)) >= wonderRules(N).spacing / 2 - 1e-6, `${w.id} by ${o.id}`);
+  }
+  // With nothing else on the land, the first wonders all keep the full spacing from each other.
+  const first = placeWonders(l, [], wonderRules(N), { only: ["railway", "baths"] });
+  for (const w of first.wonders) for (const o of first.wonders) {
+    if (o === w) continue;
     assert.ok(Math.hypot(torusDelta(w.x, o.x, N), torusDelta(w.y, o.y, N)) >= wonderRules(N).spacing - 1e-6, `${w.id} by ${o.id}`);
   }
 });
