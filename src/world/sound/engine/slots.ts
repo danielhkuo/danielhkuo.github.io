@@ -63,6 +63,11 @@ export function createOneShots(ctx: Ctx, cap: number): OneShots {
       }
       source.connect(g);
       g.connect(dest);
+      // Ended, both leave the graph: nothing is left for the engine to visit.
+      source.onended = () => {
+        source.disconnect();
+        g.disconnect();
+      };
       source.start(o.when, offset);
       live.push({ source, gain: g, end: o.when + (buffer.duration - offset) / rate + 0.05 });
       started++;

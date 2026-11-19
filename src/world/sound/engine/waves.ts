@@ -13,14 +13,13 @@
 // Every gain's own value is 0, so an emitter is silent before, after and without an envelope.
 
 import { hash2 } from "../../core/hash.ts";
-import { rngFor } from "../../core/rng.ts";
 import { K_SURF, SIZZLE, WAVE_BAND_Q, WAVE_HISS_TOP_HZ, WAVE_MID_Q, TAU } from "../levels.ts";
-import { ROCK } from "../schedule/waves.ts";
+import { ROCK, SHINGLE } from "../schedule/waves.ts";
 import { airCutoff, cutoffCents, dbToGain, offsetTo, panOf, panPair, southCutoff, southGain, southOf, waveGain } from "../space.ts";
-import { CONTROL_PLAYBACK } from "../synth/controls.ts";
-import { ENV_BASE, ENV_CHANNELS, envelopeName } from "../synth/envelopes.ts";
+import { ENV_BASE, ENV_CHANNELS, envelopeName, glideAt, glides, STRENGTH_DB, type Glide } from "../synth/envelopes.ts";
 import type { Pose } from "../types.ts";
 import { bandpass, gain, highpass, kRate, loop, lowpass, panner, type Ctx, type Pan } from "./graph.ts";
+import type { Hub } from "./hub.ts";
 import type { Kit } from "./kit.ts";
 import type { EmitterState, WaveStart } from "./lanes.ts";
 
@@ -37,8 +36,12 @@ interface Emitter {
   /** Where this emitter's noise comes in: a wave's own source of the Gaussian loop, and of its sign loop. */
   noiseIn: ChannelSplitterNode;
   sign: AudioParam;
+  /** The sign's way into the grain's own product: connected only for a shingle wave, so other waves leave the grain path silent. */
+  grainSign: AudioParam | null;
   signLoop: number;
   split: ChannelSplitterNode;
+  /** The four filters' detunes, written as ramps when a wave starts: low, mid, high, band (null where the hiss alone is built). */
+  detunes: (AudioParam | null)[];
   slosh: GainNode;
   chain: GainNode;
   air: BiquadFilterNode;
@@ -47,6 +50,10 @@ interface Emitter {
   sentGain: number;
   sentHz: number;
   sentPan: number;
+  /** Its wave's strength, as a gain. */
+  level: number;
+  /** Waves started on it that have not ended. While there are none it is out of the graph, and costs nothing. */
+  active: number;
 }
 
 export interface Surf {
@@ -67,12 +74,42 @@ export interface Surf {
 
 const scratch = { gain: 0, hz: 0, pan: 0 };
 
-export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: number; seed: number; n: number; at: number; hissOnly?: boolean }): Surf {
-  const rng = rngFor(opts.seed, "sound/waves/offsets");
+/** A source that has ended leaves the graph at once: an ended source left connected is still visited every quantum. */
+export const release = (e: Event): void => {
+  (e.target as AudioNode).disconnect();
+};
+
+/**
+ * Writes a glide on a filter's detune for a wave whose envelope starts at audio time `when`, `offset` seconds in:
+ * whatever was scheduled is dropped, the value the glide has at the offset is set, and straight ramps follow its points.
+ */
+function ramp(param: AudioParam | null, g: Glide, when: number, offset: number, now: number): void {
+  if (!param) return;
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(glideAt(g, offset), now);
+  let anchored = false;
+  for (let i = 0; i < g.length; i++) {
+    const t = g[i][0] - offset;
+    if (t <= 0) continue;
+    // A ramp runs from the event before it: hold the starting value until the glide's first point is due.
+    if (!anchored) {
+      const from = i > 0 ? Math.max(0, g[i - 1][0] - offset) : t;
+      param.setValueAtTime(glideAt(g, offset + from), when + from);
+      anchored = true;
+      if (i === 0) continue;
+    }
+    param.linearRampToValueAtTime(g[i][1], when + t);
+  }
+}
+
+export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; emitters: number; seed: number; n: number; at: number; hissOnly?: boolean }): Surf {
   const emitters: Emitter[] = [];
   const running: { source: AudioBufferSourceNode; end: number }[] = [];
   const shared: AudioScheduledSourceNode[] = [];
   let flutter: ChannelSplitterNode, velvetSplit: ChannelSplitterNode;
+  // Every emitter ends in one low-pass at 9 kHz (the hiss's top): one filter after their sum, not one each.
+  const top = lowpass(ctx, WAVE_HISS_TOP_HZ);
+  top.connect(out);
   const surf: Surf = {
     steps: [],
     nodes: 0,
@@ -82,7 +119,8 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
     start(w, when, now, pose, calm) {
       const e = emitters[w.emitter];
       if (!e) return;
-      emitterTargets(pose, w.x, w.y, opts.n, w.db, calm, scratch);
+      // The wave's strength is its level: 8, 4 or 0 dB down.
+      emitterTargets(pose, w.x, w.y, opts.n, w.db + STRENGTH_DB[w.strength], calm, scratch);
       // The emitter is free, so silent: its chain is set outright for the new wave.
       const g = e.chain.gain, [l, r] = panPair(scratch.pan);
       for (const p of [g, e.air.detune, e.pan.left.gain, e.pan.right.gain]) p.cancelScheduledValues(now);
@@ -97,14 +135,20 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       e.sentGain = scratch.gain;
       e.sentHz = scratch.hz;
       e.sentPan = scratch.pan;
-      const buffer = kit.buffer(envelopeName(w.kind, w.strength));
+      e.level = dbToGain(STRENGTH_DB[w.strength]);
+      // Its filters' glides, as ramps on the free emitter; then its gains, one source at its own rate.
+      const g4 = glides(w.kind, w.strength);
+      ramp(e.detunes[0], g4.low, when, w.offset, now);
+      ramp(e.detunes[1], g4.mid, when, w.offset, now);
+      ramp(e.detunes[2], g4.high, when, w.offset, now);
+      ramp(e.detunes[3], g4.band, when, w.offset, now);
+      const buffer = kit.buffer(envelopeName(w.kind));
       const env = ctx.createBufferSource();
       env.buffer = buffer;
-      env.playbackRate.value = CONTROL_PLAYBACK;
       env.connect(e.split);
-      // Offsets into a buffer are in its own seconds: a tenth of the time as played.
-      env.start(when, w.offset * CONTROL_PLAYBACK);
-      const lasts = buffer.duration / CONTROL_PLAYBACK - w.offset;
+      env.onended = release;
+      env.start(when, w.offset);
+      const lasts = buffer.duration - w.offset;
       running.push({ source: env, end: when + lasts + 0.05 });
       // The wave's noise: its own two sources, each started where a loop running since the context began would be,
       // so the streams are exactly those of loops that never stop; and stopped with the wave, so an idle emitter's
@@ -112,10 +156,19 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       const noiseBuffer = kit.buffer("waveA"), signBuffer = kit.buffer(`sign${e.signLoop}`);
       const noise = loop(ctx, noiseBuffer);
       noise.connect(e.noiseIn);
+      // The emitter joins the graph for its wave and leaves when the wave's noise ends (50 ms after its envelope has
+      // closed): an emitter left connected is visited every quantum, node by node, to find that it is silent.
+      if (e.active++ === 0) e.pan.out.connect(top);
+      noise.onended = () => {
+        noise.disconnect();
+        if (--e.active === 0) e.pan.out.disconnect();
+      };
       noise.start(when, when % noiseBuffer.duration);
       noise.stop(when + lasts + 0.05);
       const sign = loop(ctx, signBuffer);
       sign.connect(e.sign);
+      sign.onended = release;
+      if (w.kind === SHINGLE && e.grainSign) sign.connect(e.grainSign);
       sign.start(when, when % signBuffer.duration);
       sign.stop(when + lasts + 0.05);
       running.push({ source: noise, end: when + lasts + 0.1 }, { source: sign, end: when + lasts + 0.1 });
@@ -125,6 +178,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
         const plunge = kit.buffer("plunge");
         const s = loop(ctx, plunge, 0.9 + 0.2 * ((h >>> 8) / 16777216));
         s.connect(e.slosh);
+        s.onended = release;
         s.start(when, ((h & 255) / 256) * plunge.duration);
         s.stop(when + lasts + 0.05);
         running.push({ source: s, end: when + lasts + 0.1 });
@@ -136,6 +190,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
         const st = states[i], e = emitters[i];
         if (!st || st.lane < 0 || e.sentGain !== e.sentGain) continue;
         emitterTargets(pose, st.x, st.y, opts.n, st.db, calm, scratch);
+        scratch.gain *= e.level;
         const ga = Math.max(e.sentGain, 1e-3), gb = Math.max(scratch.gain, 1e-3);
         if (ga !== gb && Math.abs(20 * Math.log10(gb / ga)) >= 0.5) {
           e.chain.gain.setTargetAtTime(scratch.gain, now, 0.06);
@@ -192,19 +247,16 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
     vel.start(opts.at);
     velvetSplit = ctx.createChannelSplitter(2);
     vel.connect(velvetSplit);
-    const flut = kit.buffer("flutter");
-    const f = loop(ctx, flut, CONTROL_PLAYBACK);
-    f.start(opts.at, rng.float() * flut.duration);
-    flutter = ctx.createChannelSplitter(2);
-    f.connect(flutter);
-    shared.push(vel, f);
-    surf.nodes += 4;
+    flutter = opts.hub.flutter;
+    shared.push(vel);
+    surf.nodes += 2;
   });
 
   for (let i = 0; i < opts.emitters; i++) {
     // Each emitter in three steps of a few nodes, so no frame builds more than a handful.
     let prod: GainNode, split: ChannelSplitterNode, chain: GainNode, noiseIn: ChannelSplitterNode;
     const slosh = { node: null as GainNode | null };
+    const detunes: (AudioParam | null)[] = [null, null, null, null];
     const env = (ch: number, param: AudioParam) => split.connect(param, ch);
     surf.steps.push(() => {
       // This emitter's own stream: channel i & 1 of the Gaussian loop times sign loop i >> 1.
@@ -215,18 +267,16 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       chain = gain(ctx, 0);
       const gHigh = gain(ctx, 0);
       const high = highpass(ctx, ENV_BASE.high);
-      const top = lowpass(ctx, WAVE_HISS_TOP_HZ);
       const sizzle = gain(ctx, SIZZLE[0]);
       const depth = gain(ctx, SIZZLE[1]);
       flutter.connect(depth, i & 1);
       depth.connect(sizzle.gain);
       prod.connect(gHigh);
       gHigh.connect(high);
-      high.connect(top);
-      top.connect(sizzle);
+      high.connect(sizzle);
       sizzle.connect(chain);
       env(2, gHigh.gain);
-      env(7, high.detune);
+      detunes[2] = high.detune;
       // The envelope and the flutter move slowly: one value a render quantum is enough, and costs far less.
       for (const p of [gHigh.gain, high.detune, sizzle.gain]) kRate(p);
     });
@@ -239,33 +289,39 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       gLow.connect(low);
       low.connect(chain);
       env(0, gLow.gain);
-      env(5, low.detune);
+      detunes[0] = low.detune;
       const gMid = gain(ctx, 0);
       const mid = bandpass(ctx, ENV_BASE.mid, WAVE_MID_Q);
       prod.connect(gMid);
       gMid.connect(mid);
       mid.connect(chain);
       env(1, gMid.gain);
-      env(6, mid.detune);
+      detunes[1] = mid.detune;
       // The envelope's detunes move only as fast as a control signal does.
       for (const p of [low.detune, mid.detune, gLow.gain, gMid.gain]) kRate(p);
     });
     surf.steps.push(() => {
       const sloshGain = slosh.node as GainNode;
+      let grainSign: AudioParam | null = null;
       if (!opts.hissOnly) {
-        // Grain: the fresh noise let through in knocks. Slosh: the plunge bed, a source per rock wave.
+        // Grain: the fresh noise let through in knocks, from a product of its own that only a shingle wave's sign
+        // loop opens. Slosh: the plunge bed, a source per rock wave. For any other wave this whole path is silence.
+        const own = gain(ctx, 0);
+        noiseIn.connect(own, i & 1);
+        grainSign = own.gain;
         const sparse = gain(ctx, 0);
         velvetSplit.connect(sparse.gain, 0);
-        prod.connect(sparse);
+        own.connect(sparse);
         const gGrain = gain(ctx, 0);
         sparse.connect(gGrain);
         const band = bandpass(ctx, ENV_BASE.band, WAVE_BAND_Q);
         gGrain.connect(band);
         sloshGain.connect(band);
         band.connect(chain);
+        // One channel shapes both: a shingle wave has no slosh source, a rock wave no grain.
         env(3, gGrain.gain);
-        env(4, sloshGain.gain);
-        env(8, band.detune);
+        env(3, sloshGain.gain);
+        detunes[3] = band.detune;
         for (const p of [band.detune, gGrain.gain, sloshGain.gain]) kRate(p);
       }
       const air = lowpass(ctx, 1000);
@@ -273,8 +329,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       chain.connect(air);
       air.connect(pan.left);
       air.connect(pan.right);
-      pan.out.connect(out);
-      emitters.push({ noiseIn, sign: prod.gain, signLoop: (i >> 1) & 3, split, slosh: sloshGain, chain, air, pan, sentGain: NaN, sentHz: 1000, sentPan: 0 });
+      emitters.push({ noiseIn, sign: prod.gain, grainSign, signLoop: (i >> 1) & 3, split, detunes, slosh: sloshGain, chain, air, pan, sentGain: NaN, sentHz: 1000, sentPan: 0, level: 1, active: 0 });
       surf.nodes += opts.hissOnly ? 12 : 20;
     });
   }

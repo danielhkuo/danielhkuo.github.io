@@ -181,6 +181,54 @@ export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;
 export const BED_OFF_S = 2;
 
+// ── Rivers and falls (§3.2, §4.4, §4.5) ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The river bed's three gains (each × the square root of an energy sum) and a fall's level, small (a run of 6 rows
+ * or fewer) and tall (18 or more). Calibrated: a river 20 cells off at −33 LUFS, a small fall at 20 cells −28, a tall
+ * fall at 30 cells −22.
+ */
+export const K_RIVER = { flow: 0.007, brook: 0.007, riffle: 0.003, fallSmall: 0.46, fallTall: 0.66 };
+/** The share of a stream's energy that feeds the purl as well as the brook. */
+export const RIVER_STREAM_PURL = 0.15;
+/** The riffle: band-pass (LINEAR Q). The bed's reads of the bubble beds run at rates between these. */
+export const RIVER = { riffleHz: 1800, riffleQ: 0.6, rateLo: 0.94, rateHi: 1.06 };
+/**
+ * A fall's voice. Body: band-pass (LINEAR Q) at bodyHz[0] for a small fall, bodyHz[1] for a tall one. Hiss: high-pass
+ * (Q_FLAT_DB), breathing by ±`breathe` of its level on a slow drift (about ±2 dB). Plunge: the bubble bed under a
+ * low-pass (Q_FLAT_DB). Rumble (tall falls only): brown under a low-pass (Q_FLAT_DB). Then each part's share of the
+ * voice: body, hiss, plunge, rumble (× tallness), brook (× smallness).
+ */
+export const FALL = {
+  bodyHz: [1600, 900] as [number, number], bodyQ: 0.5, hissHz: 4000, breathe: 0.23, plungeHz: 1200, rumbleHz: 140,
+  body: 0.7, hiss: 0.2, plunge: 0.6, rumble: 1.8, brook: 0.8,
+  /** A reported fall within this many cells of a voice's place is that voice's fall; the place follows it at this time constant. */
+  near: 12, tau: 0.25,
+  /** A fall with no voice takes the spare chain when it beats the weaker sounding fall by this ratio (6 dB) for this long; the crossfade takes this long. */
+  beats: 2, forS: 0.5, crossS: 0.5,
+};
+
+// ── Bells (§3.4, §4.6) ───────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A stroke's ring and its strike, linear (their buffers peak at 0.5), the reverb send's level at the tower, and how
+ * far wind and water yield while the abbey rings, dB.
+ * Calibrated at the tower (60 cells): the peal at −21 LUFS, its momentary loudness no higher than −18.
+ */
+export const K_BELL = { ring: 0.372, strike: 0.372, send: 0.251, duck: 3 };
+/** Under reduced motion the strike is this much softer, dB. */
+export const BELL_CALM_STRIKE_DB = -4;
+/** A stroke beyond a bell's ring cap fades that bell's oldest ring at this time constant, seconds. */
+export const BELL_CAP_TAU = 0.25;
+/** The abbey's two slots sit this far either side of its place, × near; near falls from 1 to 0 between these distances, cells. */
+export const BELL_SPREAD = 0.3;
+export const BELL_NEAR: [number, number] = [60, 200];
+/** Far off (0 … 1 between these distances, cells) the slots' level and cutoff wander on the drifts: by this share (about ±4 dB) and by these cents. */
+export const BELL_FAR: [number, number] = [150, 900];
+export const BELL_WANDER = { gain: 0.45, cents: 300 };
+/** While the abbey rings, wind and water yield K_BELL.duck dB: in full once the abbey's own gain passes the upper edge, not at all under the lower. */
+export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
+
 // ── Smoothing (§3.5): time constants in seconds ──────────────────────────────────────────────────────────────────────
 
 export const TAU = {

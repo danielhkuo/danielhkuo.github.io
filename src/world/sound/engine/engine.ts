@@ -4,13 +4,17 @@
 // rendered in one go (the bench's unstepped mode, and how Firefox renders).
 
 import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
-import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU } from "../levels.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
+import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
+import { torusDelta } from "../../core/torus.ts";
 import { airCutoff, dbToGain, distanceGain, offsetTo, panOf, SMALL, southCutoff, southGain, southOf } from "../space.ts";
+import { RING_S, TENOR } from "../synth/bells.ts";
+import { IR_TAPS } from "../synth/ir.ts";
 import { TAIL_S } from "../synth/probe.ts";
-import { EMPTY_CENSUS, emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Hearing, type Pose, type Prefs } from "../types.ts";
+import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Pose, type Prefs, type Pt } from "../types.ts";
 import { bind, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
@@ -19,7 +23,11 @@ import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.
 import { buildOpenSea, buildSurfBed } from "./sea.ts";
 import { createOneShots, createPool, type OneShots, type Pool } from "./slots.ts";
 import { buildSurf, type Surf } from "./waves.ts";
-import { buildWind, type Voice } from "./wind.ts";
+import { buildBells, buildReverb, type Bells } from "./bells.ts";
+import { buildFalls, type Falls } from "./falls.ts";
+import { buildHub, type Hub } from "./hub.ts";
+import { buildRiverBed } from "./river.ts";
+import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
 export interface EngineOptions {
   touch: boolean;
@@ -39,6 +47,12 @@ export interface EngineOptions {
   hissOnly?: boolean;
   /** A calibration tone into the master chain: dBFS peak and Hz. */
   tone?: { db: number; hz: number };
+  /** The world's abbeys: the nearest one rings. None, and there are no bells. */
+  abbeys?: readonly Pt[];
+  /** In place of the abbey's hours: one stroke of the tenor under its hammer at this world time (the bench's `bell-stroke`). */
+  oneStroke?: number;
+  /** In place of any bell: one sample of 1 into the reverb's send bus at this world time, so a render is the reverb's own response (the bench's `reverb-impulse`). */
+  impulse?: number;
 }
 
 /** When a frame is: given by the bench; read from the context by the page. */
@@ -62,6 +76,12 @@ export interface EngineStats {
   /** Waves started in each lane, and the world times every wave started at (with its lane and train). */
   wavesByLane: number[];
   waves: { t: number; when: number; lane: number; train: number; kind: number; strength: number; lasts: number }[];
+  /** Every bell stroke started: its hour, bell (5 the hour's hammer) and number, its world time, the audio time it was started at, and how far into its ring (0: from its top, with its strike). */
+  strokes: { H: number; bell: number; k: number; t: number; when: number; offset: number }[];
+  /** Falls: how many were given a chain outright, how many took the spare from a weaker one, and each of those moments (audio time, the fall's place). */
+  fallsBound: number;
+  fallHandovers: number;
+  fallLog: { when: number; x: number; y: number; handover: boolean }[];
 }
 
 export interface Engine {
@@ -153,11 +173,47 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const waveStarts: WaveStart[] = [];
   const lapStarts: LapStart[] = [];
   const waveLog: EngineStats["waves"] = [];
+  const abbeys = opts.abbeys ?? [];
+  /** What the mix is told is there: the nearest abbey. */
+  const census: Census = { n, sources: abbeys.length ? [{ kind: "abbey", key: 0, x: abbeys[0].x, y: abbeys[0].y, h: 0 }] : [] };
+  let falls: Falls | null = null;
+  const fallLog: EngineStats["fallLog"] = [];
+  /** World time of the falls' last update, and the audio time of the one running. */
+  let lastFalls = NaN, fallNow = 0;
+  const noteFall = (x: number, y: number, handover: boolean) => {
+    if (fallLog.length < 500) fallLog.push({ when: fallNow, x, y, handover });
+  };
+  let bells: Bells | null = null;
+  let bellsBuilt = false;
+  const strokeLog: EngineStats["strokes"] = [];
+  let impulsed = false;
+  const bellSource: CueSource = opts.impulse !== undefined
+    ? { kind: "bell", lookBack: 0, cues() {} }
+    : opts.oneStroke === undefined
+    ? { kind: "bell", cues: (a, b, out) => bellCues(opts.seed, a, b, out), lookBack: LONGEST_RING }
+    : {
+      kind: "bell", lookBack: LONGEST_RING,
+      cues(a, b, out) {
+        const t = opts.oneStroke as number;
+        if (t >= a && t < b) out.push({ t, kind: "bell", key: "one", lasts: RING_S[TENOR], soft: true, H: 0, bell: HAMMER, k: 0, take: 0, ringDb: 0, strikeDb: 5 });
+      },
+    };
   /** Voices built when they can be heard and let go when they cannot: the surf bed and the open sea. */
+  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: { hub: Hub; seed: number; at: number }) => Voice;
+  const demand = (name: string, gains: number[], make: Make, out: AudioNode, on: number, off: number, surfKit: boolean, riverKit = false) => ({
+    name, gains, make, out, on, off, surfKit, riverKit, voice: null as Voice | null, built: false, quietSince: NaN,
+  });
   const beds = [
-    { name: "bed", gains: [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], make: buildSurfBed, voice: null as Voice | null, built: false, quietSince: NaN },
-    { name: "open", gains: [T.OPEN], make: buildOpenSea, voice: null as Voice | null, built: false, quietSince: NaN },
+    demand("bed", [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], buildSurfBed, master.bus.water, BED_ON, BED_OFF, true),
+    demand("open", [T.OPEN], buildOpenSea, master.bus.water, BED_ON, BED_OFF, true),
+    demand("river", [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE], buildRiverBed, master.bus.water, BED_ON, BED_OFF, true, true),
+    // The whistles: only when the dragon is going fast enough for them to be heard (they are 26 dB under the rush at
+    // cruise). On above 30 % of their fullest (s > 1.1), off after two seconds under 25 %.
+    // The whoosh: only round a turn.
+    demand("whoosh", [T.W_GAIN], buildWhoosh, master.windIn, BED_ON, BED_OFF, false),
+    ...(touch ? [] : [demand("whistles", [T.D_GAIN], buildWhistles, master.windIn, 0.3 * K_WIND.d, 0.25 * K_WIND.d, false)]),
   ];
+  let hub: Hub | null = null;
   let toneNodes: AudioScheduledSourceNode[] = [];
 
   /** What `enable` asked for, done by the next frame that can (it needs that frame's targets). */
@@ -248,8 +304,14 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const build = (now: number) => {
     if (opts.tone) return;
     const base = kit.ready("noise") && kit.ready("controls");
+    if (base && !hub) {
+      hub = buildHub(ctx, kit, opts.seed, now);
+      nodes += 6;
+      work |= WORK.build;
+      if (!offline) return;
+    }
     if (!opts.hissOnly) {
-      if (!wind && base) wind = buildWind(ctx, kit, master.windIn, { touch, seed: opts.seed, at: now });
+      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now });
       if (wind && !windBuilt) {
         if (stepVoice(wind)) {
           windBuilt = true;
@@ -259,13 +321,33 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         if (!offline) return;
       }
     } else windBuilt = true;
-    if (!base || !kit.ready("surf") || opts.noSurf) return;
-    if (!surf && !opts.beds) surf = buildSurf(ctx, kit, master.bus.water, { emitters: touch ? 4 : 8, seed: opts.seed, n, at: now, hissOnly: opts.hissOnly });
+    if (!base || !hub) return;
+    const surfReady = kit.ready("surf") && !opts.noSurf;
+    if (surfReady && !surf && !opts.beds) surf = buildSurf(ctx, kit, master.bus.water, { hub, emitters: touch ? 4 : 8, seed: opts.seed, n, at: now, hissOnly: opts.hissOnly });
     if (surf && !surfBuilt) {
       if (stepVoice(surf)) {
         surfBuilt = true;
         nodes += surf.nodes;
         pool = createPool(ctx, touch ? 6 : 12, master.bus.water);
+      }
+      if (!offline) return;
+    }
+    // The falls: nothing is built until one is heard (each chain is made when its first fall is bound).
+    if (!falls && !opts.noSurf && kit.ready("surf") && kit.ready("river")) falls = buildFalls(ctx, kit, master.bus.water, { hub, touch, n, seed: opts.seed, onBind: noteFall });
+    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) {
+      bells = buildBells(ctx, kit, master, { hub, touch });
+      // The reverb with them: its response is the first thing the bells need.
+      bells.steps.unshift(() => {
+        nodes += buildReverb(ctx, kit, master).length;
+      });
+    }
+    if (bells && !bellsBuilt) {
+      if (stepVoice(bells)) {
+        bellsBuilt = true;
+        bindings.push(...bells.bindings);
+        nodes += bells.nodes;
+        // From here the strokes are scheduled: rings already sounding are joined in progress.
+        sources.push(bellSource);
       }
       if (!offline) return;
     }
@@ -282,16 +364,18 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
 
   /** Builds a bed when one of its gains can be heard, and lets it go after two seconds when none can. */
   const tendBeds = (t: number, now: number) => {
-    if (opts.hissOnly || opts.noSurf || !kit.ready("surf") || !kit.ready("noise") || !kit.ready("controls")) return;
+    if (opts.hissOnly || !hub || !kit.ready("noise") || !kit.ready("controls")) return;
     for (const b of beds) {
+      if (b.surfKit && (opts.noSurf || !kit.ready("surf"))) continue;
+      if (b.riverKit && !kit.ready("river")) continue;
       let loud = false, quiet = true;
       for (const i of b.gains) {
-        if (targets[i] > BED_ON) loud = true;
-        if (targets[i] >= BED_OFF) quiet = false;
+        if (targets[i] > b.on) loud = true;
+        if (targets[i] >= b.off) quiet = false;
       }
       if (!b.voice) {
         if (loud) {
-          b.voice = b.make(ctx, kit, master.bus.water, { seed: opts.seed, at: now });
+          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
           b.built = false;
           b.quietSince = NaN;
         }
@@ -375,7 +459,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         // A voice's first values: its level gains are still at 0 (or the master is), so nothing is heard to jump.
         for (let k = 0; k < b.params.length; k++) b.params[k].setValueAtTime(b.map(v, k), now);
       } else {
-        const tau = first ? TAU.late : (v > b.sent ? rule.up : rule.down) * (rule.unit === "pan" && calm ? 2 : 1);
+        const tau = first && !b.prompt ? TAU.late : (first || v > b.sent ? rule.up : rule.down) * (rule.unit === "pan" && calm ? 2 : 1);
         for (let k = 0; k < b.params.length; k++) b.params[k].setTargetAtTime(b.map(v, k), now, tau);
       }
       b.sent = v;
@@ -383,7 +467,32 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     }
   };
 
-  const play = (d: Due, worldNow: number, now: number, lookahead: number) => {
+  /** The abbey the mix hears: the nearest. */
+  const nearestAbbey = (pose: Pose) => {
+    if (abbeys.length < 2) return;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < abbeys.length; i++) {
+      const dx = torusDelta(pose.x, abbeys[i].x, n), dy = torusDelta(pose.y, abbeys[i].y, n);
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    census.sources[0].x = abbeys[best].x;
+    census.sources[0].y = abbeys[best].y;
+  };
+
+  const strike = (cue: Cue, when: number, offset: number, calm: boolean) => {
+    // Out of earshot (beyond 1500 cells the abbey's gain is nothing), a stroke is not started at all.
+    if (!bells || !(targets[T.BELL_GAIN] > 1e-4)) return;
+    const started = bells.stroke(cue, when, offset, calm);
+    if (started === 0) return;
+    strokeLog.push({ H: cue.H ?? 0, bell: cue.bell ?? 0, k: cue.k ?? 0, t: cue.t, when, offset });
+    if (started === 2) onsets.push(when + PAD + LIMITER_DELAY_S);
+  };
+
+  const play = (d: Due, worldNow: number, now: number, lookahead: number, calm: boolean) => {
     const cue = d.cue;
     let when: number, offset = 0;
     if (d.rejoin) {
@@ -401,6 +510,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     } else if (cue.kind === "tail" && kit.ready("probe")) {
       const ok = shots.play(kit.buffer("tail"), master.bus.moments, { when, offset, gain: dbToGain(TAIL_DB), fadeIn: d.rejoin });
       if (ok && !d.rejoin) onsets.push(when + PAD + LIMITER_DELAY_S);
+    } else if (cue.kind === "bell") {
+      strike(cue, when, offset, calm);
     }
   };
 
@@ -454,7 +565,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         const v = hold(now);
         falling = false;
         work |= WORK.enable;
-        mix(pose, hearing, EMPTY_CENSUS, prefs, memory, targets);
+        nearestAbbey(pose);
+        mix(pose, hearing, census, prefs, memory, targets);
         lastMix = pose.t;
         const quiet = v < 1e-3;
         if (quiet) apply(now, prefs.calm, true);
@@ -465,12 +577,26 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       }
       if (!live) return;
 
+      if (opts.impulse !== undefined && bellsBuilt && !impulsed && o === o) {
+        impulsed = true;
+        const click = ctx.createBuffer(1, 8, ctx.sampleRate);
+        click.getChannelData(0)[0] = 1;
+        const src = ctx.createBufferSource();
+        src.buffer = click;
+        src.connect(master.send);
+        const at = Math.max(now, opts.impulse + o);
+        src.start(at);
+        // The response's early taps are single reflections, sharp by design: each is an onset.
+        for (const tap of IR_TAPS) onsets.push(at + tap[0] + LIMITER_DELAY_S);
+      }
+
       // The scheduler, every frame.
       if (sources.length) {
         due.length = 0;
         scheduler.pass(pose.t, dt, look, due);
-        for (const d of due) play(d, pose.t, now, look);
+        for (const d of due) play(d, pose.t, now, look, prefs.calm);
         shots.prune(now);
+        bells?.prune(now);
       }
 
       // Thirty times a second each, on alternate turns so no frame carries both: the mix and its sends; and the
@@ -481,10 +607,17 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (mixDue && (offline || !wavesDue || lastTurn !== 0)) {
         lastTurn = 0;
         work |= WORK.mix;
-        mix(pose, hearing, EMPTY_CENSUS, prefs, memory, targets);
+        nearestAbbey(pose);
+        mix(pose, hearing, census, prefs, memory, targets);
         lastMix = pose.t;
         tendBeds(pose.t, now);
         apply(now, prefs.calm, false);
+        if (falls) {
+          const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
+          lastFalls = pose.t;
+          fallNow = now;
+          sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
+        }
         if (!wavesDue || !offline) return;
       }
       if (wavesDue && surf) {
@@ -519,6 +652,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       falling = true;
       shots.stopAll(now + 0.25);
       surf?.stopAll(now + 0.25);
+      bells?.stopAll(now + 0.25);
+      falls?.stopAll(now + 0.25);
+      lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
       lastT = NaN;
@@ -536,6 +672,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       falling = true;
       shots.stopAll(now + TAU.hideRamp + 0.01);
       surf?.stopAll(now + TAU.hideRamp + 0.01);
+      bells?.stopAll(now + TAU.hideRamp + 0.01);
+      falls?.stopAll(now + TAU.hideRamp + 0.01);
+      lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
       lastT = NaN;
@@ -552,6 +691,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       falling = false;
       shots.stopAll(now);
       surf?.stopAll(now);
+      bells?.stopAll(now);
+      falls?.stopAll(now);
+      lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
       lastT = NaN;
@@ -560,7 +702,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     },
     laneMask: () => lanes.mask(),
     work: () => work,
-    built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && beds.every((b) => !b.voice || b.built),
+    built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && (abbeys.length === 0 || opts.beds === true || bellsBuilt) && beds.every((b) => !b.voice || b.built),
     setBus(bus, on) {
       busOn[bus] = on;
       const now = ctx.currentTime;
@@ -568,7 +710,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       else for (const b of bindings) if (b.i === T.DUCK) for (let k = 0; k < b.params.length; k++) b.params[k].setTargetAtTime(b.map(targets[T.DUCK] || 1, k), now, 0.03);
     },
     stats() {
-      return { limiterMinDb: limiterMin, onsets: [...onsets], oneShots: shots.started, dropped: shots.dropped, nodes, sends, wavesByLane: [...lanes.started], waves: [...waveLog] };
+      return { limiterMinDb: limiterMin, onsets: [...onsets], oneShots: shots.started, dropped: shots.dropped, nodes, sends, wavesByLane: [...lanes.started], waves: [...waveLog], strokes: [...strokeLog], fallsBound: falls?.tracker.bound ?? 0, fallHandovers: falls?.tracker.handovers ?? 0, fallLog: [...fallLog] };
     },
     dispose() {
       if (disposed) return;
@@ -583,7 +725,10 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
       }
       shots.stopAll(now);
+      bells?.stopAll(now);
+      falls?.stopAll(now);
       surf?.end(now);
+      for (const src of hub?.sources ?? []) src.stop(now);
       for (const b of beds) for (const src of b.voice?.sources ?? []) {
         try {
           src.stop(now);
@@ -631,13 +776,13 @@ const KIT_MS = 0.05;
 /** The kit outlives engines (its buffers are not tied to a context), as long as the sample rate is the same. */
 let kept: Kit | null = null;
 
-export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; arm?: string }): Runtime {
+export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly Pt[]; arm?: string }): Runtime {
   if (!kept || kept.sampleRate !== ctx.sampleRate) {
     kept?.dispose();
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, noSurf: opts.arm === "nosurf" });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, noSurf: opts.arm === "nosurf" });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;

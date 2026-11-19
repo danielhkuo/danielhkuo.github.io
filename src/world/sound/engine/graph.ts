@@ -178,6 +178,8 @@ export interface Binding {
   map(v: number, k: number): number;
   /** The target last sent; NaN before the first. */
   sent: number;
+  /** Its first value is approached at the target's own pace, not eased in slowly as a late voice's is. */
+  prompt?: boolean;
 }
 
 export function bind(i: number, params: AudioParam[], map: (v: number, k: number) => number = (v) => v): Binding {

@@ -12,13 +12,24 @@ export interface BedOptions {
   /** Radii, metres: drawn from a power law (exponent −1.5), many small and few large. */
   rMin: number;
   rMax: number;
+  /** Seconds each bubble takes to come up to its level (half a millisecond when absent). */
+  rise?: number;
 }
 
 export const PLUNGE: BedOptions = { seconds: 7.9, rate: 1500, rMin: 0.001, rMax: 0.008 };
+/** The brook: few bubbles, each heard on its own (discrete, playful). */
+export const BROOK: BedOptions = { seconds: 9.7, rate: 60, rMin: 0.0008, rMax: 0.005, rise: 0.006 };
+/** The river's purl: many small bubbles, a continuous sound. */
+export const FLOW: BedOptions = { seconds: 13.3, rate: 400, rMin: 0.0006, rMax: 0.003, rise: 0.003 };
+
+/** A bubble's own frequency, Hz, for its radius in metres (Minnaert). */
+export function bubbleHz(r: number): number {
+  return 3.26 / r;
+}
 
 /** Adds one bubble of radius r (m) starting at sample `at`, wrapping round `out` when `wrapRound`. */
-function bubble(out: Float32Array, sampleRate: number, at: number, r: number, amp: number, wrapRound: boolean): void {
-  const f0 = 3.26 / r;
+function bubble(out: Float32Array, sampleRate: number, at: number, r: number, amp: number, wrapRound: boolean, riseS = 0.0005): void {
+  const f0 = bubbleHz(r);
   const d = 0.043 * f0 + 0.0014 * Math.pow(f0, 1.5);
   // Rings until 60 dB down.
   const len = Math.min(Math.ceil((6.9 / d) * sampleRate), wrapRound ? out.length : out.length - at);
@@ -29,16 +40,17 @@ function bubble(out: Float32Array, sampleRate: number, at: number, r: number, am
     // The pitch rises as the bubble nears the surface.
     const f = f0 * (1 + 0.1 * d * t);
     phase += (2 * Math.PI * f) / sampleRate;
-    // A 0.5 ms rise keeps the start from being a step.
-    const rise = t < 0.0005 ? t / 0.0005 : 1;
+    // A short rise keeps the start from being a step. (Heard alone, as a brook's bubbles are, each needs a few
+    // milliseconds, eased, or its start is a tick: the plunge and the laps, heard in a crowd, keep the short one.)
+    const rise = t >= riseS ? 1 : riseS > 0.001 ? 0.5 - 0.5 * Math.cos((Math.PI * t) / riseS) : t / riseS;
     const v = amp * rise * Math.sin(phase) * Math.exp(-d * t);
     const j = at + i;
     out[wrapRound ? j % n : j] += v;
   }
 }
 
-/** A seamless bed of bubbles, levelled to an RMS of 0.1. */
-export function bubbleBed(o: BedOptions, sampleRate: number, rng: Rng): Float32Array {
+/** A seamless bed of bubbles, levelled to an RMS of 0.1. `each` is told every bubble's radius (m) and amplitude as it is added. */
+export function bubbleBed(o: BedOptions, sampleRate: number, rng: Rng, each?: (r: number, amp: number) => void): Float32Array {
   const n = Math.round(o.seconds * sampleRate);
   const out = new Float32Array(n);
   const count = Math.round(o.seconds * o.rate);
@@ -46,7 +58,9 @@ export function bubbleBed(o: BedOptions, sampleRate: number, rng: Rng): Float32A
   const a = Math.pow(o.rMin, -0.5), b = Math.pow(o.rMax, -0.5);
   for (let i = 0; i < count; i++) {
     const r = Math.pow(a + (b - a) * rng.float(), -2);
-    bubble(out, sampleRate, rng.int(n), r, Math.pow(r / o.rMax, 1.5) * (0.5 + rng.float()), true);
+    const amp = Math.pow(r / o.rMax, 1.5) * (0.5 + rng.float());
+    bubble(out, sampleRate, rng.int(n), r, amp, true, o.rise);
+    each?.(r, amp);
   }
   let s2 = 0;
   for (let i = 0; i < n; i++) s2 += out[i] * out[i];

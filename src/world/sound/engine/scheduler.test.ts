@@ -121,3 +121,21 @@ test("after a clear every sound that should still be going is started once more"
   s.pass(t + 2 / 60, 1 / 60, 0.25, more);
   assert.ok(!more.some((d) => d.cue.kind === "tail"));
 });
+
+test("a source that joins late (its buffers arrived) joins what is sounding, once, without a gap for the others", () => {
+  const long: CueSource = { kind: "long", lookBack: 10, cues: (a, b, out) => {
+    for (let k = Math.ceil(a / 3); k * 3 < b; k++) out.push({ t: k * 3, kind: "long", key: `${k}`, lasts: 10 });
+  } };
+  const sources: CueSource[] = [];
+  const s = createScheduler(sources);
+  const due: Due[] = [];
+  for (let t = 0; t < 20; t += 1 / 60) s.pass(t, 1 / 60, 0.25, due);
+  assert.equal(due.length, 0);
+  sources.push(long);
+  s.pass(20, 1 / 60, 0.25, due);
+  // Sounding at 20: the strokes of 12, 15 and 18 (9 ended at 19).
+  assert.deepEqual(due.map((d) => [d.cue.key, d.rejoin]), [["4", true], ["5", true], ["6", true]]);
+  for (let t = 20 + 1 / 60; t < 30; t += 1 / 60) s.pass(t, 1 / 60, 0.25, due);
+  assert.deepEqual(due.map((d) => d.cue.key), ["4", "5", "6", "7", "8", "9", "10"]);
+  assert.ok(due.slice(3).every((d) => !d.rejoin));
+});

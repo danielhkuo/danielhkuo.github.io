@@ -7,6 +7,7 @@
 //   node scripts/world-sound.mjs --mode ahead        (the unstepped render: the whole timeline scheduled, then one render)
 //   node scripts/world-sound.mjs --browser firefox   (headless Firefox; it has no stepped mode, so it renders ahead)
 //   node scripts/world-sound.mjs --set K_WIND.a=0    (calibration: try a level constant, e.g. to solo a layer)
+//   node scripts/world-sound.mjs --mode ahead --best 5   (the audio thread's share, least of five renders; printed last)
 //
 // The bench page reports through window.__sound:
 //   scenes: { name: string; seconds: number; about: string }[]
@@ -32,7 +33,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { scenes: [], rate: 48000, port: 4372, out: ".cache/world-sound", origin: null, mode: null, browser: "chrome", set: {} };
+  const o = { scenes: [], rate: 48000, port: 4372, out: ".cache/world-sound", origin: null, mode: null, browser: "chrome", set: {}, best: 1 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--scene") o.scenes.push(argv[++i]);
@@ -42,6 +43,7 @@ function parseArgs(argv) {
     else if (a === "--origin") o.origin = argv[++i].replace(/\/?$/, "/");
     else if (a === "--mode") o.mode = argv[++i];
     else if (a === "--browser") o.browser = argv[++i];
+    else if (a === "--best") o.best = Number(argv[++i]);
     else if (a === "--set") {
       // Calibration: --set K_WIND.a=0 tries a level constant for this run only.
       const [k, v] = argv[++i].split("=");
@@ -112,7 +114,14 @@ try {
     const t0 = Date.now();
     let result;
     try {
-      result = await page.evaluate((name, o) => window.__sound.render(name, o), scene.name, { sampleRate: opts.rate, ...(opts.mode ? { mode: opts.mode } : {}), ...(Object.keys(opts.set).length ? { set: opts.set } : {}) });
+      const ask = { sampleRate: opts.rate, ...(opts.mode ? { mode: opts.mode } : {}), ...(Object.keys(opts.set).length ? { set: opts.set } : {}) };
+      result = await page.evaluate((name, o) => window.__sound.render(name, o), scene.name, ask);
+      // --best N: the audio thread's share is wall time over duration, so a busy machine inflates it. Render again
+      // and keep the least.
+      for (let k = 1; k < opts.best; k++) {
+        const again = await page.evaluate((name, o) => window.__sound.render(name, o).then((r) => r.stats.audioThreadShare), scene.name, ask);
+        if (again < result.stats.audioThreadShare) result.stats.audioThreadShare = again;
+      }
     } catch (e) {
       // One scene failing does not stop the run.
       failed = true;
@@ -135,12 +144,31 @@ try {
         `lim ${typeof row.stats?.limiterMinDb === "number" ? row.stats.limiterMinDb.toFixed(3) : "?"}  hp200 −${row.smallSpeakerLossLu}  (${row.stats?.mode ?? "?"}, ${row.renderMs} ms)${row.fails.length ? `  FAIL: ${row.fails.join("; ")}` : ""}`,
     );
     const st = row.stats ?? {};
+    if (st.strokes?.length) {
+      // Bells: strokes started from their top and joined in progress; the hour's count; any stroke started twice
+      // without a stop between (a mute or a hide stops everything, so a stroke may then be joined again, once).
+      const hour = st.strokes.filter((b) => b.bell === 5);
+      const hours = [...new Set(hour.map((b) => b.H))].map((H) => `hour ${H}: ${new Set(hour.filter((b) => b.H === H).map((b) => b.k)).size} strokes`);
+      const seen = new Map();
+      let doubled = 0;
+      for (const b of st.strokes) {
+        const key = `${b.H}:${b.bell}:${b.k}`;
+        const before = seen.get(key);
+        // A ring is at most 10 s: a second start while the first could still sound is a double unless everything was stopped between.
+        // (A stroke is scheduled up to 0.3 s before it sounds: one started just after a hide began was stopped by it.)
+        if (before !== undefined && b.at - before < 10 && !(st.stops ?? []).some((t) => t > before - 0.3 && t <= b.at)) doubled++;
+        seen.set(key, b.at);
+      }
+      console.log(`    bell strokes: ${st.strokes.filter((b) => b.offset === 0).length} struck, ${st.strokes.filter((b) => b.offset > 0).length} joined in progress; ${hours.join(", ") || "no hour"}; doubled ${doubled}`);
+    }
+    if (st.falls?.length) console.log(`    falls: ${st.fallsBound} given a chain, ${st.fallHandovers} took the spare (${st.falls.map((f) => `${f.handover ? "handover" : "bound"} at ${f.at} s`).join(", ")})`);
     if (st.wavesPerMinute?.length) console.log(`    waves a minute, by lane: ${st.wavesPerMinute.join(", ")}; closest two of one train in a lane: ${st.closestTrainGap === null ? "—" : st.closestTrainGap.toFixed(2)} s`);
     if (typeof st.repeatMax === "number") console.log(`    repeatMax ${st.repeatMax.toFixed(4)} over ${st.repeatPairs} pairs of ${st.repeatWaves} waves; control (one wave copied over another) ${st.repeatControl?.toFixed(4)}`);
     for (const m of row.marks ?? []) {
       console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  rms ${m.rmsDb} dBFS  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB${m.lowShares ? `  <60 Hz ${(m.lowShares[0] * 100).toFixed(1)} % 60–120 ${(m.lowShares[1] * 100).toFixed(1)} %` : ""}`);
     }
   }
+  if (opts.best > 1 || opts.mode === "ahead") console.log(`audio thread, % of real time: ${rows.map((r) => `${r.file.replace(".wav", "")} ${((r.stats?.audioThreadShare ?? 0) * 100).toFixed(2)}`).join(", ")}`);
   writeFileSync(path.join(opts.out, "render.json"), JSON.stringify({ origin, browser: opts.browser, mode: opts.mode, rows: rows.map(({ file, renderMs }) => ({ file, renderMs })), broken, errors }, null, 2));
   // The contact sheet and report.json: the checker writes them from the WAVs now on disk.
   execFileSync(process.execPath, [fileURLToPath(new URL("./world-sound-check.mjs", import.meta.url)), opts.out], { stdio: "ignore" });

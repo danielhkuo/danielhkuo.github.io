@@ -1,15 +1,16 @@
 // The mix: the dragon's pose, what the ear heard, the point sources alive and the listener's choices → one array of
 // targets for the graph (design §3). Pure: the only state is the small `memory` handed in and out.
 //
-// This file holds the wind, the whoosh, the world bus and the volume. The beds, slots and the bell duck join it with
-// their phases.
+// This file holds the wind, the whoosh, the surf and river beds, the abbey and its duck, the world bus and the volume.
 
 import {
-  A_CUT_HZ, A_CUT_RANGE, A_EXP, A_TILT_DB, B_HZ, B_RANGE, C_FROM, C_LOW, C_PUSH, D_FROM, E_REST, BED_SPREAD, K_SURF, K_WIND, W_BLOOM_FULL, W_BLOOM_TAU, W_FLOOR, W_GATE, W_HOLD, W_HZ, W_PAN, W_RISE, WIND_FLOOR, WIND_SLEW,
+  A_CUT_HZ, A_CUT_RANGE, A_EXP, A_TILT_DB, B_HZ, B_RANGE, BELL_DUCK_EDGES_DB, BELL_FAR, BELL_NEAR, BELL_SPREAD, C_FROM, C_LOW, C_PUSH, D_FROM, E_REST, BED_SPREAD, K_BELL, K_RIVER, K_SURF, K_WIND, RIVER_STREAM_PURL, W_BLOOM_FULL, W_BLOOM_TAU, W_FLOOR, W_GATE, W_HOLD, W_HZ, W_PAN, W_RISE, WIND_FLOOR, WIND_SLEW,
   WORLD_BOOST_DB, WORLD_REST_DB,
 } from "./levels.ts";
 import { volumeGain } from "./prefs.ts";
-import { airCutoff, clamp, dbToGain, ease, PAN, smoothstep } from "./space.ts";
+import { torusDelta } from "../core/torus.ts";
+import { bellDuck } from "./schedule/bells.ts";
+import { airCutoff, BELLS, clamp, dbToGain, distanceGain, ease, gainToDb, PAN, panOf, reverbSend, smoothstep, southCutoff, southGain, southOf } from "./space.ts";
 import type { Census, Hearing, Pose, Prefs } from "./types.ts";
 
 /** Cruise speed, cells a second: s = speed / CRUISE. */
@@ -47,7 +48,21 @@ export const T = {
   BED_PAN_B: 22,
   /** The open sea's wash. */
   OPEN: 23,
-  COUNT: 24,
+  /** The abbey: its slots' gain and air (Hz), their two pans, the reverb send, and how far off it is (0 near … 1 far: the wander's depth). */
+  BELL_GAIN: 24,
+  BELL_HZ: 25,
+  BELL_PAN_A: 26,
+  BELL_PAN_B: 27,
+  BELL_SEND: 28,
+  BELL_FAR: 29,
+  /** The river bed: the purl, the brook, the riffle; its air (Hz) and its two halves' pans. */
+  RIVER_FLOW: 30,
+  RIVER_BROOK: 31,
+  RIVER_RIFFLE: 32,
+  RIVER_AIR_HZ: 33,
+  RIVER_PAN_A: 34,
+  RIVER_PAN_B: 35,
+  COUNT: 36,
 } as const;
 
 /** How a target is sent: its unit decides how "moved" is measured (§3.5). */
@@ -86,6 +101,16 @@ export const SEND: readonly SendRule[] = (() => {
   r[T.BED_AIR_HZ] = { unit: "hz", by: 50, up: 0.1, down: 0.1 };
   r[T.BED_PAN_A] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
   r[T.BED_PAN_B] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
+  for (const i of [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE]) r[i] = gain(0.5, 0.25);
+  r[T.RIVER_AIR_HZ] = { unit: "hz", by: 50, up: 0.1, down: 0.1 };
+  r[T.RIVER_PAN_A] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
+  r[T.RIVER_PAN_B] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
+  r[T.BELL_GAIN] = gain(0.5, 0.06);
+  r[T.BELL_HZ] = { unit: "hz", by: 50, up: 0.1, down: 0.1 };
+  r[T.BELL_PAN_A] = { unit: "pan", by: 0.02, up: 0.06, down: 0.06 };
+  r[T.BELL_PAN_B] = { unit: "pan", by: 0.02, up: 0.06, down: 0.06 };
+  r[T.BELL_SEND] = gain(0.5, 0.25);
+  r[T.BELL_FAR] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
   return r;
 })();
 
@@ -154,7 +179,6 @@ export function windSpeed(speed: number, calm: boolean): number {
 export function mix(
   pose: Pose, hearing: Hearing, census: Census, prefs: Prefs, memory: MixMemory = newMemory(), targets: Float32Array = newTargets(),
 ): { targets: Float32Array; memory: MixMemory } {
-  void census;
   const calm = prefs.calm;
   const speed = windSpeed(pose.speed, calm);
   const first = memory.t !== memory.t;
@@ -192,7 +216,40 @@ export function mix(
 
   targets[T.MASTER] = volumeGain(prefs.volume);
   targets[T.WORLD] = dbToGain(WORLD_BOOST_DB * clamp((speed - 1) / 0.8, 0, 1)) * dbToGain(WORLD_REST_DB * rest);
-  targets[T.DUCK] = 1;
+
+  // The abbey (§3.1, §3.4): heard from the dragon; its bells hang about as high as the dragon flies, so only the
+  // ground between counts. Wind and water yield while it rings, and only when it is near.
+  let abbey = -1;
+  for (let i = 0; i < census.sources.length; i++) {
+    if (census.sources[i].kind === "abbey") {
+      abbey = i;
+      break;
+    }
+  }
+  if (abbey < 0) {
+    targets[T.DUCK] = 1;
+    targets[T.BELL_GAIN] = 0;
+    targets[T.BELL_HZ] = 1000;
+    targets[T.BELL_PAN_A] = 0;
+    targets[T.BELL_PAN_B] = 0;
+    targets[T.BELL_SEND] = 0;
+    targets[T.BELL_FAR] = 0;
+  } else {
+    const src = census.sources[abbey];
+    const dx = torusDelta(pose.x, src.x, census.n), dy = torusDelta(pose.y, src.y, census.n);
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const b = southOf(dx, dy);
+    const g = distanceGain(BELLS, d) * southGain(b);
+    targets[T.BELL_GAIN] = g;
+    targets[T.BELL_HZ] = airCutoff(d) * southCutoff(b);
+    const p = panOf(dx, dy, calm), spread = BELL_SPREAD * (1 - smoothstep(BELL_NEAR[0], BELL_NEAR[1], d));
+    targets[T.BELL_PAN_A] = clamp(p - spread, -1, 1);
+    targets[T.BELL_PAN_B] = clamp(p + spread, -1, 1);
+    targets[T.BELL_SEND] = reverbSend(K_BELL.send, BELLS, d);
+    targets[T.BELL_FAR] = smoothstep(BELL_FAR[0], BELL_FAR[1], d);
+    const a = g > 0 ? smoothstep(BELL_DUCK_EDGES_DB[0], BELL_DUCK_EDGES_DB[1], gainToDb(g)) : 0;
+    targets[T.DUCK] = dbToGain(-K_BELL.duck * a * bellDuck(pose.t));
+  }
 
   const a = K_WIND.a * Math.pow(s, A_EXP);
   const tilt = calm ? 0 : A_TILT_DB * bank * side;
@@ -243,6 +300,25 @@ export function mix(
   const dMean = near > 0 ? (eb * hearing.surf[0].d + es * hearing.surf[1].d + er * hearing.surf[2].d) / near : 1000;
   targets[T.BED_AIR_HZ] = airCutoff(dMean);
   targets[T.OPEN] = K_SURF.open * smoothstep(0.3, 0.9, hearing.sea);
+
+  // The river bed (§3.2): the purl of wide water, the brook of streams (and a little of every river), the riffle of
+  // white water. Direction and spread as the surf bed's.
+  const er2 = hearing.river.e, est = hearing.stream.e, ewh = hearing.white.e;
+  // (A stream has a little of the purl too: a brook's bubbles alone leave dead silence between them.)
+  targets[T.RIVER_FLOW] = K_RIVER.flow * Math.sqrt(er2 + RIVER_STREAM_PURL * est);
+  targets[T.RIVER_BROOK] = K_RIVER.brook * Math.sqrt(est + 0.3 * er2);
+  targets[T.RIVER_RIFFLE] = K_RIVER.riffle * Math.sqrt(ewh);
+  const ef2 = er2 + est + ewh;
+  let rp = 0, rhalf = BED_SPREAD, rd = 1000;
+  if (ef2 > 0) {
+    const dx = hearing.river.dx + hearing.stream.dx + hearing.white.dx, dy = hearing.river.dy + hearing.stream.dy + hearing.white.dy;
+    rp = (PAN * dx) / ef2;
+    rhalf = BED_SPREAD * smoothstep(0.4, 0.85, 1 - Math.sqrt(dx * dx + dy * dy) / ef2);
+    rd = (er2 * hearing.river.d + est * hearing.stream.d + ewh * hearing.white.d) / ef2;
+  }
+  targets[T.RIVER_PAN_A] = clamp(rp - rhalf, -1, 1);
+  targets[T.RIVER_PAN_B] = clamp(rp + rhalf, -1, 1);
+  targets[T.RIVER_AIR_HZ] = airCutoff(rd);
 
   return { targets, memory };
 }

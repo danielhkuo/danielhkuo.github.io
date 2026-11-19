@@ -8,12 +8,13 @@
 //                   off), so a shore weighs the same whichever way it runs;
 //   the coast scan  the land grid (8 cells a node) in a disc of 56 nodes: the coast the bake does not speak for.
 //
-// Rivers and falls (river, stream, white, falls) join the bake scan with their phase. No allocation per frame.
+// The bake scan also hears fresh water: every river sample by its class (a wide river, a stream, white water), and the
+// falls, each a run of fall-toned samples down the frame, with its foot's place. No allocation per frame.
 
 import { hash2 } from "../core/hash.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { isBuilt, MATERIAL as M } from "../look/materials.ts";
-import { emptyHearing, type Area, type Hearing, type Pose, type ShorePoint } from "./types.ts";
+import { emptyHearing, MAX_FALLS, type Area, type FallPoint, type Hearing, type Pose, type ShorePoint } from "./types.ts";
 
 /** What the ear layer kept from the frame the live layers saw. */
 export interface Seen {
@@ -90,14 +91,38 @@ export function sectorOf(dx: number, dy: number): number {
   return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
 }
 
+/** The tone from which river water is falling (bake/chunk.ts's FALL_TONE) and the height lost a pixel from which a reach is steep (live/water.ts's STEEP): restated, so the ear's worker need not carry either file; a test holds them equal. */
+export const EAR_FALL_TONE = 14;
+export const EAR_STEEP = 5;
+/** Fall samples are grouped by columns this many pixels wide (a power of two); a group runs on down the frame while its next sample is within FALL_GAP rows. */
+const FALL_SHIFT = 4;
+const FALL_GAP = 6;
+const FALL_COLS = 64;
+/** Falls kept while a pass runs (the heaviest are reported). */
+const FALL_KEEP = 16;
+/** What a river sample stands for, cells², and the distance inside which fresh water counts in full. */
+const RIVER_AREA = 5;
+const RIVER_REF = 25;
+const FALL_REF = 40;
+/** A river sample whose depth differs from a river neighbour's by this (eighths of a unit, over the lattice's two pixels) is on a steep reach: white water. */
+const STEEP_2 = 2 * EAR_STEEP;
+
 /** How loud a source d cells off counts in the surf's sums: full inside 30 cells, then 1/d. */
 function reach(d: number): number {
   return 30 / (d > 30 ? d : 30);
 }
 
 interface Sums {
-  /** Beach, shingle, rock, far: e, Σw·ux, Σw·uy, Σw·d. */
+  /** Beach, shingle, rock, far, river, stream, white: e, Σw·ux, Σw·uy, Σw·d. */
   area: Float64Array;
+  /** Falls being followed down the frame, by column group: samples so far (0: none), the rows of the first and the last, and the last one's place, height, distance and edge. */
+  runCount: Int32Array;
+  runTop: Int32Array;
+  runLast: Int32Array;
+  runFoot: Float64Array;
+  /** Falls that have ended, this pass: x, y, h, run, w, edge each. */
+  falls: Float64Array;
+  nFalls: number;
   samples: number;
   haze: number;
   open: number;
@@ -116,7 +141,9 @@ interface Sums {
 
 function newSums(): Sums {
   return {
-    area: new Float64Array(16), samples: 0, haze: 0, open: 0,
+    area: new Float64Array(28), samples: 0, haze: 0, open: 0,
+    runCount: new Int32Array(FALL_COLS), runTop: new Int32Array(FALL_COLS), runLast: new Int32Array(FALL_COLS), runFoot: new Float64Array(FALL_COLS * 5),
+    falls: new Float64Array(FALL_KEEP * 6), nFalls: 0,
     cellW: new Float64Array(CELLS), cellBest: new Float64Array(CELLS), cellKind: new Uint8Array(CELLS), cellSector: new Uint8Array(CELLS), cellBend: new Uint8Array(CELLS),
     cellX: new Float64Array(CELLS), cellY: new Float64Array(CELLS), cellId: new Int32Array(CELLS), crossed: new Uint8Array(64 * 64),
   };
@@ -125,6 +152,8 @@ function newSums(): Sums {
 function clearSums(s: Sums): void {
   s.area.fill(0);
   s.samples = s.haze = s.open = 0;
+  s.runCount.fill(0);
+  s.nFalls = 0;
   s.cellW.fill(0);
   s.cellBest.fill(Infinity);
   s.crossed.fill(0);
@@ -148,6 +177,33 @@ export function createEar(): Ear {
   let front = emptyHearing(), back = emptyHearing();
   const pool: [ShorePoint[], ShorePoint[]] = [[], []];
   for (const p of pool) for (let i = 0; i < 16; i++) p.push({ sector: 0, cell: 0, kind: 0, bend: 0, x: 0, y: 0, w: 0 });
+  const fallPool: [FallPoint[], FallPoint[]] = [[], []];
+  for (const p of fallPool) for (let i = 0; i < MAX_FALLS; i++) p.push({ x: 0, y: 0, h: 0, run: 0, w: 0, edge: 0 });
+
+  /** The fall followed in column group `c` has ended: it is kept if it is among the heaviest so far. */
+  const endFall = (c: number): void => {
+    const count = sums.runCount[c];
+    if (count === 0) return;
+    sums.runCount[c] = 0;
+    const foot = sums.runFoot, f = c * 5;
+    const g = FALL_REF / (foot[f + 3] > FALL_REF ? foot[f + 3] : FALL_REF);
+    const wgt = count * g * g * foot[f + 4];
+    let at = sums.nFalls;
+    if (at === FALL_KEEP) {
+      // Full: the lightest makes way, if this one is heavier.
+      at = 0;
+      for (let k = 1; k < FALL_KEEP; k++) if (sums.falls[k * 6 + 4] < sums.falls[at * 6 + 4]) at = k;
+      if (sums.falls[at * 6 + 4] >= wgt) return;
+    } else sums.nFalls++;
+    const o = at * 6;
+    sums.falls[o] = foot[f];
+    sums.falls[o + 1] = foot[f + 1];
+    sums.falls[o + 2] = foot[f + 2];
+    // Rows from its top to its foot, the foot's own included (the lattice reads every other row).
+    sums.falls[o + 3] = sums.runLast[c] - sums.runTop[c] + STRIDE;
+    sums.falls[o + 4] = wgt;
+    sums.falls[o + 5] = foot[f + 4];
+  };
   let which = 0;
   const sums = newSums();
   clearSums(sums);
@@ -210,10 +266,61 @@ export function createEar(): Ear {
             }
           }
         }
+        const left = l;
+        const hadLeft = haveLeft;
         l = v;
         q = u;
         haveLeft = true;
-        if (cls === C_HAZE || cls === C_RIVER) continue;
+        if (cls === C_RIVER) {
+          // Fresh water, by class (the tone the bake gave it, and how it lies against its river neighbours).
+          const tone = (v >>> 8) & 15;
+          const fall = tone >= EAR_FALL_TONE;
+          const lRiver = hadLeft && CLASS[left & 255] === C_RIVER, uRiver = up && CLASS[u & 255] === C_RIVER;
+          let white = fall;
+          if (!white && tone >= 12) white = (lRiver && ((left >>> 8) & 15) >= EAR_FALL_TONE) || (uRiver && ((u >>> 8) & 15) >= EAR_FALL_TONE);
+          if (!white) {
+            // A steep reach, as water.ts reads it: height lost to the east, and to the south beyond what the rows themselves take.
+            const dropE = lRiver ? ((v >>> 16) - (left >>> 16)) * 0.8 : 0;
+            const dropS = uRiver ? (row - (baseUp + (u >>> 16))) * 0.8 - 8 * STRIDE : 0;
+            white = (dropE < 0 ? -dropE : dropE) + (dropS < 0 ? -dropS : dropS) >= STEEP_2;
+          }
+          const bx = rx + px;
+          const wx = wrap(bx, n), wy = wrap(row / 8, n);
+          const dx = torusDelta(ox, wx, n), dy = torusDelta(oy, wy, n);
+          const flat2 = dx * dx + dy * dy;
+          const d = Math.sqrt(flat2 + alt2);
+          const edgeX = px < w - 1 - px ? px : w - 1 - px;
+          const edge = smooth(0, EDGE, edgeX < edgeY ? edgeX : edgeY);
+          const g = RIVER_REF / (d > RIVER_REF ? d : RIVER_REF);
+          const wgt = RIVER_AREA * g * g * edge;
+          if (wgt > 0) {
+            const a = white ? 24 : tone < 8 ? 16 : 20;
+            const flat = Math.sqrt(flat2);
+            area[a] += wgt;
+            if (flat > 1e-9) {
+              area[a + 1] += (wgt * dx) / flat;
+              area[a + 2] += (wgt * dy) / flat;
+            }
+            area[a + 3] += wgt * d;
+          }
+          if (fall) {
+            // Its fall: the one being followed down this column group, or a new one.
+            const c = (px >> FALL_SHIFT) & (FALL_COLS - 1);
+            if (sums.runCount[c] > 0 && py - sums.runLast[c] > FALL_GAP) endFall(c);
+            if (sums.runCount[c] === 0) sums.runTop[c] = py;
+            sums.runCount[c]++;
+            sums.runLast[c] = py;
+            const f = c * 5;
+            sums.runFoot[f] = wx;
+            sums.runFoot[f + 1] = wy;
+            // The foot's height: its depth's world row seen 0.8 to a pixel, less the frame row it is drawn on.
+            sums.runFoot[f + 2] = (row * 0.8 - by * 8) / 8;
+            sums.runFoot[f + 3] = d;
+            sums.runFoot[f + 4] = edge;
+          }
+          continue;
+        }
+        if (cls === C_HAZE) continue;
         if (len === 0) {
           // Open sea: no crossing near it last pass.
           if (cls === C_SEA) {
@@ -340,6 +447,27 @@ export function createEar(): Ear {
     setArea(h.surf[1], 4);
     setArea(h.surf[2], 8);
     setArea(h.far, 12);
+    setArea(h.river, 16);
+    setArea(h.stream, 20);
+    setArea(h.white, 24);
+    // The falls: every one still being followed ends here; the four heaviest are reported, heaviest first.
+    for (let c = 0; c < FALL_COLS; c++) endFall(c);
+    const fallSpare = fallPool[which ^ 1];
+    h.falls.length = 0;
+    for (let k = 0; k < MAX_FALLS; k++) {
+      let best = -1;
+      for (let i = 0; i < sums.nFalls; i++) if (sums.falls[i * 6 + 4] > 0 && (best < 0 || sums.falls[i * 6 + 4] > sums.falls[best * 6 + 4])) best = i;
+      if (best < 0) break;
+      const o = best * 6, f = fallSpare[k];
+      f.x = sums.falls[o];
+      f.y = sums.falls[o + 1];
+      f.h = sums.falls[o + 2];
+      f.run = sums.falls[o + 3];
+      f.w = sums.falls[o + 4];
+      f.edge = sums.falls[o + 5];
+      sums.falls[o + 4] = 0;
+      h.falls.push(f);
+    }
     // The two heaviest shore cells of each sector.
     top.fill(-1);
     if (warp) {

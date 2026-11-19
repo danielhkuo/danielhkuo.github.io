@@ -11,8 +11,8 @@
 import { rngFor } from "../../core/rng.ts";
 import { BED, BED_WANDER, OPEN } from "../levels.ts";
 import { T } from "../mix.ts";
-import { CONTROL_PLAYBACK } from "../synth/controls.ts";
 import { bandpass, bind, bindHz, bindPan, gain, highpass, loop, lowpass, panner, type Ctx } from "./graph.ts";
+import type { Hub } from "./hub.ts";
 import type { Kit } from "./kit.ts";
 import type { Voice } from "./wind.ts";
 
@@ -20,7 +20,6 @@ interface Parts {
   v: Voice;
   keep<N extends AudioNode>(n: N): N;
   noise(name: string): AudioBufferSourceNode;
-  drift(): ChannelSplitterNode;
 }
 
 function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts {
@@ -35,24 +34,15 @@ function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts
     keep,
     noise(name) {
       const buffer = kit.buffer(name);
-      const s = keep(loop(ctx, buffer, 0.97 + 0.06 * rng.float()));
+      const s = keep(loop(ctx, buffer));
       s.start(at, rng.float() * buffer.duration);
       v.sources.push(s);
       return s;
     },
-    drift() {
-      const buffer = kit.buffer("drift");
-      const s = keep(loop(ctx, buffer, CONTROL_PLAYBACK));
-      s.start(at, rng.float() * buffer.duration);
-      v.sources.push(s);
-      const split = keep(ctx.createChannelSplitter(2));
-      s.connect(split);
-      return split;
-    },
   };
 }
 
-export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { seed: number; at: number }): Voice {
+export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
   const p = parts(ctx, kit, opts.seed, "bed", opts.at);
   const { v, keep } = p;
   let sum: GainNode;
@@ -99,7 +89,7 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { seed: n
   });
   v.steps.push(() => {
     // The two halves: each channel of the sum wanders on its own drift and has its own pan.
-    const drift = p.drift();
+    const drift = opts.hub.drift;
     const split = keep(ctx.createChannelSplitter(2));
     const merge = keep(ctx.createChannelMerger(2));
     sum.connect(split);
@@ -122,14 +112,14 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { seed: n
   return v;
 }
 
-export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { seed: number; at: number }): Voice {
+export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
   const p = parts(ctx, kit, opts.seed, "open", opts.at);
   const { v, keep } = p;
   v.steps.push(() => {
     const band = keep(bandpass(ctx, OPEN.hz, OPEN.q));
     const swell = keep(gain(ctx, 0.75));
     const depth = keep(gain(ctx, 0.25));
-    p.drift().connect(depth, 0);
+    opts.hub.drift.connect(depth, 0);
     depth.connect(swell.gain);
     const lev = keep(gain(ctx, 0));
     p.noise("pink0").connect(band);

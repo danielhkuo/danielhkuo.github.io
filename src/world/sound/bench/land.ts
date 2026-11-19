@@ -11,6 +11,8 @@ export interface FlatWorld {
   n: number;
   /** The material at world cell (x, y), both already wrapped into [0, n). */
   at(x: number, y: number): number;
+  /** The tone the bake gives the pixel there (0 … 15): for river water, under 8 a wide river, 8–13 a stream, 14 falling. 0 when absent. */
+  tone?(x: number, y: number): number;
 }
 
 export const FRAME_W = 400, FRAME_H = 225;
@@ -26,7 +28,8 @@ export function frameOf(world: FlatWorld, cx: number, cy: number, out?: Uint32Ar
     const depth = 10 * (by & 255);
     for (let px = 0; px < w; px++) {
       const mat = haze && haze(px, py) ? 0 : world.at(wrap(rx + px, n), y);
-      bake[py * w + px] = mat === 0 ? 0 : (mat | (depth << 16)) >>> 0;
+      const tone = mat !== 0 && world.tone ? world.tone(wrap(rx + px, n), y) & 15 : 0;
+      bake[py * w + px] = mat === 0 ? 0 : (mat | (tone << 8) | (depth << 16)) >>> 0;
     }
   }
   return { bake, rect: { x: rx, y: ry, w, h }, t: 0 };
@@ -116,4 +119,34 @@ export function lakeShore(at: number): FlatWorld {
 /** A small block of `shore` in open sea, its west face at x = `at`, `tall` cells from north to south about y = `mid`: one short shore. */
 export function islet(at: number, mid: number, tall: number, shore: number, depth = 14): FlatWorld {
   return { n: N, at: (x, y) => (x >= at && x < at + depth && Math.abs(y - mid) <= tall / 2 ? shore : M.sea) };
+}
+
+/** One fall on a river: where its top is, how many frame rows it falls, and nothing else (it is as wide as its river). */
+export interface FlatFall {
+  y: number;
+  run: number;
+}
+
+/**
+ * A river running north–south through meadow, `width` cells wide about x = `at`, of tone `tone` (under 8 a wide
+ * river, 8–13 a stream), with falls on it: each a stretch of falling water `run` frame rows long going south from
+ * its `y` (a frame row is 1.25 cells of ground here, where the real bake stands a fall up on the screen).
+ */
+export function riverNS(at: number, width: number, tone: number, falls: readonly FlatFall[] = [], from = -Infinity, to = Infinity): FlatWorld {
+  const inRiver = (x: number, y: number) => Math.abs(x - at) < width / 2 && y >= from && y < to;
+  return {
+    n: N,
+    at: (x, y) => (inRiver(x, y) ? M.river : M.meadowMid),
+    tone(x, y) {
+      if (!inRiver(x, y)) return 0;
+      for (const f of falls) if (y >= f.y && y < f.y + f.run / 0.8) return 14;
+      return tone;
+    },
+  };
+}
+
+/** Two flat worlds as one: `b` wherever it is not meadow, else `a`. */
+export function overlay(a: FlatWorld, b: FlatWorld): FlatWorld {
+  const top = (x: number, y: number) => b.at(x, y) !== M.meadowMid;
+  return { n: a.n, at: (x, y) => (top(x, y) ? b.at(x, y) : a.at(x, y)), tone: (x, y) => (top(x, y) ? (b.tone?.(x, y) ?? 0) : (a.tone?.(x, y) ?? 0)) };
 }

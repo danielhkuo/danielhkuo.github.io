@@ -68,6 +68,8 @@ export interface Scheduler {
 export function createScheduler(sources: readonly CueSource[]): Scheduler {
   const ledger = createLedger();
   const scratch: Cue[] = [];
+  /** Sources that have had a pass. One that joins later (its buffers arrived) is treated as after a gap, for itself alone. */
+  const known = new Set<CueSource>();
   let until = NaN;
   let gap = true;
 
@@ -88,14 +90,17 @@ export function createScheduler(sources: readonly CueSource[]): Scheduler {
       gap = false;
       const t1 = t + lookahead;
       for (const src of sources) {
-        if (rejoin && src.lookBack > 0) {
+        const fresh = !known.has(src);
+        if (fresh) known.add(src);
+        if ((rejoin || fresh) && src.lookBack > 0) {
           scratch.length = 0;
           src.cues(t - src.lookBack, t, scratch);
           for (const cue of scratch) if (cue.t + (cue.lasts ?? 0) > t + WORTH) take(src.kind, cue, true, due);
         }
-        if (t1 > until) {
+        const from = fresh ? t : until;
+        if (t1 > from) {
           scratch.length = 0;
-          src.cues(until, t1, scratch);
+          src.cues(from, t1, scratch);
           for (const cue of scratch) take(src.kind, cue, false, due);
         }
       }

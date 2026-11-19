@@ -1,23 +1,27 @@
 // Wind and the turn whoosh (design §4.1, §4.2; Recipes §1, §2): five layers of noise, each with its own filter, and
-// three prerendered control signals moving them, so nothing sits still and nothing is periodic. Persistent; every
-// layer's level gain starts at 0 and is moved only by the mix's targets.
+// the hub's control signals moving them, so nothing sits still and nothing is periodic. Every level gain starts at 0
+// and is moved only by the mix's targets. Each layer's fixed filters are already in its noise buffer (synth/make.ts);
+// what is built here is the part that moves.
 //
-//   A  ear buffet   brown (each ear its own) → high-pass 45 Hz → low-pass → peaking 250 Hz → per ear [flutter] → [level]
-//   B  rush         pink ρ0.7 → band-pass (the gust moves its centre ±15 %) → high shelf → [gust swell] → [level]
-//   C  hiss         white ρ0.7 → high-pass 2.5 kHz → low-pass → [level]
-//   D  whistles     pink (one source) → three narrow band-passes → [squall] → fixed pans → [level]     (not on touch)
-//   E  ground breeze pink ρ0.7 → band-pass 400 Hz → low-pass 1.5 kHz → [gust] → [level]
-//   W  whoosh       pink (mono) → band-pass → [level] → pan
+//   A  ear buffet   buffet (brown, each ear its own; high-passed, with its bump) → low-pass → per ear [flutter] → [level]
+//   B  rush         rush (pink ρ0.7, shelved) → band-pass (the gust moves its centre ±15 %) → [gust swell] → [level]
+//   C  hiss         hiss (white ρ0.7, high-passed) → low-pass → [level]
+//   E  ground breeze breeze (pink ρ0.7 through its band) → [slow drift] → [level]
+//   D  whistles     pink (one source) → three narrow band-passes → [squall] → fixed pans → [level]     (a voice of its
+//                   own, built only at speed; not on touch)
+//   W  whoosh       pink (mono) → band-pass → [level] → pan                                            (a voice of its
+//                   own, built only round a turn)
 //
 // Built a layer at a time (`steps`), so no frame pays for the whole graph.
 
 import { rngFor } from "../../core/rng.ts";
 import {
-  A_CUT_HZ, A_FLUTTER, A_HIGHPASS_HZ, A_PEAK, B_GUST, B_HZ, B_Q, B_SHELF, B_SWELL, C_HIGHPASS_HZ, C_LOW, D_GUST, D_HZ, D_PAN, D_Q, E_BAND, E_GUST, E_LOWPASS_HZ, W_HZ, W_Q,
+  A_CUT_HZ, A_FLUTTER, B_GUST, B_HZ, B_Q, B_SWELL, C_LOW, D_GUST, D_HZ, D_PAN, D_Q, E_GUST, W_HZ, W_Q,
 } from "../levels.ts";
 import { T } from "../mix.ts";
 import { CONTROL_PLAYBACK } from "../synth/controls.ts";
-import { bandpass, bind, bindHz, bindPan, gain, highpass, highshelf, intoPan, kRate, loop, lowpass, panner, peaking, type Binding, type Ctx } from "./graph.ts";
+import { bandpass, bind, bindHz, bindPan, gain, intoPan, kRate, loop, lowpass, panner, type Binding, type Ctx } from "./graph.ts";
+import type { Hub } from "./hub.ts";
 import type { Kit } from "./kit.ts";
 
 export interface Voice {
@@ -31,7 +35,7 @@ export interface Voice {
 /** Cents either side of its centre that a share `x` (0.15 for ±15 %) moves a filter. */
 const cents = (x: number) => 1200 * Math.log2(1 + x);
 
-export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boolean; seed: number; at: number }): Voice {
+export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/wind/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
@@ -41,20 +45,12 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
   /** A noise loop read from its own place, a shade off speed, so no two layers loop together. */
   const noise = (name: string): AudioBufferSourceNode => {
     const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer, 0.97 + 0.06 * rng.float()));
+    // At its own rate exactly: a loop played off-speed is resampled every sample, which costs far more than it gives
+    // (the loops are of unequal lengths and start at their own places, so they never keep step anyway).
+    const s = keep(loop(ctx, buffer));
     s.start(opts.at, rng.float() * buffer.duration);
     v.sources.push(s);
     return s;
-  };
-  /** A control loop, played at a tenth of its rate, split into its channels. */
-  const control = (name: string): ChannelSplitterNode => {
-    const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer, CONTROL_PLAYBACK));
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    const split = keep(ctx.createChannelSplitter(Math.max(2, buffer.numberOfChannels)));
-    s.connect(split);
-    return split;
   };
   /** Channel `ch` of a control, scaled by `depth`, added to `param`. */
   const drive = (split: ChannelSplitterNode, ch: number, depth: number, param: AudioParam) => {
@@ -63,28 +59,20 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
     g.connect(param);
   };
 
-  let gust: ChannelSplitterNode, whistle: ChannelSplitterNode;
+  const hub = opts.hub;
+  const gust = hub.gust;
 
-  v.steps.push(() => {
-    gust = control("gust");
-    whistle = control("whistle");
-  });
-
-  // A: the ear buffet, in two steps.
+  // A: the ear buffet, in two steps. (Its high-pass and its bump are in the buffer.)
   let aSplit: ChannelSplitterNode, aLow: BiquadFilterNode;
   v.steps.push(() => {
-    const src = noise("brown0");
-    const high = keep(highpass(ctx, A_HIGHPASS_HZ));
+    const src = noise("buffet");
     aLow = keep(lowpass(ctx, A_CUT_HZ));
-    const peak = keep(peaking(ctx, A_PEAK.hz, A_PEAK.db, A_PEAK.q));
     aSplit = keep(ctx.createChannelSplitter(2));
-    src.connect(high);
-    high.connect(aLow);
-    aLow.connect(peak);
-    peak.connect(aSplit);
+    src.connect(aLow);
+    aLow.connect(aSplit);
   });
   v.steps.push(() => {
-    const flutter = control("flutter");
+    const flutter = hub.flutter;
     const merge = keep(ctx.createChannelMerger(2));
     const levels: GainNode[] = [];
     for (let ear = 0; ear < 2; ear++) {
@@ -100,88 +88,68 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
     v.bindings.push(bind(T.A_L, [levels[0].gain]), bind(T.A_R, [levels[1].gain]), bindHz(T.A_HZ, [aLow], A_CUT_HZ));
   });
 
-  // B: the rush. The filter's own frequency sits at the bottom of the gust's reach; the gust (0 … 1) lifts it.
+  // B: the rush. The filter's own frequency sits at the bottom of the gust's reach; the gust (0 … 1) lifts it. (Its
+  // shelf is in the buffer.)
   v.steps.push(() => {
-    const src = noise("pink7");
+    const src = noise("rush");
     const base = B_HZ / (1 + B_GUST);
     const band = keep(bandpass(ctx, base, B_Q));
     drive(gust, 0, 2 * cents(B_GUST), band.detune);
-    const shelf = keep(highshelf(ctx, B_SHELF.hz, B_SHELF.db));
     const swell = keep(gain(ctx, B_SWELL[0]));
     drive(gust, 0, B_SWELL[1], swell.gain);
     const lev = keep(gain(ctx, 0));
     src.connect(band);
-    band.connect(shelf);
-    shelf.connect(swell);
+    band.connect(swell);
     swell.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.B_GAIN, [lev.gain]), bind(T.B_HZ, [band.detune], (hz) => 1200 * Math.log2(Math.max(hz, 1) / B_HZ)));
   });
 
-  // C: the hiss.
+  // C: the hiss. (Its high-pass is in the buffer.)
   v.steps.push(() => {
-    const src = noise("white7");
-    const high = keep(highpass(ctx, C_HIGHPASS_HZ));
+    const src = noise("hiss");
     const base = C_LOW[0] + C_LOW[1];
     const low = keep(lowpass(ctx, base));
     const lev = keep(gain(ctx, 0));
-    src.connect(high);
-    high.connect(low);
+    src.connect(low);
     low.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.C_GAIN, [lev.gain]), bindHz(T.C_HZ, [low], base));
   });
 
-  // D: three whistles off one source, each opened by its own squall and bent by its own gust.
-  if (!opts.touch) {
-    let dSrc: AudioBufferSourceNode, dMerge: ChannelMergerNode;
-    const bands: BiquadFilterNode[] = [];
-    v.steps.push(() => {
-      dSrc = noise("pink1");
-      dMerge = keep(ctx.createChannelMerger(2));
-    });
-    for (let i = 0; i < 3; i++) {
-      v.steps.push(() => {
-        const band = keep(bandpass(ctx, D_HZ[i], D_Q[i]));
-        drive(whistle, 2 * i, cents(D_GUST), band.detune);
-        const open = keep(gain(ctx, 0));
-        whistle.connect(open.gain, 2 * i + 1);
-        const pan = panner(ctx, D_PAN[i], dMerge);
-        keep(pan.left);
-        keep(pan.right);
-        dSrc.connect(band);
-        band.connect(open);
-        intoPan(open, pan);
-        bands.push(band);
-        if (i === 2) {
-          const lev = keep(gain(ctx, 0));
-          dMerge.connect(lev);
-          lev.connect(out);
-          v.bindings.push(bind(T.D_GAIN, [lev.gain]), bind(T.D_RATIO, bands.map((b) => b.detune), (ratio) => 1200 * Math.log2(ratio)));
-        }
-      });
-    }
-  }
-
-  // E: the ground breeze, riding the wind the third whistle hears (unrelated to the main gust).
+  // E: the ground breeze, riding the slower drift (unrelated to the main gust). Its band and low-pass are in the
+  // buffer: nothing of it is left to filter.
   v.steps.push(() => {
-    const src = noise("pink7");
-    const band = keep(bandpass(ctx, E_BAND.hz, E_BAND.q));
-    const low = keep(lowpass(ctx, E_LOWPASS_HZ));
-    const swell = keep(gain(ctx, E_GUST[0]));
-    drive(whistle, 4, E_GUST[1], swell.gain);
+    const src = noise("breeze");
+    // The drift runs −1 … 1: the swell moves between E_GUST[0] and E_GUST[0] + E_GUST[1] about their middle.
+    const swell = keep(gain(ctx, E_GUST[0] + E_GUST[1] / 2));
+    drive(hub.drift, 1, E_GUST[1] / 2, swell.gain);
     const lev = keep(gain(ctx, 0));
-    src.connect(band);
-    band.connect(low);
-    low.connect(swell);
+    src.connect(swell);
     swell.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.E_GAIN, [lev.gain]));
   });
 
-  // W: the turn whoosh.
+  return v;
+}
+
+/**
+ * W, the turn whoosh: a voice of its own, built as a turn begins (its level is still under −54 dB then, and rises no
+ * faster than the bloom lets it) and let go two seconds after the dragon levels out.
+ */
+export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+  const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
+  const rng = rngFor(opts.seed, "sound/whoosh/offsets");
+  const keep = <N extends AudioNode>(n: N): N => {
+    v.nodes.push(n);
+    return n;
+  };
   v.steps.push(() => {
-    const src = noise("pink1");
+    const buffer = kit.buffer("pink1");
+    const src = keep(loop(ctx, buffer));
+    src.start(opts.at, rng.float() * buffer.duration);
+    v.sources.push(src);
     const band = keep(bandpass(ctx, W_HZ[0], W_Q));
     const lev = keep(gain(ctx, 0));
     const pan = panner(ctx, 0);
@@ -193,8 +161,64 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { touch: boo
     intoPan(lev, pan);
     pan.out.connect(out);
     kRate(band.detune);
-    v.bindings.push(bind(T.W_GAIN, [lev.gain]), bindHz(T.W_HZ, [band], W_HZ[0]), bindPan(T.W_PAN, pan));
+    const level = bind(T.W_GAIN, [lev.gain]);
+    // Its level follows the mix at the whoosh's own pace from its first value: a voice just built is not eased in again.
+    level.prompt = true;
+    v.bindings.push(level, bindHz(T.W_HZ, [band], W_HZ[0]), bindPan(T.W_PAN, pan));
   });
+  return v;
+}
 
+/**
+ * D, the whistles: three narrow bands off one source, each opened by its own squall and bent by the gust. A voice of
+ * its own: the engine builds it only when the dragon is fast enough for them to be heard (they sit 26 dB under the
+ * rush at cruise), and lets it go when it slows. Not on touch.
+ */
+export function buildWhistles(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+  const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
+  const rng = rngFor(opts.seed, "sound/whistles/offsets");
+  const keep = <N extends AudioNode>(n: N): N => {
+    v.nodes.push(n);
+    return n;
+  };
+  let src: AudioBufferSourceNode, merge: ChannelMergerNode, squall: ChannelSplitterNode;
+  const bands: BiquadFilterNode[] = [];
+  v.steps.push(() => {
+    const buffer = kit.buffer("pink1");
+    src = keep(loop(ctx, buffer));
+    src.start(opts.at, rng.float() * buffer.duration);
+    v.sources.push(src);
+    merge = keep(ctx.createChannelMerger(2));
+    // Their squalls: three channels, played at a tenth of the rate like every control.
+    const sq = kit.buffer("squall");
+    const control = keep(loop(ctx, sq, CONTROL_PLAYBACK));
+    control.start(opts.at, rng.float() * sq.duration);
+    v.sources.push(control);
+    squall = keep(ctx.createChannelSplitter(3));
+    control.connect(squall);
+  });
+  for (let i = 0; i < 3; i++) {
+    v.steps.push(() => {
+      const band = keep(bandpass(ctx, D_HZ[i], D_Q[i]));
+      const bend = keep(gain(ctx, cents(D_GUST)));
+      opts.hub.gust.connect(bend, 0);
+      bend.connect(band.detune);
+      const open = keep(gain(ctx, 0));
+      squall.connect(open.gain, i);
+      const pan = panner(ctx, D_PAN[i], merge);
+      keep(pan.left);
+      keep(pan.right);
+      src.connect(band);
+      band.connect(open);
+      intoPan(open, pan);
+      bands.push(band);
+      if (i === 2) {
+        const lev = keep(gain(ctx, 0));
+        merge.connect(lev);
+        lev.connect(out);
+        v.bindings.push(bind(T.D_GAIN, [lev.gain]), bind(T.D_RATIO, bands.map((b) => b.detune), (ratio) => 1200 * Math.log2(ratio)));
+      }
+    });
+  }
   return v;
 }

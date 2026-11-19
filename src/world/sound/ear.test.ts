@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hash2 } from "../core/hash.ts";
 import { MATERIAL as M } from "../look/materials.ts";
-import { coastEast, coastNorth, coastSouth, coastToward, coastWest, cove, frameOf, gridOf, lakeShore, MEADOW, OPEN_SEA, type FlatWorld } from "./bench/land.ts";
-import { createEar, sectorOf, type Ear } from "./ear.ts";
-import type { Area, Hearing, Pose } from "./types.ts";
+import { FALL_TONE } from "../bake/chunk.ts";
+import { STEEP } from "../live/water.ts";
+import { coastEast, coastNorth, coastSouth, coastToward, coastWest, cove, frameOf, gridOf, lakeShore, MEADOW, OPEN_SEA, overlay, riverNS, type FlatWorld } from "./bench/land.ts";
+import { createEar, EAR_FALL_TONE, EAR_STEEP, sectorOf, type Ear } from "./ear.ts";
+import { HEARING_FLOATS, packHearing, pooledHearing, unpackHearing, type Area, type Hearing, type Pose } from "./types.ts";
 
 const ALT = 30;
 const pose = (x: number, y: number, t = 0): Pose => ({ t, dt: 1 / 60, x, y, alt: ALT, heading: 0, speed: 0, bank: 0, rest: 0 });
 const WARP = new Uint8Array(65536).map((_, i) => (i * 37) & 255);
 const db = (a: number, b: number) => 10 * Math.log10(a / b);
+const POSE = pose(5000, 5000);
 
 /** The ear over `world` with the dragon at (x, y): two whole passes (the second knows where the first found shore). */
 function hear(world: FlatWorld, x: number, y: number, o: { lanes?: number; land?: boolean; haze?: (px: number, py: number) => boolean; ear?: Ear } = {}): Hearing {
@@ -214,4 +217,61 @@ test("a frame gathered to its lattice a few rows at a time, the camera moving me
   assert.ok(Math.abs(db(total(fromLattice), total(whole))) < 0.2, `${db(total(fromLattice), total(whole))} dB`);
   assert.deepEqual(fromLattice.shores.map((s) => s.cell).sort(), whole.shores.map((s) => s.cell).sort());
   assert.ok(Math.abs(fromLattice.sea - whole.sea) < 0.02);
+});
+
+test("the ear's river constants are the picture's own", () => {
+  assert.equal(EAR_FALL_TONE, FALL_TONE);
+  assert.equal(EAR_STEEP, STEEP);
+});
+
+test("fresh water by class: a wide river, a stream, white water where it falls; each on its side", () => {
+  const hear = (world: FlatWorld) => {
+    const ear = createEar();
+    ear.setWorld({ n: world.n, land: null });
+    return ear.pass(POSE, frameOf(world, POSE.x, POSE.y - POSE.alt / 0.8), 0);
+  };
+  const river = hear(riverNS(POSE.x + 20, 6, 4));
+  assert.ok(river.river.e > 0 && river.stream.e === 0 && river.white.e === 0);
+  assert.ok(river.river.dx > 0, "to the east");
+  assert.equal(river.falls.length, 0);
+  const stream = hear(riverNS(POSE.x - 25.5, 2, 10));
+  assert.ok(stream.stream.e > 0 && stream.river.e === 0 && stream.stream.dx < 0);
+  // Energy falls with distance: the same river twice as far is quieter.
+  assert.ok(hear(riverNS(POSE.x + 80, 6, 4)).river.e < 0.5 * river.river.e);
+  // Tones 12–13 are a stream unless they lie beside falling water.
+  const pale = hear(riverNS(POSE.x + 20, 4, 12));
+  assert.ok(pale.stream.e > 0 && pale.white.e === 0);
+});
+
+test("falls: one report a fall, its foot's place, its run in rows; small and tall; the heaviest four", () => {
+  const ear = createEar();
+  const hear = (world: FlatWorld) => {
+    ear.setWorld({ n: world.n, land: null });
+    return ear.pass(POSE, frameOf(world, POSE.x, POSE.y - POSE.alt / 0.8), 0);
+  };
+  const small = hear(riverNS(POSE.x + 20, 4, 4, [{ y: POSE.y - 5, run: 4 }]));
+  assert.equal(small.falls.length, 1);
+  assert.ok(small.white.e > 0, "falling water is white water too");
+  assert.ok(Math.abs(small.falls[0].x - (POSE.x + 20)) <= 2 && Math.abs(small.falls[0].y - POSE.y) <= 3, `foot at ${small.falls[0].x}, ${small.falls[0].y}`);
+  assert.ok(small.falls[0].run >= 4 && small.falls[0].run <= 6);
+  assert.equal(small.falls[0].edge, 1);
+  assert.ok(Math.abs(small.falls[0].h) < 0.5, "at sea level in the flat world");
+  const tall = hear(riverNS(POSE.x + 30, 4, 4, [{ y: POSE.y - 22.5, run: 18 }]));
+  assert.equal(tall.falls.length, 1);
+  assert.ok(tall.falls[0].run >= 18 && tall.falls[0].run <= 20, `run ${tall.falls[0].run}`);
+  assert.ok(tall.falls[0].w > small.falls[0].w);
+  // Two falls on one river, well apart, are two; six in the frame are reported as the heaviest four, heaviest first.
+  const two = hear(riverNS(POSE.x + 20, 4, 4, [{ y: POSE.y - 60, run: 4 }, { y: POSE.y + 20, run: 4 }]));
+  assert.equal(two.falls.length, 2);
+  let many: FlatWorld = riverNS(POSE.x - 150, 4, 4, [{ y: POSE.y - 40, run: 6 }]);
+  for (let k = 1; k < 6; k++) many = overlay(many, riverNS(POSE.x - 150 + 50 * k, 4, 4, [{ y: POSE.y - 40, run: 6 }]));
+  const most = hear(many).falls;
+  assert.equal(most.length, 4);
+  for (let i = 1; i < 4; i++) assert.ok(most[i].w <= most[i - 1].w);
+  // A Hearing survives packing with its falls.
+  const packed = new Float64Array(HEARING_FLOATS);
+  packHearing(tall, packed);
+  const back = unpackHearing(packed, pooledHearing());
+  assert.deepEqual(back.falls, tall.falls);
+  assert.deepEqual(back.river, tall.river);
 });

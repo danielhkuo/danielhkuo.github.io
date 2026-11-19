@@ -115,6 +115,9 @@ export class FakeContext {
   createDynamicsCompressor(): FakeNode {
     return new FakeNode(this, "compressor", { threshold: -24, knee: 30, ratio: 12, attack: 0.003, release: 0.25 });
   }
+  createConvolver(): FakeNode {
+    return new FakeNode(this, "convolver");
+  }
   createWaveShaper(): FakeNode {
     return new FakeNode(this, "waveShaper");
   }
@@ -134,7 +137,7 @@ export class FakeContext {
 
 /** A kit whose every buffer is ready: enough of an AudioBuffer for the graph to be built on. */
 export function fakeKit(): { sampleRate: number; step(): boolean; heavy(): boolean; ready(): boolean; done(): boolean; buffer(name: string): AudioBuffer; bytes(name: string): Uint8Array; whenDone(): Promise<void>; dispose(): void } {
-  const channels: Record<string, number> = { brown0: 2, pink7: 2, white7: 2, pink1: 1, gust: 1, flutter: 2, whistle: 6, drift: 2, pip: 1, tail: 1, waveA: 2, velvet: 2, pink0: 2, white0: 2 };
+  const channels: Record<string, number> = { brown0: 2, buffet: 2, rush: 2, hiss: 2, breeze: 2, pink1: 1, gust: 1, flutter: 2, squall: 3, drift: 2, pip: 1, tail: 1, waveA: 2, velvet: 2, pink0: 2, white0: 2 };
   return {
     sampleRate: 48000,
     step: () => false,

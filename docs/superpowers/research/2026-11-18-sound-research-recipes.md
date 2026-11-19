@@ -342,6 +342,15 @@ Add a second read of each bed at a different offset and rate, panned opposite, t
 - Small falls: no rumble, body centre up at 1.6 kHz, more `brook` bed: a small fall is a loud brook, not a quiet big
   fall.
 
+**As built (phase 4, 2026-11-19; tuned by loudness and spectrogram, not by ear).** Values are in
+`src/world/sound/levels.ts` (`K_RIVER`, `RIVER`, `FALL`) and `synth/bubbles.ts`. The three beds are as above, except
+that a brook's and a purl's bubbles come up over 6 and 3 ms. The river bed is two reads of each bed at fixed rates in
+0.94–1.06, each half with its own pan; the riffle is pink through the 1.8 kHz band. A fall's parts by weight: body
+0.7 (band at 1600 Hz small … 900 Hz tall), hiss 0.2 breathing ±23 % on a drift, plunge 0.6, rumble 1.8 × tallness,
+brook 0.8 × smallness. With more plunge or rumble a still fall's momentary loudness wandered by a decibel a tenth
+of a second; these hold it to 0.8. Measured: a river 20 cells off −32.9 LUFS, a small fall at 20 −28.7, a tall
+fall at 30 −22.8 (its power under 140 Hz 4.8 dB over the rest; a small fall's 28 dB under).
+
 ### Distance and stereo
 
 Close (under 25 cells): bubbles and hiss detail, wide stereo. By 80 cells the bubble beds are gone and the hiss is
@@ -442,6 +451,14 @@ bell's `playbackRate`: a bell has one pitch.
 
 **Live alternative** (no prerender): 5 bells × 20 oscillators per stroke with strokes overlapping for 10 s is several
 hundred live oscillators at the peak of the peal. Prerendering is the right choice.
+
+**As built (phase 3, 2026-11-19; checked by spectrum and decay, not by ear).** `synth/bells.ts`, `schedule/bells.ts`,
+`engine/bells.ts`; levels in `K_BELL`. Five bells at the context's rate, each two ring takes (the doublets' shares
+swapped) and one strike; every mode starts at its own phase; a ring's last 1.5 s is eased to nothing. Each bell's hum
+and prime are within ±20 cents of the table's offsets. Measured on one stroke of the tenor, dry: every partial within
+2 cents of its design, every T60 within 4 % (a doublet's read over whole beats), six doublets beating
+at their designed periods (0.39 s to 2.1 s). The reverb's response measures T60 2.2 s with taps at 150, 270, 410 and
+600 ms.
 
 ### Distance and stereo
 

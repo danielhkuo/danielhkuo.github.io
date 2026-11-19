@@ -1257,10 +1257,65 @@ After the build's first phases (2026-11-19), by the judge's ruling: §3.6's "inl
   made seven laps a second.
 - **An emitter is taken only when it is free now**, not merely by the time the new wave starts, and emitters are taken
   in turn (so every stream of noise is used).
-- **Rivers and falls are not in the ear yet**: they join the bake scan with their phase (4).
 - **The whoosh rises in a straight line in decibels** (18 dB a second from a fifth of its fullest), from the roll rate
   smoothed twice (§3.3 had the rate term at τ 60 ms and a 70 ms rise): a swell with no step.
 - **A second high-pass (75 Hz) on the wind bus** (§4.1): under 8 % of the wind's power lies below 60 Hz at boost.
+
+**As built, the audio thread (after phase 2), where it differs from the text above.** The surf scenes took about 6 %
+of real time in an unstepped render; these changes bring a scene with no surf near to under 1 % and a surf scene to
+about 2.5 % as the page schedules it (3.2–4.0 % in the unstepped render, which cannot take an emitter out of the
+graph between waves: every wave of the scene is connected before the render starts). None changes the sound.
+
+- **No loop is played off its rate** (§4.1, §4.3): a buffer played at any rate but 1 is resampled sample by sample.
+  The wind's and the beds' noise loops run at exactly 1 (their lengths are unequal and they start at seeded places, so
+  they never keep step anyway); a wave's gains are a buffer at the context's rate, and its filter glides are ramps
+  written on the emitter when the wave starts, not buffer channels.
+- **The control signals are played once** (`engine/hub.ts`: the gust, the flutter, the drifts) and every voice taps
+  them. The whistles' squalls are played only while the whistles exist.
+- **The wind's fixed filters are in its buffers** (`synth/filters.ts`: the Web Audio biquads as arithmetic, run round
+  each loop): the buffet's high-pass and bump, the rush's shelf, the hiss's high-pass, the breeze's band and low-pass.
+  The audio thread runs only the one filter of each layer that moves. Costs 4 MB.
+- **The whistles and the whoosh are voices of their own**, built when they can be heard (above cruise; in a turn)
+  and let go two seconds after.
+- **A wave emitter is in the graph only while a wave of its own is sounding**; a fall's chain likewise; a source
+  that has ended is disconnected at once. An idle emitter left connected is visited every quantum, node by node,
+  to find that it is silent: eight of them took 0.85 % of real time.
+- **The hiss's 9 kHz low-pass is one filter after all the emitters**, and the shingle's grain path is opened only
+  for shingle waves.
+
+**As built, phase 3 (bells), where it differs from the text above:**
+
+- **Bell buffers are at the context's rate, not 32 kHz** (§4.6): a ring played off its rate costs the audio thread
+  for every ring sounding, and a peal has fifteen. About 18 MB at 48 kHz in place of 11.
+- **Bells are rendered by plain arithmetic in the worker** (decaying sinusoids), not by offline contexts.
+- **Each bell's hum and prime sit within ±20 cents of the table's old-style offsets** (hum +40, prime −30 cents of
+  their octaves), by seed, so no two bells are sour in the same way. The other partials are the table's.
+- **A stroke's levels** are in `K_BELL`; the peal at the tower measures −21 LUFS, its momentary loudness −18 at most.
+- **The abbey is told to the mix as a census source** (§1.3), the nearest of the world's abbeys; its bells are
+  taken to hang as high as the dragon flies (the places carry no height).
+- **A stroke out of earshot is not started** (the abbey's gain is nothing beyond 1500 cells), and **a ring joined
+  after a gap that would be over its bell's cap is not played** (the three newest of each bell are).
+- **A cue source may join late** (`engine/scheduler.ts`): the bells' buffers arrive after the wind's, and the rings
+  then sounding are joined in progress, once. Bells do not jump the kit's queue (§6.5): jobs run noise, controls,
+  surf, river, bells.
+- **The reverb's early taps are single samples**, 12 times the tail's level round them at most; the right ear hears
+  each up to 1.4 ms after the left. Measured through the convolver and the master chain: T60 2.21 and 2.20 s.
+
+**As built, phase 4 (rivers and falls), where it differs from the text above:**
+
+- **A FallPoint carries `edge`** (§1.3): how far inside the frame's edge its foot is (0 … 1). The voice's level is
+  its gain by distance times that, so a fall fades in and out with the frame, as §4.5 asks.
+- **Fall voices are followed outside the mix's targets** (`engine/falls.ts`: a pure tracker and the chains), as wave
+  emitters are: thirty times a second, each chain's gain, air and pan.
+- **A stream feeds the purl a little** (15 % of its energy) as well as the brook (§3.2): a brook's bubbles alone
+  leave digital silence between them.
+- **A brook's and a river's bubbles come up over 6 and 3 ms** (the recipe's 0.5 ms is kept for the plunge and the
+  laps): heard alone, a bubble that starts in half a millisecond is a tick, and the checker counts it.
+- **The lattice reads every other pixel**, so a stream one pixel wide is heard where it crosses an even column or
+  row: about half of it, as each sample's 5 cells² assumes for water two pixels wide. A straight one-pixel stream
+  along an odd column is not heard at all.
+- **The river bed's reads run at fixed seeded rates** in 0.94–1.06 (they do not drift): the four reads cost about
+  0.1 % while a river is heard.
 
 Also by ruling: the fall memory, the stall dip and the second (fallback) clock are cut; HRTF is the last, optional
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike

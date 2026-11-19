@@ -30,7 +30,7 @@ test("without a worker the kit computes in place and adopts every buffer whole",
   // No copy is longer than a slice.
   assert.ok(Math.max(...got.copies) <= 65536);
   assert.equal(kit.buffer("gust").sampleRate, 3000);
-  assert.equal(kit.buffer("whistle").numberOfChannels, 6);
+  assert.equal(kit.buffer("squall").numberOfChannels, 3);
   assert.ok(!kit.step(), "nothing left to do");
 });
 
@@ -45,12 +45,16 @@ test("with a worker: jobs are asked for in order, adopted as they arrive, and wi
   assert.ok(kit.ready("noise") && !kit.ready("controls") && !kit.done());
   w.onmessage!({ data: { job: "controls", buffers: make("controls", 3, 8000) } });
   w.onmessage!({ data: { job: "surf", buffers: make("surf", 3, 8000) } });
+  w.onmessage!({ data: { job: "river", buffers: make("river", 3, 8000) } });
+  w.onmessage!({ data: { job: "bells", buffers: make("bells", 3, 8000) } });
   w.onmessage!({ data: { job: "probe", buffers: make("probe", 3, 8000) } });
   while (kit.step());
   assert.ok(kit.done());
+  assert.equal(kit.buffer("ir").numberOfChannels, 2);
+  assert.equal(kit.buffer("ring40").numberOfChannels, 1);
   // Bytes that are not sound (the warp tile) are kept as they came.
   assert.equal(kit.bytes("warp").length, 65536);
-  assert.equal(kit.buffer("env13").numberOfChannels, 9);
+  assert.equal(kit.buffer("env1").numberOfChannels, 4);
 });
 
 test("a worker that fails hands the rest to the main thread", () => {

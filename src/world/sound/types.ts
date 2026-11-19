@@ -36,12 +36,14 @@ export interface ShorePoint {
   w: number;
 }
 
+/** A waterfall in the frame: its foot's place and height, how many rows it falls (9 or more is tall), its weight, and how far it is inside the frame's edge (0 at the edge … 1 well inside). */
 export interface FallPoint {
   x: number;
   y: number;
   h: number;
   run: number;
   w: number;
+  edge: number;
 }
 
 export interface Startle {
@@ -109,6 +111,8 @@ export interface CensusSource {
 }
 
 export interface Census {
+  /** The world's size in cells: positions wrap every n. */
+  n: number;
   sources: CensusSource[];
 }
 
@@ -134,6 +138,12 @@ export interface Cue {
   variant?: number;
   db?: number;
   rate?: number;
+  /** A bell's stroke: the hour, the bell (0 the treble … 4 the tenor, 5 the tenor under the hour's hammer), which ring take, and the levels of its ring and its strike, dB. */
+  H?: number;
+  bell?: number;
+  take?: number;
+  ringDb?: number;
+  strikeDb?: number;
 }
 
 /** What the listener chose, and what the device is. `calm` is reduced motion. */
@@ -162,7 +172,7 @@ export function emptyHearing(t = 0): Hearing {
   };
 }
 
-export const EMPTY_CENSUS: Census = { sources: [] };
+export const EMPTY_CENSUS: Census = { n: 10240, sources: [] };
 
 /** A Hearing of its own, sharing nothing with `h`: the ear reuses its Hearings, so whoever keeps one copies it. */
 export function copyHearing(h: Hearing): Hearing {
@@ -178,21 +188,23 @@ export function copyHearing(h: Hearing): Hearing {
   };
 }
 
-/** Shore points a Hearing can carry, and the numbers a packed Hearing takes. */
+/** Shore points and falls a Hearing can carry, and the numbers a packed Hearing takes. */
 export const MAX_SHORES = 16;
-export const HEARING_FLOATS = 5 + 7 * 4 + MAX_SHORES * 7;
+export const MAX_FALLS = 4;
+export const HEARING_FLOATS = 6 + 7 * 4 + MAX_SHORES * 7 + MAX_FALLS * 6;
 
 const AREAS = (h: Hearing): Area[] => [h.surf[0], h.surf[1], h.surf[2], h.far, h.river, h.stream, h.white];
 
 /** A Hearing as plain numbers in `out` (HEARING_FLOATS long): what the ear's worker hands back, transferred, not cloned. */
 export function packHearing(h: Hearing, out: Float64Array): void {
-  const n = Math.min(MAX_SHORES, h.shores.length);
+  const n = Math.min(MAX_SHORES, h.shores.length), falls = Math.min(MAX_FALLS, h.falls.length);
   out[0] = h.t;
   out[1] = h.ready;
   out[2] = h.lanes;
   out[3] = h.sea;
   out[4] = n;
-  let at = 5;
+  out[5] = falls;
+  let at = 6;
   for (const a of AREAS(h)) {
     out[at++] = a.e;
     out[at++] = a.dx;
@@ -209,24 +221,35 @@ export function packHearing(h: Hearing, out: Float64Array): void {
     out[at++] = p.y;
     out[at++] = p.w;
   }
+  for (let i = 0; i < falls; i++) {
+    const f = h.falls[i];
+    out[at++] = f.x;
+    out[at++] = f.y;
+    out[at++] = f.h;
+    out[at++] = f.run;
+    out[at++] = f.w;
+    out[at++] = f.edge;
+  }
 }
 
 /** A Hearing with its shore points made once, to be filled again and again by `unpackHearing` with no allocation. */
-export function pooledHearing(): { hearing: Hearing; pool: ShorePoint[] } {
+export function pooledHearing(): { hearing: Hearing; pool: ShorePoint[]; falls: FallPoint[] } {
   const pool: ShorePoint[] = [];
   for (let i = 0; i < MAX_SHORES; i++) pool.push({ sector: 0, cell: 0, kind: 0, bend: 0, x: 0, y: 0, w: 0 });
-  return { hearing: emptyHearing(), pool };
+  const falls: FallPoint[] = [];
+  for (let i = 0; i < MAX_FALLS; i++) falls.push({ x: 0, y: 0, h: 0, run: 0, w: 0, edge: 0 });
+  return { hearing: emptyHearing(), pool, falls };
 }
 
 /** Fills `into` (from `pooledHearing`) from packed numbers. Nothing is allocated. */
-export function unpackHearing(from: Float64Array, into: { hearing: Hearing; pool: ShorePoint[] }): Hearing {
+export function unpackHearing(from: Float64Array, into: { hearing: Hearing; pool: ShorePoint[]; falls: FallPoint[] }): Hearing {
   const h = into.hearing;
   h.t = from[0];
   h.ready = from[1];
   h.lanes = from[2];
   h.sea = from[3];
-  const n = from[4];
-  let at = 5;
+  const n = from[4], falls = from[5];
+  let at = 6;
   for (let k = 0; k < 7; k++) {
     const a = k < 3 ? h.surf[k] : k === 3 ? h.far : k === 4 ? h.river : k === 5 ? h.stream : h.white;
     a.e = from[at++];
@@ -245,6 +268,17 @@ export function unpackHearing(from: Float64Array, into: { hearing: Hearing; pool
     p.y = from[at++];
     p.w = from[at++];
     h.shores.push(p);
+  }
+  h.falls.length = 0;
+  for (let i = 0; i < falls; i++) {
+    const f = into.falls[i];
+    f.x = from[at++];
+    f.y = from[at++];
+    f.h = from[at++];
+    f.run = from[at++];
+    f.w = from[at++];
+    f.edge = from[at++];
+    h.falls.push(f);
   }
   return h;
 }

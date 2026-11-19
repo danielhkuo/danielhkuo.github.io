@@ -253,3 +253,43 @@ test("open sea comes in between three tenths and nine tenths of the frame", () =
   assert.ok(at(0.6) > 0 && at(0.6) < at(0.9));
   assert.equal(at(0.9), at(1));
 });
+
+test("the abbey: −18 dB at the start point, slots either side of it near, wandering only far off", () => {
+  const prefs: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
+  const at = (d: number, t = 100) => {
+    const census = { n: 10240, sources: [{ kind: "abbey", key: 0, x: 5000, y: 5000, h: 0 }] };
+    return mix({ t, dt: 1 / 60, x: 5000, y: 5000 + d, alt: 30, heading: 0, speed: 60, bank: 0, rest: 0 }, emptyHearing(), census, prefs).targets;
+  };
+  const db = (g: number) => 20 * Math.log10(g);
+  assert.ok(Math.abs(db(at(1150)[T.BELL_GAIN]) + 18) < 0.3, `${db(at(1150)[T.BELL_GAIN]).toFixed(2)} dB at 1150 cells`);
+  assert.equal(at(1600)[T.BELL_GAIN], 0);
+  assert.ok(Math.abs(at(40)[T.BELL_GAIN] - 1) < 1e-6);
+  // At the tower the two slots sit 0.3 either side; from 200 cells they are one place.
+  assert.ok(Math.abs(at(40)[T.BELL_PAN_A] + 0.3) < 1e-6 && Math.abs(at(40)[T.BELL_PAN_B] - 0.3) < 1e-6);
+  assert.equal(at(300)[T.BELL_PAN_A], at(300)[T.BELL_PAN_B]);
+  assert.equal(at(100)[T.BELL_FAR], 0);
+  assert.equal(at(1000)[T.BELL_FAR], 1);
+  // The reverb's share grows threefold as the abbey recedes.
+  assert.ok(Math.abs(at(1000)[T.BELL_SEND] / at(40)[T.BELL_SEND] - 3) < 1e-6);
+  // No abbey: nothing, and nothing ducks.
+  const none = mix({ t: 20, dt: 1 / 60, x: 0, y: 0, alt: 30, heading: 0, speed: 60, bank: 0, rest: 0 }, emptyHearing(), EMPTY_CENSUS, prefs).targets;
+  assert.equal(none[T.BELL_GAIN], 0);
+  assert.equal(none[T.DUCK], 1);
+});
+
+test("the bell duck: 3 dB while the abbey rings, between an abbey gain of −16 dB (none) and −6 dB (all of it)", () => {
+  const prefs: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
+  const census = { n: 10240, sources: [{ kind: "abbey", key: 0, x: 5000, y: 5000, h: 0 }] };
+  const duckAt = (d: number, t: number) => 20 * Math.log10(mix({ t, dt: 1 / 60, x: 5000, y: 5000 + d, alt: 30, heading: 0, speed: 60, bank: 0, rest: 0 }, emptyHearing(), census, prefs).targets[T.DUCK]);
+  // Distances where the abbey's gain (60 / d)^0.7 is −16, −11 and −6 dB.
+  const dOf = (db: number) => 60 * Math.pow(10, -db / 14);
+  const ringing = 20, quiet = 120;
+  assert.ok(Math.abs(duckAt(dOf(-6) - 1, ringing) + 3) < 0.01);
+  assert.ok(Math.abs(duckAt(60, ringing) + 3) < 1e-5);
+  assert.ok(Math.abs(duckAt(dOf(-11), ringing) + 1.5) < 0.02);
+  assert.ok(Math.abs(duckAt(dOf(-16) + 1, ringing)) < 0.01);
+  assert.equal(duckAt(1150, ringing), 0, "nothing ducks at the start point");
+  assert.equal(duckAt(60, quiet), 0, "nor when the abbey is not ringing");
+  // Down quickly, back slowly.
+  assert.deepEqual([SEND[T.DUCK].down, SEND[T.DUCK].up], [0.13, 0.8]);
+});

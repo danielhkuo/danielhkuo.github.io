@@ -8,7 +8,7 @@ import { advance, cameraAt, easeFocus, land, restShare, takeOff, type Phase, typ
 import { createEar } from "../ear.ts";
 import { createLanes } from "../engine/lanes.ts";
 import { copyHearing, emptyHearing, type Hearing, type Places, type Pose, type Prefs } from "../types.ts";
-import { coastEast, coastOfKinds, coastWest, cove, frameOf, gridOf, islet, OPEN_SEA, type FlatWorld } from "./land.ts";
+import { coastEast, coastOfKinds, coastWest, cove, frameOf, gridOf, islet, OPEN_SEA, overlay, riverNS, type FlatWorld } from "./land.ts";
 
 export type Action =
   /** "on" is the first enable (the slow fade); a scene without one starts already on. */
@@ -57,6 +57,10 @@ export interface Scene {
   repeat?: boolean;
   /** Seconds of the render to hand back as sound (the rest is rendered and measured, then let go). */
   keep?: number;
+  /** In place of the abbey's hours: one stroke of the tenor under its hammer, this many seconds into the scene. */
+  stroke?: number;
+  /** In place of any bell: one sample of 1 into the reverb's send, this many seconds into the scene. */
+  impulse?: number;
 }
 
 export const BENCH_PREFS: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
@@ -235,6 +239,42 @@ function landing(seconds: number, t0: number): (t: number) => SceneFrame {
 }
 
 
+/** The bench's abbey, and the places that hold it alone. */
+const ABBEY = { x: 5000, y: 5000 };
+const abbeyAt = (x: number, y: number): Places => ({ worldId: "bench", seed: SEED, n: N, forced: false, abbeys: [{ x, y }], towns: [], lighthouses: [], gulls: [], wonders: [] });
+const AT_ABBEY = abbeyAt(ABBEY.x, ABBEY.y);
+/** World time at the top of the abbey's hour `H` (it strikes ((H + 11) mod 12) + 1). */
+const hourTop = (H: number) => 240 * H;
+/** The bells alone, dry: no send to the reverb. */
+const DRY = { "K_BELL.send": 0 };
+
+/**
+ * In from 1400 cells south of the abbey at cruise, slowing over the last two seconds to brake speed, then round the
+ * tower at 100 cells, clockwise from due south (the bells pass from ahead to the left, behind, the right).
+ */
+function approach(seconds: number, t0: number): (t: number) => SceneFrame {
+  const R = 100, far = 1400, slowS = 2;
+  const run = (far - R) / CRUISE - slowS / 2 * (1 - BRAKE);
+  return (time) => {
+    const t = Math.min(seconds, Math.max(0, Math.round(time * FPS) / FPS));
+    // Speed: cruise, then eased to brake speed over the two seconds before the circle is joined.
+    const u = Math.min(1, Math.max(0, (t - (run - slowS)) / slowS));
+    const speed = CRUISE * (1 - (1 - BRAKE) * u * u * (3 - 2 * u));
+    let x = ABBEY.x, y: number, heading = NORTH;
+    if (t <= run) {
+      // Distance flown: cruise throughout, less what the slowing has cost so far (the integral of the ease).
+      const lost = CRUISE * (1 - BRAKE) * slowS * (u * u * u - (u * u * u * u) / 2);
+      y = ABBEY.y + far - (CRUISE * t - lost);
+    } else {
+      const a = ((t - run) * CRUISE * BRAKE) / R;
+      x = ABBEY.x - R * Math.sin(a);
+      y = ABBEY.y + R * Math.cos(a);
+      heading = Math.PI + a;
+    }
+    return { pose: { t: t0 + t, dt: 1 / FPS, x, y, alt: 30, heading, speed, bank: 0, rest: 0 }, hearing: QUIET };
+  };
+}
+
 /** `wind-speeds` then `turns`, as one flight. */
 const CALM_KEYS: Keys = (t) => (t < 30 ? SPEEDS(t) : TURNS(t - 30));
 
@@ -401,6 +441,130 @@ export const SCENES: Scene[] = [
     at: heard(islet(5025, 5000, 16, M.sand), 600, hover(600, 100, 5000, 5000, 1)),
   }),
   scene({
+    name: "river",
+    set: NO_WIND,
+    seconds: 20,
+    about: "Still, between a wide river 20 cells to the east and a stream 25 cells to the west: bubbles, not hiss; the purl on the right, the brook's separate notes on the left.",
+    at: heard(overlay(riverNS(5020, 6, 4), riverNS(4974.5, 2, 10)), 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "brook",
+    set: NO_WIND,
+    seconds: 20,
+    about: "Still, 15 cells from a stream alone: single bubbles, each a short rising note.",
+    at: heard(riverNS(5014.5, 2, 10), 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "fall-small",
+    set: NO_WIND,
+    seconds: 20,
+    about: "Still, 20 cells from a small fall (4 rows) on a river: a loud brook with a bright body; no rumble.",
+    at: heard(riverNS(5020, 4, 4, [{ y: 4995, run: 4 }]), 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "fall-tall",
+    set: NO_WIND,
+    seconds: 20,
+    about: "Still, 30 cells from a tall fall (18 rows): body, hiss that breathes, the plunge, and a rumble under it all.",
+    at: heard(riverNS(5030, 4, 4, [{ y: 4977.5, run: 18 }]), 20, hover(20, 100, 5000, 5000)),
+  }),
+  scene({
+    name: "river-to-fall",
+    seconds: 40,
+    about: "Up a river at cruise to a tall fall and past, the camera sliding: the purl, then the fall rising with no gap, then left behind, duller.",
+    beds: true,
+    at: heard(riverNS(5015, 4, 4, [{ y: 4977.5, run: 18 }]), 40, flown(40, 100, startAt(5000, 6200, NORTH), LEVEL)),
+    marks: [
+      { name: "the river alone", t0: 4, t1: 12 },
+      { name: "at the fall", t0: 19, t1: 21 },
+    ],
+  }),
+  scene({
+    name: "falls-handover",
+    set: NO_WIND,
+    seconds: 14,
+    about: "Slowly north past two small falls toward a tall one: the tall fall takes the spare chain when it beats the weaker small one, a half-second crossfade with no hole.",
+    at: heard(
+      overlay(overlay(riverNS(5030, 4, 4, [{ y: 5495, run: 4 }], 5440, 5560), riverNS(4965, 4, 4, [{ y: 5465, run: 4 }], 5410, 5530)), riverNS(5015, 4, 4, [{ y: 5307.5, run: 18 }], 5200, 5380)),
+      14, flown(14, 100, startAt(5000, 5560, NORTH, CRUISE * BRAKE), () => key(0, false, true)),
+    ),
+  }),
+  scene({
+    name: "bell-stroke",
+    seconds: 12,
+    about: "One stroke of the tenor, 60 cells off: clang to dark hum; the warble of its doublets; the tail ends in silence.",
+    set: NO_WIND,
+    places: AT_ABBEY,
+    stroke: 0.5,
+    at: hover(12, 100, ABBEY.x, ABBEY.y + 60),
+  }),
+  scene({
+    name: "bell-stroke-dry",
+    seconds: 12,
+    about: "The same stroke with no reverb: what the bell itself does (its partials and their decays are measured here).",
+    set: { ...NO_WIND, ...DRY },
+    places: AT_ABBEY,
+    stroke: 0.5,
+    at: hover(12, 100, ABBEY.x, ABBEY.y + 60),
+  }),
+  scene({
+    name: "reverb-impulse",
+    seconds: 4,
+    about: "One sample into the reverb's send bus, half a second in: the render is the reverb's own response (measured, not for listening).",
+    set: NO_WIND,
+    places: AT_ABBEY,
+    impulse: 0.5,
+    at: hover(4, 100, ABBEY.x, ABBEY.y + 60),
+  }),
+  scene({
+    name: "bells-near",
+    seconds: 75,
+    about: "At the tower through hour 5: the bells entering in turn, drifting against each other; a pause; five strokes.",
+    set: NO_WIND,
+    places: AT_ABBEY,
+    t0: hourTop(5),
+    at: hover(75, hourTop(5), ABBEY.x, ABBEY.y + 60),
+    marks: [
+      { name: "peal", t0: 14, t1: 36 },
+      { name: "peal 25–33 s", t0: 25, t1: 33 },
+      { name: "the hour", t0: 40, t1: 52 },
+    ],
+  }),
+  scene({
+    name: "bells-twelve",
+    seconds: 40,
+    about: "At the tower, the page's first hour, from just before its strokes: twelve of them, 2.4 s apart.",
+    set: NO_WIND,
+    places: AT_ABBEY,
+    t0: hourTop(0) + 38,
+    at: hover(40, hourTop(0) + 38, ABBEY.x, ABBEY.y + 60),
+  }),
+  scene({
+    name: "abbey-approach",
+    seconds: 90,
+    about: "From 1400 cells, 4 s before the hour, in to the tower and round it: faint, wandering, mostly hum; clearing on arrival; the wind yields 3 dB only when near.",
+    beds: true,
+    places: AT_ABBEY,
+    t0: hourTop(7) - 4,
+    at: approach(90, hourTop(7) - 4),
+    marks: [
+      // The wind at brake speed round the tower: under the bells, and after they are done.
+      { name: "wind, ringing", t0: 40, t1: 60 },
+      { name: "wind, after", t0: 75, t1: 90 },
+    ],
+  }),
+  scene({
+    name: "bells-rejoin",
+    seconds: 40,
+    about: "Unlock mid-peal; a 0.6 s stall at 10 s; hide at 20, show at 24: tails present at once; nothing doubled after the stall; nothing stale after the hide; five strokes for the hour.",
+    set: NO_WIND,
+    places: AT_ABBEY,
+    t0: hourTop(5) + 14,
+    actions: [{ at: 0, do: "on" }, { at: 10, do: "stall", for: 0.6 }, { at: 20, do: "hide" }, { at: 24, do: "show" }],
+    at: hover(40, hourTop(5) + 14, ABBEY.x, ABBEY.y + 60),
+    marks: [{ name: "peal 25–33 s", t0: 11, t1: 19 }],
+  }),
+  scene({
     name: "toggle",
     seconds: 16,
     about: "Cruising along a beach: on at 0, off at 6, on at 9, off at 13. A slow first rise; clean stops; nothing old on return.",
@@ -420,6 +584,28 @@ export const SCENES: Scene[] = [
     about: "Cruising along a beach: a 0.6 s gap in the frames at 5 s. No hole after it, nothing doubled.",
     actions: [{ at: 5, do: "stall", for: 0.6 }],
     at: heard(BEACH_COAST, 12, alongCoast(12, 100)),
+    marks: [
+      { name: "before the gap", t0: 4, t1: 5 },
+      { name: "after the gap", t0: 5.6, t1: 6.6 },
+    ],
+  }),
+  scene({
+    name: "hide-show-bells",
+    seconds: 16,
+    about: "The same, mid-peal, past an abbey 120 cells inland: the rings that should be sounding on return are, once.",
+    actions: [{ at: 5, do: "hide" }, { at: 9, do: "show" }],
+    places: abbeyAt(4880, 3480),
+    t0: hourTop(5) + 16,
+    at: heard(BEACH_COAST, 16, alongCoast(16, hourTop(5) + 16)),
+  }),
+  scene({
+    name: "stall-bells",
+    seconds: 12,
+    about: "The same, mid-peal, past an abbey 120 cells inland: no ring doubled, none missing after the gap.",
+    actions: [{ at: 5, do: "stall", for: 0.6 }],
+    places: abbeyAt(4880, 3360),
+    t0: hourTop(5) + 16,
+    at: heard(BEACH_COAST, 12, alongCoast(12, hourTop(5) + 16)),
     marks: [
       { name: "before the gap", t0: 4, t1: 5 },
       { name: "after the gap", t0: 5.6, t1: 6.6 },
