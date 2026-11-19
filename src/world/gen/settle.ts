@@ -405,8 +405,23 @@ const HB = { w: 98, h: 44, x: 49, y: 3 };
  * from the quay's middle on the shore line, y to the south. The lobe's x is given for the river on the east.
  */
 const BASIN: readonly (readonly [number, number, number, number])[] = [[0, 14, 32, 12], [-13, 17, 20, 10]];
-/** The mole follows an ellipse round the basin, centred on the first ellipse's centre. */
-const MOLE = { y: 14, rx: 40, ry: 19 };
+/**
+ * The mole follows an ellipse round the basin, centred on the first ellipse's centre. It ends at `end` of the way round
+ * (see harbourWorks), its head on the ray (headU, headV), so a wide mouth is left between it and the pier.
+ */
+const MOLE = { y: 14, rx: 40, ry: 19, end: 1.4, headU: -0.556, headV: 0.831 };
+/**
+ * The harbour's mouth, between the mole's head and the pier, in cells from the quay's middle on the shore line (x for
+ * the river on the east), and the way out from it; and the fairway dredged on from it: [cells out, radius].
+ */
+const MOUTH = { x: 23.2, y: 29.5, ux: 0.832, uy: 0.555 };
+const FAIRWAY: readonly (readonly [number, number])[] = [[0, 7], [7, 7.5], [14, 8], [21, 8.5], [28, 9]];
+/** The basin's floor: as deep as the sea it opens to, so its water is the sea's own and not a darker pool. */
+const BASIN_LEVEL = -2.2;
+/** Twelve directions round a circle, for testing a fairway's edge against the shore. */
+const AROUND: readonly (readonly [number, number])[] = [
+  [1, 0], [0.866, 0.5], [0.5, 0.866], [0, 1], [-0.5, 0.866], [-0.866, 0.5], [-1, 0], [-0.866, -0.5], [-0.5, -0.866], [0, -1], [0.5, -0.866], [0.866, -0.5],
+];
 
 /** True inside the basin, its ellipses grown by `grow` cells. (lx, ly) are cells from the quay's middle on the shore line. */
 export function inBasin(lx: number, ly: number, river: number, grow: number): boolean {
@@ -428,7 +443,7 @@ export function inBasin(lx: number, ly: number, river: number, grow: number): bo
 export function harbourWorks(river: number, land?: (i: number, j: number) => boolean): Structure {
   const W = HB.w, H = HB.h, s = S.sculpt(W, H);
   // The mole's head: where the ellipse is met by a ray most of the way round to the river's side.
-  const hu = -0.55, hv = 0.45, hk = 1 / Math.sqrt((hu * hu) / (MOLE.rx * MOLE.rx) + (hv * hv) / (MOLE.ry * MOLE.ry));
+  const hu = MOLE.headU, hv = MOLE.headV, hk = 1 / Math.sqrt((hu * hu) / (MOLE.rx * MOLE.rx) + (hv * hv) / (MOLE.ry * MOLE.ry));
   const headX = -river * hu * hk, headY = MOLE.y + hv * hk;
   const slip = river * 13;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
@@ -455,7 +470,7 @@ export function harbourWorks(river: number, land?: (i: number, j: number) => boo
     const d = len * (1 - 1 / q);
     const a = v >= 0 ? 1 - u / (Math.abs(u) + v) : u > 0 ? u / (u - v) - 1 : -3;
     const head = Math.sqrt((lx - headX) * (lx - headX) + (ly - headY) * (ly - headY));
-    const mole = (Math.abs(d) <= 2.3 && a >= -0.25 && a <= 1.55) || head <= 3.3;
+    const mole = (Math.abs(d) <= 2.3 && a >= -0.25 && a <= MOLE.end) || head <= 3.3;
     const pier = Math.abs(d) <= 1.9 && ((v >= 0 && a >= 1.8) || (v < 0 && u < 0 && v > -5));
     if (!mole && !pier) continue;
     if (land && land(i, j)) continue;
@@ -501,7 +516,19 @@ function standTown(w: Work, site: PlacedSite): void {
   // The quay and the low ground behind it, built up clear of the tide as far as the first street; then the
   // basin, cut out of it.
   addConform(w, { kind: "raise", x: hx, y: shore - 4, rx: 50, ry: 18, round: true, level: 1.8, skirt: 3, limit: 0 });
-  BASIN.forEach((b, k) => addConform(w, { kind: "dredge", x: hx + (k === 0 ? b[0] : river * b[0]), y: shore + b[1], rx: b[2], ry: b[3], round: true, level: -3, skirt: 2, limit: 0 }));
+  BASIN.forEach((b, k) => addConform(w, { kind: "dredge", x: hx + (k === 0 ? b[0] : river * b[0]), y: shore + b[1], rx: b[2], ry: b[3], round: true, level: BASIN_LEVEL, skirt: 2, limit: 0 }));
+  // The fairway: the mouth between the mole's head and the pier is dredged on out through the shallows, so the basin's
+  // deep water runs on into the sea's and the harbour reads as open to it. Only over water: where the shore stands in
+  // the way the channel is narrowed, or stops.
+  for (const [along, r] of FAIRWAY) {
+    const fx = hx + river * (MOUTH.x + MOUTH.ux * along), fy = shore + MOUTH.y + MOUTH.uy * along;
+    let room = r;
+    for (let q = 0; q < AROUND.length && room >= 3; q++) {
+      if (heightAt({ h: natural, gN: w.c.gN }, fx + room * AROUND[q][0], fy + room * AROUND[q][1]) > 0.2) { room -= 1.5; q = -1; }
+    }
+    if (room < 3) break;
+    addConform(w, { kind: "dredge", x: fx, y: fy, rx: room, ry: room, round: true, level: BASIN_LEVEL + 0.04 * along, skirt: 3, limit: 0 });
+  }
   block(w, hx, shore - 40, 60, 44);
   const taken: [number, number, number, number][] = [];
   w.town = { hx, shore, taken };
