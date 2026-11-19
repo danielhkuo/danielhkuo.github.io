@@ -861,7 +861,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   }
 
   // Structures: their tops go into the crown layer over whatever grew there; their yards repaint the ground.
-  const fixed = new Uint8Array(count), made = new Uint8Array(count);
+  // Picture marks (a crown, a mast) leave a shadow depth on cells they do not stand on.
+  const fixed = new Uint8Array(count), made = new Uint8Array(count), pictShadow = new Uint8Array(count);
   if (bi) {
     for (const id of structuresIn(bi, wx0, wy0, wx0 + W, wy0 + H)) {
       const s = bi.built.structures[id];
@@ -881,6 +882,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           } else if (s.paint[a] !== 0 && made[k] !== 2) {
             crown[k] = -Infinity;
             if (!water[k] && riv[k] !== 0) { gmat[k] = s.paint[a]; made[k] = 1; }
+          }
+          if (s.shadow) {
+            const d = s.shadow[a];
+            if (d > pictShadow[k]) pictShadow[k] = d;
           }
         }
       }
@@ -948,6 +953,9 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         if (v > over) over = v;
       }
       flags |= shadowDepth(over, top);
+      // A picture's shadow, on land and on water: at least the depth the builder stored.
+      const cast = pictShadow[i];
+      if (cast > (flags & F_SHADOW)) flags = (flags & ~F_SHADOW) | cast;
 
       out.surf[o] = top;
       out.mat[o] = m;
@@ -960,10 +968,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
           out.mat[o] = boulder ? (look.apronRock as number) : look.apron;
           if (boulder) out.surf[o] = top + 1 + ((hs >>> 8) & 1);
           // Pale stones under the dark wall, a tone darker where the water laps them. The cliff's own shadow is held to
-          // its lightest, or the strip reads as a violet line round the coast.
+          // its lightest, or the strip reads as a violet line round the coast. A picture's shadow keeps its depth.
           out.light[o] = boulder ? 96 + (hs & 31) : (dist[i] <= 4 ? 126 : 110) + (hs & 15);
           out.aux[o] = 0;
-          out.flags[o] = ((flags & F_SHADOW) !== 0 ? 1 : 0) | F_QUIET;
+          const held = (flags & F_SHADOW) !== 0 ? 1 : 0;
+          out.flags[o] = (pictShadow[i] > held ? pictShadow[i] : held) | F_QUIET;
           continue;
         }
       }

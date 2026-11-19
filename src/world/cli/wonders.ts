@@ -75,7 +75,8 @@ export function renderWonders(opts: WondersBenchOptions): string[] {
     // are framed halfway down it; the rest stand on their level.
     const ground = w.type === "baths" ? w.level * 0.5 : w.level;
     const close: readonly [number, number, number] = w.type === "railway" ? [w.x, w.y, w.level + 4] : [cx, cy, ground + w.height * 0.3];
-    return { name: w.id, wide: [cx, cy + 20, ground], close };
+    const wide: readonly [number, number, number] = w.type === "railway" ? [w.x, w.y + 20, 0] : [cx, cy + 20, ground];
+    return { name: w.id, wide, close };
   });
   // For scale and style: the abbey and the first lighthouse, framed the same way.
   const shown = new Set<string>();
