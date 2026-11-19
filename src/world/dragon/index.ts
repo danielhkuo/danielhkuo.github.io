@@ -94,13 +94,14 @@ export interface Dragon {
 export function createDragon(n: number): Dragon {
   const pose: Pose = { chain: createChain(n, PATH), n, time: 0, wave: 0 };
   let look: Look = LACQUER;
-  let lookKey = "";
+  let lookKey = -1;
   let night = 0;
   return {
     pose,
     setAir(air) {
       night = air.night;
-      const key = `${Math.round(air.time * STEPS)} ${Math.round(air.season * 8)} ${Math.round(air.overcast * 8)} ${Math.round(air.mist * 8)}`;
+      // The light in steps, as a number (cheaper each frame than a string); cloud and rain do not colour the dragon.
+      const key = ((Math.round(air.time * STEPS) * 9 + Math.round(air.season * 8)) * 9 + Math.round(air.overcast * 8)) * 9 + Math.round(air.mist * 8);
       if (key === lookKey) return;
       lookKey = key;
       const plain = air.night === 0 && air.overcast === 0 && air.mist === 0 && Math.abs(air.time - 0.5) < 0.14;

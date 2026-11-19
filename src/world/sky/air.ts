@@ -39,6 +39,17 @@ export function paletteOptions(air: Air): PaletteOptions {
   return air.mist > 0 ? { time: air.time, season: air.season, overcast: air.overcast, mist: air.mist } : { time: air.time, season: air.season, overcast: air.overcast };
 }
 
+/**
+ * A number naming this air's light in steps: the sun phase in `timeSteps`, the season in eighths, and the overcast,
+ * mist and cloud in `weatherSteps`. Colours worked out from the air are kept until it changes; a number is cheaper
+ * to make every frame than a string.
+ */
+export function lightKey(air: Air, timeSteps: number, weatherSteps: number): number {
+  const w = weatherSteps + 1;
+  return (((Math.round(air.time * timeSteps) * 9 + Math.round(air.season * 8)) * w + Math.round(air.overcast * weatherSteps)) * w
+    + Math.round(air.mist * weatherSteps)) * w + Math.round(air.cloud * weatherSteps);
+}
+
 /** The palette for this air, and the paper's cream in the same light (for the grain and the haze). */
 export function lightFor(air: Air): { palette: Palette; cream: number } {
   const o = paletteOptions(air);

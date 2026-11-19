@@ -92,6 +92,9 @@ export interface WindOptions {
 }
 
 /** The wind in the grass and the trees. `seed` is the world's. */
+/** Mist (sky/air.ts) this thick or more stills the wind. */
+export const STILL = 0.35;
+
 export function windLayer(seed: number, opts: WindOptions = {}): LiveLayer {
   const gust = gustField(seed);
   const { at: runAt, runs } = gustRuns(gust, opts.plain ? 0 : GUST - FEATHER);
@@ -103,6 +106,8 @@ export function windLayer(seed: number, opts: WindOptions = {}): LiveLayer {
   return {
     name: "wind",
     draw(f: LiveFrame): void {
+      // Mist lies in still air: no gust crosses the grass while it is thick.
+      if (f.air && f.air.mist >= STILL) return;
       const { out, bake, palette, t } = f;
       const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
       const shift = Math.floor(t * GUST_SPEED);

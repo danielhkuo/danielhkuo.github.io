@@ -208,10 +208,11 @@ test("the sky in noon's air is the sky as painted; weather clouds gather only as
   const plain = createSky(3, N, STYLES.cumulus);
   const noon = createSky(3, N, STYLES.cumulus);
   noon.setAir(NOON_AIR);
+  // Over black a shadow changes nothing, so only cloud is counted.
   const covered = (sky: ReturnType<typeof createSky>, x: number, y: number): number => {
-    const out = frame();
+    const out = new Uint32Array(W * H).fill(BLACK);
     sky.draw(out, rect(x, y), 0, "below");
-    return out.filter((v) => v !== GREY).length;
+    return out.filter((v) => v !== BLACK).length;
   };
   let busy = 0;
   for (let k = 0; k < 12; k++) {

@@ -4,7 +4,7 @@
 
 import type { ViewRect } from "../render/compose.ts";
 import { gradeRgb } from "../render/palette.ts";
-import type { Air } from "./air.ts";
+import { lightKey, type Air } from "./air.ts";
 import { ALT, makeField, weatherClouds, type CloudLayer, type Opening, type SkyField } from "./field.ts";
 import { MIDDAY_RAMP, type Ramp } from "./paint/cumulus.ts";
 import { makeShapes, SHADOW_SLOPE, SHAPE_COUNTS, type CloudShape } from "./shapes.ts";
@@ -188,6 +188,8 @@ export function drawShadows(
 
 /** The span of cloudiness over which a weather cloud condenses from nothing to whole. */
 const CONDENSE = 0.12;
+/** Of 256: a cloud shadow that keeps at least this much of each channel is too faint to see, and is not drawn. */
+const FAINT = 246;
 /** Steps of cloudiness at which the list of weather clouds that can show is made again. */
 const GATHER_STEPS = 32;
 
@@ -261,7 +263,7 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
   let gatheredTo = 0;
   let keep: readonly [number, number, number] = style.shadowKeep;
   let cloudiness = 0;
-  let painted = "";
+  let painted = -1;
   return {
     field,
     shapes,
@@ -276,11 +278,11 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
       const soft = (1 - 0.85 * Math.max(air.overcast, air.cloud)) * (1 - 0.8 * air.night);
       const sk = style.shadowKeep;
       keep = [Math.round(256 - (256 - sk[0]) * soft), Math.round(256 - (256 - sk[1]) * soft), Math.round(256 - (256 - sk[2]) * soft)];
-      const key = `${Math.round(air.time * TIME_STEPS)} ${Math.round(air.cloud * WEATHER_STEPS)} ${Math.round(air.overcast * WEATHER_STEPS)} ${Math.round(air.mist * WEATHER_STEPS)}`;
+      const key = lightKey(air, TIME_STEPS, WEATHER_STEPS);
       if (key === painted) return;
       // The first air seen is noon's plain light: the sprites are as the painter left them.
       const plain = air.cloud === 0 && air.overcast === 0 && air.mist === 0 && Math.abs(air.time - 0.5) < 0.14;
-      if (plain && painted === "") {
+      if (plain && painted === -1) {
         painted = key;
         return;
       }
@@ -296,7 +298,8 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
     draw(out, rect, t, pass) {
       const lows = cloudiness > 0 ? gathered : low;
       if (pass === "below") {
-        if (keep[0] < 256 || keep[1] < 256 || keep[2] < 256) {
+        // A shadow that keeps this much of every channel cannot be seen: under a closed sky or at night, none is drawn.
+        if (keep[0] < FAINT || keep[1] < FAINT || keep[2] < FAINT) {
           drawShadows(out, rect, banks, shapes, t, "bank", keep);
           drawShadows(out, rect, lows, shapes, t, "low", keep, true, cloudiness);
         }

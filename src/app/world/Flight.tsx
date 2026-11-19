@@ -16,7 +16,7 @@ import { createDiscoveries, type KeyValue } from "../../world/runtime/discoverie
 import { createStreamView } from "../../world/runtime/stream";
 import type { StreamView } from "../../world/runtime/stream";
 import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
-import { dayOfYear, parseSeason, parseTime, seasonOf, sunPhase } from "../../world/sky/clock";
+import { dayOfYear, parseSeason, parseTime, SEASONS, sunPhase } from "../../world/sky/clock";
 import { createRain } from "../../world/sky/rain";
 import { createSky } from "../../world/sky/sky";
 import { styleFrom } from "../../world/sky/styles";
@@ -172,8 +172,8 @@ export default function Flight() {
           if (!readyFrame || (pool && pool.stats().workers === 0)) fail();
         };
 
-        // The light and weather: the visitor's own clock, the date, and the weather everyone shares at this moment.
-        // ?time=, ?season= and ?weather= hold any of them still, for testing and screenshots.
+        // The light and weather: the visitor's own clock (its date sets how long the day is) and the weather everyone
+        // shares at this moment. ?time=, ?season= and ?weather= hold any of them still, for testing and screenshots.
         const params = new URLSearchParams(window.location.search);
         const today = new Date();
         const fixedTime = parseTime(params.get("time"), dayOfYear(today.getFullYear(), today.getMonth() + 1, today.getDate()));
@@ -184,7 +184,9 @@ export default function Flight() {
           const d = new Date();
           const doy = dayOfYear(d.getFullYear(), d.getMonth() + 1, d.getDate());
           const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
-          return airOf(fixedTime ?? sunPhase(hour, doy), fixedSeason ?? seasonOf(doy), fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
+          // The season stays summer, the one the world was tuned in, until the owner settles whether seasons follow
+          // the date or the place; ?season= previews the others.
+          return airOf(fixedTime ?? sunPhase(hour, doy), fixedSeason ?? SEASONS.summer, fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
         };
         let builtAir = airNow();
         let air = builtAir;

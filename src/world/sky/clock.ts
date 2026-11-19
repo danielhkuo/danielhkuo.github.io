@@ -1,5 +1,6 @@
-// The visitor's clock: where the sun is, and the time of year, from the hour and the date on their own clock. The
-// page reads the clock and hands the numbers in; nothing here reads it, so the same numbers give the same light.
+// The visitor's clock: where the sun is, from the hour and the date on their own clock (the date sets how long the
+// day is). The page reads the clock and hands the numbers in; nothing here reads it, so the same numbers give the
+// same light.
 //
 // The light is told in sun phase, the palette's `time`: 0.25 at sunrise, 0.5 at noon, 0.75 at sunset, 0 and 1 in the
 // middle of the night. Days are longer in summer, as at a middle latitude, so a summer evening stays light.
@@ -64,7 +65,11 @@ export function sunPhase(hour: number, doy: number): number {
   return wrap01(0.75 + (0.5 * since) / (24 - day));
 }
 
-/** The palette's season on day `doy`: 0 in mid-April, 0.25 mid-July, 0.5 mid-October, 0.75 mid-January. */
+/**
+ * The palette's season on day `doy`: 0 in mid-April, 0.25 mid-July, 0.5 mid-October, 0.75 mid-January. Not used by
+ * the page yet: whether seasons follow the date or the place is the owner's call (2026-11-18); until then it flies
+ * in summer.
+ */
 export function seasonOf(doy: number): number {
   return wrap01((doy - SPRING) / YEAR);
 }

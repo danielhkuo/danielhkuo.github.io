@@ -50,3 +50,17 @@ test("the kite flies on fair days only: not at night and not in the rain", () =>
   assert.equal(kites(airOf(PHASES.night, 0.25)), 0);
   assert.equal(kites(airOf(0.5, 0.25, parseWeather("rain") ?? undefined)), 0);
 });
+
+test("thick mist stills the wind: no gusts cross the grass while it lies", async () => {
+  const { windLayer, STILL } = await import("./wind.ts");
+  const { shot, frameOf, differing } = await import("../testing/liveShot.ts");
+  const s = await shot("town");
+  const gusts = (air?: ReturnType<typeof airOf>): number => {
+    const f = frameOf(s, 7.5);
+    windLayer(manifest.seed).draw(air ? { ...f, air } : f);
+    return differing(f.out, s.out);
+  };
+  assert.ok(gusts() > 0, "gusts on a fair day");
+  assert.ok(gusts(airOf(0.5, 0.25, parseWeather(`mist:${STILL / 2}`) ?? undefined)) > 0, "thin mist leaves them");
+  assert.equal(gusts(airOf(0.5, 0.25, parseWeather("mist") ?? undefined)), 0);
+});

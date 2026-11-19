@@ -14,7 +14,7 @@ import { gradeRgb } from "../render/palette.ts";
 import type { ViewRect } from "../render/compose.ts";
 import type { LiveLayer } from "../live/live.ts";
 import { matOf } from "../live/pixel.ts";
-import { paletteOptions, type Air } from "./air.ts";
+import { lightKey, paletteOptions, type Air } from "./air.ts";
 
 /** Streaks in the rain's space in full rain; about two thirds of them are on the frame at once. */
 export const STREAKS = 520;
@@ -84,10 +84,10 @@ function mixRgb(a: number, b: number, t: number): number {
 
 /** The rain's colour and its ink in this air, kept until the light moves. */
 function rainColours(): (air: Air) => { pale: number; ink: number } {
-  let key = "";
+  let key = -1;
   const colours = { pale: RAIN, ink: INK };
   return (air) => {
-    const k = `${Math.round(air.time * 96)} ${Math.round(air.overcast * 16)} ${Math.round(air.mist * 16)}`;
+    const k = lightKey(air, 96, 16);
     if (k !== key) {
       key = k;
       colours.pale = mixRgb(gradeRgb(RAIN, paletteOptions(air)), RAIN, NIGHT_SPARE * air.night);

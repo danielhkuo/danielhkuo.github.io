@@ -9,7 +9,7 @@
 import { hash2 } from "../core/hash.ts";
 import { isBuilt, isCanopy, isWater, MATERIAL as M } from "../look/materials.ts";
 import { gradeRgb } from "../render/palette.ts";
-import { paletteOptions, type Air } from "../sky/air.ts";
+import { lightKey, paletteOptions, type Air } from "../sky/air.ts";
 import { rainLean } from "../sky/rain.ts";
 import { modP } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
@@ -117,9 +117,9 @@ export function mistLayer(seed: number): LiveLayer {
   const field = mistField(seed);
   const { at: runAt, runs } = runsOf(field, FRINGE);
   const lean = rainLean(seed);
-  let key = "", colour = MIST;
+  let key = -1, colour = MIST;
   const colourIn = (air: Air): number => {
-    const k = `${Math.round(air.time * 96)} ${Math.round(air.overcast * 16)} ${Math.round(air.mist * 16)}`;
+    const k = lightKey(air, 96, 16);
     if (k !== key) {
       key = k;
       colour = gradeRgb(MIST, paletteOptions(air));
