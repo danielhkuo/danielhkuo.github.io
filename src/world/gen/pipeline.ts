@@ -1,7 +1,8 @@
 // The generator's stages, in order. One place that says how a world is made.
 // Stages not built yet are marked; the bake supplies stand-ins for them.
 
-import { type Climate, climateFields, type ZoneLayout } from "./climate.ts";
+import { startOf } from "../pack/manifest.ts";
+import { type Climate, type ClimateOptions, climateFields, moistureNorm, type ZoneLayout } from "./climate.ts";
 import { type Landforms, shapeByClimate } from "./landforms.ts";
 import { coast, coastContext } from "./coast.ts";
 import { drown } from "./drown.ts";
@@ -9,10 +10,12 @@ import { runSchedule } from "./erode.ts";
 import { formWaters, shapeForms } from "./forms.ts";
 import { type GlacialFeature, glacial, glacialContext } from "./glacial.ts";
 import { type HydroResult, hydrology } from "./hydro.ts";
+import { joinTerrain, nativePlan, type Recipe } from "./native.ts";
 import { ARCHETYPE, type WorldParams } from "./params.ts";
 import { type Plan, planWorld } from "./plan.ts";
 import { rivers, type RiversResult } from "./rivers.ts";
-import { settle, type SettleOptions, type Settlement } from "./settle.ts";
+import { settle, type SettleOptions, type Settlement, siteFieldsOf } from "./settle.ts";
+import { builtRules, placeSites } from "./sites.ts";
 import { applyStamps, type Stamp } from "./stamps.ts";
 import { scree, talus } from "./talus.ts";
 
@@ -61,8 +64,12 @@ export function rockOnG(plan: Plan, gN: number): Uint8Array {
 }
 
 export function makeLand(p: WorldParams, seed: number): Land {
-  const plan = planWorld(p, seed);
-  const r = runSchedule(plan, p, seed);
+  return growLand(p, seed, planWorld(p, seed));
+}
+
+/** The land of a plan. `rain`, on C, weights the erosion's drainage by the climate (gen/native.ts); absent, it is even. */
+export function growLand(p: WorldParams, seed: number, plan: Plan, rain: Float64Array | null = null): Land {
+  const r = runSchedule(plan, p, seed, rain);
   const gN = r.gN;
   const capScale = capLand(r.g, r.isSea, p.talus.cap);
   // S3 drowning: valley mouths become inlets.
@@ -179,6 +186,8 @@ export interface Grown {
   land: Land;
   hydro: HydroResult;
   rivers: RiversResult;
+  /** On L1, the land grown for the climates (gen/native.ts): each core's recipe, and whether the world keeps L0's island instead. */
+  native?: { recipes: Recipe[]; kept: boolean[] };
 }
 
 export function growTerrain(p: WorldParams, seed: number): Grown {
@@ -194,9 +203,9 @@ export function growTerrain(p: WorldParams, seed: number): Grown {
  * and the height above drainage that come back are final for the natural land; the rain, the wind and the
  * temperature are read off the land as grown. Cheap, so it runs afresh on a cached land.
  */
-export function climateStage(g: Grown, seed: number): Terrain {
+export function climateStage(g: Grown, seed: number, opts: ClimateOptions = {}): Terrain {
   const { land, hydro, rivers: rv } = g;
-  const climate = climateOf(land, hydro, rv, seed);
+  const climate = climateFields(rv.ground, hydro.rain, land.isSea, land.p.gN, land.p.climate, zoneLayout(land, seed), opts);
   const f = shapeByClimate({
     n: land.p.n, gN: land.p.gN, ground: rv.ground, hand: hydro.hand, isSea: land.isSea, lakeId: hydro.lakeId, shoreDist: land.shoreDist,
     temp: climate.temp, arid: climate.arid, moisture: climate.moisture,
@@ -205,7 +214,47 @@ export function climateStage(g: Grown, seed: number): Terrain {
   return { land, hydro: { ...hydro, hand: f.hand }, rivers: { ...rv, ground: f.ground }, climate, landforms: f.moved };
 }
 
-/** The natural land: every stage before siting. */
+/** The start and the abbey of a terrain: where the build checks that home is drawn as before. */
+export function homeViews(t: Terrain): { x: number; y: number }[] {
+  const rules = builtRules(t.land.p.n);
+  const placed = placeSites(siteFieldsOf(t), { ...rules, counts: { abbey: 1, town: 1, lighthouse: 0, bridge: 0, cathedral: 0, windmill: 0, yew: 0 } }, { strict: false });
+  const out: { x: number; y: number }[] = [];
+  const start = startOf(placed.sites, t.land.p.n);
+  out.push({ x: start.x, y: start.y });
+  for (const s of placed.sites) if (s.type === "abbey") out.push({ x: s.x, y: s.y });
+  return out;
+}
+
+/**
+ * L1 (gen/native.ts): the same islands in the same places, each but the kept ones built again from its climate's
+ * recipe, and worn and drained under its climate's rain. `t0` is today's land with its climate.
+ */
+export function growNative(p: WorldParams, seed: number, t0: Terrain): Grown {
+  const gN = p.gN, cN = p.cN;
+  const np = nativePlan(t0.land, t0.climate, homeViews(t0));
+  const plan = planWorld(p, seed, () => np.specs);
+  const zone = t0.climate.rainZone;
+  const rainC = new Float64Array(cN * cN).fill(1);
+  if (zone) for (let i = 0; i < rainC.length; i++) rainC[i] = zone[i];
+  const land = growLand(p, seed, plan, rainC);
+  const runoff = new Float64Array(gN * gN);
+  for (let y = 0; y < gN; y++) for (let x = 0; x < gN; x++) runoff[y * gN + x] = rainC[(y >> 1) * cN + (x >> 1)];
+  const hydro = hydrology(land.g, gN, land.isSea, p.hydro, runoff);
+  const rv = rivers({ g: land.g, gN, isSea: land.isSea, hydro }, p.rivers, seed);
+  return { land, hydro, rivers: rv, native: { recipes: np.recipes, kept: np.kept } };
+}
+
+/** The world joined from today's land (`g0`) and L1 (`g1`), with its climate: home is today's to the byte. */
+export function nativeTerrain(p: WorldParams, seed: number, g0: Grown, g1: Grown): Terrain {
+  if (!g1.native) throw new Error("native terrain: the second land was not grown for the climates");
+  const joined = joinTerrain(g0, g1, g1.native.kept);
+  return climateStage(joined, seed, { p95: moistureNorm(g0.hydro.rain, g0.land.isSea, p.gN, p.climate) });
+}
+
+/** The natural land: every stage before siting. With p.native, every island outside home is grown for its climate. */
 export function makeTerrain(p: WorldParams, seed: number): Terrain {
-  return climateStage(growTerrain(p, seed), seed);
+  const g0 = growTerrain(p, seed);
+  const t0 = climateStage(g0, seed);
+  if (!p.native || !p.climate.zones) return t0;
+  return nativeTerrain(p, seed, g0, growNative(p, seed, t0));
 }

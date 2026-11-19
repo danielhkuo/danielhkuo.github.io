@@ -139,6 +139,17 @@ export interface Climate {
   equatorY?: number;
   /** 0–1: the dry side's share of a node. 0 on the wet side, the route that passes home; 1 on the dry side, rising from each line where the two meet. Absent: one side. */
   arid?: Float32Array;
+  /** What the zones multiplied the rain by, per node: 1 on the plateau and round home. Set with `temp`. */
+  rainZone?: Float32Array;
+}
+
+/** Options for climateFields. */
+export interface ClimateOptions {
+  /**
+   * Divide the blurred rain by this, not by its own 95th percentile over land: a world joined from two grown lands
+   * (gen/native.ts) keeps the moisture of the land it keeps.
+   */
+  p95?: number;
 }
 
 function toCoarseHeight(h: Float64Array, isSea: Uint8Array, gN: number): Float32Array {
@@ -311,12 +322,13 @@ function inlandShare(isSea: Uint8Array, gN: number, radius: number): Float32Arra
  * two lines where the sides meet; land with much land round it is the more extreme; and round the home island the
  * climate is held at the temperate plateau, as a warm current bends the isotherms.
  */
-function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: ZoneParams, at: ZoneLayout): { temp: Float32Array; equatorY: number; arid?: Float32Array } {
+function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: ZoneParams, at: ZoneLayout): { temp: Float32Array; equatorY: number; arid?: Float32Array; rainZone: Float32Array } {
   const cN = gN / 2, n = at.n, cell = n / cN;
   const equatorY = equatorOf(n, at.homeY, z.homeLat);
   const inland = inlandShare(isSea, gN, z.inlandRadius);
   const home = homeWeight(at.home, cN, cell, z.homeNear, z.homeFar);
   const temp = new Float32Array(cN * cN);
+  const rainZone = new Float32Array(cN * cN).fill(1);
   const arid = z.dry ? new Float32Array(cN * cN) : undefined;
   const ramp = z.aridRamp === undefined ? 0.1 : z.aridRamp;
   for (let cy = 0; cy < cN; cy++) {
@@ -356,6 +368,7 @@ function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: Zo
         rain += (1 - rain) * w;
       }
       temp[i] = t;
+      rainZone[i] = rain;
       if (rain !== 1) moisture[i] = clamp01(moisture[i] * rain);
       if (arid && dry) {
         const edge = (phi < 1 - phi ? phi : 1 - phi) / ramp;
@@ -364,16 +377,21 @@ function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: Zo
       }
     }
   }
-  return { temp, equatorY, arid };
+  return { temp, equatorY, arid, rainZone };
 }
 
 /** h and rain on G; returns fields on C (gN / 2). With `at`, and zones in the params, the world has its climates. */
-export function climateFields(h: Float64Array, rain: Float64Array, isSea: Uint8Array, gN: number, p: ClimateParams, at?: ZoneLayout): Climate {
+/** The rain's 95th percentile over land, blurred as the moisture is: what climateFields divides by. */
+export function moistureNorm(rain: Float64Array, isSea: Uint8Array, gN: number, p: ClimateParams): number {
+  return percentile95Land(blurTorus(toCoarse(rain, gN), gN / 2, p.moistureRadius, 3), gN / 2, isSea, gN);
+}
+
+export function climateFields(h: Float64Array, rain: Float64Array, isSea: Uint8Array, gN: number, p: ClimateParams, at?: ZoneLayout, opts: ClimateOptions = {}): Climate {
   const cN = gN / 2;
   const cc = cN * cN;
 
   const blurred = blurTorus(toCoarse(rain, gN), cN, p.moistureRadius, 3);
-  const p95 = percentile95Land(blurred, cN, isSea, gN);
+  const p95 = opts.p95 ?? percentile95Land(blurred, cN, isSea, gN);
   const moisture = new Float32Array(cc);
   for (let i = 0; i < cc; i++) {
     moisture[i] = clamp01(blurred[i] / p95);
@@ -401,5 +419,5 @@ export function climateFields(h: Float64Array, rain: Float64Array, isSea: Uint8A
 
   if (!p.zones || !at) return { moisture, wind };
   const zone = zoneFields(moisture, isSea, gN, p.zones, at);
-  return { moisture, wind, temp: zone.temp, equatorY: zone.equatorY, arid: zone.arid };
+  return { moisture, wind, temp: zone.temp, equatorY: zone.equatorY, arid: zone.arid, rainZone: zone.rainZone };
 }

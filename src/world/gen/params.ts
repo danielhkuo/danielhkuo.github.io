@@ -43,6 +43,15 @@ export interface ArchetypeSpec {
   ridges: readonly [number, number];
   /** Width of a rock stripe across strike, in cells. */
   stripeWidth: readonly [number, number];
+  /**
+   * Overrides for the islands grown for their climate (gen/native.ts): the share of the half-width that is flat top
+   * (a plateau); a lowland share added everywhere (a plain); the scale of the outline's bays and coves; the scale of
+   * the uplift's grain. Absent: the form's own.
+   */
+  plateau?: number;
+  lowland?: number;
+  bite?: number;
+  grain?: number;
 }
 
 export interface WorldParams {
@@ -62,6 +71,11 @@ export interface WorldParams {
   talus: { repose: readonly [number, number, number]; sweeps: number; cap: number; scree: { shed: number; rate: number; repose: number; wash: number; passes: number; sweeps: number } };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
   climate: ClimateParams;
+  /**
+   * Native land (gen/native.ts): every island outside home grown again for its climate, joined to the land the
+   * generator grows for home. Off for the small worlds the tests grow.
+   */
+  native: boolean;
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
   /** S7 rivers (see gen/rivers.ts RiverParams). Pixel-scale lengths are in cells and never scale. */
   rivers: {
@@ -311,6 +325,7 @@ export function paramsFor(n: number): WorldParams {
     // plateau: tundra, steppe, the Mediterranean (it passes 0.5 at φ 0.62), desert, savanna, jungle. So a lap of the
     // world meets each climate once. Conifers take the woods by 0.42, the tree line reaches the sea at 0.27 and the
     // snowline at 0.14 (cover.ts climateShift). The two sides' curves meet at the pole and at the equator.
+    native: n >= 6400,
     climate: {
       moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30,
       zones: {
