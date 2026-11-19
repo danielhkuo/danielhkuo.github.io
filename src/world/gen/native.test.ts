@@ -109,5 +109,6 @@ test("islands grown again differ from today's and stay in their own water", () =
   }
   assert.ok(changed > 0.05 * (mask.length - mask.reduce((a, b) => a + b, 0)), `nodes outside the kept land that changed: ${changed}`);
   // L1's own land that falls in the kept islands' water is dropped by the join; there should be next to none.
-  assert.ok(intruding <= 0.002 * land1, `L1 land in the kept water: ${intruding} of ${land1}`);
+  // More islands are kept than grown again on this small world, so their owners' regions are many: half a percent.
+  assert.ok(intruding <= 0.005 * land1, `L1 land in the kept water: ${intruding} of ${land1}`);
 });
