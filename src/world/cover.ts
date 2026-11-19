@@ -749,7 +749,8 @@ function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
       (m >= M.wheatRow && m <= M.stubbleRow) || m === M.bracken || m === M.gorse || m === M.floorBroadleaf || (m === M.floorConifer && shift < 40))) {
     const rdx = c.riverDx === undefined ? 0 : c.riverDx, rdy = c.riverDy === undefined ? 0 : c.riverDy;
     const rd = Math.sqrt(rdx * rdx + rdy * rdy);
-    const d = aridDress(m, c, x, y, mask, n, 0, shift >= 24 ? 1 : shift / 24, rd > 0 && rd < 7 ? 1 - rd / 7 : 0);
+    // The same reckoning of a bank as the warm side's, so nothing changes where the two meet.
+    const d = aridDress(m, c, x, y, mask, n, 0, shift >= 24 ? 1 : shift / 24, rd > 0 && rd < 7 ? (c.riverWide === 0 ? 0.45 : 1) * (1 - rd / 7) : 0);
     if (d !== M.floorConifer) return d;
   }
   // A marsh of the steppe is reeds and wet grass, not the taiga's red bog.

@@ -987,7 +987,8 @@ const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean
   "marsh-house": { lo: 0.3, hi: 0.75 },
   baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
   "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
-  railway: { lo: 0, hi: 1 },
+  // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
+  railway: { lo: 0, hi: 1, lean: (t) => (t > 0.34 ? 2 : 0) },
   "airship-mast": { lo: 0, hi: 1 },
   observatory: { lo: 0, hi: 1 },
 };
