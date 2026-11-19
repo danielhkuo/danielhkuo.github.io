@@ -3,9 +3,10 @@
 //
 // Everything is a function of the seed, the place and the clock. Things that stand on the land are placed on a lattice
 // in bake space (which is fixed to the world) and drawn only where the bake pixel under them is the right material;
-// things in the air are placed in world space round the sites. Birds near the flier's track lift and scatter, then
-// settle: how far into that flight a bird is depends only on where the flier is and how it is heading. Boats keep to
-// routes planned round the land (routes.ts), out from the roads off the harbour and home to them.
+// things in the air are placed in world space round the sites. Birds near the flier lift and scatter, then settle: the
+// one thing the layer remembers is which birds are up, since when, and which way they fled, so a bird keeps to its
+// flight whatever the flier does next (see `scares`). Boats keep to routes planned round the land (routes.ts), out from
+// the roads off the harbour and home to them, and float on the water drawn under them.
 
 import { hash2, mix32 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
@@ -24,7 +25,14 @@ export const UPLAND = 14;
 export const REACH = 46;
 export const LOW = 60;
 /** Seconds a startled bird stays up. */
-const ALOFT = 4.4;
+export const ALOFT = 4.4;
+/** The flier must be going at least this fast (cells a second) to put birds up: one that has landed lets them settle. */
+const STIR = 6;
+/**
+ * Frames further apart than this (seconds), or a flier that has moved further than it could have, start the birds'
+ * memory afresh: as if the flier had come the way it is heading (see `startledFor`).
+ */
+const GAP = 0.5;
 /** Boats turn for home at least this far from the roads off the harbour, by water. */
 const BOAT_FAR = 190;
 /** Smoke rises only from roofs within this many cells of a town. */
@@ -44,11 +52,19 @@ export const isBeach: Uint8Array = flags([M.sand, M.sandPale, M.shingle]);
 export const isSea: Uint8Array = flags([M.sea, M.seaClear]);
 export const isRoof: Uint8Array = flags([M.roofTile, M.roofSlate]);
 
-/** What the layer drew last frame, for tests: the kind and the frame pixel it stands on. */
+/**
+ * What the layer drew last frame, for tests: the kind, the frame pixel it stands on, which one it is (the same thing
+ * keeps its id from frame to frame, within its kind) and the frame pixel its sprite's anchor was drawn on.
+ */
 export interface Placed {
   kind: "sheep" | "gull-resting" | "gull-startled" | "gull" | "boat" | "smoke";
   px: number;
   py: number;
+  id: number;
+  ax: number;
+  ay: number;
+  /** Whether the sprite was drawn mirrored. */
+  flip: boolean;
 }
 
 export interface LifeLayer extends LiveLayer {
@@ -60,8 +76,8 @@ export interface LifeLayer extends LiveLayer {
 
 /**
  * Seconds since the flier's track came within REACH of a bird at world (x, y), `ground` units up; −1 when it has not,
- * the bird has settled again, or the flier is more than LOW over it. The track is the flier's heading held straight,
- * so the answer needs no memory.
+ * the bird has settled again, or the flier is more than LOW over it. The track is the flier's heading held straight:
+ * the best guess at the past when there is no memory of it (the first frame, or after a jump).
  */
 export function startledFor(fl: Flier | undefined, n: number, x: number, y: number, ground: number): number {
   if (!fl) return -1;
@@ -76,21 +92,142 @@ export function startledFor(fl: Flier | undefined, n: number, x: number, y: numb
   return tau < 0 || tau > ALOFT ? -1 : tau;
 }
 
-/** Where a startled bird is, relative to where it was: filled by `flee`. */
-const fled = { dx: 0, dy: 0, up: 0 };
+/** A bird in the air: when it took off, the flier's heading then, and the side of the flier's way it fled to. */
+interface Up {
+  t0: number;
+  hx: number;
+  hy: number;
+  side: 1 | -1;
+}
 
-/** The flight of a bird `tau` seconds after it was startled: out to the side of the flier's track and up, then back. */
-function flee(fl: Flier, n: number, x: number, y: number, tau: number, h: number): void {
-  const a = smooth01(tau / 0.45) * (1 - smooth01((tau - 2.6) / (ALOFT - 2.6)));
-  const hx = pcos(fl.heading), hy = psin(fl.heading);
-  const side = ringDelta(fl.x, x, n) * hy - ringDelta(fl.y, y, n) * hx;
-  const s = side > 0.5 ? 1 : side < -0.5 ? -1 : (h & 1) === 0 ? 1 : -1;
-  const far = 20 + ((h >>> 3) & 15) * 1.4;
-  const along = (((h >>> 8) & 31) - 15) / 22;
-  const turn = tau * 2.6 + ((h >>> 14) & 63) / 10;
-  fled.dx = a * (far * (s * hy + along * hx) + 5 * pcos(turn));
-  fled.dy = a * (far * (-s * hx + along * hy) + 5 * psin(turn));
-  fled.up = a * (13 + ((h >>> 20) & 15) * 0.8);
+/** Where a bird is in its flight, relative to its perch (cells, and units up), and seconds into it: −1 on its perch. */
+export interface Fled {
+  dx: number;
+  dy: number;
+  up: number;
+  tau: number;
+}
+
+export interface Scares {
+  /** Call once a frame, before `bird`: the frame's time and flier. */
+  frame(t: number, flier: Flier | undefined): void;
+  /**
+   * The bird `id` (any number, the same every frame) perched at world (x, y), `ground` units up, with hash `h` for its
+   * own way of flying: fills and returns where it is in its flight this frame.
+   */
+  bird(id: number, x: number, y: number, ground: number, h: number): Fled;
+}
+
+/**
+ * Which birds are up. A bird takes off when the flier, going at STIR or more and within LOW of its height, comes within
+ * REACH of it (looked for along the flier's way since the last frame, so no frame rate lets one slip), and flies for
+ * ALOFT seconds out to the side of the flier's way and back to its perch. Its flight is fixed when it takes off, so the
+ * flier turning, climbing, slowing or landing never moves a bird already up. A frame with no memory behind it (the
+ * first, one after a gap of more than GAP seconds or a time earlier than the last, or one where the flier has moved
+ * further than it could have) starts afresh, the birds up as if the flier had come the way it is heading.
+ */
+export function scares(n: number): Scares {
+  const ups = new Map<number, Up>();
+  const fled: Fled = { dx: 0, dy: 0, up: 0, tau: -1 };
+  let fl: Flier | undefined;
+  let t = 0;
+  let fresh = true;
+  // The flier at the last frame, and its way from there to now relative to it (for take-offs between frames).
+  let had = false, lastT = 0, lastX = 0, lastY = 0, lastAlt = 0, lastSpeed = 0, wayX = 0, wayY = 0;
+
+  const rest = (): Fled => {
+    fled.dx = 0;
+    fled.dy = 0;
+    fled.up = 0;
+    fled.tau = -1;
+    return fled;
+  };
+
+  /** Share of the way since the last frame at which the flier came within REACH of (x, y), or −1 if it did not. */
+  const reached = (x: number, y: number): number => {
+    if (!fl) return -1;
+    // From the bird to the flier at the last frame (a), and along its way since (d).
+    const ax = ringDelta(x, fl.x, n) - wayX, ay = ringDelta(y, fl.y, n) - wayY;
+    const aa = ax * ax + ay * ay;
+    if (aa <= REACH * REACH) return 0;
+    const dd = wayX * wayX + wayY * wayY;
+    if (dd === 0) return -1;
+    const ad = ax * wayX + ay * wayY;
+    const disc = ad * ad - dd * (aa - REACH * REACH);
+    if (disc < 0) return -1;
+    const u = (-ad - Math.sqrt(disc)) / dd;
+    return u >= 0 && u <= 1 ? u : -1;
+  };
+
+  return {
+    frame(time, flier) {
+      t = time;
+      fl = flier;
+      fresh = true;
+      if (fl && had && t >= lastT && t - lastT <= GAP) {
+        const dt = t - lastT;
+        wayX = ringDelta(lastX, fl.x, n);
+        wayY = ringDelta(lastY, fl.y, n);
+        const most = (fl.speed > lastSpeed ? fl.speed : lastSpeed) * 1.5 * dt + 4;
+        const climb = fl.alt - lastAlt;
+        fresh = wayX * wayX + wayY * wayY > most * most || climb > 45 * dt + 4 || climb < -45 * dt - 4;
+      }
+      if (fresh) {
+        ups.clear();
+        wayX = 0;
+        wayY = 0;
+      } else {
+        for (const [id, up] of ups) if (t - up.t0 >= ALOFT) ups.delete(id);
+      }
+      had = fl !== undefined;
+      if (fl) {
+        lastT = t;
+        lastX = fl.x;
+        lastY = fl.y;
+        lastAlt = fl.alt;
+        lastSpeed = fl.speed;
+      }
+    },
+    bird(id, x, y, ground, h) {
+      let up = ups.get(id);
+      if (up === undefined) {
+        if (!fl || fl.speed < STIR) return rest();
+        let t0: number;
+        if (fresh) {
+          const tau = startledFor(fl, n, x, y, ground);
+          if (tau < 0) return rest();
+          t0 = t - tau;
+        } else {
+          const over = fl.alt - ground;
+          if (over > LOW || over < -LOW) return rest();
+          const u = reached(x, y);
+          if (u < 0) return rest();
+          t0 = t - (t - lastT) * (1 - u);
+        }
+        // Out to the side of the flier's way it was on, as it was when the bird took off.
+        const hx = pcos(fl.heading), hy = psin(fl.heading);
+        const side = ringDelta(fl.x, x, n) * hy - ringDelta(fl.y, y, n) * hx;
+        up = { t0, hx, hy, side: side > 0.5 ? 1 : side < -0.5 ? -1 : (h & 1) === 0 ? 1 : -1 };
+        ups.set(id, up);
+      }
+      const tau = t - up.t0;
+      if (tau < 0 || tau >= ALOFT) {
+        ups.delete(id);
+        return rest();
+      }
+      // Up and out over half a second, wheeling a little, then back down to the perch from 2.6 s.
+      const a = smooth01(tau / 0.45) * (1 - smooth01((tau - 2.6) / (ALOFT - 2.6)));
+      const { hx, hy, side } = up;
+      const far = 20 + ((h >>> 3) & 15) * 1.4;
+      const along = (((h >>> 8) & 31) - 15) / 22;
+      const turn = tau * 2.6 + ((h >>> 14) & 63) / 10;
+      fled.dx = a * (far * (side * hy + along * hx) + 5 * pcos(turn));
+      fled.dy = a * (far * (-side * hx + along * hy) + 5 * psin(turn));
+      fled.up = a * (13 + ((h >>> 20) & 15) * 0.8);
+      fled.tau = tau;
+      return fled;
+    },
+  };
 }
 
 // ── The layer ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -204,11 +341,14 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     }
   }
 
+  const scare = scares(ctx.n);
+
   const layer: LifeLayer = {
     name: "life",
     log: null,
     draw(f: LiveFrame): void {
       art.sync(f.palette);
+      scare.frame(f.t, f.flier);
       smoke(f);
       sheep(f);
       sail(f);
@@ -217,8 +357,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     },
   };
 
-  const note = (kind: Placed["kind"], px: number, py: number): void => {
-    if (layer.log) layer.log.push({ kind, px, py });
+  const note = (kind: Placed["kind"], px: number, py: number, id: number, ax = px, ay = py, flip = false): void => {
+    if (layer.log) layer.log.push({ kind, px, py, id, ax, ay, flip });
   };
 
   /** Sheep: flocks of three to five on a 40 × 32 lattice, one cell in four. */
@@ -258,7 +398,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         // Head up for a moment now and then; down to the grass otherwise.
         const up = ((t / 7 + ((g >>> 14) & 255) / 256) % 1) < 0.16;
         drawSprite(f, up ? sheepLook : sheepGraze, rx + sx, row, 0.8 * row - (ry + py), going < 0);
-        note("sheep", sx, py);
+        note("sheep", sx, py, (modP(cy, perY) * perX + modP(cx, perX)) * 8 + k);
       }
     }
   }
@@ -281,23 +421,24 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         if (isBeach[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
         const row = worldRowAt(f, px, py);
         const ground = 0.8 * row - (ry + py);
-        const tau = startledFor(f.flier, n, rx + px, row, ground);
-        if (tau < 0 || !f.flier) {
+        const id = (modP(cy, perY) * perX + modP(cx, perX)) * 8 + k;
+        const fled = scare.bird(id, rx + px, row, ground, g);
+        if (fled.tau < 0) {
           drawSprite(f, gullRest, rx + px, row, ground, (g & 16) !== 0);
-          note("gull-resting", px, py);
+          note("gull-resting", px, py, id);
           continue;
         }
-        flee(f.flier, n, rx + px, row, tau, g);
         const wing = flap[Math.floor(t * 7 + (g & 3)) & 3];
         drawSprite(f, wing, rx + px + fled.dx, row + fled.dy, ground + fled.up, false);
-        note("gull-startled", px, py);
+        const ax = frameX(f, rx + px + fled.dx, 8), ay = frameY(f, 0.8 * (row + fled.dy) - ground - fled.up, 8);
+        note("gull-startled", px, py, id, ax, ay);
       }
     }
   }
 
   /** Gulls wheeling round the town and the lighthouses. */
   function wheel(f: LiveFrame): void {
-    const { t, n } = f;
+    const { t } = f;
     const w = f.rect.w, h = f.rect.h;
     for (let k = 0; k < wheelers.length; k++) {
       const g = wheelers[k];
@@ -308,9 +449,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       let wing = gullUp;
       const beat = (t * 0.21 + (g.h & 255) / 256) % 1;
       if (beat < 0.22) wing = flap[Math.floor(t * 6) & 3];
-      const tau = startledFor(f.flier, n, x, y, alt);
-      if (tau >= 0 && f.flier) {
-        flee(f.flier, n, x, y, tau, g.h);
+      const fled = scare.bird(-1 - k, x, y, alt, g.h);
+      if (fled.tau >= 0) {
         x += fled.dx;
         y += fled.dy;
         alt += fled.up;
@@ -319,7 +459,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       const sx = frameX(f, x, 4), sy = frameY(f, 0.8 * y - alt, 4);
       if (sx >= w + 4 || sy >= h + 4) continue;
       drawSprite(f, wing, x, y, alt, false);
-      note("gull", sx, sy);
+      note("gull", sx, sy, k);
     }
   }
 
@@ -361,8 +501,12 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         const tone = j <= 5 ? 0 : 2;
         if (((v >>> 8) & 15) > tone) out[q] = palette[((v & 255) << 8) | tone];
       }
-      drawSprite(f, boatSprite, x, y, 0, dx < 0);
-      note("boat", px, py);
+      // It floats on the water drawn under it: its depth is that water's own row, so the sea it sits on never hides its
+      // keel. (Its route's row can lie up to a row and a half short of it, as the pixel rounds.)
+      const surf = worldRowAt(f, px, py);
+      if (Math.abs(ringDelta(y, surf, f.n)) <= 2.5) drawSprite(f, boatSprite, x, surf, 0.8 * surf - (f.rect.y + py), dx < 0);
+      else drawSprite(f, boatSprite, x, y, 0, dx < 0);
+      note("boat", px, py, k, px, py, dx < 0);
     }
   }
 
@@ -407,7 +551,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         if (dx * dx + dy * dy < SMOKE_REACH * SMOKE_REACH) inTown = true;
       }
       if (!inTown) continue;
-      note("smoke", px, py);
+      note("smoke", px, py, modP(cy, perY) * perX + modP(cx, perX));
       // The thread: a pale pixel a row with its shade on the lee side, so it shows on limewash and on trees alike.
       // Its bends travel up it, breaks rise through it to part it into wisps, and it thins as it climbs and leans.
       const bend = t * 1.5 + ((hc >>> 16) & 255) / 40;
