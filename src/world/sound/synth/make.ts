@@ -4,6 +4,7 @@
 import { rngFor } from "../../core/rng.ts";
 import { warpTile } from "../../live/water.ts";
 import { BELL_RATIOS, ring, ringName, strike, strikeName } from "./bells.ts";
+import { flap, flapName, FLAPS, GULL_NOTES, GULL_VOICES, gullName, gullNote } from "./gulls.ts";
 import { impulseResponse } from "./ir.ts";
 import { BROOK, bubbleBed, FLOW, lap, PLUNGE, velvet } from "./bubbles.ts";
 import { CONTROL_RATE, makeControls } from "./controls.ts";
@@ -22,7 +23,7 @@ export interface Raw {
 }
 
 /** The jobs, in the order they are wanted: wind needs the noises and the controls, surf its own set, the rivers their bubble beds, the abbey its bells and the reverb; the probe is the bench's. */
-export const JOBS = ["noise", "controls", "surf", "river", "bells", "probe"] as const;
+export const JOBS = ["noise", "controls", "surf", "river", "bells", "gulls", "probe"] as const;
 export type Job = (typeof JOBS)[number];
 
 /** Noise loop lengths, samples: unequal, so no two layers loop together. */
@@ -86,6 +87,13 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
       brook: { rate: sampleRate, channels: [bubbleBed(BROOK, sampleRate, rngFor(seed, "sound/brook"))] },
       flow: { rate: sampleRate, channels: [bubbleBed(FLOW, sampleRate, rngFor(seed, "sound/flow"))] },
     };
+  }
+  if (job === "gulls") {
+    // Six birds, eight notes each, and the three wingbeats.
+    const out: Record<string, Raw> = {};
+    for (let voice = 0; voice < GULL_VOICES; voice++) for (const note of GULL_NOTES) out[gullName(voice, note)] = { rate: sampleRate, channels: [gullNote(seed, voice, note, sampleRate)] };
+    for (let k = 0; k < FLAPS; k++) out[flapName(k)] = { rate: sampleRate, channels: [flap(seed, k, sampleRate)] };
+    return out;
   }
   if (job === "bells") {
     // Five bells, two ring takes and a strike each, and the response of the stone and the valley they are heard in.

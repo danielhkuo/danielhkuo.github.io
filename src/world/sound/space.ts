@@ -33,6 +33,9 @@ export const MEDIUM: DistanceClass = { ref: 40, max: 450, p: 1 };
 /** The abbey's bells carry: exponent 0.7 gives −18 dB at the start point (1150 cells) instead of −26 dB. */
 export const BELLS: DistanceClass = { ref: 60, max: 1500, p: 0.7 };
 
+/** A tall waterfall carries: the medium class with an exponent of 0.5 (−5.7 dB at 150 cells), so it is heard under cruise wind from the frame's edge in. */
+export const TALL_FALL: DistanceClass = { ref: 40, max: 450, p: 0.5 };
+
 /** Pan reach: a source due east at any distance sits at 0.85, never hard over. Halved under reduced motion. */
 export const PAN = 0.85;
 export const PAN_CALM = 0.42;

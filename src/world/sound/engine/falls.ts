@@ -13,7 +13,7 @@
 
 import { torusDelta } from "../../core/torus.ts";
 import { FALL, K_RIVER } from "../levels.ts";
-import { airCutoff, cutoffCents, distanceGain, MEDIUM, panOf, panPair, SMALL, southCutoff, southGain, southOf } from "../space.ts";
+import { airCutoff, cutoffCents, distanceGain, panOf, panPair, SMALL, southCutoff, southGain, southOf, TALL_FALL } from "../space.ts";
 import type { FallPoint, Pose } from "../types.ts";
 import { bandpass, gain, highpass, loop, lowpass, panner, type Ctx, type Pan } from "./graph.ts";
 import type { Hub } from "./hub.ts";
@@ -25,12 +25,12 @@ export function tallness(run: number): number {
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
-/** How loud a fall at (x, y), height h, is from the dragon: its level by tallness, distance (small … medium class) and the south cue. */
+/** How loud a fall at (x, y), height h, is from the dragon: its level by tallness, distance (the small class … the tall fall's own, which carries) and the south cue. */
 export function fallGain(pose: Pose, x: number, y: number, h: number, run: number, n: number): number {
   const dx = torusDelta(pose.x, x, n), dy = torusDelta(pose.y, y, n), dz = pose.alt - h;
   const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
   const t = tallness(run);
-  return (K_RIVER.fallSmall + (K_RIVER.fallTall - K_RIVER.fallSmall) * t) * ((1 - t) * distanceGain(SMALL, d) + t * distanceGain(MEDIUM, d)) * southGain(southOf(dx, dy));
+  return (K_RIVER.fallSmall + (K_RIVER.fallTall - K_RIVER.fallSmall) * t) * ((1 - t) * distanceGain(SMALL, d) + t * distanceGain(TALL_FALL, d)) * southGain(southOf(dx, dy));
 }
 
 /** One chain's fall, as the tracker holds it. */
@@ -84,7 +84,9 @@ export function createFallTracker(opts: { chains: number; n: number; onBind?: (x
     v.y = v.ty = f.y;
     v.h = f.h;
     v.run = f.run;
-    v.edge = 0;
+    // It starts where the frame's edge has it (a fall is given a chain while it is still 26 dB down or more at the
+    // edge, and the chain's own gain eases up from nothing): from there the edge is followed, not caught up with.
+    v.edge = f.edge;
     v.edgeTo = f.edge;
     v.mix = mix;
     v.dir = dir;
@@ -176,8 +178,6 @@ export function createFallTracker(opts: { chains: number; n: number; onBind?: (x
         rival.y = f.y;
         if (rival.s >= FALL.forS) {
           take(voices[free], f, 0, 1);
-          // The newcomer is already well inside the frame: it comes up with the crossfade, not with the edge.
-          voices[free].edge = f.edge;
           voices[weakest].dir = -1;
           handovers++;
           opts.onBind?.(f.x, f.y, true);

@@ -1,6 +1,7 @@
 // The fixed sites and anchors the sound needs, from what the live layers are handed (design §1.3). Pure.
 
 import type { LayerContext } from "../live/registry.ts";
+import { wheelersOf } from "../live/life.ts";
 import type { Places } from "./types.ts";
 
 /**
@@ -17,7 +18,7 @@ export function placesOf(ctx: LayerContext, worldId: string): Places {
     abbeys: at("abbey"),
     towns: at("town"),
     lighthouses: at("lighthouse"),
-    gulls: [],
+    gulls: wheelersOf(ctx.sites, ctx.seed),
     wonders: (ctx.wonders ?? []).map((w) => ({ type: w.type, x: w.x, y: w.y, level: w.level, height: w.height, anchors: { ...w.anchors } })),
   };
 }

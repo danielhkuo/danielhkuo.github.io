@@ -18,7 +18,8 @@
 
 import { createEngine } from "../engine/engine.ts";
 import type { Kit } from "../engine/kit.ts";
-import { K_BELL, K_RIVER, K_SURF, K_WIND } from "../levels.ts";
+import { K_BELL, K_GULL, K_RIVER, K_SURF, K_WIND } from "../levels.ts";
+import { callLength } from "../schedule/gulls.ts";
 import { repeatCheck } from "./repeat.ts";
 import type { Pose } from "../types.ts";
 import type { Action, Mark, Scene } from "./scenes.ts";
@@ -35,7 +36,7 @@ export interface RenderOptions {
 }
 
 /** The level tables a calibration render may touch. */
-const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER };
+const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL };
 
 /** Runs `run` with some level constants replaced, and puts them back: how a layer is soloed to calibrate it. */
 export async function withLevels<R>(set: Record<string, number> | undefined, run: () => Promise<R>): Promise<R> {
@@ -80,6 +81,10 @@ export interface RenderStats {
   fallsBound: number;
   fallHandovers: number;
   falls: { at: number; x: number; y: number; handover: boolean }[];
+  /** Gulls: every call started (seconds into the scene, colony, bird, kind: 0 yelp, 1 keks, 2 mew, 3 long call), calls dropped for want of a slot, startled birds voiced. */
+  gullCalls: { at: number; colony: number; bird: number; call: number }[];
+  gullsDropped: number;
+  gullStartles: number;
   /** The repetition check, where the scene asks for it: see bench/repeat.ts. `control` is the same check with one wave copied over another: it must find it. */
   repeatMax?: number;
   repeatPairs?: number;
@@ -119,6 +124,10 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
     touch: scene.prefs.touch, seed: 3, offline: true, probe: scene.probe, beds: opts.beds, tone: scene.tone, hissOnly: scene.hissOnly, n: scene.places?.n, abbeys: scene.places?.abbeys,
     oneStroke: scene.stroke === undefined ? undefined : scene.t0 + scene.stroke,
     impulse: scene.impulse === undefined ? undefined : scene.t0 + scene.impulse,
+    gulls: scene.places?.gulls,
+    gullScript: scene.gullScript?.map((g, i) => ({
+      t: scene.t0 + g.at, kind: "gull", key: `script:${i}`, lasts: callLength(3, g.voice, 1000 + i, g.call), call: g.call, k: 1000 + i, variant: g.voice, x: g.x, y: g.y,
+    })),
   });
   /** Audio time minus world time: exact offline. */
   const o = pre - scene.t0;
@@ -259,6 +268,9 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
         marks: scene.marks ?? [],
         wavesPerMinute,
         closestTrainGap: closest,
+        gullCalls: st.gullCalls.map((g) => ({ at: Math.round((g.when - pre) * 100) / 100, colony: g.colony, bird: g.bird, call: g.call })),
+        gullsDropped: st.gullsDropped,
+        gullStartles: st.gullStartles,
         fallsBound: st.fallsBound,
         fallHandovers: st.fallHandovers,
         falls: st.fallLog.map((f) => ({ at: Math.round((f.when - pre) * 100) / 100, x: Math.round(f.x), y: Math.round(f.y), handover: f.handover })),

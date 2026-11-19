@@ -31,7 +31,7 @@ export interface SoundRuntime {
 }
 
 export interface SoundModule {
-  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly { x: number; y: number }[]; arm?: string }): SoundRuntime;
+  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly { x: number; y: number }[]; gulls?: Places["gulls"]; arm?: string }): SoundRuntime;
 }
 
 /** The slice of AudioContext the control uses. */
@@ -185,7 +185,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
   let armed = false;
   let disposed = false;
   /** The world, once it has loaded: the engine is not made before it (its kit is seeded by the world's seed). */
-  let land: { seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys: { x: number; y: number }[] } | null = null;
+  let land: { seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys: { x: number; y: number }[]; gulls: Places["gulls"] } | null = null;
   let suspendTimer: unknown = null;
   let disposeTimer: unknown = null;
   let recoverTimer: unknown = null;
@@ -289,7 +289,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         suspendTimer = disposeTimer = null;
         if (mod && ctx && land) {
           const first = rt === null;
-          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed: land.seed, n: land.n, land: land.land, abbeys: land.abbeys, arm: measuring });
+          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed: land.seed, n: land.n, land: land.land, abbeys: land.abbeys, gulls: land.gulls, arm: measuring });
           if (!enabled) rt.enable(first);
           enabled = true;
           started = true;
@@ -437,7 +437,8 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       },
     },
     world(layers, worldId) {
-      land = { seed: layers.seed, n: layers.n, land: layers.land ?? null, abbeys: placesOf(layers, worldId).abbeys };
+      const places = placesOf(layers, worldId);
+      land = { seed: layers.seed, n: layers.n, land: layers.land ?? null, abbeys: places.abbeys, gulls: places.gulls };
       check();
       if (record) {
         record.worldId = worldId;

@@ -46,11 +46,13 @@ export interface FallPoint {
   edge: number;
 }
 
+/** A gull the flier has just put up: its key (for the ledger), where it was, when it took off (world time), and its hash as the picture has it (its wingbeat's phase). */
 export interface Startle {
   key: number;
   x: number;
   y: number;
   t0: number;
+  g: number;
 }
 
 /** What the ear found in the land around the dragon. */
@@ -79,12 +81,16 @@ export interface Pt {
   y: number;
 }
 
-/** A wheeling gull, as live/life.ts places it (filled in with the gulls' phase). */
+/** A wheeling gull, as live/life.ts places it (its `wheelersOf`). */
 export interface Wheeler {
-  colony: number;
+  site: number;
+  town: boolean;
   x: number;
   y: number;
   r: number;
+  turn: number;
+  phase: number;
+  alt: number;
   h: number;
 }
 
@@ -144,6 +150,12 @@ export interface Cue {
   take?: number;
   ringDb?: number;
   strikeDb?: number;
+  /** A gull's call: its colony (the site's index), the bird, and the kind of call. A scripted call carries its own place. */
+  colony?: number;
+  bird?: number;
+  call?: number;
+  x?: number;
+  y?: number;
 }
 
 /** What the listener chose, and what the device is. `calm` is reduced motion. */

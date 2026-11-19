@@ -47,6 +47,7 @@ test("with a worker: jobs are asked for in order, adopted as they arrive, and wi
   w.onmessage!({ data: { job: "surf", buffers: make("surf", 3, 8000) } });
   w.onmessage!({ data: { job: "river", buffers: make("river", 3, 8000) } });
   w.onmessage!({ data: { job: "bells", buffers: make("bells", 3, 8000) } });
+  w.onmessage!({ data: { job: "gulls", buffers: make("gulls", 3, 8000) } });
   w.onmessage!({ data: { job: "probe", buffers: make("probe", 3, 8000) } });
   while (kit.step());
   assert.ok(kit.done());

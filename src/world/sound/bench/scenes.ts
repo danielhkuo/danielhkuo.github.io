@@ -5,9 +5,12 @@ import { CRUISE, BRAKE, stepFlight, type FlightInput, type FlightState } from ".
 import { warpTile } from "../../live/water.ts";
 import { MATERIAL as M } from "../../look/materials.ts";
 import { advance, cameraAt, easeFocus, land, restShare, takeOff, type Phase, type Target } from "../../sites/landing.ts";
+import { wheelersOf } from "../../live/life.ts";
+import { censusStartles } from "../census.ts";
 import { createEar } from "../ear.ts";
 import { createLanes } from "../engine/lanes.ts";
-import { copyHearing, emptyHearing, type Hearing, type Places, type Pose, type Prefs } from "../types.ts";
+import { KEKS, LONG, MEW, YELP } from "../schedule/gulls.ts";
+import { copyHearing, emptyHearing, type Hearing, type Places, type Pose, type Prefs, type Startle } from "../types.ts";
 import { coastEast, coastOfKinds, coastWest, cove, frameOf, gridOf, islet, OPEN_SEA, overlay, riverNS, type FlatWorld } from "./land.ts";
 
 export type Action =
@@ -61,6 +64,8 @@ export interface Scene {
   stroke?: number;
   /** In place of any bell: one sample of 1 into the reverb's send, this many seconds into the scene. */
   impulse?: number;
+  /** In place of the colonies' own calling: these calls (times in seconds into the scene), each from its own fixed place. */
+  gullScript?: { at: number; call: number; voice: number; x: number; y: number }[];
 }
 
 export const BENCH_PREFS: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
@@ -118,8 +123,10 @@ function hover(seconds: number, t0: number, x: number, y: number, rest = 0): (t:
  * A timeline over a stand-in world: the real ear makes a pass ten times a second over the frame the camera would
  * see, with the lane mask the real lane logic would hand it, and each frame carries the Hearing then in force.
  */
-function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFrame, touch = false): (t: number) => SceneFrame {
+function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFrame, touch = false, census = false): (t: number) => SceneFrame {
   let hearings: Hearing[] | null = null;
+  /** With the census: the gulls put up, by frame (thirty looks a second, each frame carrying the last look's). */
+  const startled: Startle[][] = [];
   const build = () => {
     warp ??= warpTile(SEED);
     const ear = createEar();
@@ -131,6 +138,13 @@ function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFr
     let last: Hearing = QUIET, lastT = NaN;
     for (let k = 0; k <= seconds * FPS; k++) {
       const pose = flight(k / FPS).pose;
+      if (census) {
+        if (k % 2 === 0) {
+          const list: Startle[] = [];
+          censusStartles(frameOf(world, pose.x, pose.y - pose.alt / 0.8, buffer), pose, world.n, SEED, [], list, []);
+          startled.push(list);
+        } else startled.push(startled[k - 1]);
+      }
       if (k % 6 === 0) {
         // In flight the camera centres on the dragon itself, alt / 0.8 cells north of its ground point.
         const seen = frameOf(world, pose.x, pose.y - pose.alt / 0.8, buffer);
@@ -148,7 +162,8 @@ function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFr
     hearings ??= build();
     const k = Math.min(seconds * FPS, Math.max(0, Math.round(t * FPS)));
     const f = flight(t);
-    return { pose: f.pose, hearing: hearings[Math.floor(k / 6)], camera: f.camera };
+    const hearing = hearings[Math.floor(k / 6)];
+    return { pose: f.pose, hearing: census ? { ...hearing, startled: startled[k] } : hearing, camera: f.camera };
   };
 }
 
@@ -159,6 +174,8 @@ const BEACH_COAST = coastEast(5040, M.sand);
 const NO_WATER = { "K_SURF.wave": 0, "K_SURF.lap": 0, "K_SURF.bedHiss": 0, "K_SURF.bedBody": 0, "K_SURF.bedRumble": 0, "K_SURF.bedRattle": 0, "K_SURF.open": 0 };
 /** The approach from 600 cells out at 60 cells a second: one-second stretches centred 400, 300, 200, 100 and 50 cells from the beach. */
 const APPROACH: Mark[] = [400, 300, 200, 100, 50].map((d) => ({ name: `${d} cells out`, t0: (600 - d) / 60 - 0.5, t1: (600 - d) / 60 + 0.5 }));
+/** No rivers or falls. */
+const NO_FRESH = { "K_RIVER.flow": 0, "K_RIVER.brook": 0, "K_RIVER.riffle": 0, "K_RIVER.fallSmall": 0, "K_RIVER.fallTall": 0 };
 /** The water alone: the still surf scenes are solo, so their levels can be read against §3.6. */
 const NO_WIND = { "K_WIND.a": 0, "K_WIND.b": 0, "K_WIND.c": 0, "K_WIND.d": 0, "K_WIND.e": 0, "K_WIND.w": 0 };
 
@@ -238,6 +255,11 @@ function landing(seconds: number, t0: number): (t: number) => SceneFrame {
   };
 }
 
+
+/** A town at (5000, 5000) and nothing else: its nine gulls wheel over it. */
+const TOWN_SITES = [{ type: "town", x: 5000, y: 5000 }];
+const HARBOUR: Places = { worldId: "bench", seed: SEED, n: N, forced: false, abbeys: [], towns: [{ x: 5000, y: 5000 }], lighthouses: [], gulls: wheelersOf(TOWN_SITES, SEED), wonders: [] };
+const NO_GULLS: Places = { ...HARBOUR, towns: [], gulls: [] };
 
 /** The bench's abbey, and the places that hold it alone. */
 const ABBEY = { x: 5000, y: 5000 };
@@ -479,6 +501,15 @@ export const SCENES: Scene[] = [
       { name: "at the fall", t0: 19, t1: 21 },
     ],
   }),
+  ...(["", "-water", "-wind"] as const).map((part) => scene({
+    name: `fall-tall-pass${part}`,
+    seconds: 12,
+    about: `Cruising north past a tall fall 30 cells to the east, from 250 cells off: heard under the wind from the frame's edge in, loudest abeam, then behind and duller.${part === "-water" ? " (The water alone.)" : part === "-wind" ? " (The wind alone.)" : ""}`,
+    set: part === "-water" ? NO_WIND : part === "-wind" ? NO_FRESH : undefined,
+    at: heard(riverNS(5030, 4, 4, [{ y: 4977.5, run: 18 }]), 12, flown(12, 100, startAt(5000, 5250, NORTH), LEVEL)),
+    // The half second from each distance in (30 cells at cruise, from 250 off): the fall's foot is inside the frame from 177 cells.
+    marks: [150, 120, 90, 60, 30].map((d) => ({ name: `${d} to ${d - 30} cells out`, t0: (250 - d) / 60, t1: (250 - d) / 60 + 0.5 })),
+  })),
   scene({
     name: "falls-handover",
     set: NO_WIND,
@@ -488,6 +519,43 @@ export const SCENES: Scene[] = [
       overlay(overlay(riverNS(5030, 4, 4, [{ y: 5495, run: 4 }], 5440, 5560), riverNS(4965, 4, 4, [{ y: 5465, run: 4 }], 5410, 5530)), riverNS(5015, 4, 4, [{ y: 5307.5, run: 18 }], 5200, 5380)),
       14, flown(14, 100, startAt(5000, 5560, NORTH, CRUISE * BRAKE), () => key(0, false, true)),
     ),
+  }),
+  scene({
+    name: "gull-calls",
+    set: NO_WIND,
+    seconds: 20,
+    about: "One bird's four calls 30 cells to the east (a yelp, a run of keks, a mew, a long call), then a yelp, keks and a mew from 200 cells: harmonics, rasp at the peak only; far off, a thin kyow.",
+    places: NO_GULLS,
+    gullScript: [
+      { at: 0.5, call: YELP, voice: 0, x: 5030, y: 5000 }, { at: 1.6, call: KEKS, voice: 0, x: 5030, y: 5000 }, { at: 3.2, call: MEW, voice: 0, x: 5030, y: 5000 },
+      { at: 5.2, call: LONG, voice: 0, x: 5030, y: 5000 },
+      { at: 14.5, call: YELP, voice: 0, x: 5200, y: 5000 }, { at: 15.6, call: KEKS, voice: 0, x: 5200, y: 5000 }, { at: 17.4, call: MEW, voice: 0, x: 5200, y: 5000 },
+    ],
+    at: hover(20, 100, 5000, 5000),
+  }),
+  scene({
+    name: "gulls-harbour",
+    set: NO_WIND,
+    seconds: 60,
+    about: "Still, 80 cells south of the town: calls in clusters with silences between; answers; each bird in its own place, moving as it wheels.",
+    places: HARBOUR,
+    t0: 400,
+    at: hover(60, 400, 5000, 5080),
+  }),
+  scene({
+    name: "gulls-lowpass",
+    seconds: 30,
+    about: "A boosted low pass along a beach where gulls rest: each bird's keks as it lifts, and its wingbeats on the drawn downstrokes, under the wind.",
+    places: NO_GULLS,
+    at: heard(coastEast(5040, M.sand), 30, flown(30, 100, startAt(5030, 3000, SOUTH), () => key(0, true)), false, true),
+  }),
+  scene({
+    name: "gulls-lowpass-birds",
+    set: { ...NO_WIND, ...NO_WATER },
+    seconds: 30,
+    about: "The same pass, the birds alone: keks and wingbeats.",
+    places: NO_GULLS,
+    at: heard(coastEast(5040, M.sand), 30, flown(30, 100, startAt(5030, 3000, SOUTH), () => key(0, true)), false, true),
   }),
   scene({
     name: "bell-stroke",

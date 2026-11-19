@@ -5,7 +5,7 @@ import { MATERIAL as M } from "../look/materials.ts";
 import { FALL_TONE } from "../bake/chunk.ts";
 import { STEEP } from "../live/water.ts";
 import { coastEast, coastNorth, coastSouth, coastToward, coastWest, cove, frameOf, gridOf, lakeShore, MEADOW, OPEN_SEA, overlay, riverNS, type FlatWorld } from "./bench/land.ts";
-import { createEar, EAR_FALL_TONE, EAR_STEEP, sectorOf, type Ear } from "./ear.ts";
+import { createEar, EAR_FALL_TONE, EAR_STEEP, gatherRows, latticeOf, sectorOf, type Ear } from "./ear.ts";
 import { HEARING_FLOATS, packHearing, pooledHearing, unpackHearing, type Area, type Hearing, type Pose } from "./types.ts";
 
 const ALT = 30;
@@ -274,4 +274,36 @@ test("falls: one report a fall, its foot's place, its run in rows; small and tal
   const back = unpackHearing(packed, pooledHearing());
   assert.deepEqual(back.falls, tall.falls);
   assert.deepEqual(back.river, tall.river);
+});
+
+test("a stream one pixel wide is heard the same on an even column as on an odd one, and a thin fall is found on either", () => {
+  const hear1 = (world: FlatWorld) => {
+    const ear = createEar();
+    ear.setWorld({ n: world.n, land: null });
+    return ear.pass(POSE, frameOf(world, POSE.x, POSE.y - POSE.alt / 0.8), 0);
+  };
+  for (const side of [20, -40, 90]) {
+    const even = hear1(riverNS(POSE.x + side, 1, 10)), odd = hear1(riverNS(POSE.x + side + 1, 1, 10));
+    assert.ok(even.stream.e > 0 && odd.stream.e > 0, "both are heard");
+    assert.ok(Math.abs(db(even.stream.e, odd.stream.e)) < 1, `${side}: even against odd ${db(even.stream.e, odd.stream.e).toFixed(2)} dB`);
+  }
+  // The same through the page's own path: the lattice gathered a few rows at a time, then heard packed.
+  const packedE = (x: number) => {
+    const world = riverNS(x, 1, 10);
+    const seen = frameOf(world, POSE.x, POSE.y - POSE.alt / 0.8);
+    const lat = latticeOf(seen.rect);
+    const into = new Uint32Array(lat.cols * lat.rows);
+    for (let r = 0; r < lat.rows; r += 7) gatherRows(into, seen.rect, seen.bake, seen.rect, r, Math.min(lat.rows, r + 7));
+    const ear = createEar();
+    ear.setWorld({ n: world.n, land: null });
+    return ear.pass(POSE, { bake: into, rect: seen.rect, t: 0, packed: true }, 0).stream.e;
+  };
+  assert.ok(Math.abs(db(packedE(POSE.x + 20), packedE(POSE.x + 21))) < 1);
+  // A fall one pixel wide on an odd column is still a fall, with its foot in the right place.
+  const thin = hear1(riverNS(POSE.x + 21, 1, 4, [{ y: POSE.y - 10, run: 8 }]));
+  assert.equal(thin.falls.length, 1);
+  assert.ok(Math.abs(thin.falls[0].x - (POSE.x + 21)) <= 1 && thin.falls[0].run >= 8 && thin.falls[0].run <= 10);
+  // A wide river is not made wider by more than its edge: within 1.5 dB of what the bare lattice gave it.
+  const wide = hear1(riverNS(POSE.x + 20, 6, 4)), wide1 = hear1(riverNS(POSE.x + 21, 6, 4));
+  assert.ok(Math.abs(db(wide.river.e, wide1.river.e)) < 1.5);
 });

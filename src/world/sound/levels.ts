@@ -188,7 +188,7 @@ export const BED_OFF_S = 2;
  * or fewer) and tall (18 or more). Calibrated: a river 20 cells off at −33 LUFS, a small fall at 20 cells −28, a tall
  * fall at 30 cells −22.
  */
-export const K_RIVER = { flow: 0.007, brook: 0.007, riffle: 0.003, fallSmall: 0.46, fallTall: 0.66 };
+export const K_RIVER = { flow: 0.007, brook: 0.007, riffle: 0.003, fallSmall: 0.565, fallTall: 0.66 };
 /** The share of a stream's energy that feeds the purl as well as the brook. */
 export const RIVER_STREAM_PURL = 0.15;
 /** The riffle: band-pass (LINEAR Q). The bed's reads of the bubble beds run at rates between these. */
@@ -201,7 +201,7 @@ export const RIVER = { riffleHz: 1800, riffleQ: 0.6, rateLo: 0.94, rateHi: 1.06 
  */
 export const FALL = {
   bodyHz: [1600, 900] as [number, number], bodyQ: 0.5, hissHz: 4000, breathe: 0.23, plungeHz: 1200, rumbleHz: 140,
-  body: 0.7, hiss: 0.2, plunge: 0.6, rumble: 1.8, brook: 0.8,
+  body: 0.7, hiss: 0.2, plunge: 0.6, rumble: 1.8, brook: 0.4,
   /** A reported fall within this many cells of a voice's place is that voice's fall; the place follows it at this time constant. */
   near: 12, tau: 0.25,
   /** A fall with no voice takes the spare chain when it beats the weaker sounding fall by this ratio (6 dB) for this long; the crossfade takes this long. */
@@ -228,6 +228,14 @@ export const BELL_FAR: [number, number] = [150, 900];
 export const BELL_WANDER = { gain: 0.45, cents: 300 };
 /** While the abbey rings, wind and water yield K_BELL.duck dB: in full once the abbey's own gain passes the upper edge, not at all under the lower. */
 export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
+
+// ── Gulls (§4.7, §4.11) ──────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A call's notes, a startled bird's keks and its wingbeats, linear (their buffers peak at 0.5), and the reverb
+ * send's level. Calibrated: a call 40 cells off peaks at −30 LUFS momentary.
+ */
+export const K_GULL = { call: 0.18, kek: 0.25, flap: 0.1, send: 0.158 };
 
 // ── Smoothing (§3.5): time constants in seconds ──────────────────────────────────────────────────────────────────────
 

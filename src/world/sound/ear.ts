@@ -73,6 +73,8 @@ CLASS[M.seaClear] = C_SEA;
 CLASS[M.lake] = C_LAKE;
 CLASS[M.river] = C_RIVER;
 
+const RIVER = M.river;
+
 /** Shore kind of each land material: 0 calm, 1 beach, 2 shingle, 3 rock. Shingle is its own kind. */
 const KIND = new Uint8Array(256);
 for (const m of [M.sand, M.sandPale, M.duneGrass]) KIND[m] = 1;
@@ -213,6 +215,8 @@ export function createEar(): Ear {
   let progress = 0;
   let lastT = NaN;
   let passLanes = 0;
+  /** A whole frame's lattice, when the ear is handed whole frames (the bench, the tests, a page with no worker). */
+  let own = new Uint32Array(0);
   /** The two heaviest cells of each sector, as table indices (−1 none), while publishing. */
   const top = new Int16Array(16);
 
@@ -514,9 +518,15 @@ export function createEar(): Ear {
     const rect = seen.rect, bake = seen.bake;
     if (bake && rect) {
       const lat = latticeOf(rect);
-      const packed = seen.packed === true;
-      if (bake.length >= (packed ? lat.cols * lat.rows : rect.w * rect.h)) {
-        bakeRows(pose, bake, rect, Math.floor(from * lat.rows), Math.floor(to * lat.rows), lanes, packed);
+      const r0 = Math.floor(from * lat.rows), r1 = Math.floor(to * lat.rows);
+      if (seen.packed === true) {
+        if (bake.length >= lat.cols * lat.rows) bakeRows(pose, bake, rect, r0, r1, lanes, true);
+      } else if (bake.length >= rect.w * rect.h) {
+        // A whole frame is gathered to its lattice first, as the page gathers it for the worker: one way of reading it.
+        if (own.length !== lat.cols * lat.rows) own = new Uint32Array(lat.cols * lat.rows);
+        // (The row above the first is needed again: squares and river neighbours look up.)
+        gatherRows(own, rect, bake, rect, Math.max(0, r0 - 1), r1);
+        bakeRows(pose, own, rect, r0, r1, lanes, true);
       }
     }
     gridRows(pose, seen, Math.floor(from * GRID), Math.floor(to * GRID));
@@ -574,6 +584,20 @@ export function gatherRows(
     if (cFrom > 0) into.fill(0, row, row + cFrom);
     if (cTo < lat.cols) into.fill(0, row + cTo, row + lat.cols);
     let i = py * w + (hx + 2 * cFrom - cx);
-    for (let c = cFrom; c < cTo; c++, i += 2) into[row + c] = bake[i];
+    // The pixel below belongs to the sample's block unless it is off the frame or in the next chunk of rows (its depth
+    // is counted from another base there).
+    const below = py + 1 < h && ((hy + 2 * r + 1) & 255) !== 0 ? w : 0;
+    const last = py * w + w - 1;
+    for (let c = cFrom; c < cTo; c++, i += 2) {
+      let v = bake[i];
+      // A stream is one pixel wide: where the sample itself is land, river water in the pixel east of it or below it
+      // stands for the block (falling water first), so a thin stream is heard whichever column or row it runs along.
+      if (CLASS[v & 255] === C_LAND) {
+        const e = i < last ? bake[i + 1] : 0, so = below ? bake[i + below] : 0;
+        const er = (e & 255) === RIVER, sr = (so & 255) === RIVER;
+        if (er || sr) v = er && sr ? (((so >>> 8) & 15) >= EAR_FALL_TONE && ((e >>> 8) & 15) < EAR_FALL_TONE ? so : e) : er ? e : so;
+      }
+      into[row + c] = v;
+    }
   }
 }

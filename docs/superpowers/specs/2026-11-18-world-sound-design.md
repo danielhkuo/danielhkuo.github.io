@@ -1311,11 +1311,31 @@ graph between waves: every wave of the scene is connected before the render star
   leave digital silence between them.
 - **A brook's and a river's bubbles come up over 6 and 3 ms** (the recipe's 0.5 ms is kept for the plunge and the
   laps): heard alone, a bubble that starts in half a millisecond is a tick, and the checker counts it.
-- **The lattice reads every other pixel**, so a stream one pixel wide is heard where it crosses an even column or
-  row: about half of it, as each sample's 5 cells² assumes for water two pixels wide. A straight one-pixel stream
-  along an odd column is not heard at all.
+- **A lattice sample that is land takes river water from the pixel east of it or below it** (falling water first),
+  when the frame is gathered to its lattice (`gatherRows`; the ear handed a whole frame gathers it the same way). A
+  stream one pixel wide is heard alike on an even column and on an odd one (within 1 dB), and a thin fall is found.
+  The page reads two more pixels for each land sample.
+- **A tall fall carries**: its distance law is `(40 / d)^0.5` (the medium class has exponent 1), so it stands within
+  6 dB of cruise wind from 150 cells in; a fall's voice starts at the level the frame's edge gives it, not from
+  nothing. A small fall's brook share is 0.4 (0.8 gave steps of 3 LU on a still fall; now 1.4).
 - **The river bed's reads run at fixed seeded rates** in 0.94–1.06 (they do not drift): the four reads cost about
   0.1 % while a river is heard.
+
+**As built, phase 5 (gulls), where it differs from the text above:**
+
+- **Notes are rendered by plain arithmetic in the worker** (§4.7): twenty harmonics of the moving pitch, each weighed by
+  the three formants where it falls, not an oscillator graph offline. **Each harmonic starts at its own phase**: all
+  in step they make one sharp pulse a period, which the click check counts by the dozen (and is harsher than a gull).
+- **A bird's voice is `hash(colony, bird) mod 6`** in the schedule (§5.3), not its wheeler's `h mod 6`: the schedule
+  must know a call's length (so no bird calls over itself) without the wheelers. Its personal rate is from `h`.
+- **Long calls have one to three squeals and seven to eleven kyows** (eight to fourteen notes, as published for
+  herring gulls); the squeals are the loudest and highest notes (to 1.45 B), as the published descriptions have them.
+- **`live/life.ts` exports** `wheelersOf` (the layer builds its wheelers with it), `wheelerAt`, `flee`, `fled`,
+  `ALOFT`, and `eachShoreGull` (the beach lattice's own arithmetic, beside the layer's loop, which is untouched).
+- **The census runs fifteen times a second** in the runtime (§5.3 has thirty): a bird is reported for its first
+  0.3 s aloft, so each is seen four times. A Startle carries the bird's hash `g` (its wingbeat's phase).
+- **A startled beach gull's keks and wingbeats play from where it rested** (a pooled chain set once), not following
+  its flight; a caller's slot does follow its bird.
 
 Also by ruling: the fall memory, the stall dip and the second (fallback) clock are cut; HRTF is the last, optional
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike
