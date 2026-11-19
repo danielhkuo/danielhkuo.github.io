@@ -56,6 +56,11 @@ export interface StreamView extends WorldView {
   bakeFrame(): Uint32Array;
   /** Draws the frame; `flier`, when given, is handed to the live layers. */
   frame(out: Uint32Array, time?: number, flier?: Flier): void;
+  /**
+   * Makes the frame width × height from the next one on, kept on the same camera point. The chunks stay cached; the
+   * next frame composes the whole view afresh.
+   */
+  resize(width: number, height: number): void;
 }
 
 function isRegionLand(data: FlightData | RegionLand): data is RegionLand {
@@ -66,7 +71,7 @@ function isRegionLand(data: FlightData | RegionLand): data is RegionLand {
 export function createStreamView(data: FlightData | RegionLand, pool: BakePool, palette: Palette, mask: Uint8Array, opts: StreamOptions): StreamView {
   const n = data.n;
   if (n % 320 !== 0) throw new Error("n must be a multiple of 320");
-  const width = opts.width, height = opts.height;
+  let width = opts.width, height = opts.height;
   const capacity = opts.cacheChunks ?? STREAM_CACHE;
   const lookahead = opts.lookahead ?? LOOKAHEAD;
   // Bake space is  n × 0.8·n  pixels; both axes then span a whole number of chunks.
@@ -78,11 +83,11 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
   const haze = isRegionLand(data) ? data.haze(palette) : hazeOf(data, palette);
   const groundSample = new Float32Array(1);
   const sites: Site[] = (opts.sites ?? []).map((s) => ({ x: s.x, y: s.y, type: s.type, project: null }));
-  const bakeBuffer = new Uint32Array(width * height);
+  let bakeBuffer = new Uint32Array(width * height);
   // The land of the last frame, composed (palette colours, before the live layers), with bakeBuffer to match. A frame
   // whose rect slid less than its own size slides both and composes only the strips it exposed. It holds while the
   // chunks are the ones it was composed from (no chunk arrived or left since: `received`) and it showed no haze.
-  const land = new Uint32Array(width * height);
+  let land = new Uint32Array(width * height);
   let landX = 0, landY = 0;
   let landVersion = -1;
   let landWhole = false;
@@ -120,6 +125,43 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
 
   /** Cached pixels for an unwrapped chunk, or null, without counting it as a use. */
   const peek = (cx: number, cy: number): Uint32Array | null => cache.get(keyOf(cx, cy)) ?? null;
+
+  /**
+   * bakeSpace's last few chunks looked up (unwrapped coordinates; null where none was baked), round robin. A layer
+   * reading round all four sides of the frame goes from chunk to chunk; these spare it building a key each time. They
+   * hold while no chunk has arrived or left since (`received`).
+   */
+  const SPACE_SLOTS = 4;
+  const spaceCx = new Float64Array(SPACE_SLOTS).fill(NaN), spaceCy = new Float64Array(SPACE_SLOTS).fill(NaN);
+  const spaceHit: (Uint32Array | null)[] = new Array<Uint32Array | null>(SPACE_SLOTS).fill(null);
+  let spaceAt = -1, spaceNext = 0;
+  /**
+   * The bake pixel at bake-space (bx, by), whole numbers, from the cache (0 where the chunk is not baked): what the
+   * live layers read past the frame's edges. Never counted as a use, so the cache keeps and drops what it did before.
+   */
+  const bakeSpace = (bx: number, by: number): number => {
+    const cx = Math.floor(bx / CHUNK), cy = Math.floor(by / CHUNK);
+    if (spaceAt !== received) {
+      spaceCx.fill(NaN);
+      spaceAt = received;
+    }
+    let hit: Uint32Array | null = null, s = 0;
+    for (; s < SPACE_SLOTS; s++) {
+      if (spaceCx[s] === cx && spaceCy[s] === cy) {
+        hit = spaceHit[s];
+        break;
+      }
+    }
+    if (s === SPACE_SLOTS) {
+      hit = peek(cx, cy);
+      s = spaceNext;
+      spaceNext = (spaceNext + 1) % SPACE_SLOTS;
+      spaceCx[s] = cx;
+      spaceCy[s] = cy;
+      spaceHit[s] = hit;
+    }
+    return hit === null ? 0 : hit[(by - cy * CHUNK) * CHUNK + (bx - cx * CHUNK)];
+  };
 
   const eachChunk = (x: number, y: number, w: number, h: number, fn: (cx: number, cy: number) => void): void => {
     const cx0 = Math.floor(x / CHUNK), cx1 = Math.floor((x + w - 1) / CHUNK);
@@ -175,7 +217,7 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
       out.set(land);
       runLayers(
         opts.layers ?? [],
-        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier },
+        { out, bake: bakeBuffer, rect, t: t ?? 0, palette, n, bakeVersion: received, flier, bakeSpace },
         disabled,
         opts.onLayerError,
       );
@@ -224,6 +266,20 @@ export function createStreamView(data: FlightData | RegionLand, pool: BakePool, 
     },
     bakeFrame() {
       return bakeBuffer;
+    },
+    resize(w, h) {
+      if (w === width && h === height) return;
+      // The camera's point stays where it was: rect.x and rect.y are its corner, so move them by half the change.
+      rect.x += (width >> 1) - (w >> 1);
+      rect.y += (height >> 1) - (h >> 1);
+      width = w;
+      height = h;
+      rect.w = w;
+      rect.h = h;
+      bakeBuffer = new Uint32Array(w * h);
+      land = new Uint32Array(w * h);
+      landWhole = false;
+      landVersion = -1;
     },
     rect() {
       return { ...rect };

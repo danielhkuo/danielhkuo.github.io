@@ -15,7 +15,7 @@ import { artSet, blend, frameX, frameY, modP, ringDelta, smooth01 } from "./art.
 import type { Flier, LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { planHarbour, ROUTE_STEP } from "./routes.ts";
-import { drawSprite, worldRowAt } from "./sprites.ts";
+import { bakeAt, drawSprite, worldRowAt } from "./sprites.ts";
 
 // ── Tuning ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,27 @@ const BOAT_FAR = 190;
 const SMOKE_REACH = 190;
 /** Boats to a town, fanned over the sea its harbour opens on. */
 const BOATS = 12;
+
+// How far from the pixel it stands on each thing can draw: a lattice point is placed (from the land under it, past the
+// frame's edge as on it) whenever its thing can reach the frame, and drawn clipped, so it crosses the edge whole.
+/** A sheep walks up to this many pixels either way along its slope. */
+const SHEEP_WALK = 5;
+/**
+ * A startled gull flies up to FLEE_SIDE pixels either side of its beach, FLEE_UP above it and FLEE_DOWN below (flee's
+ * furthest: 41 cells out, sideways or a little along the track, with 5 of wheeling; 25 units up), wings and all.
+ */
+const FLEE_SIDE = 59;
+const FLEE_UP = 71;
+const FLEE_DOWN = 48;
+/** A boat and its wake: up to this many pixels from the boat's point, either way. */
+const BOAT_REACH = 10;
+/**
+ * Smoke climbs up to 8 pixels to the ridge, rises up to 15 over it and leans up to 8 downwind. A town counts as near the
+ * frame within SMOKE_REACH, the frame's half-diagonal and SMOKE_SLACK cells of its middle.
+ */
+const SMOKE_UP = 24;
+const SMOKE_LEAN = 9;
+const SMOKE_SLACK = 86;
 
 const TAU = 2 * Math.PI;
 
@@ -92,6 +113,33 @@ export function startledFor(fl: Flier | undefined, n: number, x: number, y: numb
   return tau < 0 || tau > ALOFT ? -1 : tau;
 }
 
+/** The way the flier last asked of mayStartle was heading, and its cosine and sine: the same for a whole frame. */
+const track = { heading: NaN, hx: 0, hy: 0 };
+
+/**
+ * Whether a bird anywhere on bake pixels x0…x1 (world columns) by rows by0…by1 could be startled by `fl`
+ * (startledFor ≥ 0), from any ground it could be startled on (within LOW of the flier's height): a cheap test that
+ * reads no land, false only where startledFor is surely −1. A bird's world row is (by + ground) / 0.8, and its distances
+ * across and along the flier's track are linear in its column and row, so their extremes lie at the box's corners.
+ */
+export function mayStartle(fl: Flier, n: number, x0: number, x1: number, by0: number, by1: number): boolean {
+  const dx0 = ringDelta(fl.x, x0, n), dx1 = dx0 + (x1 - x0);
+  const dy0 = ringDelta(fl.y, (by0 + fl.alt - LOW) / 0.8, n), dy1 = dy0 + (by1 - by0 + 2 * LOW) / 0.8;
+  if (fl.heading !== track.heading) {
+    track.heading = fl.heading;
+    track.hx = pcos(fl.heading);
+    track.hy = psin(fl.heading);
+  }
+  const hx = track.hx, hy = track.hy;
+  // Across the track: dx·hy − dy·hx; along it, behind the flier: −(dx·hx + dy·hy).
+  const a = dx0 * hy, b = dx1 * hy, c = dy0 * hx, d = dy1 * hx;
+  const sLo = Math.min(a, b) - Math.max(c, d), sHi = Math.max(a, b) - Math.min(c, d);
+  if (sLo >= REACH || sHi <= -REACH) return false;
+  const e = dx0 * hx, g = dx1 * hx, p = dy0 * hy, q = dy1 * hy;
+  const bLo = -(Math.max(e, g) + Math.max(p, q)), bHi = -(Math.min(e, g) + Math.min(p, q));
+  return bLo <= ALOFT * (fl.speed < 20 ? 20 : fl.speed) && bHi >= -REACH;
+}
+
 /** A bird in the air: when it took off, the flier's heading then, and the side of the flier's way it fled to. */
 interface Up {
   t0: number;
@@ -116,6 +164,12 @@ export interface Scares {
    * own way of flying: fills and returns where it is in its flight this frame.
    */
   bird(id: number, x: number, y: number, ground: number, h: number): Fled;
+  /**
+   * Whether any of the birds `id` … `id + count − 1`, perched anywhere on bake pixels x0…x1 (world columns) by rows
+   * by0…by1, can be in the air this frame: one already up, or one the flier could put up now. A cheap test that reads
+   * no land, false only where `bird` would surely leave each of them on its perch.
+   */
+  mayFly(id: number, count: number, x0: number, x1: number, by0: number, by1: number): boolean;
 }
 
 /**
@@ -160,6 +214,18 @@ export function scares(n: number): Scares {
   };
 
   return {
+    mayFly(id, count, x0, x1, by0, by1) {
+      for (let k = 0; k < count; k++) if (ups.has(id + k)) return true;
+      if (!fl || fl.speed < STIR) return false;
+      if (fresh) return mayStartle(fl, n, x0, x1, by0, by1);
+      // Between frames a bird is put up within REACH of the flier's way since the last one (so within REACH and that
+      // way of the flier now), on ground within LOW of the flier's height.
+      const most = REACH + Math.sqrt(wayX * wayX + wayY * wayY);
+      const dx0 = ringDelta(fl.x, x0, n), dx1 = dx0 + (x1 - x0);
+      const dy0 = ringDelta(fl.y, (by0 + fl.alt - LOW) / 0.8, n), dy1 = dy0 + (by1 - by0 + 2 * LOW) / 0.8;
+      const nx = dx0 > 0 ? dx0 : dx1 < 0 ? -dx1 : 0, ny = dy0 > 0 ? dy0 : dy1 < 0 ? -dy1 : 0;
+      return nx * nx + ny * ny <= most * most;
+    },
     frame(time, flier) {
       t = time;
       fl = flier;
@@ -363,11 +429,14 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
 
   /** Sheep: flocks of three to five on a 40 × 32 lattice, one cell in four. */
   function sheep(f: LiveFrame): void {
-    const { bake, t, n } = f;
+    const { t, n } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
     const perX = n / 40, perY = (n * 0.8) / 32;
-    const cx1 = Math.floor((rx + w) / 40), cy1 = Math.floor((ry + h) / 32);
-    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor(rx / 40) - 1; cx <= cx1; cx++) {
+    // A sheep covers a pixel left of where it stands to two right, and the row above: with its walk, those on
+    // pixels −2 − SHEEP_WALK … w + SHEEP_WALK and rows 0 … h can show.
+    const xLo = -2 - SHEEP_WALK, xHi = w + SHEEP_WALK;
+    const cx1 = Math.floor((rx + xHi) / 40), cy1 = Math.floor((ry + h) / 32);
+    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx + xLo) / 40) - 1; cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x5eeb);
       if ((hc & 3) !== 0) continue;
       const fx = cx * 40 + 9 + ((hc >>> 4) % 22), fy = cy * 32 + 7 + ((hc >>> 10) % 18);
@@ -375,9 +444,8 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       for (let k = 0; k < count; k++) {
         const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
         const px = fx + (g % 19) - 9 - rx, py = fy + ((g >>> 8) % 13) - 6 - ry;
-        if (px < 6 || px >= w - 6 || py < 2 || py >= h) continue;
-        const i = py * w + px;
-        const v = bake[i];
+        if (px < xLo || px > xHi || py < 0 || py > h) continue;
+        const v = bakeAt(f, px, py);
         if (isPasture[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
         const row = worldRowAt(f, px, py);
         if (0.8 * row - (ry + py) < UPLAND) continue;
@@ -389,7 +457,7 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
         const want = ph < 0.3 ? 0 : ph < 0.44 ? Math.round((reach * (ph - 0.3)) / 0.14) : ph < 0.8 ? reach : ph < 0.94 ? Math.round(reach * (1 - (ph - 0.8) / 0.14)) : 0;
         let at = 0;
         while (at < want) {
-          const u = bake[i + dir * (at + 1)];
+          const u = bakeAt(f, px + dir * (at + 1), py);
           if (isPasture[u & 255] === 0 || ((u >>> 8) & 255) >= 64 || Math.abs((u >>> 16) - (v >>> 16)) > 12) break;
           at++;
         }
@@ -405,25 +473,41 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
 
   /** Gulls on the beaches: a group of three to six to each cell of a 32 × 32 lattice, of which those on sand or shingle show. */
   function shoreGulls(f: LiveFrame): void {
-    const { bake, t, n } = f;
+    const { t, n } = f;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
     const perX = n / 32, perY = (n * 0.8) / 32;
-    const cx1 = Math.floor((rx + w) / 32), cy1 = Math.floor((ry + h) / 32);
-    for (let cy = Math.floor(ry / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor(rx / 32) - 1; cx <= cx1; cx++) {
+    // A gull at rest covers the pixels round where it stands; one in the air can be a long way from its beach. With a
+    // flier about, every beach a startled gull could fly into the frame from is looked at.
+    const fl = f.flier;
+    const side = fl ? FLEE_SIDE : 1, above = fl ? FLEE_DOWN : 1, below = fl ? FLEE_UP : 1;
+    const cx1 = Math.floor((rx + w + side) / 32), cy1 = Math.floor((ry + h + below) / 32);
+    for (let cy = Math.floor((ry - above) / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx - side) / 32) - 1; cx <= cx1; cx++) {
+      // The cell's gulls stand on bake pixels cx·32 + 1 … + 30 by cy·32 + 4 … + 27, and are birds id … id + 5. Past
+      // the pixels a resting gull covers, only one in the air can show: one already up, or one the flier can put up
+      // now. A cell with neither is passed over unhashed.
+      const bx0 = cx * 32 + 1, by0 = cy * 32 + 4, cell = (modP(cy, perY) * perX + modP(cx, perX)) * 8;
+      const rests = bx0 + 29 >= rx - 1 && bx0 <= rx + w && by0 + 23 >= ry - 1 && by0 <= ry + h;
+      // A cell wholly within the pixels where gulls rest needs no test: any of its gulls may be drawn.
+      const whole = bx0 >= rx - 1 && bx0 + 29 <= rx + w && by0 >= ry - 1 && by0 + 23 <= ry + h;
+      const may = !whole && fl !== undefined && scare.mayFly(cell, 6, bx0, bx0 + 29, by0, by0 + 23);
+      if (!rests && !may) continue;
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x9011);
       const fx = cx * 32 + 8 + ((hc >>> 4) % 16), fy = cy * 32 + 8 + ((hc >>> 10) % 16);
       const count = 3 + ((hc >>> 16) & 3);
       for (let k = 0; k < count; k++) {
         const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
         const px = fx + (g % 15) - 7 - rx, py = fy + ((g >>> 8) % 9) - 4 - ry;
-        if (px < 1 || px >= w - 1 || py < 1 || py >= h) continue;
-        const v = bake[py * w + px];
+        if (px < -side || px > w + side || py < -above || py > h + below) continue;
+        const resting = px >= -1 && px <= w && py >= -1 && py <= h;
+        if (!resting && !may) continue;
+        const v = bakeAt(f, px, py);
         if (isBeach[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
         const row = worldRowAt(f, px, py);
         const ground = 0.8 * row - (ry + py);
-        const id = (modP(cy, perY) * perX + modP(cx, perX)) * 8 + k;
+        const id = cell + k;
         const fled = scare.bird(id, rx + px, row, ground, g);
         if (fled.tau < 0) {
+          if (!resting) continue;
           drawSprite(f, gullRest, rx + px, row, ground, (g & 16) !== 0);
           note("gull-resting", px, py, id);
           continue;
@@ -478,13 +562,13 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       const x = where.x, y = where.y;
       const sign = outward ? 1 : -1;
       const dx = sign * where.dx, dy = sign * where.dy;
-      const px = frameX(f, x, 8), py = frameY(f, 0.8 * y, 8);
-      if (px < 5 || px >= w - 5 || py < 6 || py >= h - 1) continue;
+      // Frame pixel of the boat's point, in [−BOAT_REACH, …) when it is in reach: it and its wake can show.
+      const px = frameX(f, x, BOAT_REACH), py = frameY(f, 0.8 * y, BOAT_REACH);
+      if (px >= w + BOAT_REACH || py >= h + BOAT_REACH) continue;
       // Clear water under the whole hull: the routes are planned on a coarse grid, and a rock or a quay may lie on one.
-      const i = py * w + px;
       let clear = true;
       for (let q = -4; q <= 4; q += 2) {
-        const v = bake[i + q];
+        const v = bakeAt(f, px + q, py);
         if (isSea[v & 255] === 0) { clear = false; break; }
       }
       if (!clear) continue;
@@ -512,38 +596,41 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
 
   /** Chimney smoke: wisps rising from the top of one roof in three, pale with a cool shade under them, leaning downwind. */
   function smoke(f: LiveFrame): void {
-    const { out, bake, palette, t, n } = f;
+    const { out, palette, t, n } = f;
     if (towns.length === 0) return;
     const w = f.rect.w, h = f.rect.h, rx = f.rect.x, ry = f.rect.y;
-    // Only when a town is anywhere near the frame.
+    // Only when a town is near enough the frame for its roofs to smoke into it: SMOKE_REACH, the frame's half-diagonal in
+    // cells, and SMOKE_SLACK for the plumes and for roofs standing high (520 in all for the flight page's frame).
     const midX = rx + w / 2, midY = (ry + h / 2) / 0.8;
+    const reach = SMOKE_REACH + Math.hypot(w / 2, h / 2 / 0.8) + SMOKE_SLACK;
     let near = false;
     for (let s = 0; s < towns.length; s++) {
       const dx = ringDelta(towns[s].x, midX, n), dy = ringDelta(towns[s].y, midY, n);
-      if (dx * dx + dy * dy < 520 * 520) near = true;
+      if (dx * dx + dy * dy < reach * reach) near = true;
     }
     if (!near) return;
     const pale = palette[(M.whitewash << 8) | 15], shade = palette[(M.roofSlate << 8) | 7];
     const perX = n / 20, perY = (n * 0.8) / 16;
-    const cx1 = Math.floor((rx + w) / 20), cy1 = Math.floor((ry + h) / 16);
-    for (let cy = Math.floor(ry / 16); cy <= cy1; cy++) for (let cx = Math.floor(rx / 20); cx <= cx1; cx++) {
+    // A roof SMOKE_LEAN left of the frame, or SMOKE_UP below it, can still smoke into it.
+    const cx1 = Math.floor((rx + w) / 20), cy1 = Math.floor((ry + h + SMOKE_UP) / 16);
+    for (let cy = Math.floor(ry / 16); cy <= cy1; cy++) for (let cx = Math.floor((rx - SMOKE_LEAN) / 20); cx <= cx1; cx++) {
       const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x50c7);
       if ((hc & 1) !== 0) continue;
-      // The first of a few fixed tries in the cell that lands on a roof.
-      let px = -1, py = -1;
+      // The first of a few fixed tries in the cell that lands on a roof: the land's, on the frame or past it.
+      let px = 0, py = 0, found = false;
       for (let k = 0; k < 5; k++) {
         const g = mix32(hc + k);
         const qx = cx * 20 + (g % 20) - rx, qy = cy * 16 + ((g >>> 8) & 15) - ry;
-        if (qx < 0 || qx >= w || qy < 12 || qy >= h) continue;
-        if (isRoof[bake[qy * w + qx] & 255] === 0) continue;
+        if (isRoof[bakeAt(f, qx, qy) & 255] === 0) continue;
         px = qx;
         py = qy;
+        found = true;
         break;
       }
-      if (px < 0) continue;
+      if (!found || px < -SMOKE_LEAN || px >= w + 1 || py < 1 || py >= h + SMOKE_UP) continue;
       // Up to the ridge.
       let climb = 0;
-      while (climb < 8 && py > 0 && isRoof[bake[(py - 1) * w + px] & 255] === 1) { py--; climb++; }
+      while (climb < 8 && isRoof[bakeAt(f, px, py - 1) & 255] === 1) { py--; climb++; }
       const row = worldRowAt(f, px, py);
       let inTown = false;
       for (let s = 0; s < towns.length; s++) {
@@ -560,13 +647,13 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
       for (let j = 1; j <= tall; j++) {
         const qy = py - j;
         if (qy < 0) break;
-        if (j > 2 && (j + gap) % 7 === 0) continue;
+        if (qy >= h || (j > 2 && (j + gap) % 7 === 0)) continue;
         const u = j / tall;
         const qx = px + Math.round(6 * u * u + (0.5 + u) * psin(j * 0.7 - bend));
-        if (qx < 0 || qx >= w - 1) continue;
+        if (qx < -1 || qx >= w) continue;
         const a = Math.round(245 * (1 - u * 0.6));
-        blend(out, qy * w + qx, pale, a);
-        blend(out, qy * w + qx + 1, shade, (a * 5) >> 3);
+        if (qx >= 0) blend(out, qy * w + qx, pale, a);
+        if (qx + 1 < w) blend(out, qy * w + qx + 1, shade, (a * 5) >> 3);
       }
     }
   }
