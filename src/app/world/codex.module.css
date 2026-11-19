@@ -341,3 +341,17 @@
     animation: none;
   }
 }
+
+/* A touch screen (mobile spec 5): the flight is locked, so the sheet scrolls but never pinches, and its type is a size
+   up because it cannot be zoomed (all of it is also on the plain page). Its height is the visible area's (--vvh, set by
+   the flight from visualViewport), never vh: on landscape iPhone Safari 86vh is taller than what shows. */
+@media (hover: none) and (pointer: coarse) {
+  .codex {
+    max-height: min(calc(var(--vvh, 100dvh) - 1.5rem), 46rem);
+  }
+
+  .leaf {
+    font-size: max(1em, 17px);
+    touch-action: pan-y;
+  }
+}

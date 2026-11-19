@@ -4,7 +4,10 @@
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
 //   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly]
-//                                              [--viewport 1920x1080] [--query pixels=130000]
+//                                              [--viewport 1920x1080] [--query pixels=130000] [--phone]
+//
+// --phone flies as an iPhone 17 in landscape Safari (874×338 at 3×, touch): it takes wing on the first card and flies the
+// same route with the touch stick and the Boost button (mobile spec 8, the phone perf gate). It sets its own viewport.
 //
 // The page reports through window.__flight (set only with ?stats). The frame fills the window, so --viewport sets how
 // many frame pixels are drawn (runtime/fit.ts); --query adds to the page's query: ?pixels= to try another budget, or
@@ -14,6 +17,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
+import { layoutControls } from "../src/world/mobile/layout.ts";
 import { createReadStream, statSync } from "node:fs";
 import { createServer } from "node:http";
 
@@ -25,7 +29,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", width: 1600, height: 900, query: "" };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", width: 1600, height: 900, query: "", phone: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
@@ -34,6 +38,7 @@ function parseArgs(argv) {
     else if (a === "--out") o.out = argv[++i];
     else if (a === "--viewport") [o.width, o.height] = argv[++i].split("x").map(Number);
     else if (a === "--query") o.query = argv[++i];
+    else if (a === "--phone") o.phone = true;
     else throw new Error(`unknown argument ${a}`);
   }
   return o;
@@ -76,18 +81,60 @@ const pct = (xs, p) => {
 /** Key presses: [key, seconds held]. A loop of turns and boosts, then cruise. */
 const ROUTE = [["ArrowUp", 4], [null, 2], ["ArrowRight", 2.5], ["ArrowUp", 3], ["ArrowLeft", 4], [null, 3], ["ArrowDown", 2], ["ArrowRight", 1.5]];
 
+/** The phone: measured in the iOS 26.5 Simulator (iPhone 17, Safari, landscape, one tab). */
+const PHONE = {
+  viewport: { width: 874, height: 338, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: true },
+  ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1",
+  insets: { top: 0, right: 62, bottom: 20, left: 62 },
+};
+/** The keys of ROUTE as a stick direction on screen and Boost. */
+const TOUCH = { ArrowUp: { dx: 0, dy: -1, boost: true }, ArrowDown: { dx: 0, dy: 1, boost: false }, ArrowLeft: { dx: -1, dy: 0, boost: false }, ArrowRight: { dx: 1, dy: 0, boost: false } };
+
+/** Holds the route's step by touch: the stick pushed that way (and Boost for Up) for `held` seconds. */
+async function touchStep(page, layout, key, held) {
+  if (!key) return new Promise((r) => setTimeout(r, held * 1000));
+  const t = TOUCH[key];
+  const sx = Math.round((layout.zone.x0 + layout.zone.x1) / 2);
+  const sy = Math.round((layout.zone.y0 + layout.zone.y1) / 2);
+  const thumb = await page.touchscreen.touchStart(sx, sy);
+  await thumb.move(sx + t.dx * layout.travel, sy + t.dy * layout.travel);
+  const boost = t.boost ? await page.touchscreen.touchStart(Math.round(layout.boost.x), Math.round(layout.boost.y)) : null;
+  await new Promise((r) => setTimeout(r, held * 1000));
+  await boost?.end();
+  await thumb.end();
+}
+
 async function fly(browser, origin, opts, label, rate) {
   const page = await browser.newPage();
-  await page.setViewport({ width: opts.width, height: opts.height });
+  if (opts.phone) {
+    await page.setUserAgent(PHONE.ua);
+    await page.setViewport(PHONE.viewport);
+    const cdp = await page.createCDPSession();
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: PHONE.insets });
+  } else {
+    await page.setViewport({ width: opts.width, height: opts.height });
+  }
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   if (rate > 1) await page.emulateCPUThrottling(rate);
   const t0 = Date.now();
   await page.goto(`${origin}world?stats${opts.query ? `&${opts.query}` : ""}`, { waitUntil: "load" });
+  // Under phone emulation the navigation lands in a fresh renderer that drops the throttle: set it again.
+  if (opts.phone && rate > 1) await page.emulateCPUThrottling(rate);
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
   const boot = await page.evaluate(() => ({ ...window.__flight, frameMs: undefined }));
   if (boot.error) throw new Error(`${label}: page error ${boot.error}`);
+  let layout = null;
+  if (opts.phone) {
+    await page.tap('[data-act="take-wing"]');
+    await page.waitForFunction(() => !document.querySelector("[data-card]"));
+    const v = await page.evaluate(() => {
+      const r = document.querySelector("canvas").getBoundingClientRect();
+      return { w: Math.round(visualViewport.width), h: Math.round(visualViewport.height), frame: { x: r.left, y: r.top, w: r.width, h: r.height } };
+    });
+    layout = layoutControls({ width: v.w, height: v.h, insets: PHONE.insets, platform: "ios", hand: "right", size: 1, frame: v.frame, land: false });
+  }
   const shots = [];
   const shot = async (name) => {
     const file = path.join(opts.out, `${label}-${name}.png`);
@@ -102,9 +149,12 @@ async function fly(browser, origin, opts, label, rate) {
   let step = 0;
   while ((Date.now() - start) / 1000 < opts.seconds) {
     const [key, held] = ROUTE[step++ % ROUTE.length];
-    if (key) await page.keyboard.down(key);
-    await new Promise((r) => setTimeout(r, held * 1000));
-    if (key) await page.keyboard.up(key);
+    if (layout) await touchStep(page, layout, key, held);
+    else {
+      if (key) await page.keyboard.down(key);
+      await new Promise((r) => setTimeout(r, held * 1000));
+      if (key) await page.keyboard.up(key);
+    }
     const t = (Date.now() - start) / 1000;
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
@@ -113,7 +163,7 @@ async function fly(browser, origin, opts, label, rate) {
     frame: `${document.querySelector("canvas").width}x${document.querySelector("canvas").height}`,
     frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])],
     hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(),
-    air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])],
+    air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])], state: window.__flight.state?.() ?? null,
   }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
@@ -125,6 +175,7 @@ async function fly(browser, origin, opts, label, rate) {
     guideMsP50: pct(res.guideMs, 0.5), guideMsP95: pct(res.guideMs, 0.95), guideMsMax: pct(res.guideMs, 1),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
     air: res.air, palettes: res.paletteMs.length, paletteMsMax: pct(res.paletteMs, 1),
+    ...(opts.phone ? { workers: res.state?.workers, pacedTo: res.state?.rate } : {}),
   };
 }
 

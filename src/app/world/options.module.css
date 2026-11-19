@@ -179,8 +179,9 @@
 .corner {
   position: absolute;
   z-index: 12;
-  top: calc(var(--px) * 3);
-  right: calc(var(--px) * 3);
+  /* Now the frame fills the window, the corner keeps out of a phone's notch and rounded corners (0 on a desktop). */
+  top: max(calc(var(--px) * 3), env(safe-area-inset-top));
+  right: max(calc(var(--px) * 3), calc(env(safe-area-inset-right) + var(--px) * 2));
   display: flex;
   gap: calc(var(--px) * 5);
   opacity: 0;

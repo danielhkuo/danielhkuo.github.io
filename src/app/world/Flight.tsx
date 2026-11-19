@@ -4,36 +4,50 @@ import { useRef, type CSSProperties } from "react";
 import Terminal from "../../components/terminal/Terminal";
 import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
+import FlightCard from "./FlightCard";
 import styles from "./flight.module.css";
+import mobile from "./mobile.module.css";
 import OptionsPanel, { Corner } from "./OptionsPanel";
 import { setOptions, useOptions } from "./optionsStore";
 import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
 import { useFlight } from "./useFlight";
 import { useFrameFit } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
+import { phoneFrame, usePhoneFlight } from "./usePhoneFlight";
 import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
+import { MINIMAL_PAGE } from "../../components/title/phone/copy";
 
 /** The corner shows this long after the page opens and after the pointer last moved, ms. */
 const REVEAL_MS = 4000;
+
+/** On a phone the abbey's terminal is the minimal version's: the terminal is folded into that page. */
+function openTerminalPage(): void {
+  window.location.href = MINIMAL_PAGE;
+}
 
 export interface FlightProps {
   /** The landmarks and what each holds, worked out at build time; null when the build had no world. */
   landmarks: LandmarkSet | null;
   /** What the terminal at the abbey is handed, as on the home page. */
   terminal: TerminalProps;
+  /** Bytes fetched before the first view (the core and the start's regions), from the build; 0 when unknown. */
+  startBytes: number;
 }
 
-export default function Flight({ landmarks, terminal }: FlightProps) {
+export default function Flight({ landmarks, terminal, startBytes }: FlightProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fit = useFrameFit();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const windowFit = useFrameFit();
   const drawer = useTerminalDrawer(terminal);
   const panel = usePanel();
-  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link);
+  const { shell, touch } = usePhoneFlight(rootRef, panel.open);
+  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch);
   const options = useOptions();
   const revealed = useReveal(REVEAL_MS);
 
   if (flight.failed) return <LoadFailed />;
 
+  const { fit, page: touchPage, turned } = phoneFrame(shell, windowFit);
   const at = flight.phase.at;
   // The panel and the corner draw their glyphs a step finer than the world's pixel, 2 or 3 CSS pixels, so the panel
   // stays small on any window.
@@ -41,9 +55,11 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   // The frame covers the window from its top-left corner; the session sizes the canvas itself to fit.w × fit.h.
   const stage = { width: fit.w * fit.css, height: fit.h * fit.css } as CSSProperties;
   // Round the frame the page takes the paper's colour in the hour's light: dark at night, as the frame is.
-  const page = flight.paper ? ({ background: flight.paper } as CSSProperties) : undefined;
+  const paper = flight.paper ? ({ background: flight.paper } as CSSProperties) : undefined;
+  // On a touch-first screen the page is also the game layer: sized to the visible area, and turned when played sideways.
+  const page = paper || touchPage ? { ...paper, ...touchPage } : undefined;
   return (
-    <div className={styles.page} style={page} data-motion={options.motion}>
+    <div ref={rootRef} className={`${styles.page} ${touchPage ? mobile.touchPage : ""}`} style={page} data-motion={options.motion}>
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} className={styles.canvas} />
         {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
@@ -55,20 +71,35 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
           landmark={at}
           register={landmarks ? registerFrom(at, landmarks) : []}
           onTakeOff={flight.takeOff}
-          onOpenTerminal={drawer.show}
+          onOpenTerminal={shell.phone ? openTerminalPage : drawer.show}
         />
       ) : null}
-      {at?.holds.kind === "about" ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
+      {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
       <OptionsPanel
         open={panel.open}
         px={px}
         options={options}
+        device={flight.device}
+        platform={shell.platform}
         onChange={setOptions}
         onTeach={() => {
           flight.teachAgain();
           panel.link.toggle();
         }}
         onClose={panel.closed}
+      />
+      <FlightCard
+        card={shell.card}
+        px={px}
+        phone={shell.phone}
+        homeScreenHint={shell.platform === "ios" && shell.phone && !shell.standalone}
+        sideways={turned}
+        startBytes={startBytes}
+        onTakeWing={shell.takeWing}
+        onFlyOn={shell.flyOn}
+        onSideways={shell.playSideways}
+        onOtherWay={shell.otherWay}
+        onOptions={panel.show}
       />
       {flight.stats ? <StatsReadout stats={flight.stats} /> : null}
     </div>
