@@ -10,7 +10,9 @@ import mobile from "./mobile.module.css";
 import OptionsPanel, { Corner } from "./OptionsPanel";
 import { setOptions, useOptions } from "./optionsStore";
 import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
+import SoundToggle from "./SoundToggle";
 import { useFlight } from "./useFlight";
+import { useSound } from "./useSound";
 import { useFrameFit } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
 import { phoneFrame, usePhoneFlight } from "./usePhoneFlight";
@@ -41,7 +43,9 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
   const drawer = useTerminalDrawer(terminal);
   const panel = usePanel();
   const { shell, touch } = usePhoneFlight(rootRef, panel.open);
-  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch);
+  // The sound's control is made first, so the flight finds it when the world has loaded.
+  const sound = useSound();
+  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref);
   const options = useOptions();
   const revealed = useReveal(REVEAL_MS);
 
@@ -60,6 +64,7 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
   const page = paper || touchPage ? { ...paper, ...touchPage } : undefined;
   return (
     <div ref={rootRef} className={`${styles.page} ${touchPage ? mobile.touchPage : ""}`} style={page} data-motion={options.motion}>
+      <SoundToggle control={sound.control} />
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} className={styles.canvas} />
         {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
@@ -82,6 +87,7 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
         device={flight.device}
         platform={shell.platform}
         onChange={setOptions}
+        sound={sound.control}
         onTeach={() => {
           flight.teachAgain();
           panel.link.toggle();

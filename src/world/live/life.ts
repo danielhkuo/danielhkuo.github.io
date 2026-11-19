@@ -298,7 +298,10 @@ export function scares(n: number): Scares {
 
 // ── The layer ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-interface Wheeler {
+export interface Wheeler {
+  /** The site it wheels over (its index among the sites), and whether that is a town. */
+  site: number;
+  town: boolean;
   x: number;
   y: number;
   r: number;
@@ -307,6 +310,72 @@ interface Wheeler {
   phase: number;
   alt: number;
   h: number;
+}
+
+/** The gulls that wheel over the towns (nine each) and the lighthouses (five each), as the layer draws them. */
+export function wheelersOf(sites: readonly { type: string; x: number; y: number }[], seed: number): Wheeler[] {
+  const wheelers: Wheeler[] = [];
+  for (let s = 0; s < sites.length; s++) {
+    const site = sites[s];
+    const town = site.type === "town";
+    if (!town && site.type !== "lighthouse") continue;
+    const count = town ? 9 : 5, spread = town ? 105 : 42;
+    for (let k = 0; k < count; k++) {
+      const h = hash2(s * 31 + k, 7, seed ^ 0x6a11);
+      const ang = ((h & 1023) / 1024) * TAU, out = spread * Math.sqrt(((h >>> 10) & 255) / 255);
+      wheelers.push({
+        site: s,
+        town,
+        // Town gulls keep to the seaward half of the sky when there is one: south of the roofs.
+        x: site.x + out * pcos(ang),
+        y: site.y + (town ? 30 : 0) + out * psin(ang),
+        r: 10 + ((h >>> 18) & 15),
+        turn: (0.26 + ((h >>> 22) & 7) * 0.02) * ((h >>> 25) & 1 ? 1 : -1),
+        phase: ((h >>> 26) / 64) * TAU,
+        alt: 42 + ((mix32(h) & 15) * 1.5),
+        h: mix32(h + 1),
+      });
+    }
+  }
+  return wheelers;
+}
+
+/** Where a wheeling gull is at time t, on its round (before any startle): filled by `wheelerAt`. */
+export const wheeled = { x: 0, y: 0, alt: 0 };
+export function wheelerAt(g: Wheeler, t: number): void {
+  const ang = g.phase + g.turn * t;
+  wheeled.x = g.x + g.r * pcos(ang);
+  wheeled.y = g.y + g.r * psin(ang);
+  wheeled.alt = g.alt + 3 * psin(ang * 0.37 + g.phase);
+}
+
+/**
+ * The gulls resting on the beaches round frame pixel (px0, py0), within `reach` pixels: the layer's own lattice and
+ * hashes (three to six birds to each 32 × 32 cell, of which those on sand or shingle show). `each` is told every bird
+ * that shows inside the frame: its pixel, its hash, and its id (the one the layer gives `scares`). What the layer's
+ * own loop draws at rest, for those who only need to know where the birds are.
+ */
+export function eachShoreGull(
+  bake: Uint32Array, rect: { x: number; y: number; w: number; h: number }, n: number, seed: number, px0: number, py0: number, reach: number,
+  each: (px: number, py: number, g: number, id: number) => void,
+): void {
+  const w = rect.w, h = rect.h, rx = rect.x, ry = rect.y;
+  const perX = n / 32, perY = (n * 0.8) / 32;
+  const cx1 = Math.floor((rx + px0 + reach) / 32), cy1 = Math.floor((ry + py0 + reach) / 32);
+  for (let cy = Math.floor((ry + py0 - reach) / 32) - 1; cy <= cy1; cy++) for (let cx = Math.floor((rx + px0 - reach) / 32) - 1; cx <= cx1; cx++) {
+    const cell = (modP(cy, perY) * perX + modP(cx, perX)) * 8;
+    const hc = hash2(modP(cx, perX), modP(cy, perY), seed ^ 0x9011);
+    const fx = cx * 32 + 8 + ((hc >>> 4) % 16), fy = cy * 32 + 8 + ((hc >>> 10) % 16);
+    const count = 3 + ((hc >>> 16) & 3);
+    for (let k = 0; k < count; k++) {
+      const g = mix32(hc + Math.imul(k + 1, 0x9e3779b9));
+      const px = fx + (g % 15) - 7 - rx, py = fy + ((g >>> 8) % 9) - 4 - ry;
+      if (px < 0 || px >= w || py < 0 || py >= h) continue;
+      const v = bake[py * w + px];
+      if (isBeach[v & 255] === 0 || ((v >>> 8) & 255) >= 64) continue;
+      each(px, py, g, cell + k);
+    }
+  }
 }
 
 interface Boat {
@@ -363,28 +432,12 @@ export function lifeLayer(ctx: LayerContext): LifeLayer {
     ".kkkk.",
   ], 3, 5, { s: [M.sailcloth, 13], m: [M.timber, 2], h: [M.timber, 10], k: [M.timber, 3] });
 
-  const wheelers: Wheeler[] = [];
+  const wheelers: Wheeler[] = wheelersOf(ctx.sites, seed);
   const boats: Boat[] = [];
   const towns: { x: number; y: number }[] = [];
   for (let s = 0; s < ctx.sites.length; s++) {
     const site = ctx.sites[s];
     const town = site.type === "town";
-    if (!town && site.type !== "lighthouse") continue;
-    const count = town ? 9 : 5, spread = town ? 105 : 42;
-    for (let k = 0; k < count; k++) {
-      const h = hash2(s * 31 + k, 7, seed ^ 0x6a11);
-      const ang = ((h & 1023) / 1024) * TAU, out = spread * Math.sqrt(((h >>> 10) & 255) / 255);
-      wheelers.push({
-        // Town gulls keep to the seaward half of the sky when there is one: south of the roofs.
-        x: site.x + out * pcos(ang),
-        y: site.y + (town ? 30 : 0) + out * psin(ang),
-        r: 10 + ((h >>> 18) & 15),
-        turn: (0.26 + ((h >>> 22) & 7) * 0.02) * ((h >>> 25) & 1 ? 1 : -1),
-        phase: ((h >>> 26) / 64) * TAU,
-        alt: 42 + ((mix32(h) & 15) * 1.5),
-        h: mix32(h + 1),
-      });
-    }
     if (!town) continue;
     towns.push({ x: site.x, y: site.y });
     const hashes: number[] = [], fars: number[] = [];

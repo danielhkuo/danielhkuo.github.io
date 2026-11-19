@@ -3,7 +3,9 @@
 
 import type { FlightState } from "../../world/runtime/flight";
 import { startState } from "../../world/runtime/flight";
-import { makeLayers } from "../../world/live/registry";
+import { makeLayers, type LayerContext } from "../../world/live/registry";
+import type { SoundControl, SoundLog } from "../../world/sound/control";
+import type { SoundState } from "../../world/sound/types";
 import { wondersOf } from "../../world/pack/manifest";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
@@ -104,6 +106,8 @@ export interface FlightSetup {
   touch?: (canvas: HTMLCanvasElement, hooks: { options(): Options; ghost(): boolean; touched(): void }) => TouchLayer | null;
   /** The frame size wanted, in frame pixels, read each frame: the session resizes its frame when it changes. */
   frame(): { w: number; h: number };
+  /** The world's sound, if the page has it: its ear joins the live layers, and it is given each frame. */
+  sound?(): SoundControl | null;
 }
 
 export interface FlightSession {
@@ -131,6 +135,16 @@ interface FlightProbe {
   skyMs: number[];
   /** Main-thread ms the controls, the lesson and the guide took, per frame. */
   guideMs: number[];
+  /** Main-thread ms the sound took, per frame (0 while it is off), and the kit's share of it. */
+  soundMs: number[];
+  soundKit: number[];
+  /** What the sound did each frame, as bits (see SoundControl.work). */
+  soundWork: number[];
+  /** True once the sound's buffers and graphs are all made. */
+  soundSettled: boolean;
+  soundState: SoundState;
+  /** The flight as recorded for the sound bench, with ?soundlog. */
+  soundLog: SoundLog | null;
   hazeFrames: number;
   frames: number;
   baked: () => number;
@@ -181,7 +195,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
   const probe: FlightProbe | null = statsOn
     ? {
-      air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], hazeFrames: 0, frames: 0,
+      air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], soundMs: [], soundKit: [], soundWork: [], soundSettled: false, soundState: "off", soundLog: null, hazeFrames: 0, frames: 0,
       baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [],
     }
     : null;
@@ -338,26 +352,31 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const wanted = setup.frame();
     fw = wanted.w;
     fh = wanted.h;
+    const layerContext: LayerContext = {
+      seed: loaded.manifest.seed,
+      n: regions.n,
+      sites: loaded.manifest.sites,
+      land: { gN: regions.n / 8, ground: coast },
+      wonders: wondersOf(loaded.manifest),
+      discover: (id, label) => {
+        discoveries.discover(id, label);
+      },
+      // ?sights=all shows every rare sight at once, to look them over without waiting for them.
+      forceSights: params.get("sights") === "all",
+      structures: loaded.core.world.built?.built.structures,
+    };
+    const sound = setup.sound?.() ?? null;
+    if (probe) probe.soundLog = sound?.log() ?? null;
     const view = createStreamView(regions, workers, light.lit.palette, mask, {
       width: fw,
       height: fh,
       sites: loaded.manifest.sites,
-      layers: makeLayers({
-        seed: loaded.manifest.seed,
-        n: regions.n,
-        sites: loaded.manifest.sites,
-        land: { gN: regions.n / 8, ground: coast },
-        wonders: wondersOf(loaded.manifest),
-        discover: (id, label) => {
-          discoveries.discover(id, label);
-        },
-        // ?sights=all shows every rare sight at once, to look them over without waiting for them.
-        forceSights: params.get("sights") === "all",
-        structures: loaded.core.world.built?.built.structures,
-      }),
+      // The sound's ear comes last: it draws nothing, and keeps what the frame saw.
+      layers: sound ? [...makeLayers(layerContext), sound.ear] : makeLayers(layerContext),
       onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
     });
     view.setLight(light.lit.palette, light.lit.cream, light.built);
+    sound?.world(layerContext, loaded.manifest.worldId);
     worldN = regions.n;
     groundHeight = (x, y) => view.groundHeight(x, y);
 
@@ -559,6 +578,17 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       buffer.set(frame);
       ctx.putImageData(imageData, 0, 0);
 
+      // The sound, after the picture: the ear has what this frame saw.
+      if (sound) {
+        const soundMs = sound.frame(t / 1000, flight, restShare(phase), air);
+        if (probe) {
+          probe.soundMs.push(soundMs);
+          probe.soundKit.push(sound.kitMs());
+          probe.soundWork.push(sound.work());
+          probe.soundSettled = sound.settled();
+          probe.soundState = sound.state();
+        }
+      }
       pacer?.worked(performance.now() - work);
       const ready = view.ready();
       if (ready) readyFrame = true;

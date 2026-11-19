@@ -151,8 +151,92 @@ function across(at: number, lasts: number): number {
 }
 
 /** 0 as an appearance begins, 1 a couple of seconds in and from then on: nothing fades out at the end of its time. */
-function fadeIn(at: number): number {
+export function fadeIn(at: number): number {
   return smooth01(at / 2.5);
+}
+
+// ── Where each moment's actors are ───────────────────────────────────────────────────────────────────────────────────
+// The picture draws from these, and the sound times itself by them: one arithmetic for both.
+
+/** How far along its way out figure `i` of the clock's procession is at `at` seconds: it shows between 0.02 and 0.98. */
+export function figureP(at: number, i: number): number {
+  const p0 = (at / CLOCK_LASTS) * 1.15;
+  return p0 - i * 0.16;
+}
+
+/** Seconds into the procession at which figure `i` steps out (its `figureP` passes 0.02). */
+export function figureOut(i: number): number {
+  return ((0.02 + i * 0.16) * CLOCK_LASTS) / 1.15;
+}
+
+/** Where the train is: filled by `trainAt`. `face` is 1 when it faces east. */
+export const trainPlace = { x: 0, y: 0, face: 1 };
+/** The train `at` seconds into an appearance of `lasts`: from the shore to the halt and back, at one speed, turning at the halt. */
+export function trainAt(at: number, lasts: number, shore: readonly [number, number], halt: readonly [number, number], n: number): void {
+  const u = across(at, lasts);
+  const dx = ringDelta(shore[0], halt[0], n);
+  const dy = ringDelta(shore[1], halt[1], n);
+  trainPlace.x = modP(shore[0] + dx * u, n);
+  trainPlace.y = modP(shore[1] + dy * u, n);
+  const going = at < lasts * 0.5 ? 1 : -1;
+  trainPlace.face = (dx >= 0 ? 1 : -1) * going;
+}
+/** The carriage rides this many cells behind the engine. */
+export const CARRIAGE_BEHIND = 8;
+
+/** Where the seaplane is: filled by `planeAt`. */
+export const planePlace = { x: 0, y: 0, alt: 0 };
+/** The seaplane's approach ends, and its taxi ends, at these shares of its appearance. */
+export const PLANE_DOWN = 0.34, PLANE_MOORED = 0.62;
+/** The seaplane `at` seconds into an appearance of `lasts`: down from the south to the water, a taxi to the pontoon, then riding at its mooring. */
+export function planeAt(at: number, lasts: number, pontoon: readonly [number, number]): void {
+  const p = at / lasts;
+  let x = pontoon[0];
+  let y = pontoon[1];
+  let alt = 1.4;
+  if (p < 0.34) {
+    const u = p / 0.34;
+    y = pontoon[1] + 48 * (1 - u);
+    alt = 16 + (1.4 - 16) * u;
+  } else if (p < 0.62) {
+    const u = (p - 0.34) / 0.28;
+    y = pontoon[1] + 8 * (1 - u);
+    x = pontoon[0] + 3 * u;
+    alt = 1.35;
+  } else {
+    x = pontoon[0] + 3;
+    y = pontoon[1] + 0.35 * psin(at * 1.6);
+    alt = 1.15 + 0.2 * psin(at * 2);
+  }
+  planePlace.x = x;
+  planePlace.y = y;
+  planePlace.alt = alt;
+}
+
+/** The ferry's y `at` seconds into an appearance of `lasts`: in from 42 cells off to the quay (2 cells off) and out again. Its x is the quay's. */
+export function ferryAt(at: number, lasts: number, quay: readonly [number, number]): number {
+  const u = across(at, lasts);
+  return quay[1] + 42 + (2 - 42) * u;
+}
+
+/** Where a bird of the church's flock is, and which wing frame it shows (2 is the downstroke): filled by `flockAt`. */
+export const flockPlace = { x: 0, y: 0, alt: 0, frame: 0, left: false };
+export const FLOCK_BIRDS = 5;
+/** The flock rises over this share of its appearance. */
+export const FLOCK_RISE = 0.18;
+/** Bird `b` of the flock `at` seconds into an appearance of `lasts` (past its time it settles back), over a tower at `tower` whose water lies at `level`. */
+export function flockAt(at: number, lasts: number, b: number, tower: readonly [number, number], level: number): void {
+  const p = at / lasts;
+  // The flock rises off the tower and wheels round it; past its time it settles back, and goes in.
+  const past = at - lasts;
+  const rise = p < 0.18 ? p / 0.18 : past <= 0 ? 1 : 1 - smooth01(past / SETTLE);
+  const ang = b * 1.15 + at * 0.4;
+  const rad = 3 + rise * (7 + b * 2);
+  flockPlace.x = tower[0] + rad * pcos(ang) + rise * 6;
+  flockPlace.y = tower[1] + rad * 0.4 * psin(ang);
+  flockPlace.alt = level + 8 + rise * (14 + b);
+  flockPlace.frame = (Math.floor(at * 7) + b) & 3;
+  flockPlace.left = pcos(ang) < 0;
 }
 
 function poolAlt(level: number, terrace: number): number {
@@ -760,8 +844,7 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     if (at < 0) return;
     const span = momentSpan(seed, "ferry");
     const q = anchor(w, "quay");
-    const u = across(at, span.lasts);
-    const y = q[1] + 42 + (2 - 42) * u;
+    const y = ferryAt(at, span.lasts, q);
     const cover = coverOf(i, at);
     const saw = paint(f, ferry, q[0], y, 1.15, false, cover, "ferry");
     foam(f, q[0], y + 1, cover);
@@ -774,13 +857,8 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     const span = momentSpan(seed, "train");
     const shore = anchor(w, "shore");
     const halt = anchor(w, "halt");
-    const u = across(at, span.lasts);
-    const dx = ringDelta(shore[0], halt[0], f.n);
-    const dy = ringDelta(shore[1], halt[1], f.n);
-    const x = modP(shore[0] + dx * u, f.n);
-    const y = modP(shore[1] + dy * u, f.n);
-    const going = at < span.lasts * 0.5 ? 1 : -1;
-    const face = (dx >= 0 ? 1 : -1) * going;
+    trainAt(at, span.lasts, shore, halt, f.n);
+    const x = trainPlace.x, y = trainPlace.y, face = trainPlace.face;
     const cover = coverOf(i, at);
     const saw = paint(f, engine, x, y, 1.25, face < 0, cover, "train");
     paint(f, carriage, modP(x - face * 8, f.n), y, 1.25, face < 0, cover, "");
@@ -795,19 +873,12 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     const cover = coverOf(i, at);
     const tower = anchor(w, "tower");
     const rippled = ripples(f, tower[0], tower[1], at, cover, span.lasts);
-    const p = at / span.lasts;
-    // The flock rises off the tower and wheels round it; past its time it settles back, and goes in.
     const past = at - span.lasts;
-    const rise = p < 0.18 ? p / 0.18 : past <= 0 ? 1 : 1 - smooth01(past / SETTLE);
     const birds = past <= SETTLE ? cover : Math.round(cover * (1 - smooth01((past - SETTLE) / ROOST)));
     let saw = false;
     for (let b = 0; b < 5; b++) {
-      const ang = b * 1.15 + at * 0.4;
-      const rad = 3 + rise * (7 + b * 2);
-      const bx = tower[0] + rad * pcos(ang) + rise * 6;
-      const by = tower[1] + rad * 0.4 * psin(ang);
-      const alt = w.level + 8 + rise * (14 + b);
-      if (paint(f, flap[(Math.floor(at * 7) + b) & 3], bx, by, alt, pcos(ang) < 0, birds, "flock")) saw = true;
+      flockAt(at, span.lasts, b, tower, w.level);
+      if (paint(f, flap[flockPlace.frame], flockPlace.x, flockPlace.y, flockPlace.alt, flockPlace.left, birds, "flock")) saw = true;
     }
     witness(i, w, cover, saw || rippled);
   }
@@ -854,24 +925,8 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
     if (at < 0) return;
     const span = momentSpan(seed, "plane");
     const pontoon = anchor(w, "pontoon");
-    const p = at / span.lasts;
-    let x = pontoon[0];
-    let y = pontoon[1];
-    let alt = 1.4;
-    if (p < 0.34) {
-      const u = p / 0.34;
-      y = pontoon[1] + 48 * (1 - u);
-      alt = 16 + (1.4 - 16) * u;
-    } else if (p < 0.62) {
-      const u = (p - 0.34) / 0.28;
-      y = pontoon[1] + 8 * (1 - u);
-      x = pontoon[0] + 3 * u;
-      alt = 1.35;
-    } else {
-      x = pontoon[0] + 3;
-      y = pontoon[1] + 0.35 * psin(at * 1.6);
-      alt = 1.15 + 0.2 * psin(at * 2);
-    }
+    planeAt(at, span.lasts, pontoon);
+    const x = planePlace.x, y = planePlace.y, alt = planePlace.alt;
     const cover = coverOf(i, at);
     if (alt > 3) shadow(f, x, y, alt, cover);
     const craft = (Math.floor(at * 12) & 1) === 0 ? planeA : planeB;
@@ -1047,11 +1102,10 @@ export function momentsLayer(ctx: LayerContext): MomentsLayer {
       if (gy === null) gy = frameY(f, 0.8 * town.y, DIAL_UP + FIGURES) | 0;
       if (gy + DIAL_DOWN < 0 || gy - DIAL_UP - FIGURES >= f.rect.h) continue;
       if (!findDial(f, col, gy)) continue;
-      const p0 = (at / CLOCK_LASTS) * 1.15;
       let any = false, shows = false;
       sync(f);
       for (let i = 0; i < 5; i++) {
-        const p = p0 - i * 0.16;
+        const p = figureP(at, i);
         if (p <= 0.02 || p >= 0.98) continue;
         const ang = PI * (0.85 - 0.7 * p);
         const px = dialAt.sx + Math.round(8 * pcos(ang));

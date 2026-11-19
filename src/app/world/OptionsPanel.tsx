@@ -4,13 +4,14 @@
 // toggle boost, the pace, motion, the keys, the lesson, and leaving. Game layer: hand-drawn, not Astryx.
 
 import Link from "next/link";
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { DEFAULT_KEYS, REMAPPABLE, rebind, type Remappable } from "../../world/controls/bindings";
 import { INK_SOFT, keyCap, plate, slip, text, VERMILION } from "../../world/controls/glyphs";
 import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
 import type { PhaseKind } from "./session";
 import type { Options } from "../../world/controls/options";
 import type { Platform } from "../../world/mobile/layout";
+import { SOUND_UI, type SoundControl } from "../../world/sound/control";
 import styles from "./options.module.css";
 import PixelGlyph from "./PixelGlyph";
 
@@ -23,6 +24,8 @@ export interface OptionsPanelProps {
   device: Device;
   platform: Platform;
   onChange(next: Options): void;
+  /** The world's sound, once the page has mounted: its on/off and its volume live here too. */
+  sound?: SoundControl | null;
   /** Shows the first-flight lesson again (and closes the panel). */
   onTeach(): void;
   onClose(): void;
@@ -98,12 +101,73 @@ function Action({ children, onClick, px }: { children: ReactNode; onClick(): voi
   );
 }
 
+/** The volume's steps (0–1, the slider's value before it is squared): "mute" is silence, "loud" the default. */
+const VOLUMES = [["mute", 0], ["soft", 0.3], ["half", 0.5], ["loud", 0.7], ["full", 1]] as const;
+type VolumeStep = (typeof VOLUMES)[number][0];
+const VOLUME_SAY: Record<VolumeStep, string> = {
+  mute: "Volume off: no sound at all",
+  soft: "Soft",
+  half: "Half",
+  loud: "Loud (the usual)",
+  full: "Full",
+};
+
+const offOnServer = (): "off" => "off";
+
+function nearestStep(v: number): VolumeStep {
+  let best: VolumeStep = "loud", d = Infinity;
+  for (const [name, at] of VOLUMES) if (Math.abs(at - v) < d) [best, d] = [name, Math.abs(at - v)];
+  return best;
+}
+
+/**
+ * The sound's own settings: on or off (the same switch as the speaker in the corner; turning it on here is the gesture
+ * that unlocks audio) and the volume, in five steps down to none. Marked as sound UI, so a click here is not taken as
+ * the unlock while sound waits for a gesture.
+ */
+function SoundSection({ sound, px }: { sound: SoundControl; px: number }) {
+  // The control's methods are closures: they keep their identity, so the store does not resubscribe on each render.
+  const state = useSyncExternalStore(sound.subscribe, sound.state, offOnServer);
+  const [step, setStep] = useState<VolumeStep>(() => nearestStep(sound.volume()));
+  const on = state !== "off";
+  return (
+    <fieldset className={styles.keys} {...{ [SOUND_UI]: "" }}>
+      <legend className={styles.keysTitle}>
+        <Words px={px} ink={VERMILION}>
+          sound
+        </Words>
+      </legend>
+      <Choice
+        name="sound"
+        legend="sound"
+        value={on ? "on" : "off"}
+        px={px}
+        choices={[["on", "Sound on"], ["off", "Sound off"]]}
+        onPick={(v) => {
+          if ((v === "on") !== on) sound.toggle();
+        }}
+      />
+      <Choice
+        name="volume"
+        legend="volume"
+        value={step}
+        px={px}
+        choices={VOLUMES.map(([name]) => [name, VOLUME_SAY[name]] as [VolumeStep, string])}
+        onPick={(v) => {
+          setStep(v);
+          sound.setVolume(VOLUMES.find(([name]) => name === v)?.[1] ?? 0.7);
+        }}
+      />
+    </fieldset>
+  );
+}
+
 /** Glyph pixels as the panel's CSS unit. */
 function pxVar(px: number): CSSProperties {
   return { "--px": `${px}px` } as CSSProperties;
 }
 
-export default function OptionsPanel({ open, px, options, device, platform, onChange, onTeach, onClose }: OptionsPanelProps) {
+export default function OptionsPanel({ open, px, options, device, platform, onChange, sound, onTeach, onClose }: OptionsPanelProps) {
   const touch = device === "touch";
   const canBuzz = platform === "android" && typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
   const dialog = useRef<HTMLDialogElement>(null);
@@ -161,6 +225,7 @@ export default function OptionsPanel({ open, px, options, device, platform, onCh
       <Choice name="boost" legend="boost" value={options.boost} px={px} choices={[["hold", "Hold to boost"], ["toggle", "Press to start and stop boosting"]]} onPick={(boost) => set({ boost })} />
       <Choice name="pace" legend="pace" value={options.pace} px={px} choices={[["cruise", "Cruise at full speed"], ["gentle", "A gentler pace"]]} onPick={(pace) => set({ pace })} />
       <Choice name="motion" legend="motion" value={options.motion} px={px} choices={[["full", "Full motion"], ["reduced", "Reduced motion"]]} onPick={(motion) => set({ motion })} />
+      {sound ? <SoundSection sound={sound} px={px} /> : null}
       {touch ? (
         <fieldset className={styles.keys}>
           <legend className={styles.keysTitle}>

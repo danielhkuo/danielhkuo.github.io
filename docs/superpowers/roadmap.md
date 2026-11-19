@@ -19,6 +19,7 @@ Last updated 2026-11-19.
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
 | The minimal version and the terminal as one page: design, and the Safari keyboard research behind it | `docs/superpowers/specs/2026-11-19-minimal-terminal-design.md`, `docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md` |
+| Sound: fact sheet, research, design (Fable, after an Opus critique), the tune's originality | `docs/superpowers/research/2026-11-18-sound-factsheet.md`, `…-sound-research-engine.md`, `…-sound-research-recipes.md`, `…-sound-design-critique.md`, `docs/superpowers/specs/2026-11-18-world-sound-design.md`, `docs/superpowers/research/2026-11-19-clock-tune-originality.md` |
 | This roadmap | `docs/superpowers/roadmap.md` |
 
 ## Done
@@ -143,6 +144,21 @@ Last updated 2026-11-19.
   wind, as heavy rain does; every shadow follows the sun (`sunOn`). Rainbows need daylight and the town kite a fair day. `?time=` and
   `?weather=` hold either still; `world:live --times --weathers`, `world-fly --query`. Seasons do not follow the clock
   (coordinator, 2026-11-18): the page flies in summer.
+- **Sound** (2026-11-19, `claude/sharp-golick-cbdced`; researched, designed and built by Fable, critiqued by Opus,
+  judged on offline renders). Generated live with Web Audio, no audio files; muted until the visitor asks, by the
+  speaker in the top corner or the options' new Sound section (on/off and five volume steps, mute included), remembered
+  in localStorage; no AudioContext before that gesture, and none at all while off. Wind on five layers rising with
+  speed and boost; a soft bloom on turns; surf on the picture's own wave clock (each wave fresh noise, heard where it
+  breaks: beach, shingle, rock, quays, far coast and open sea); rivers made of bubbles, falls with rumble when tall;
+  the abbey's five old-style bells on the world hour, a peal then the hour struck, with a generated reverb; herring
+  gulls at the town and the lighthouses (tuned to a published sonogram), startled gulls on a low pass; the clock's
+  figures and an original tune; the train, seaplane, ferry and baths, and the church flock, each in step with its
+  picture through shared position functions in `live/moments.ts`. Mist muffles the world (not the wind); gulls roost
+  at night. Reduced motion (the options' or the system's) softens the motion-linked sound. The tab hidden or the sound
+  off: faded, then suspended. Listen at `/world-sound` (every scene, live, and offline renders with
+  `node scripts/world-sound.mjs`, checked by `scripts/world-sound-check.mjs` for loudness, clipping, clicks and
+  spectrograms). Frame budget (merged tree, five pairs): +0.10 ms on the 4× p95 with sound on, sound's own work
+  0.1 ms p95 a frame at 1× (design §13).
 - **End-to-end suite and a WebKit pass** (2026-11-19, `claude/e2e-webkit-3824c0`). `npm run e2e` builds the export
   and runs Playwright in Chromium and WebKit, at desktop and phone sizes. It covers opening the world (no haze, the
   frame filling the window), keyboard flight, the lesson, the options, landing and the Codex, the abbey's terminal, a
@@ -244,7 +260,13 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - **Seasons**: not from the clock (settled 2026-11-18), and the lore that laid the months out as places is set aside.
   If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
-- **Sound** (wind, sea, bells) and a **photo mode** that saves a postcard of the view. Not in the design yet.
+- ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
+- **Sound, what is left.** A rain bed for the showers (drops on land, bubbles on water) and the final re-pin of every
+  level against the whole mix: both wait for Fable (its usage limit, 2026-11-19). Later moments (the airship, the
+  marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12). Headphones (HRTF) as an
+  option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the small hours. Tall
+  falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills, and sounds for the
+  rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
 
@@ -284,7 +306,8 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 - Shareable places: a link that opens the world at a tower or a view, so a recruiter can be sent straight to a project.
 - Photo mode: freeze, hide prompts, save a postcard with an ink border and caption.
 - Errands between towns (carry a letter from tower to tower) as a light way to tour the projects.
-- ~~Time of day and weather from the visitor's clock~~ (done); sound (wind, sea, bells, rain), muted until turned on.
+- ~~Time of day and weather from the visitor's clock~~ (done); ~~sound (wind, sea, bells), muted until turned on~~
+  (done; rain to come).
 - Fly low to startle birds and skim water for spray; clouds muffle sound.
 
 **Site**
@@ -393,5 +416,12 @@ From the first-flight review:
 - Owner: in desktop Safari, on `/minimal`, click `cat`, then `projects/`, then `README.md`. The page should rest at
   the top of the projects, with the prompt below the fold and still holding the keys. WebKit scrolls to a focused
   field whose value a script changes; the fix is checked in Playwright's WebKit only.
+- Owner, sound: on an iPhone, the first enable, a sliding tap, lock and unlock, background and back, silent mode
+  ("ambient" session); in desktop Safari, a sound panned hard left (WebKit 257447; the engine pans by gain pairs, not
+  StereoPannerNode); with Bluetooth headphones, whether the abbey's bells meet the clock's figures. Listening set:
+  `side-session-notes/…/sound-listening/index.html`.
+- Owner: the clock's tune in two public melody indexes (Musipedia's contour search, FolkTuneFinder): both need one
+  "Verify you are human" tick in the app's browser. The corpus check (13,367 tunes) found nothing close; see
+  `research/2026-11-19-clock-tune-originality.md`.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
   `PAGES` list once it passes.

@@ -6,6 +6,7 @@ import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
 import { getFrameFit } from "./useFrameScale";
 import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
+import type { SoundControl } from "../../world/sound/control";
 import type { TerminalLink } from "./useTerminalDrawer";
 
 export interface Caption {
@@ -51,6 +52,7 @@ export interface FlightView {
 /** Runs a flight on the canvas while the page is open, and mirrors what it reports into React state. */
 export function useFlight(
   canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink, touch: TouchLink,
+  sound?: RefObject<SoundControl | null>,
 ): FlightView {
   const [failed, setFailed] = useState(false);
   const [phase, setPhase] = useState<FlightView["phase"]>({ kind: "flying", at: null });
@@ -77,6 +79,7 @@ export function useFlight(
         touch: touch.touch,
         // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
         frame: touch.frame ?? getFrameFit,
+        sound: () => sound?.current ?? null,
       },
       {
         failed: () => setFailed(true),
@@ -101,7 +104,7 @@ export function useFlight(
       session.current = null;
     };
     // `landmarks` is a build-time prop and the links are stable: the flight runs once per page.
-  }, [canvas, landmarks, terminal, panel, touch]);
+  }, [canvas, landmarks, terminal, panel, touch, sound]);
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);
