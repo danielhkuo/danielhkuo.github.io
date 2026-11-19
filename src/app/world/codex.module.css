@@ -1,0 +1,386 @@
+/* The Codex and the landing prompt: game layer, Ink & Glyph. Cream paper with a faint grain, inked double rules with
+   flourished corners, IM Fell English, vermilion and gold for ornament, teal for links. Nothing here is shared with the
+   Recruiter page. */
+
+.codex,
+.prompt {
+  --ink: #2e2a24;
+  --ink-soft: #5a5246;
+  --paper: #f0e8d2;
+  --paper-deep: #e6dabb;
+  --vermilion: #b0341f;
+  --vermilion-bright: #cf3f2b;
+  --gold: #d9a637;
+  --teal: #2c6b66;
+  /* Astryx's reset paints headings and paragraphs through these; inside the Codex they are IM Fell. */
+  --font-family-heading: var(--font-fell), Georgia, serif;
+  --font-family-body: var(--font-fell), Georgia, serif;
+  font-family: var(--font-fell), Georgia, serif;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.18 0 0 0 0 0.16 0 0 0 0 0.14 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  color: var(--ink);
+}
+
+/* ---- The Codex ---- */
+
+.codex {
+  position: fixed;
+  z-index: 20;
+  top: 50%;
+  right: clamp(0.75rem, 3vw, 2.5rem);
+  width: min(25rem, 40vw);
+  max-height: min(86vh, 46rem);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-50%);
+  background-color: var(--paper);
+  background-image: var(--grain);
+  border: 3px double var(--ink);
+  outline: 1px solid rgb(46 42 36 / 0.5);
+  outline-offset: -10px;
+  box-shadow: 0 12px 30px rgb(46 42 36 / 0.3);
+  animation: codex-in 320ms ease-out both;
+}
+
+@keyframes codex-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(12px) scaleY(0.97);
+  }
+}
+
+.leaf {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.7rem 1.9rem 1.3rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-soft) transparent;
+}
+
+.leaf:focus {
+  outline: none;
+}
+
+.leaf:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -5px;
+}
+
+.corner {
+  position: absolute;
+  width: 2.9rem;
+  height: 2.9rem;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.tl {
+  top: 1px;
+  left: 1px;
+}
+
+.tr {
+  top: 1px;
+  right: 1px;
+  transform: scaleX(-1);
+}
+
+.br {
+  right: 1px;
+  bottom: 1px;
+  transform: scale(-1, -1);
+}
+
+.bl {
+  bottom: 1px;
+  left: 1px;
+  transform: scaleY(-1);
+}
+
+.lobes {
+  fill: var(--vermilion-bright);
+}
+
+.boss {
+  fill: var(--gold);
+}
+
+.rubric {
+  margin: 0 0 0.3rem;
+  color: var(--vermilion);
+  font-size: 0.95rem;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+}
+
+.title {
+  margin: 0 0 0.55rem;
+  font-family: inherit;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+/* The illuminated initial: a cream letter on vermilion, ruled in gold and inked round. */
+.initial {
+  display: inline-block;
+  text-transform: uppercase;
+  margin-right: 0.1em;
+  padding: 0.08em 0.16em 0;
+  font-size: 1.4em;
+  line-height: 1;
+  color: var(--paper);
+  background: var(--vermilion-bright);
+  border: 1px solid var(--ink);
+  box-shadow: inset 0 0 0 2px var(--gold);
+  vertical-align: -0.12em;
+}
+
+.lede {
+  margin: 0 0 1rem;
+  font-size: 1.08rem;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.note {
+  margin: -0.4rem 0 1rem;
+  font-size: 1rem;
+}
+
+.ledger {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0 0;
+  border-top: 1px dotted var(--ink-soft);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 7.2rem 1fr;
+  gap: 0.6rem;
+  padding: 0.12rem 0;
+  line-height: 1.35;
+}
+
+.row dt {
+  color: var(--ink-soft);
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.row dd {
+  margin: 0;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.2rem;
+  margin: 0 0 1.1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.links li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bullet {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: none;
+  color: var(--ink);
+}
+
+.links a {
+  color: var(--teal);
+  font-size: 1.05rem;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.links a:hover {
+  color: var(--vermilion);
+}
+
+.links a:focus-visible,
+.button:focus-visible,
+.prompt:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.register {
+  margin: 0 0 1.1rem;
+  padding-top: 0.55rem;
+  border-top: 1px dotted var(--ink-soft);
+}
+
+.register h3 {
+  margin: 0 0 0.3rem;
+  font-family: inherit;
+  color: var(--vermilion);
+  font-size: 0.95rem;
+  font-weight: 400;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+}
+
+.register ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  line-height: 1.45;
+}
+
+.registerName {
+  font-style: italic;
+}
+
+.registerWhere {
+  color: var(--ink-soft);
+}
+
+/* The buttons stay in reach at the foot of the leaf however far it scrolls. */
+.actions {
+  position: sticky;
+  bottom: -1.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.2rem -0.4rem -0.4rem;
+  padding: 0.5rem 0.4rem 0.4rem;
+  background-color: var(--paper);
+  background-image: var(--grain);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.95rem;
+  font: inherit;
+  font-size: 1.02rem;
+  color: var(--ink);
+  background: var(--paper-deep);
+  border: 1px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+.button:hover {
+  color: var(--vermilion);
+}
+
+.button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.codex kbd,
+.prompt kbd {
+  padding: 0 0.32em;
+  font-family: inherit;
+  font-size: 0.82em;
+  color: var(--ink-soft);
+  border: 1px solid var(--ink-soft);
+  border-radius: 2px;
+}
+
+/* Phones: a sheet along the bottom, over the lower land. */
+@media (max-width: 760px) {
+  .codex {
+    top: auto;
+    right: 0.6rem;
+    bottom: 0.6rem;
+    left: 0.6rem;
+    width: auto;
+    max-height: 58vh;
+    transform: none;
+    animation-name: codex-up;
+  }
+
+  .leaf {
+    padding: 1.4rem 1.4rem 1.1rem;
+  }
+
+  .actions {
+    bottom: -1.1rem;
+  }
+
+  .title {
+    font-size: 1.7rem;
+  }
+}
+
+@keyframes codex-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* ---- The prompt ---- */
+
+.prompt {
+  position: fixed;
+  z-index: 15;
+  bottom: 3.3rem;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: calc(100vw - 1.5rem);
+  padding: 0.42rem 0.95rem;
+  font-size: 1.02rem;
+  white-space: nowrap;
+  background-color: var(--paper);
+  background-image: var(--grain);
+  border: 3px double var(--ink);
+  box-shadow: 0 4px 14px rgb(46 42 36 / 0.24);
+  transform: translateX(-50%);
+  cursor: pointer;
+  animation: prompt-in 240ms ease-out both;
+}
+
+.prompt em {
+  color: var(--vermilion);
+}
+
+.prompt:hover {
+  color: var(--vermilion);
+}
+
+.promptMark {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: none;
+}
+
+@keyframes prompt-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+}
+
+/* Touch screens have no keys to name. */
+@media (hover: none) and (pointer: coarse) {
+  .codex kbd,
+  .prompt kbd {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex,
+  .prompt {
+    animation: none;
+  }
+}

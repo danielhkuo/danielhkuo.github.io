@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { CRUISE, MIN_GAP, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
 import {
   advance, beginLanding, cameraAt, easeFocus, FOCUS_RATE, LANDING_CAP, land, MAX_TURN, NEAR, nearest, offered,
-  pullUp, QUIET_FACTOR, REST_LIFT, takeOff, type Phase, type Target,
+  pullUp, QUIET_FACTOR, REST_LIFT, restShare, takeOff, type Phase, type Target,
 } from "./landing.ts";
 
 const N = 10240;
@@ -166,4 +166,15 @@ test("the camera eases from the flier to the landmark and back", () => {
   assert.equal(easeFocus(0, true, 0.1), 0.1 * FOCUS_RATE);
   assert.equal(easeFocus(1, true, 0.1), 1);
   assert.equal(easeFocus(0.05, false, 0.1), 0);
+});
+
+test("the dragon rests as the coil closes: not at all flying, fully once landed", () => {
+  assert.equal(restShare(FLYING), 0);
+  assert.equal(restShare({ kind: "landed", id: TOWER.id }), 1);
+  const a = beginLanding(flier(TOWER.x + 50, TOWER.y, Math.PI / 2), TOWER, N);
+  assert.equal(restShare({ kind: "landing", approach: a }), 0);
+  assert.equal(restShare({ kind: "landing", approach: { ...a, swept: a.sweep * 0.5 } }), 0);
+  const late = restShare({ kind: "landing", approach: { ...a, swept: a.sweep * 0.9 } });
+  assert.ok(late > 0 && late < 1, `${late}`);
+  assert.equal(restShare({ kind: "landing", approach: { ...a, swept: a.sweep } }), 1);
 });

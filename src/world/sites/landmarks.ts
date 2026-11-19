@@ -123,6 +123,31 @@ export function landmarksFor(
   };
 }
 
+const KIND_NAMES: Record<LandmarkType, string> = {
+  abbey: "abbey",
+  town: "town",
+  lighthouse: "lighthouse",
+  windmill: "windmill",
+  bridge: "bridge",
+  cathedral: "ruined cathedral",
+  yew: "churchyard yew",
+};
+
+/** The landmark's kind as the page names it. */
+export function kindName(type: LandmarkType): string {
+  return KIND_NAMES[type];
+}
+
+/**
+ * The discovery a landing logs. A project is keyed by its repository (design 5.4), so a new world keeps it; the abbey
+ * and an empty landmark by their own names.
+ */
+export function discoveryOf(l: Landmark): { id: string; label: string } {
+  if (l.holds.kind === "project") return { id: `landmark:repo:${l.holds.project.name}`, label: `${l.holds.project.name}, at the ${kindName(l.type)}` };
+  if (l.holds.kind === "about") return { id: "landmark:abbey", label: "The abbey: About me" };
+  return { id: `landmark:site:${l.id}`, label: `The ${kindName(l.type)}` };
+}
+
 const COMPASS = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"] as const;
 export type Compass = (typeof COMPASS)[number];
 
@@ -138,7 +163,7 @@ export interface RegisterLine {
 
 /** Where the abbey and every project lie from `here`, nearest first; `here` itself is left out. */
 export function registerFrom(here: { id: string; x: number; y: number }, set: LandmarkSet): RegisterLine[] {
-  const lines: (RegisterLine & { d: number })[] = [];
+  const lines: { line: RegisterLine; d: number }[] = [];
   for (const l of set.landmarks) {
     if (l.id === here.id || l.holds.kind === "none") continue;
     const dx = torusDelta(here.x, l.x, set.n), dy = torusDelta(here.y, l.y, set.n);
@@ -146,8 +171,8 @@ export function registerFrom(here: { id: string; x: number; y: number }, set: La
     // y grows southward, so the angle runs clockwise from east, as COMPASS does.
     const sector = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8;
     const title = l.holds.kind === "project" ? l.holds.project.name : "About me";
-    lines.push({ id: l.id, type: l.type, title, compass: COMPASS[sector], seconds: Math.round(d / CRUISE), d });
+    lines.push({ line: { id: l.id, type: l.type, title, compass: COMPASS[sector], seconds: Math.round(d / CRUISE) }, d });
   }
-  lines.sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : 1));
-  return lines.map(({ d: _d, ...line }) => line);
+  lines.sort((a, b) => a.d - b.d || (a.line.id < b.line.id ? -1 : 1));
+  return lines.map((l) => l.line);
 }

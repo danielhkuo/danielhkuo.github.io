@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CRUISE } from "../runtime/flight.ts";
-import { entryOf, landmarksFor, registerFrom, stickyFrom, stickyText, type ProjectEntry } from "./landmarks.ts";
+import { discoveryOf, entryOf, kindName, landmarksFor, registerFrom, stickyFrom, stickyText, type ProjectEntry } from "./landmarks.ts";
 
 const N = 6400;
 const SITES = [
@@ -128,4 +128,20 @@ test("the register measures across the world's edge", () => {
   // From (100, 6300) the abbey is 200 west and 200 south, the short way round.
   assert.equal(reg[0].compass, "south-west");
   assert.equal(reg[0].seconds, Math.round(Math.hypot(200, 200) / CRUISE));
+});
+
+test("a landing is logged by repository, so a new world keeps it; the abbey and empty landmarks by their own names", () => {
+  const { set } = landmarksFor(MANIFEST, PROJECTS, {}, null);
+  const project = set.landmarks.find((l) => l.holds.kind === "project")!;
+  const name = project.holds.kind === "project" ? project.holds.project.name : "";
+  assert.deepEqual(discoveryOf(project), { id: `landmark:repo:${name}`, label: `${name}, at the ${kindName(project.type)}` });
+  assert.deepEqual(discoveryOf(set.landmarks.find((l) => l.type === "abbey")!), { id: "landmark:abbey", label: "The abbey: About me" });
+  const empty = set.landmarks.find((l) => l.holds.kind === "none")!;
+  assert.deepEqual(discoveryOf(empty), { id: `landmark:site:${empty.id}`, label: `The ${kindName(empty.type)}` });
+});
+
+test("every kind of landmark has a name to show", () => {
+  assert.equal(kindName("cathedral"), "ruined cathedral");
+  assert.equal(kindName("yew"), "churchyard yew");
+  for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge"] as const) assert.equal(kindName(t), t);
 });

@@ -125,7 +125,7 @@ Game layer, so it is hand-drawn CSS, not Astryx.
 
 ## Discovery
 
-A landing logs `landmark:<repo>` for a project (keyed by repository, design 5.4, so a new world keeps it),
+A landing logs `landmark:repo:<name>` for a project (keyed by repository, design 5.4, so a new world keeps it),
 `landmark:abbey`, or `landmark:site:<id>` for an empty landmark. The caption reads like the rare sights:
 "leaf, at the lighthouse".
 

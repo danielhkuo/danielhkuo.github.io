@@ -228,6 +228,17 @@ export function advance(
   return { phase, s: { ...s, speed: 0, bank: s.bank * settle }, landed: null };
 }
 
+/** The dragon starts to rest at this share of the sweep. */
+const REST_FROM = 0.7;
+
+/** How much the dragon rests (dragon step's `rest`): 0 flying, rising over the last of the sweep, 1 landed. */
+export function restShare(phase: Phase): number {
+  if (phase.kind === "flying") return 0;
+  if (phase.kind === "landed") return 1;
+  const a = phase.approach;
+  return smooth((a.swept / a.sweep - REST_FROM) / (1 - REST_FROM));
+}
+
 /** The camera's share of the way from the flier to the landmark, moved on by dt toward 1 (`on`) or 0. */
 export function easeFocus(focus: number, on: boolean, dt: number): number {
   const step = Math.max(0, dt) * FOCUS_RATE;
