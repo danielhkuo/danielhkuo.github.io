@@ -243,13 +243,14 @@ export type DpadArm = "left" | "right" | "up" | "down";
 /** The d-pad: a cross with the arms to press filled (vermilion while held). */
 export function padDpad(arms: readonly DpadArm[], lit = false): Sprite {
   const s = blank(11, 11);
+  const pressed = new Set(arms);
   const cross = (x: number, y: number) => (x >= 3 && x <= 7) || (y >= 3 && y <= 7);
   for (let y = 0; y < 11; y++) {
     for (let x = 0; x < 11; x++) {
       if (!cross(x, y)) continue;
       const rim = x === 0 || y === 0 || x === 10 || y === 10 || !cross(x - 1, y) || !cross(x + 1, y) || !cross(x, y - 1) || !cross(x, y + 1);
       const arm: DpadArm | null = x < 3 ? "left" : x > 7 ? "right" : y < 3 ? "up" : y > 7 ? "down" : null;
-      const on = arm !== null && arms.includes(arm);
+      const on = arm !== null && pressed.has(arm);
       set(s, x, y, rim ? INK : on ? (lit ? VERMILION : INK) : FACE);
     }
   }

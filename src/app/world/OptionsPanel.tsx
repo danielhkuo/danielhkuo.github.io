@@ -1,0 +1,205 @@
+"use client";
+
+// The options: a small pixel panel (a modal dialog with native controls, drawn in the guides' glyphs) for hold or
+// toggle boost, the pace, motion, the keys, the lesson, and leaving. Game layer: hand-drawn, not Astryx.
+
+import Link from "next/link";
+import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { DEFAULT_KEYS, REMAPPABLE, rebind, type Remappable } from "../../world/controls/bindings";
+import { keyCap, label, plate, text, VERMILION } from "../../world/controls/glyphs";
+import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
+import type { Options } from "../../world/controls/options";
+import styles from "./options.module.css";
+import PixelGlyph from "./PixelGlyph";
+
+export interface OptionsPanelProps {
+  open: boolean;
+  /** CSS pixels per glyph pixel. */
+  px: number;
+  options: Options;
+  onChange(next: Options): void;
+  /** Shows the first-flight lesson again (and closes the panel). */
+  onTeach(): void;
+  onClose(): void;
+}
+
+/** Words drawn in the pixel font, with the same words for readers. */
+function Words({ children, px, say }: { children: string; px: number; say?: string }) {
+  return (
+    <>
+      <PixelGlyph sprite={text(children)} px={px} />
+      <span className={styles.sr}>{say ?? children}</span>
+    </>
+  );
+}
+
+interface ChoiceProps<T extends string> {
+  name: string;
+  legend: string;
+  value: T;
+  choices: readonly [T, string][];
+  px: number;
+  onPick(v: T): void;
+}
+
+/** Two or more ways, one picked: radio buttons drawn as plates, the picked one lit. */
+function Choice<T extends string>({ name, legend, value, choices, px, onPick }: ChoiceProps<T>) {
+  return (
+    <fieldset className={styles.row}>
+      <legend className={styles.legend}>
+        <Words px={px}>{legend}</Words>
+      </legend>
+      <span className={styles.choices}>
+        {choices.map(([v, say]) => (
+          <label key={v} className={styles.choice}>
+            <input className={styles.sr} type="radio" name={name} value={v} checked={value === v} onChange={() => onPick(v)} />
+            <PixelGlyph sprite={plate(v, value === v)} px={px} />
+            <span className={styles.sr}>{say}</span>
+          </label>
+        ))}
+      </span>
+    </fieldset>
+  );
+}
+
+function Action({ children, onClick, px }: { children: ReactNode; onClick(): void; px: number }) {
+  return (
+    <button type="button" className={styles.action} onClick={onClick}>
+      {children}
+      <PixelGlyph className={styles.mark} sprite={text("¶", VERMILION)} px={px} />
+    </button>
+  );
+}
+
+/** Glyph pixels as the panel's CSS unit. */
+function pxVar(px: number): CSSProperties {
+  return { "--px": `${px}px` } as CSSProperties;
+}
+
+export default function OptionsPanel({ open, px, options, onChange, onTeach, onClose }: OptionsPanelProps) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  // The action waiting for its new key, if any.
+  const [waiting, setWaiting] = useState<Remappable | null>(null);
+
+  useEffect(() => {
+    const d = dialog.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    else if (!open && d.open) d.close();
+  }, [open]);
+
+  // Takes the next key before anything else hears it: Esc gives up, a key that cannot be bound is passed over.
+  const take = useEffectEvent((e: KeyboardEvent) => {
+    if (!waiting || e.key === "Tab") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      setWaiting(null);
+      return;
+    }
+    const keys = rebind(options.keys, waiting, e.key);
+    if (!keys) return;
+    onChange({ ...options, keys });
+    setWaiting(null);
+  });
+  useEffect(() => {
+    if (!waiting) return;
+    const onKey = (e: KeyboardEvent) => take(e);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [waiting]);
+
+  const set = (patch: Partial<Options>) => onChange({ ...options, ...patch });
+
+  return (
+    <dialog
+      ref={dialog}
+      className={styles.panel}
+      style={pxVar(px)}
+      aria-labelledby="options-title"
+      onCancel={(e) => {
+        // Esc while a key is awaited gives up the wait, not the panel.
+        if (waiting) e.preventDefault();
+      }}
+      onClose={() => {
+        setWaiting(null);
+        onClose();
+      }}
+    >
+      <h2 id="options-title" className={styles.title}>
+        <Words px={px}>options</Words>
+      </h2>
+      <Choice name="boost" legend="boost" value={options.boost} px={px} choices={[["hold", "Hold to boost"], ["toggle", "Press to start and stop boosting"]]} onPick={(boost) => set({ boost })} />
+      <Choice name="pace" legend="pace" value={options.pace} px={px} choices={[["cruise", "Cruise at full speed"], ["gentle", "A gentler pace"]]} onPick={(pace) => set({ pace })} />
+      <Choice name="motion" legend="motion" value={options.motion} px={px} choices={[["full", "Full motion"], ["reduced", "Reduced motion"]]} onPick={(motion) => set({ motion })} />
+      <fieldset className={styles.keys}>
+        <legend className={styles.legend}>
+          <Words px={px}>keys</Words>
+        </legend>
+        <ul>
+          {REMAPPABLE.map((a) => (
+            <li key={a} className={styles.keyRow}>
+              <span className={styles.keyWord}>
+                <Words px={px}>{ACTION_WORDS[a]}</Words>
+              </span>
+              <button
+                type="button"
+                className={styles.key}
+                aria-label={waiting === a ? `Press a key for ${ACTION_WORDS[a]}, or Esc to keep ${keyWord(options.keys[a])}` : `${ACTION_WORDS[a]}: ${keyWord(options.keys[a])}. Change`}
+                onClick={() => setWaiting(waiting === a ? null : a)}
+              >
+                <PixelGlyph sprite={waiting === a ? plate("press a key", true) : keyCap(options.keys[a])} px={px} />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className={styles.note}>
+          <Words px={px} say="The arrow keys, Shift, Enter and Esc always work.">
+            arrows, shift, enter and esc always work
+          </Words>
+        </p>
+      </fieldset>
+      <p className={styles.actions}>
+        <Action px={px} onClick={() => set({ keys: { ...DEFAULT_KEYS } })}>
+          <Words px={px}>reset the keys</Words>
+        </Action>
+        <Action px={px} onClick={onTeach}>
+          <Words px={px}>show the lesson again</Words>
+        </Action>
+        <Link className={styles.action} href="/">
+          <Words px={px}>leave the world</Words>
+          <PixelGlyph className={styles.mark} sprite={text("¶", VERMILION)} px={px} />
+        </Link>
+        <Action px={px} onClick={() => dialog.current?.close()}>
+          <Words px={px} say="Close the options">close</Words>
+        </Action>
+      </p>
+    </dialog>
+  );
+}
+
+export interface OptionsButtonProps {
+  px: number;
+  device: Device;
+  /** Shown while the pointer moves, for a while after the page opens, and always on a touch screen. */
+  shown: boolean;
+  onOpen(): void;
+}
+
+/** The way into the options from the corner of the world: "[O] options" by keyboard, a plate to tap on a touch screen. */
+export function OptionsButton({ px, device, shown, onOpen }: OptionsButtonProps) {
+  const glyph = device === "touch" ? plate("options") : device === "gamepad" ? plate("menu") : keyCap("o");
+  return (
+    <button
+      type="button"
+      className={`${styles.corner} ${shown || device === "touch" ? styles.cornerShown : ""}`}
+      style={pxVar(px)}
+      onClick={onOpen}
+      aria-keyshortcuts="O"
+    >
+      <PixelGlyph sprite={glyph} px={px} />
+      {device === "touch" ? null : <PixelGlyph sprite={label("options")} px={px} />}
+      <span className={styles.sr}>Options</span>
+    </button>
+  );
+}

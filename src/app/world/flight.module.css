@@ -10,7 +10,15 @@
   background: #f0e8d2;
 }
 
+/* The canvas and what sits on its corner, sized to a whole number of device pixels per frame pixel. */
+.stage {
+  position: relative;
+}
+
 .canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
   image-rendering: pixelated;
 }
 
@@ -49,21 +57,13 @@
   opacity: 1;
 }
 
-.hint {
-  position: fixed;
-  bottom: 1.25rem;
-  left: 50%;
-  max-width: calc(100vw - 2rem);
-  margin: 0;
-  padding: 0.15rem 0.7rem;
-  font-size: 0.95rem;
-  color: rgb(46 42 36 / 0.8);
-  text-align: center;
-  pointer-events: none;
-  /* A strip of paper behind the line, so it reads over the land. */
-  background: rgb(240 232 210 / 0.82);
-  border-radius: 2px;
-  transform: translateX(-50%);
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 .stats {
