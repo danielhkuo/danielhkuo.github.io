@@ -40,8 +40,10 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   const px = Math.max(2, Math.min(3, Math.round(fit.css) - 1));
   // The frame covers the window from its top-left corner; the session sizes the canvas itself to fit.w × fit.h.
   const stage = { width: fit.w * fit.css, height: fit.h * fit.css } as CSSProperties;
+  // Round the frame the page takes the paper's colour in the hour's light: dark at night, as the frame is.
+  const page = flight.paper ? ({ background: flight.paper } as CSSProperties) : undefined;
   return (
-    <div className={styles.page} data-motion={options.motion}>
+    <div className={styles.page} style={page} data-motion={options.motion}>
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} className={styles.canvas} />
         {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}

@@ -1,7 +1,6 @@
 // The flight itself: loads the world, runs the frame loop, takes the dragon through its landing phases and draws the
 // guides by it. Plain TypeScript with no React in it: the page's hooks start a session and mirror what it reports.
 
-import { buildPalette, MIDDAY } from "../../world/render/palette";
 import type { FlightState } from "../../world/runtime/flight";
 import { startState } from "../../world/runtime/flight";
 import { makeLayers } from "../../world/live/registry";
@@ -13,8 +12,12 @@ import { createDragon } from "../../world/dragon/index";
 import { imageOn } from "../../world/dragon/parts";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
+import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
+import { dayOfYear, parseTime, SEASONS, sunPhase } from "../../world/sky/clock";
+import { createRain } from "../../world/sky/rain";
 import { createSky } from "../../world/sky/sky";
 import { styleFrom } from "../../world/sky/styles";
+import { parseWeather, weatherAt } from "../../world/sky/weather";
 import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, kindName, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
@@ -39,6 +42,10 @@ const BODY_JOINTS = 16;
 const BODY_SPACING = 5.5;
 /** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
 const GLIDE = 10;
+/** Milliseconds between reads of the clock for the light and the weather (they change slowly). */
+const AIR_EVERY = 200;
+/** The palette is built again at most this often, ms, however fast the light moves. */
+const PALETTE_EVERY = 400;
 
 export type PhaseKind = Phase["kind"];
 
@@ -64,6 +71,8 @@ export interface FlightEvents {
   device(d: Device): void;
   /** The options key or the pad's Menu was pressed. */
   toggleOptions(): void;
+  /** The paper's colour in the light of the moment, as CSS: the page round the frame takes it. */
+  paper(css: string): void;
 }
 
 export interface FlightSetup {
@@ -94,6 +103,10 @@ export interface FlightSession {
 }
 
 interface FlightProbe {
+  /** The air at the last frame: sun phase, darkness, rain, mist, cloud. */
+  air: Air | null;
+  /** Main-thread ms each palette rebuild took. */
+  paletteMs: number[];
   navStart: number;
   readyAt: number | null;
   frameMs: number[];
@@ -146,7 +159,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   let pool: ReturnType<typeof createPool> | null = null;
   // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
   const probe: FlightProbe | null = statsOn
-    ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+    ? {
+      air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], hazeFrames: 0, frames: 0,
+      baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [],
+    }
     : null;
   if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
 
@@ -246,10 +262,29 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!readyFrame || workers.stats().workers === 0) fail();
     };
 
+    // The light and weather: the visitor's own clock (its date sets how long the day is) and the weather everyone
+    // shares at this moment. ?time= and ?weather= hold either still, for testing and screenshots.
+    const today = new Date();
+    const fixedTime = parseTime(params.get("time"), dayOfYear(today.getFullYear(), today.getMonth() + 1, today.getDate()));
+    const fixedWeather = parseWeather(params.get("weather"));
+    const seed = loaded.manifest.seed;
+    const airNow = (): Air => {
+      const d = new Date();
+      const doy = dayOfYear(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+      // Always summer, the season the world was tuned in: seasons do not follow the clock.
+      return airOf(fixedTime ?? sunPhase(hour, doy), SEASONS.summer, fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
+    };
+    const paperCss = (cream: number): string => `rgb(${cream & 255} ${(cream >>> 8) & 255} ${(cream >>> 16) & 255})`;
+    const light = { built: airNow(), air: null as Air | null, airAt: 0, buildAt: 0, lit: null as ReturnType<typeof lightFor> | null };
+    light.air = light.built;
+    light.lit = lightFor(light.built);
+    events.paper(paperCss(light.lit.cream));
+
     const wanted = setup.frame();
     fw = wanted.w;
     fh = wanted.h;
-    const view = createStreamView(regions, workers, buildPalette(MIDDAY), mask, {
+    const view = createStreamView(regions, workers, light.lit.palette, mask, {
       width: fw,
       height: fh,
       sites: loaded.manifest.sites,
@@ -264,9 +299,11 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         },
         // ?sights=all shows every rare sight at once, to look them over without waiting for them.
         forceSights: params.get("sights") === "all",
+        structures: loaded.core.world.built?.built.structures,
       }),
       onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
     });
+    view.setLight(light.lit.palette, light.lit.cream, light.built);
     worldN = regions.n;
     groundHeight = (x, y) => view.groundHeight(x, y);
 
@@ -286,6 +323,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     flight = startState(start, view);
     const sky = createSky(loaded.manifest.seed, regions.n, styleFrom(params.get("clouds")), loaded.manifest.start);
     const dragon = createDragon(worldN);
+    const rain = createRain(seed);
 
     canvas.width = fw;
     canvas.height = fh;
@@ -318,6 +356,26 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       clock.last = t;
       const options = setup.options();
       const reduced = options.motion === "reduced";
+
+      // The air, read from the clock a few times a second. The palette is built again only once the light has moved a
+      // step you could see.
+      if (t - light.airAt >= AIR_EVERY) {
+        light.air = airNow();
+        light.airAt = t;
+      }
+      const air = light.air ?? light.built;
+      if (lightMoved(light.built, air) && t - light.buildAt >= PALETTE_EVERY) {
+        const p0 = performance.now();
+        light.lit = lightFor(air);
+        light.built = air;
+        light.buildAt = t;
+        events.paper(paperCss(light.lit.cream));
+        if (probe) probe.paletteMs.push(performance.now() - p0);
+      }
+      if (light.lit) view.setLight(light.lit.palette, light.lit.cream, air);
+      sky.setAir(air);
+      dragon.setAir(air);
+      if (probe) probe.air = air;
       const controlsStart = performance.now();
       const asked = controls.frame();
       const controlsMs = performance.now() - controlsStart;
@@ -343,6 +401,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       view.frame(frame, t / 1000, { x: flight.x, y: flight.y, alt: flight.alt, heading: flight.heading, speed: flight.speed });
       const rect = view.rect();
       const skyStart = performance.now();
+      // The rain falls under the clouds and the flier: they hide it, never it them.
+      rain(frame, rect, t / 1000, air);
       sky.draw(frame, rect, t / 1000, "below");
       const skyBelow = performance.now() - skyStart;
       dragon.step(flight, Math.min(dt, 0.1), restShare(phase));

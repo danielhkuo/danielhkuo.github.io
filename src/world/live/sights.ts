@@ -32,6 +32,11 @@ const KITE_RISE = 38;
 /** The nets' clock, as the kite's. */
 export const NET_EVERY = 120;
 export const NET_OUT = 52;
+/** A rainbow shows only while the darkness (sky/air.ts) is under this and the mist under that; a kite while the dark and the rain are under these. */
+const RAINBOW_DARK = 0.35;
+const RAINBOW_MIST = 0.3;
+const KITE_DARK = 0.5;
+const KITE_RAIN = 0.3;
 /** Rainbows: one may stand in each tile of this many cells for RAINBOW_STAYS seconds of each RAINBOW_EVERY. */
 const RAINBOW_TILE = 1280;
 export const RAINBOW_EVERY = 140;
@@ -178,9 +183,11 @@ export function sightsLayer(ctx: LayerContext): SightsLayer {
     },
     draw(f: LiveFrame): void {
       art.sync(f.palette);
-      rainbows(f);
+      // A rainbow needs the sun, and a kite a fair day: neither shows at night, a rainbow not in mist, a kite not in rain.
+      const air = f.air;
+      if (!air || (air.night < RAINBOW_DARK && air.mist < RAINBOW_MIST)) rainbows(f);
       fishers(f);
-      kites(f);
+      if (!air || (air.night < KITE_DARK && air.rain < KITE_RAIN)) kites(f);
       skein(f);
     },
   };

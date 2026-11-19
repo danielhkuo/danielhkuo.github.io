@@ -171,3 +171,30 @@ test("sites come from the manifest, with no project yet", () => {
   });
   assert.deepEqual(view.sites(), [{ x: 10, y: 20, type: "abbey", project: null }]);
 });
+
+test("a new light composes the whole view again in the new palette, as a view made in that light would", () => {
+  const night = buildPalette({ time: 0.92, season: 0.25, overcast: 0 });
+  const cream = 0xff302820;
+  const pool = new FakePool(true);
+  const view = createStreamView(flight(), pool, palette, mask, { width: W, height: H });
+  view.setCamera(640, 640);
+  view.update(0, 0);
+  const out = new Uint32Array(W * H);
+  view.frame(out);
+  // A short slide keeps the land; the new light must not be kept out by it.
+  view.setCamera(643, 641);
+  view.setLight(night, cream);
+  view.frame(out);
+  const fresh = createStreamView(flight(), new FakePool(true), night, mask, { width: W, height: H });
+  fresh.setLight(night, cream);
+  fresh.setCamera(643, 641);
+  fresh.update(0, 0);
+  const want = new Uint32Array(W * H);
+  fresh.frame(want);
+  assert.deepEqual(out, want);
+  // The same light again changes nothing.
+  view.setLight(night, cream);
+  const again = new Uint32Array(W * H);
+  view.frame(again);
+  assert.deepEqual(again, want);
+});
