@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { FALL_TONE, FOAM_TONE } from "../bake/chunk.ts";
 import { namedViews, renderStrip } from "../cli/live.ts";
+import { readShipped } from "../pack/shipped.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
@@ -13,9 +14,8 @@ import { makeLayers } from "./registry.ts";
 import { TALL_FALL, WAVE_PERIOD, waterLayer } from "./water.ts";
 
 const root = process.cwd();
-const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin")));
-const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8")) as Manifest;
+const { world, flight, manifest: shippedManifest } = await readShipped(join(root, "public/world"));
+const manifest = shippedManifest as unknown as Manifest;
 const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
 
 const isWater = (v: number): boolean => matOf(v) >= M.sea && matOf(v) <= M.river;
@@ -34,13 +34,13 @@ async function shot(view: string, dx = 0): Promise<Shot> {
   const key = `${view}:${dx}`;
   const hit = shots.get(key);
   if (hit) return hit;
-  const place = (await namedViews(bin, manifest))[view];
+  const place = (await namedViews(world, manifest))[view];
   let got: Shot | null = null;
   const grab: LiveLayer = {
     name: "grab",
     draw: (f) => { got = { out: new Uint32Array(f.out), bake: new Uint32Array(f.bake), rect: { ...f.rect }, palette: f.palette, n: f.n }; },
   };
-  await renderStrip({ bin, manifest, mask, x: place.x + dx, y: place.y, times: [0], layers: [grab], clouds: null });
+  await renderStrip({ world, flight, manifest, mask, x: place.x + dx, y: place.y, times: [0], layers: [grab], clouds: null });
   assert.ok(got, "the view drew");
   shots.set(key, got);
   return got;

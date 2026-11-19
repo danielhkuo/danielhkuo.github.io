@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { namedViews, renderStrip } from "../cli/live.ts";
+import type { Manifest } from "../pack/manifest.ts";
+import { readShipped } from "../pack/shipped.ts";
 import type { LiveFrame } from "./live.ts";
 import { waterLayer } from "./water.ts";
 
@@ -33,15 +35,14 @@ let memo: Promise<Fixture> | null = null;
 function fixture(): Promise<Fixture> {
   memo ??= (async () => {
     const root = process.cwd();
-    const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-    const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin")));
-    const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8"));
+    const { world, flight, manifest: shippedManifest } = await readShipped(join(root, "public/world"));
+    const manifest = shippedManifest as unknown as Manifest;
     const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
-    const views = await namedViews(bin, manifest);
+    const views = await namedViews(world, manifest);
     const frames: Record<string, LiveFrame> = {};
     for (const name of VIEWS) {
       const grab = { name: "grab", draw: (f: LiveFrame) => { frames[name] = { ...f, out: f.out.slice(), bake: f.bake.slice(), rect: { ...f.rect } }; } };
-      await renderStrip({ bin, manifest, mask, x: views[name].x, y: views[name].y, times: [0], layers: [grab], clouds: null });
+      await renderStrip({ world, flight, manifest, mask, x: views[name].x, y: views[name].y, times: [0], layers: [grab], clouds: null });
     }
     return { frames, seed: manifest.seed as number };
   })();

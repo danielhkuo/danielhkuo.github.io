@@ -6,6 +6,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { namedViews, renderStrip } from "../cli/live.ts";
+import type { Manifest } from "../pack/manifest.ts";
+import { readShipped } from "../pack/shipped.ts";
 import type { LiveFrame } from "./live.ts";
 import { waterLayer } from "./water.ts";
 
@@ -15,17 +17,16 @@ let memo: Promise<Fixture> | null = null;
 function fixture(): Promise<Fixture> {
   memo ??= (async () => {
     const root = process.cwd();
-    const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-    const bin = new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin")));
-    const manifest = JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8"));
+    const { world, flight, manifest: shippedManifest } = await readShipped(join(root, "public/world"));
+    const manifest = shippedManifest as unknown as Manifest;
     const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
-    const { start } = await namedViews(bin, manifest);
+    const { start } = await namedViews(world, manifest);
     const frames: LiveFrame[] = [];
     const steps: [number, number][] = [[0, 0], [1, 0], [2, 1], [3, 1], [5, 2], [6, 4], [6, 4], [8, 5]];
     for (const [k, [dx, dy]] of steps.entries()) {
       let grabbed: LiveFrame | null = null;
       const grab = { name: "grab", draw: (f: LiveFrame) => { grabbed = { ...f, out: f.out.slice(), bake: f.bake.slice(), rect: { ...f.rect } }; } };
-      await renderStrip({ bin, manifest, mask, x: start.x + dx, y: start.y + dy, times: [k / 60], layers: [grab], clouds: null });
+      await renderStrip({ world, flight, manifest, mask, x: start.x + dx, y: start.y + dy, times: [k / 60], layers: [grab], clouds: null });
       frames.push(grabbed!);
     }
     return { frames, seed: manifest.seed as number };
