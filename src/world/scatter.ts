@@ -49,7 +49,7 @@ export const DENSITY = {
   acacia: 0.022,
   /** Thorn on steppe and gravel, in thickets; and in the dark bands of tiger bush, close. */
   thorn: 0.012,
-  tigerBush: 0.3,
+  tigerBush: 0.14,
   mangrove: 0.3,
   /** Palms over an oasis's plots, and along the back of a tropical beach. */
   oasisPalm: 0.1,
@@ -261,15 +261,15 @@ export function scatterAt(
   let density = treeDensity(c, groundMat, shift);
   if (heat > 0) {
     // Palms: over the plots of an oasis, and along the back of a tropical beach. Cypress: on the dry sward of the Mediterranean.
-    if (groundMat === M.ley && heat > 0.36 && c.moisture < 0.36) density = DENSITY.oasisPalm;
+    if (inTriple(groundMat, M.pastureCool) && heat > 0.36 && c.moisture < 0.36) density = DENSITY.oasisPalm;
     else if (groundMat === M.sandPale && heat > 0.58 && c.e > 0.7) density = DENSITY.beachPalm * clamp01((c.moisture - 0.3) / 0.3);
-    else if (heat < 0.5 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.steppeCool)) && u4 > 0.72) density = DENSITY.cypress * clamp01(heat / 0.15);
+    else if (heat < 0.5 && (inTriple(groundMat, M.scrubCool) || inTriple(groundMat, M.steppeCool)) && u4 > 0.9) density = DENSITY.cypress * clamp01(heat / 0.15);
   }
   // Sparse trees and bushes are gathered: a spinney's or a thicket's cells are dense, the sward between has next to none.
   if (density > 0 && density <= SPARSE) {
     density *= groundMat === M.marsh
       ? clump(x, y, n, 0, c.region[0] > 0.5 ? CLUMP_FLOOR : 0)
-      : groundMat === M.ley || groundMat === M.sandPale
+      : heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))
         // Palms stand apart, evenly: that evenness is what a palm grove is.
         ? 1
         : inTriple(groundMat, M.savannaCool)
@@ -308,16 +308,16 @@ export function scatterAt(
       const v = hueField(x, y, HUE_CLASS.broadleaf, n) + (u4 - 0.5) * 1.5;
       if (u3 > 0.925) {
         r = 3.4 + 1.1 * u1;
-        h = 7 + 1.2 * u2;
+        h = 5.4 + 1.2 * u2;
         mat = M.jungleBright;
       } else {
         r = 2.1 + 2 * u1 * u1;
-        h = 0.9 * r + 2.3;
+        h = 0.7 * r + 1.9;
         mat = u3 < 0.003 ? M.jungleBloom : M.jungleCool + (v < 0.8 ? 0 : v < 1.6 ? 1 : 2);
       }
     } else if (inTriple(groundMat, M.savannaCool)) {
       // An acacia: wider than tall, flat. One tree in eight is a termite mound instead, a small red cone.
-      if (u3 > 0.875) {
+      if (u3 > 0.965) {
         r = 0.6 + 0.3 * u1;
         h = 1.6 + 1.2 * u4;
         mat = M.mound;
@@ -330,7 +330,7 @@ export function scatterAt(
         shape = SHAPE.acacia;
       }
     } else if (groundMat === M.tigerBush || groundMat === M.reg || groundMat === M.earthPale || inTriple(groundMat, M.steppeCool)) {
-      if (heat < 0.5 && (inTriple(groundMat, M.steppeCool)) && u4 > 0.72) {
+      if (heat < 0.5 && (inTriple(groundMat, M.steppeCool)) && u4 > 0.9) {
         r = 0.75 + 0.2 * u1;
         h = 5 + 2 * u3;
         mat = M.cypress;
@@ -354,14 +354,14 @@ export function scatterAt(
       r = 1.3 + 0.8 * u1;
       h = 1.7 + 0.8 * u4;
       mat = M.mangrove;
-    } else if (heat > 0 && (groundMat === M.ley || groundMat === M.sandPale)) {
+    } else if (heat > 0.36 && (groundMat === M.sandPale || (inTriple(groundMat, M.pastureCool) && c.moisture < 0.36))) {
       r = 2;
       h = 5 + Math.floor(3 * u4);
       mat = M.palm;
       shape = SHAPE.palm;
-    } else if (heat > 0 && inTriple(groundMat, M.scrubCool) && (u4 > 0.72 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
+    } else if (heat > 0 && inTriple(groundMat, M.scrubCool) && (u4 > 0.9 || heat > 0.1 + 0.1 * softNoise(x, y, n, 45, SPRUCE_SEED + 3) + 0.2 * (u3 - 0.5))) {
       // The Mediterranean's dry sward: a cypress spire here and there, and olives where the temperate sward has bushes.
-      if (u4 > 0.72 && heat < 0.5) {
+      if (u4 > 0.9 && heat < 0.5) {
         r = 0.75 + 0.2 * u1;
         h = 5 + 2 * u3;
         mat = M.cypress;

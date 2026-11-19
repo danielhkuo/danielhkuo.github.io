@@ -372,7 +372,7 @@ function buildSpecs(): Spec[] {
   set(M.bogRed, all([0.58, 0.06, 28]), LAND);
   // A pool is dark still water seen from above: one flat tone, a little lighter where the sky is in it.
   set(M.pool, all([0.5, 0.045, 238]), LINE);
-  set(M.frostNet, all([0.64, 0.05, 100]), LINE);
+  set(M.frostNet, all([0.66, 0.052, 108]), LINE);
   // Taiga: dark spires on a pale floor.
   set(M.floorLichen, all([0.82, 0.03, 112]), LAND);
   set(M.spruceCool, evergreen([0.31, 0.04, 192]), CANOPY);
@@ -429,13 +429,13 @@ function buildSpecs(): Spec[] {
   set(M.jungleCool, evergreen([0.36, 0.072, 160]), CANOPY);
   set(M.jungleMid, evergreen([0.44, 0.088, 150]), CANOPY);
   set(M.jungleWarm, evergreen([0.5, 0.094, 142]), CANOPY);
-  set(M.jungleBright, evergreen([0.57, 0.1, 133]), CANOPY);
+  set(M.jungleBright, evergreen([0.555, 0.086, 136]), CANOPY);
   set(M.jungleBloom, all([0.78, 0.045, 355]), CANOPY);
   set(M.palm, evergreen([0.52, 0.092, 138]), CANOPY);
   set(M.mangrove, evergreen([0.43, 0.075, 146]), CANOPY);
   set(M.cactus, evergreen([0.55, 0.06, 158]), CANOPY);
   set(M.trunk, all([0.56, 0.04, 62]), LINE);
-  set(M.mound, all([0.58, 0.082, 40]), DUNE);
+  set(M.mound, all([0.62, 0.058, 58]), DUNE);
   // Built things of the climates: mud plaster, thatch and turf. Lit colours, as the other walls and roofs are.
   set(M.adobe, all([0.8, 0.052, 68]), BUILT);
   set(M.thatch, all([0.72, 0.06, 86]), BUILT);

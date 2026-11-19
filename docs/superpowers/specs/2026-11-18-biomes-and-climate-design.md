@@ -118,10 +118,12 @@ Rejected: blending by dither alone (a speckled band is static on screen, and sti
 `φ(y) = |y − equatorY| / (n/2)` on the torus: 0 on the equator line, 1 on the pole line; `90·φ` is degrees. The half
 of the world north of the equator line is northern latitudes; the other half is southern.
 
-**[Call] Anchor.** `equatorY = homeY + 0.57·n/2`, where `homeY` is the home island's core. The home island sits at
-51° north, colder to its north, as in the Europe the land is drawn from. On seed 3 at 10240 that puts the equator at
-y ≈ 5960 and the pole at y ≈ 840, and by luck gives a table island on the equator, a caldera in the Mediterranean
-belt, fjords under the pole and a fen in the taiga.
+**[Call] Anchor.** `equatorY = homeY + 0.62·n/2`, where `homeY` is the home island's core. The home island's core
+sits at 56° north, colder to its north, as in the Europe the land is drawn from; the island reaches further south
+than north of its core, and at 56° that reach ends in the Mediterranean belt, not at the desert's edge (the first
+anchor, 51°, left green home beside sand at one latitude: a geographer's catch). On seed 3 at 10240 the equator is
+at y ≈ 6270 and the pole at y ≈ 1150, which by luck gives a table island on the equator, a fen under frost polygons
+on the tundra and a snow-capped volcano with a frozen crater lake by the pole.
 
 **[Decide 2] North is colder at home.** Recommended. The mirror (equator to the north) is one sign.
 
@@ -388,9 +390,11 @@ projects are assigned afresh: `src/world/sites/assignments.json` is re-made by t
 Weighed and dropped: keeping five of each but varying their form by climate (a visitor still has five lighthouses to
 tell apart), and keeping two of each (the same, less).
 
-**The lore.** A lore session is writing the world's story. No lore spec exists yet (checked 2026-11-18, 23:00). The
-kinds above are named plainly so the lore can name them; if it wants a different set, the kinds are a table in
-`gen/sites.ts` and a builder each. The lore is checked again before the new builders are drawn.
+**The lore** (checked 2026-11-19, on `claude/lore-168547`: `specs/2026-11-18-a-simple-story.md`). The owner set the
+first lore aside for something simple: the dragon asks the keeper of each landmark why they make what they make, one
+keeper to a kind. It asks nothing of the generator, and one landmark of each kind is exactly what it wants: with two
+lighthouses the same keeper is met twice. It has seven keepers, for the seven kinds that exist. The six new kinds
+would want six more, or they stand without a keeper's words until the owner says; that is part of **[Decide 6]**.
 
 ## 11. Budgets and tests
 
@@ -429,9 +433,29 @@ and after, scored in the look ledger.
 
 Each step ends in renders and a commit.
 
-## 13. What is built
+## 13. What is built (2026-11-19)
 
-Filled in as the work lands.
+On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
+
+| Part | State |
+|---|---|
+| Climate fields: latitude, the curve with its plateau, warp, inland extremes, the home rule, rain by zone (`gen/climate.ts`) | built |
+| `temp` shipped a region, optional and flagged; windows; the bake reads it (`pack/`, `bake/window.ts`, `bake/cells.ts`) | built |
+| Temperate as the identity: cover and scatter pinned by hash, the home view byte-identical, every older colour unchanged | built, tested |
+| The cold family: taiga, tundra with pools and frost polygons, ice cap with drifts and crevasses, plate pack ice, frozen lakes and rivers | built |
+| The warm family: Mediterranean dress, steppe, desert with sand seas and real dunes, gravel, salt, wadis, tiger bush, savanna, jungle | built |
+| Pictures for palms, acacias, umbrella pines and cactus (`bake/sprites.ts`) | built |
+| One landmark of each kind, in its climate; hamlets and houses by climate; pads keep the climate's ground | built |
+| The six new landmarks and the wonders' climates | built by an Opus agent under review; see the commit after this one |
+| Haze by climate (a plane in the core); manifest `climate` | built |
+| The map and render tools: `world:map --view cover|climate --wild`, `world:render --wild --no-gates --temperate` | built |
+| Bergs on the sea, mangrove crowns in the shallows (6.3 "stamps on water") | not built: mangroves stand on the mud of the shore; no bergs |
+| A cold sea and a silty river colour | not built: follow-up (6.5) |
+| Fields by climate beyond the Mediterranean (oasis plots are built; paddies are not) | partly |
+
+Measured on seed 3 at 10240: land by cover is about 15 % jungle, 15 % snow and ice, 10 % tundra, 9 % steppe, 7 %
+savanna, 2 % desert; the rest temperate, Mediterranean and taiga. Critic scores and what each round changed are in the
+look ledger ("Climate rounds").
 
 ## 14. Follow-ups
 

@@ -73,7 +73,7 @@ export function ergAt(x: number, y: number, n: number): number {
 }
 
 /** The greatest height of a dune, in units. */
-export const DUNE_HEIGHT = 3.2;
+export const DUNE_HEIGHT = 5;
 
 /**
  * The height of the dunes at a cell of a sand sea, 0–1 of DUNE_HEIGHT: long crests across the south-west wind some
@@ -84,10 +84,11 @@ export function duneAt(x: number, y: number, n: number): number {
   // Along the wind (south-west to north-east) the crests come four to a lattice step; across it they run long.
   const u = ((x - y + 0.5) * p) / n, v = ((x + y + 0.5) * p) / n;
   const bend = 0.35 * softNoise(x, y, n, 90, ERG_SEED + 3);
-  const t = 4 * u + bend + 0.6 * gradNoise(u, 2 * v, p, ERG_SEED + 4);
+  const t = 3 * u + bend + 0.6 * gradNoise(u, 2 * v, p, ERG_SEED + 4);
   const f = t - Math.floor(t);
   // A sawtooth: a long rise from the south-west, a short slip face to the north-east.
   const ridge = f < 0.72 ? f / 0.72 : (1 - f) / 0.28;
   const size = 0.55 + 0.45 * gradNoise(u * 2 + 7, v * 3, p, ERG_SEED + 5);
-  return ridge * ridge * (size < 0.15 ? 0.15 : size);
+  // A dune is a body, not a blade: most of its length stands near its crest's height.
+  return ridge * (0.45 + 0.55 * ridge) * (size < 0.2 ? 0.2 : size);
 }

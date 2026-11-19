@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-18.
+Last updated 2026-11-19.
 
 ## Where things are written down
 
@@ -12,6 +12,7 @@ Last updated 2026-11-18.
 | What the site is becoming, and the rules every change follows | `.claude/CLAUDE.md` |
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
 | Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
+| Climates and biomes, and one landmark of each kind | `docs/superpowers/specs/2026-11-18-biomes-and-climate-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -67,6 +68,15 @@ Last updated 2026-11-18.
   description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
   is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
   discovery, by repository. Preview a site with `/world?at=<site id>`.
+- **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round: latitude is a band of
+  temperature from an equator line to a pole line and back, cooler with height, more extreme inland, with rain by
+  zone. Nine climates from one rule table read with the climate's offset of height: ice with plate pack ice, tundra,
+  taiga, temperate (unchanged to the byte, and held round the home island), Mediterranean, steppe, desert with real
+  dunes and dry wadis, savanna, jungle. Palms, acacias, umbrella pines and cactus are small pictures drawn over the
+  painted land. One landmark of each kind, each in its own climate; hamlets and houses by climate. Sea-level
+  temperature ships as one more section a region (about 4 KB); the haze and the manifest know the climate. Design,
+  decisions waiting and follow-ups: `specs/2026-11-18-biomes-and-climate-design.md`. The world on disk has not been
+  re-shipped: `npm run world:build -- --seed 3 --n 10240 --cache` makes the new one.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
@@ -231,6 +241,16 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
   down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
 
+From the climates (2026-11-19):
+- Winds in bands for the rain (trades in the tropics, westerlies beyond), so deserts lie on the right coasts.
+- A cold sea colour and a silty river: each needs the same line in five live-layer tables (`live/water.ts` CLASS, and
+  `isSea` in life, sights, rare and moments).
+- Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
+  pasture; no animal belongs to the new climates yet.
+- Islands grown for their climate (atolls and reefs, more fjords in the cold): a plan-stage change and a seed search.
+- The ice cap on level land is flat; black sand on tropical volcanic islands; tidewater glaciers; burn scars on the
+  savanna. Rounds 2 and 3 of the climate looks have not been scored by a fresh critic (look ledger).
+
 From landing (2026-11-18):
 - A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
   could part round a landed site.
@@ -243,6 +263,13 @@ From the first-flight review:
 - Over lakes, the shadow falls on the lake bed and vanishes.
 - Small code cleanups: the worker message types are defined twice; the codec branches on the same node kinds in
   three places.
+
+## Decisions waiting: climates (2026-11-19)
+
+All in `specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise:
+the looping climate on the torus in place of a true sphere; north colder at home; the home island kept temperate with
+the belt swelling round it; no new water colours yet; the world stays 10240 for now; thirteen landmarks, none
+repeated, six of them new (which asks the story for six more keepers, or leaves those six without one).
 
 ## Decisions waiting (2026-11-18 morning)
 

@@ -28,3 +28,76 @@ The 10240 world, seed 3, in 14 fixed views: three peaks, three upland slopes, a 
 
 Consensus left after round 5: a snow massif parts along one line rather than one per arête, and lit snow is plain; walls keep a faint pleat of ribs under their beds, and beds on rounded headlands read as onion rings; scree is almost absent at 10240; fens drain through a dense branching web (needs a fen-aware channel threshold); equal half-dome headlands between stream notches; stacks are smooth cylinders; sites painted into the land (a lighthouse pad cut down a cliff, a road down a cliff face, a ley cell on the town quay).
 
+
+## Climate rounds (2026-11-18 to 19, `claude/biomes`)
+
+The 10240 world, seed 3, with climates (`specs/2026-11-18-biomes-and-climate-design.md`), on the whole-world overview
+in cover colours (`npm run world:map -- --view cover`) and sixteen fixed close views of wild land (`npm run
+world:render -- --wild --views none --no-gates --at …`; `--temperate` draws the same places as they were). Round 1 was
+judged by two fresh Opus critics: an art director scoring each biome 0–4 on Reads (a visitor names it from one frame),
+Style (the same hand as the temperate look) and Craft (free of artefacts), and a geographer scoring the overview as a
+globe and each border between climates 0–4. Rounds 2 and 3 are the lead's own passes on their findings; they have not
+been scored by a fresh critic.
+
+**Round 1, as first built (art director).**
+
+| Biome | Reads | Style | Craft | What the critic saw |
+|---|---|---|---|---|
+| Ice and pack | 4 | 2 | 1 | Unmistakably polar; floes as evenly inked tiles, the cap one flat value, periwinkle meltwater |
+| Tundra | 3 | 2 | 1 | Right ground; a grey dead band at the snowline, pasted pale patches |
+| Taiga | 2 | 3 | 2 | Temperate forest with browner glades; no dark spruce mass |
+| Mediterranean | 2 | 2 | 2 | Good maquis; large lilac fields and a rust square |
+| Steppe | 2 | 3 | 2 | Good relief and dry colour; slate-lilac north faces read as dusk |
+| Desert | 2 | 3 | 3 | Clean washes, lovely wadi palms; the view held little open sand |
+| Savanna | 4 | 2 | 1 | Acacias name it at once; stamped as a uniform carpet, hard red blots |
+| Jungle | 3 | 2 | 1 | Rich coast canopy, too saturated; lollipop emergents and bare scabs inland |
+
+The world as a whole, before → after: Variety 3 → 8, Depth 7 → 6, Quality 7 → 5, Detail 6 → 7. The home view was
+judged unchanged (and is, byte for byte).
+
+**Round 1 (geographer).** The overview as a globe 2 of 4: the order of belts is right on both sides, but the pack was
+a ruled stripe, deserts met jungle with nothing between, and savanna, steppe and desert all read as one tan. Borders:
+ice/tundra 1, tundra/taiga 2, taiga/temperate 3, temperate/Mediterranean 2, Mediterranean or steppe/desert 2,
+desert/savanna 2, savanna/jungle 1. Silly mistakes named: a liquid crater lake inside a snow cap, spruce against the
+ice edge, river bars of sand on the ice, pale wadis that read as roads, acacias on steep banks.
+
+**Round 2 (changes).** The pack fused deep in, drawn apart at its edge, with leads all one way; quiet lake and river
+ice; late snow in the cold as patches of snow, not fellfield; acacias in open parkland, off banks and crests, in three
+widths; pines rare and only short of the tropics, cloud forest above the jungle in its own crowns; the savanna's
+forest line read at the sea; garrigue only at the heather's heart; quieter earths; lichen and frost polygons lower in
+contrast.
+
+**Round 3 (changes).** Home at 56° north, so its reach south ends in the Mediterranean; wider wander of the isotherms
+and of the pack's edge; a longer rise of rain to the equator, a wider dry core, a greener savanna; forest and grass
+run into each other both ways; water freezes by height as well as latitude; bars keep the climate's ground; the tundra
+treeless; spruce and the cold's dress sooner; darker wadis; less thorn on gravel.
+
+**Round 3, scored by a fresh critic** (one critic, art and geography together; a different critic from round 1, so
+compare with care).
+
+| Biome | Reads | Style | Craft | What the critic saw |
+|---|---|---|---|---|
+| Ice and pack | 3 | 2 | 1 | The cap reads; the pack's leads were a field of same-slant squiggles; dashes all over the ice |
+| Tundra | 3 | 2 | 1 | Olive and rust work; hundreds of pond dots are speckle; stepped lake ice |
+| Taiga | 3 | 3 | 3 | The strongest new biome: dark conifer masses on tawny ground |
+| Mediterranean | 2 | 3 | 2 | Too green to tell from temperate; spike-topped clumps repeat |
+| Steppe | 2 | 2 | 2 | Reads as dry; no grass texture |
+| Desert | 2 | 3 | 2 | Dunes too faint to see; the palm-lined river is good |
+| Savanna | 3 | 2 | 1 | Acacias read; pink dots (termite mounds), lone round bushes, banded scrub like eyelashes |
+| Jungle | 4 | 3 | 3 | A convincing canopy; lime ridge highlights near a game green |
+
+The world as a whole, before → after: Variety 3 → 7, Depth 5 → 5, Quality 6 → 4, Detail 5 → 6. The overview as a
+globe 2 of 4. Borders: ice/tundra 2, taiga/temperate 2, temperate/Mediterranean 3, steppe/desert 2, desert/savanna 2,
+savanna/jungle 3. Verdict: fit to show as a first version if it is said plainly that only taiga, jungle and the
+unchanged temperate look are close to finished.
+
+**Round 4 (changes, not yet scored).** Few, long leads in the pack and its edge in continental lobes; a lake freezes
+whole; pools in fields, rounded, a few cells across, and frost polygons only on the wettest flats; crevasses rare;
+dunes half as tall again, wider apart and full-bodied; termite mounds rare and browner; forest islands larger; less
+thorn in the bands; the Mediterranean's dress sooner and to straw, cypress rarer; a calmer green by a desert river;
+lower jungle crowns and a quieter emergent.
+
+Consensus left: the borders the tests hold to 150 cells are measured on level ground, and on the map a long island
+lying along a latitude still changes climate along a line that follows it; one south-west wind puts rain on the same
+side of every island, where a globe has trades and westerlies; the open polar sea is the temperate blue; the ice cap
+on level land has little form of its own; rounds 2 and 3 want a fresh critic's scores.

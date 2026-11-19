@@ -13,7 +13,7 @@ import { COVER_FIELDS_MARGIN, coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
-import { SPRITE_STRIDE, spriteShadow } from "./sprites.ts";
+import { spriteShadow } from "./sprites.ts";
 import { HMAX, type BakeWorld, type GridWindow, type Patch } from "./world.ts";
 
 export const TILE = 256;
