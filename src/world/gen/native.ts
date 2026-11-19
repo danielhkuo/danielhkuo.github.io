@@ -17,7 +17,7 @@ import type { Core } from "./plan.ts";
 import type { Reach, RiversResult } from "./rivers.ts";
 
 /** Bump when a recipe or the way L1 is grown changes: the cache keeps L1 under this. */
-export const NATIVE_VERSION = 10;
+export const NATIVE_VERSION = 12;
 
 export type Recipe = "keep" | "ice" | "tundraWet" | "tundraDry" | "taiga" | "steppe" | "mediterranean" | "desert" | "savanna" | "warmForest" | "jungle";
 
@@ -78,7 +78,7 @@ export function recipeOf(c: IslandClimate): Recipe {
  * theirs where volcanoes are at home (the cold and the wet), and in dry country stand as mesas.
  */
 function reformable(form: number, recipe: Recipe): boolean {
-  if (form === FORM.cone || form === FORM.caldera) return dryRecipe(recipe);
+  if (form === FORM.cone || form === FORM.caldera) return false;
   if (form === FORM.table) return dryRecipe(recipe) || recipe === "jungle";
   return form === FORM.belts || form === FORM.fjord || form === FORM.fen;
 }
@@ -175,7 +175,11 @@ export function nativePlan(land: Land, climate: Climate, views: readonly { x: nu
     // better side by side; the warm country's wonders (the bridge town) stand on it as they did. And an island on
     // the equator line, whose land is both sides' jungle (the cove hotel's cove is on one).
     const straddles = climates[c].arid > 0.2 && climates[c].arid < 0.8 && climates[c].temp > 0.85;
-    if (recipe === "keep" || recipe === "warmForest" || straddles || near[c] || core.form === FORM.fen || (core.form === FORM.table && !reformable(core.form, recipe))) {
+    // So do the steppe's and the Mediterranean's own islands (the steppe's plains are the fens at its latitude; the
+    // windmill's headland is on today's land, and the limestone recipe judged no better side by side), and the
+    // volcanoes of dry country (the Mediterranean's calanque is a caldera's wall).
+    const dryVolcano = (core.form === FORM.cone || core.form === FORM.caldera) && dryRecipe(recipe);
+    if (recipe === "keep" || recipe === "warmForest" || recipe === "steppe" || recipe === "mediterranean" || straddles || dryVolcano || near[c] || core.form === FORM.fen || (core.form === FORM.table && !reformable(core.form, recipe))) {
       kept.push(true);
       specs.push(null);
     } else {

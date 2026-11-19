@@ -454,7 +454,7 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
   if (wet < forest + 0.012 * j) {
     if (tropic < 0) return M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n);
     // Forest islands stand in the grass toward the forest's edge, in the hollows first.
-    if (wet > forest - 0.2 && soft(x, y, n, 60, WARM_SEED + 18) + 0.2 * soft(x, y, n, 19, WARM_SEED + 19) + (wet - forest + 0.1) * 5 > 0.3) return M.floorJungle;
+    if (wet > forest - 0.2 && soft(x, y, n, 60, WARM_SEED + 18) + 0.2 * soft(x, y, n, 19, WARM_SEED + 19) + (wet - forest + 0.1) * 5 > 0.45) return M.floorJungle;
     // Red earth shows through the grass in small worn patches.
     if (st < 0.16 && soft(x, y, n, 23, WARM_SEED + 15) + 0.5 * soft(x, y, n, 6, WARM_SEED + 16) > 0.8) return M.earthRed;
     return M.savannaCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);

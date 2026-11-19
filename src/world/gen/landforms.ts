@@ -136,7 +136,7 @@ export function shapeByClimate(c: LandformInput): Landforms {
         const jungle = ramp((heat - 0.62) / 0.12) * ramp((rain - 0.62) / 0.12);
         if (jungle > 0) {
           // In clusters: a field of towers here, open plain there.
-          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.6 * softNoise(x, y, n, 150, SEED + 22) + 0.05) / 0.15);
+          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.6 * softNoise(x, y, n, 150, SEED + 22) + 0.15) / 0.15);
           const where = jungle * patch * ramp((0.28 - slope) / 0.12) * ramp((55 - e) / 15);
           if (where > 0) {
             const v = TOWER.h1 * where * bumpAt(x, y, n, TOWER, LANDFORM_SEED + 23, true);
