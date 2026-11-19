@@ -1,18 +1,20 @@
 /* The flight page round the canvas: game layer, Ink & Glyph paper. The Codex and the prompts have their own sheets. */
 
 .page {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
   background: #f0e8d2;
 }
 
-/* The canvas and what sits on its corner, sized to a whole number of device pixels per frame pixel. */
+/*
+ * The canvas and what sits on its corner: the window edge to edge from its top-left corner, a whole number of device
+ * pixels per frame pixel, overhanging the right and bottom edges by less than a frame pixel (or under a phone's toolbar).
+ */
 .stage {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .canvas {

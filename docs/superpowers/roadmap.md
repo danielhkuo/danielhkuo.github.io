@@ -56,9 +56,17 @@ Last updated 2026-11-18.
   from the frame's own bake. The layers now read the land past the edge (`LiveFrame.bakeSpace`, `live/sprites.ts`
   `bakeAt`) and cull each thing by how far it reaches; the rare sights no longer fade in at the edge, which only hid the
   old cull. `live/edges.test.ts` holds every sprite layer to a bigger view of the same land, at three frame sizes. The
-  window's size never mattered: the frame is always 400 × 225, only scaled. Cost: about 0.01 ms a frame in Node; at 4×
+  window's size never mattered then: the frame was 400 × 225, only scaled. Cost: about 0.01 ms a frame in Node; at 4×
   throttle, seven alternating world-fly runs on a loaded machine gave p50 3.2 ms for both builds and p95 4.5 ms against
   4.4 ms before. Re-check the p95 against 4 ms on a quiet machine.
+- **The world fills the window** (2026-11-19, `edge-sprites`). /world covers the browser window edge to edge at any
+  size and shape, with no paper round it: the frame takes the window's shape (more world across on a wide window, more
+  up and down on a tall one) at the finest whole number of device pixels per frame pixel that keeps it within 96,000
+  frame pixels (`runtime/fit.ts`). 1600 × 900 keeps 400 × 225 at 4×; 1080p gets 384 × 216 at 5×, 1440p 366 × 206 at 7×,
+  a 390 × 844 phone 195 × 422. It is sized from the visual viewport, keeps its size while a phone's toolbars come and
+  go, and is fitted again when the window really changes or the page comes back; the stream view resizes and keeps its
+  chunks. Each thousand frame pixels costs about 0.03 ms at 4× throttle (`world-fly.mjs --viewport`, `?pixels=` to try
+  another budget): 1080p at today's 4× scale, 480 × 270, measured 5.3 ms p95.
 - **Terrain polish on the 10240 world** (2026-11-18, `terrain-polish`), five critic rounds (look ledger). Snow lit by
   its true normal, parted at each crest into a bright face and a lilac one; rock walls in horizontal beds with lit
   ledges, hatching along the contour; heather only on exposed crests and tops, fresher upland greens; fens as compact

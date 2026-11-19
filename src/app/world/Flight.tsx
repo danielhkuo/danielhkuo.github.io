@@ -8,9 +8,8 @@ import styles from "./flight.module.css";
 import OptionsPanel, { Corner } from "./OptionsPanel";
 import { setOptions, useOptions } from "./optionsStore";
 import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
-import { FRAME_H, FRAME_W } from "./session";
 import { useFlight } from "./useFlight";
-import { useFrameScale } from "./useFrameScale";
+import { useFrameFit } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
 import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
 
@@ -26,7 +25,7 @@ export interface FlightProps {
 
 export default function Flight({ landmarks, terminal }: FlightProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scale = useFrameScale(FRAME_W, FRAME_H);
+  const fit = useFrameFit();
   const drawer = useTerminalDrawer(terminal);
   const panel = usePanel();
   const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link);
@@ -38,12 +37,13 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   const at = flight.phase.at;
   // The panel and the corner draw their glyphs a step finer than the world's pixel, 2 or 3 CSS pixels, so the panel
   // stays small on any window.
-  const px = Math.max(2, Math.min(3, Math.round(scale) - 1));
-  const stage = { width: FRAME_W * scale, height: FRAME_H * scale } as CSSProperties;
+  const px = Math.max(2, Math.min(3, Math.round(fit.css) - 1));
+  // The frame covers the window from its top-left corner; the session sizes the canvas itself to fit.w × fit.h.
+  const stage = { width: fit.w * fit.css, height: fit.h * fit.css } as CSSProperties;
   return (
     <div className={styles.page} data-motion={options.motion}>
       <div className={styles.stage} style={stage}>
-        <canvas ref={canvasRef} width={FRAME_W} height={FRAME_H} className={styles.canvas} />
+        <canvas ref={canvasRef} className={styles.canvas} />
         {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
       </div>
       <GuideLine say={flight.say} />
