@@ -70,13 +70,14 @@ function bumpAt(x: number, y: number, n: number, k: typeof TOWER, seed: number, 
 }
 
 /**
- * The height of the dune ridges at a cell of a sand sea, 0–1: long crests across the south-west wind, a long rise
- * to windward and a shorter fall in the lee, each ridge dying out along its length.
+ * The height of the dune ridges at a cell of a sand sea, 0–1: long linear dunes running with the south-west wind,
+ * as in the great ergs, a long rise on one side and a shorter fall on the other, each dying out along its length.
+ * Running south-west to north-east, they face the north-west light on one flank and turn the other from it.
  */
 export function ridgeAt(x: number, y: number, n: number): number {
-  // Crests are lines of constant x − y, a whole number of them round the world, so the ridges wrap on it.
+  // Crests are lines of constant x + y, a whole number of them round the world, so the ridges wrap on it.
   const crests = Math.max(1, Math.round(n / (RIDGE_CELLS * 1.4142)));
-  const t = ((x - y + 0.5) * crests) / n + 0.6 * softNoise(x, y, n, 260, SEED + 11) + 0.3 * softNoise(x, y, n, 90, SEED + 12);
+  const t = ((x + y + 0.5) * crests) / n + 0.6 * softNoise(x, y, n, 260, SEED + 11) + 0.3 * softNoise(x, y, n, 90, SEED + 12);
   const f = t - Math.floor(t);
   const ridge = f < 0.68 ? f / 0.68 : (1 - f) / 0.32;
   const along = 0.5 + 0.9 * softNoise(x, y, n, 150, SEED + 13);
@@ -166,7 +167,7 @@ export function shapeByClimate(c: LandformInput): Landforms {
         // Karst towers: in patches of the jungle, on its low and gentle ground.
         const jungle = ramp((heat - 0.62) / 0.12) * ramp((rain - 0.62) / 0.12);
         if (jungle > 0) {
-          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.4 * softNoise(x, y, n, 200, SEED + 22) - 0.05) / 0.2);
+          const patch = ramp((softNoise(x, y, n, 600, SEED + 21) + 0.4 * softNoise(x, y, n, 200, SEED + 22) + 0.2) / 0.2);
           const where = jungle * patch * ramp((0.28 - slope) / 0.12) * ramp((55 - e) / 15);
           if (where > 0) {
             const v = TOWER.h1 * where * bumpAt(x, y, n, TOWER, SEED + 23, true);

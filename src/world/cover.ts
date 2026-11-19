@@ -439,6 +439,8 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
     if (soft(x, y, n, 24, WARM_SEED + 12) + 0.4 * soft(x, y, n, 7, WARM_SEED + 13) > 0.3 + 2.5 * (wet - DESERT_RAIN)) return M.earthPale;
     return M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n);
   }
+  // A dome of rock stands bare out of the grass: granite, grey and rounded (gen/landforms.ts).
+  if (st > 0.42 + 0.05 * j && c.rock < 1) return M.rockHard;
   // Grass country: steppe on the cooler side of the dry belt, savanna on the tropical side, the two mixed between.
   const tropic = hl - 0.5 + 0.12 * soft(x, y, n, 64, WARM_SEED + 14) + 0.04 * j;
   // How much rain a forest needs. The savanna's latitudes have a long dry season and burn: there only the wettest
@@ -1087,7 +1089,8 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   // to on a temperate mountain would ring every ice cap in grey.
   if (snowScore > -0.45) {
     if (shift <= 0) return M.snowLate;
-    if (snowScore > -0.2 - 0.25 * soft(x, y, n, 9, ICE_SEED + 23)) return M.snow;
+    // The dry side's winters are dry: its late snow is gone by summer but in the deepest hollows.
+    if (snowScore > -0.2 - 0.25 * soft(x, y, n, 9, ICE_SEED + 23) + (aridNow >= 0.5 ? 0.17 : 0)) return M.snow;
   }
 
   // Tundra: the ground beyond the tree line of a cold latitude, whatever the region. Weighted in by the shift, so

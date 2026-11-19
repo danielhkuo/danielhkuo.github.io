@@ -76,13 +76,14 @@ export function ergAt(x: number, y: number, n: number): number {
 export const DUNE_HEIGHT = 5;
 
 /**
- * The height of the dunes at a cell of a sand sea, 0–1 of DUNE_HEIGHT: long crests across the south-west wind some
- * 20 cells apart, gentle to windward and steep in the lee, that branch and die out along their length.
+ * The height of the dunes at a cell of a sand sea, 0–1 of DUNE_HEIGHT: crests some 20 cells apart running with the
+ * south-west wind, as the great ridges do (gen/landforms.ts), gentle on one flank and steep on the other, that branch
+ * and die out along their length. So they face the north-west light on one flank and turn the other from it.
  */
 export function duneAt(x: number, y: number, n: number): number {
   const p = Math.max(1, Math.round(n / 80));
-  // Along the wind (south-west to north-east) the crests come four to a lattice step; across it they run long.
-  const u = ((x - y + 0.5) * p) / n, v = ((x + y + 0.5) * p) / n;
+  // Across the crests they come four to a lattice step; along them they run long.
+  const u = ((x + y + 0.5) * p) / n, v = ((x - y + 0.5) * p) / n;
   const bend = 0.35 * softNoise(x, y, n, 90, ERG_SEED + 3);
   const t = 3 * u + bend + 0.6 * gradNoise(u, 2 * v, p, ERG_SEED + 4);
   const f = t - Math.floor(t);

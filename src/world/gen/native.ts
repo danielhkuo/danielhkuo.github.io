@@ -17,7 +17,7 @@ import type { Core } from "./plan.ts";
 import type { Reach, RiversResult } from "./rivers.ts";
 
 /** Bump when a recipe or the way L1 is grown changes: the cache keeps L1 under this. */
-export const NATIVE_VERSION = 2;
+export const NATIVE_VERSION = 4;
 
 export type Recipe = "keep" | "ice" | "tundraWet" | "tundraDry" | "taiga" | "steppe" | "mediterranean" | "desert" | "savanna" | "warmForest" | "jungle";
 
@@ -98,13 +98,13 @@ function recipeBase(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
       return { ...base, id: A.highland, form: F.fjord, look: [[A.highland, 0.75], [A.slate, 0.25]], aspect: [0.5, 0.65], turn: 0.5, peak: 150, rugged: 1, rockBias: [0.9, 0.1, 0], ridges: [2, 3], plateau: 0.55 };
     // The wet tundra: low lobes round a low core, studded with lakes, the coast ragged with islets.
     case "tundraWet":
-      return { ...base, id: A.lakes, form: F.fen, look: [[A.lakes, 0.8], [A.skerry, 0.2]], aspect: [0.6, 0.8], turn: 1.2, peak: 26, rugged: 0.25, d: 0.008, rockBias: [0.6, 0.4, 0], ridges: [4, 6], bite: 1.7 };
+      return { ...base, id: A.lakes, form: F.fen, look: [[A.lakes, 0.8], [A.skerry, 0.2]], aspect: [0.6, 0.8], turn: 1.2, peak: 22, rugged: 0.25, d: 0.008, rockBias: [0.6, 0.4, 0], ridges: [4, 6], bite: 1.7 };
     // The dry side's tundra: a low stony plateau.
     case "tundraDry":
-      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.lakes, 0.4]], aspect: [0.45, 0.7], turn: 0.9, peak: 42, rugged: 0.45, d: 0.012, rockBias: [0.7, 0.3, 0], ridges: [2, 4], lowland: 0.25, bite: 1 };
+      return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.lakes, 0.4]], aspect: [0.4, 0.62], turn: 0.9, peak: 24, rugged: 0.35, d: 0.012, rockBias: [0.7, 0.3, 0], ridges: [2, 4], plateau: 0.6, bite: 1 };
     // The taiga: glaciated mountains and fjords.
     case "taiga":
-      return { ...base, id: A.highland, form: F.fjord, look: [[A.highland, 0.55], [A.lakes, 0.45]], aspect: [0.5, 0.62], turn: 0.4, peak: 105, rugged: 0.85, rockBias: [0.85, 0.15, 0], ridges: [2, 3] };
+      return { ...base, id: A.highland, form: F.fjord, look: [[A.highland, 0.55], [A.lakes, 0.45]], aspect: [0.5, 0.62], turn: 0.4, peak: 48, rugged: 0.7, rockBias: [0.85, 0.15, 0], ridges: [2, 3] };
     // The steppe: a plain. A wide lowland ramp, low swells, smooth slopes and a smooth coast.
     case "steppe":
       return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.4, 0.62], turn: 0.9, peak: 30, rugged: 0, d: 0.03, rockBias: [0.2, 0.5, 0.3], ridges: [2, 3], plateau: 0.75, bite: 0.5, grain: 0.35 };
@@ -113,7 +113,7 @@ function recipeBase(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
       return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 1]], aspect: [0.38, 0.6], turn: 0.9, peak: 85, rugged: 0.75, d: 0.006, rockBias: [0.85, 0.15, 0], ridges: [3, 5], bite: 1.3 };
     // The desert: a plateau with a broad flat top over lowland plains, hard beds over soft, a straight coast.
     case "desert":
-      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.5], [A.slate, 0.5]], aspect: [0.4, 0.62], turn: 0.9, peak: 70, rugged: 0, d: 0.004, rockBias: [0.5, 0, 0.5], ridges: [1, 2], plateau: 0.8, lowland: 0.08, bite: 0.75, grain: 0.5 };
+      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.5], [A.slate, 0.5]], aspect: [0.4, 0.62], turn: 0.9, peak: 34, rugged: 0, d: 0.004, rockBias: [0.5, 0, 0.5], ridges: [1, 2], plateau: 0.7, lowland: 0.25, bite: 0.75, grain: 0.5 };
     // The savanna: a plain, its rock domes added by the landforms.
     case "savanna":
       return { ...base, id: A.slate, form: F.belts, look: [[A.home, 0.42], [A.slate, 0.58]], aspect: [0.4, 0.62], turn: 0.9, peak: 34, rugged: 0.1, d: 0.025, rockBias: [0.6, 0.4, 0], ridges: [2, 3], plateau: 0.7, bite: 0.55, grain: 0.45 };
@@ -122,7 +122,7 @@ function recipeBase(recipe: Exclude<Recipe, "keep">, n: number): ArchetypeSpec {
       return { ...base, id: A.slate, form: F.belts, look: [[A.slate, 0.6], [A.karst, 0.4]], aspect: [0.38, 0.6], turn: 0.9, peak: 95, rugged: 1, d: 0.0015, rockBias: [0.5, 0.5, 0], ridges: [3, 5], bite: 1.35 };
     // The jungle: rugged limestone mountains over wide coastal plains (the towers stand on them).
     case "jungle":
-      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.58], [A.home, 0.42]], aspect: [0.4, 0.65], turn: 0.9, peak: 90, rugged: 0.9, d: 0.002, rockBias: [0.8, 0.2, 0], ridges: [3, 4], lowland: 0.3, bite: 1.2 };
+      return { ...base, id: A.karst, form: F.belts, look: [[A.karst, 0.58], [A.home, 0.42]], aspect: [0.4, 0.65], turn: 0.9, peak: 70, rugged: 0.9, d: 0.002, rockBias: [0.8, 0.2, 0], ridges: [3, 4], lowland: 0.42, bite: 1.2 };
   }
 }
 
