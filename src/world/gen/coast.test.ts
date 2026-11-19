@@ -562,7 +562,8 @@ test("stamps are well formed: sizes in range, unit directions, positions inside 
     } else if (s.kind === "cove") {
       assert.ok(s.len >= 0.7 * c.coveLen[0] && s.len <= c.coveLen[1]);
       assert.ok(2 * s.width < 0.75 * s.len, "longer than wide");
-      assert.ok(s.neck > 0.3 && s.neck < 0.65);
+      // From a keyhole's narrow gap to a bay open almost as wide as its head.
+      assert.ok(s.neck > 0.3 && s.neck < 0.96);
       assert.ok(s.sand === 0 || (s.sand >= 0.25 && s.sand <= 0.42));
       assert.ok(Math.abs(s.ax * s.ax + s.ay * s.ay - 1) < 1e-9);
     } else if (s.kind === "cut") {
