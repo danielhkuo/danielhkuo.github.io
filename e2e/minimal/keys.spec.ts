@@ -2,7 +2,7 @@
 // what the visitor is using: keys and a mouse get the prompt, a finger does not.
 
 import { expect, test } from "../support";
-import { enter, focused, lastCommand, offer, openMinimal, prompt, restingTop, settled, status } from "./minimal";
+import { enter, focused, lastCommand, offer, openMinimal, outputHeight, prompt, restingTop, settled, status } from "./minimal";
 
 test.describe("typing on a phone", () => {
   test("a typed command runs on Enter and keeps focus in the prompt", async ({ page }) => {
@@ -103,8 +103,10 @@ test.describe("typing at a desk", { tag: "@desktop" }, () => {
 });
 
 test.describe("a mouse in a short window", { tag: "@desktop" }, () => {
-  // Short, so that the projects file is taller than the window.
-  test.use({ viewport: { width: 1280, height: 520 } });
+  // Short, so that help's output is taller than the window. help is the longest output that depends on neither the
+  // pinned repos nor content.ts: 559px at this width. The projects file is one line long in a build without
+  // GITHUB_TOKEN, which has no repos, and the longest file from content.ts is 338px.
+  test.use({ viewport: { width: 1280, height: 440 } });
 
   test("a clicked command leaves the keys with the prompt, and long output starts at the top", async ({ page }) => {
     await openMinimal(page);
@@ -115,13 +117,17 @@ test.describe("a mouse in a short window", { tag: "@desktop" }, () => {
     await page.locator(".mt-log button", { hasText: "cat <file>" }).click();
     await expect(prompt(page)).toHaveValue("cat ");
     expect(await focused(page)).toBe("prompt");
-    // Read from its first line, with the prompt below the fold, though the prompt has the keys. The prompt held
-    // text here ("cat projects/"), and WebKit scrolls to a focused field whose value a script changes: the page must
-    // still be at the top of the output once it has settled.
-    await offer(page, "projects/").click();
-    await offer(page, "README.md").click();
-    await expect(lastCommand(page)).toHaveText("cat projects/README.md");
+    // A change of mind: help again, clicked in its own list while "cat " is on the prompt. Running it empties the
+    // prompt, and WebKit scrolls to a focused field whose value a script changes. The page must still be at the top
+    // of the output once it has settled, with the prompt below the fold, though the prompt has the keys.
+    await page.locator(".mt-log .mt-help dt button", { hasText: /^help$/ }).first().click();
+    await expect(page.locator(".mt-log .mt-typed-cmd")).toHaveText(["help", "help"]);
     await expect(prompt(page)).toHaveValue("");
+    const height = page.viewportSize()?.height ?? 0;
+    expect(
+      await outputHeight(page),
+      `the premise: help prints more than the ${height}px window holds, or the page cannot bring its first line to the top. If this fails, help got shorter: make the window shorter.`,
+    ).toBeGreaterThan(height);
     const top = await restingTop(page);
     expect(top).toBeGreaterThanOrEqual(32);
     expect(top).toBeLessThan(60);

@@ -78,6 +78,20 @@ export async function restingTop(page: Page): Promise<number> {
   return page.locator(".mt-log .mt-cmd").last().evaluate((el) => el.getBoundingClientRect().top);
 }
 
+/**
+ * How tall the last command's output is: from its own line to the prompt. The same wherever the page is scrolled.
+ * A test of where long output comes to rest checks this first: output shorter than the window cannot be brought to
+ * the top, and the page rightly leaves it resting on the prompt instead.
+ */
+export function outputHeight(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const echo = [...document.querySelectorAll(".mt-log .mt-cmd")].pop();
+    const form = document.querySelector(".mt-form");
+    if (!echo || !form) throw new Error("no command's line, or no prompt");
+    return form.getBoundingClientRect().top - echo.getBoundingClientRect().top;
+  });
+}
+
 /** Types a line at the prompt and enters it. */
 export async function enter(page: Page, line: string): Promise<void> {
   await prompt(page).fill(line);
