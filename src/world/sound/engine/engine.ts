@@ -20,7 +20,7 @@ import { TAIL_S } from "../synth/probe.ts";
 import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
 import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
-import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
+import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
 import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
@@ -32,6 +32,7 @@ import { buildFalls, type Falls } from "./falls.ts";
 import { buildGulls, type Gulls } from "./gulls.ts";
 import { buildHub, type Hub } from "./hub.ts";
 import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
+import { buildRain } from "./rain.ts";
 import { buildRiverBed } from "./river.ts";
 import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
@@ -156,6 +157,8 @@ const FADE_STEPS = 12;
 const FADE_FOOT = 0.02;
 
 const MIX_EVERY = 1 / 30;
+/** The scheduler looks at most this often on the page, seconds (a hair under a sixtieth, so a 60 Hz display looks every frame). */
+const SCHED_EVERY = 1 / 60 - 1e-4;
 
 /** What a frame did, as bits. */
 export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128 } as const;
@@ -291,6 +294,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     demand("bed", [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], buildSurfBed, master.bus.water, BED_ON, BED_OFF, true),
     demand("open", [T.OPEN], buildOpenSea, master.bus.water, BED_ON, BED_OFF, true),
     demand("river", [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE], buildRiverBed, master.bus.water, BED_ON, BED_OFF, true, true),
+    // Rain: only while a shower is heard (its noises and the brook's bubbles come with the surf's and the river's kits).
+    demand("rain", [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ], buildRain, master.bus.water, BED_ON, BED_OFF, true, true),
     // The whistles: only when the dragon is going fast enough for them to be heard (they are 26 dB under the rush at
     // cruise). On above 30 % of their fullest (s > 1.1), off after two seconds under 25 %.
     // The whoosh: only round a turn.
@@ -312,6 +317,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let lookahead = LOOKAHEAD;
   const reading: ClockReading = { currentTime: 0, outputLatency: 0, stamp: null, now: 0 };
   let lastMix = NaN;
+  /** World time the scheduler last looked. */
+  let lastSched = NaN;
   let lastWaves = NaN;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
@@ -384,6 +391,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     return v.steps.length === 0;
   };
 
+  /** World time before which build() is not asked again (it had nothing to do). */
+  let buildIdleUntil = -Infinity;
   /** At most one build step a frame on the page, so no frame pays for a whole graph. */
   const build = (now: number) => {
     if (opts.tone) return;
@@ -521,6 +530,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
           b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
           b.built = false;
           b.quietSince = NaN;
+          // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
+          buildIdleUntil = -Infinity;
         }
         continue;
       }
@@ -700,7 +711,13 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
         look = lookahead;
       }
-      build(now);
+      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second. A bed
+      // made by tendBeds asks at once (it would otherwise come in up to half a second late), and every other voice is
+      // built once, while the kit comes in. Offline renders build every frame.
+      if (offline || !(pose.t < buildIdleUntil) || pose.t < buildIdleUntil - 1) {
+        build(now);
+        if (!offline && (work & WORK.build) === 0 && kit.done()) buildIdleUntil = pose.t + 0.5;
+      }
       readLimiter(now);
       if (!live && pending === null) return;
 
@@ -739,8 +756,10 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         for (const tap of IR_TAPS) onsets.push(at + tap[0] + LIMITER_DELAY_S);
       }
 
-      // The scheduler, every frame.
-      if (sources.length) {
+      // The scheduler, every frame up to sixty a second (it looks a quarter of a second ahead: on a faster display a
+      // look every other frame only widens its window). Offline renders step at 60 and look every step.
+      if (sources.length && (offline || !(pose.t - lastSched < SCHED_EVERY) || dt < 0 || dt > STALL)) {
+        lastSched = pose.t;
         due.length = 0;
         last.night = pose.night ?? 0;
         scheduler.pass(pose.t, dt, look, due);
@@ -1037,11 +1056,12 @@ function localEar(n: number, land: Land): Listener {
 }
 
 /**
- * The ear in its worker. Each frame the page gathers the share of the frame's lattice that the time since the last
- * frame calls for (about four thousand pixel reads at 60 Hz) into a buffer; ten times a second the buffer is handed
- * over, and the Hearing comes back a moment later. Two buffers take turns.
+ * The ear in its worker. Each frame the page copies the share of the frame's rows that the time since the last frame
+ * calls for (a native copy a row; it used to gather the lattice itself, a read a sample, the sound's largest cost on
+ * the page) into a frame laid out as the pass's first; ten times a second the buffer is handed over, the worker
+ * gathers its lattice from it, and the Hearing comes back a moment later. Two buffers take turns.
  */
-function remoteEar(n: number, land: Land): Listener | null {
+export function remoteEar(n: number, land: Land): Listener | null {
   let worker: Worker;
   try {
     worker = new Worker(new URL("../ear.worker.ts", import.meta.url), { type: "module" });
@@ -1054,7 +1074,7 @@ function remoteEar(n: number, land: Land): Listener | null {
   const spare: Uint32Array[] = [];
   const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
   /** The message and its transfer list, reused for every pass. */
-  const message = { kind: "pass" as const, bake: null as Uint32Array | null, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
   const transfer: ArrayBuffer[] = [];
   /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
   let into: Uint32Array | null = null;
@@ -1092,11 +1112,13 @@ function remoteEar(n: number, land: Land): Listener | null {
       if (dead || !bake || !rect || !(dt > 0)) return hearing;
       if (!into) {
         // A new pass, when a buffer is free: it begins with this frame's rect and this frame's dragon.
-        const lat = latticeOf(rect);
-        const size = lat.cols * lat.rows;
+        const size = rect.w * rect.h;
         if (heardSpare.length === 0) return hearing;
         let buffer = spare.pop();
-        if (buffer && buffer.length !== size) buffer = undefined;
+        // A buffer too small for this frame (the window has grown) is let go and a bigger one takes its place, so two
+        // always take turns. (Buffers once had to match the lattice exactly, and its size changes with the parity of
+        // the frame's first row: two crossings into flight both were thrown away and the ear stopped for good.)
+        if (buffer && buffer.length < size) buffer = new Uint32Array(size);
         if (!buffer && made < 2) {
           buffer = new Uint32Array(size);
           made++;
@@ -1116,7 +1138,7 @@ function remoteEar(n: number, land: Land): Listener | null {
       }
       const rows = latticeOf(home).rows;
       const to = Math.min(1, progress + dt / PASS);
-      gatherRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
+      copyRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
       progress = to;
       if (to >= 1) {
         const heard = heardSpare.pop() as Float64Array;

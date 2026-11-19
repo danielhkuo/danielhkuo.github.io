@@ -34,6 +34,15 @@ export function latticeOf(rect: { x: number; y: number; w: number; h: number }):
   return { px0, py0, cols: (rect.w - px0 + 1) >> 1, rows: (rect.h - py0 + 1) >> 1 };
 }
 
+/**
+ * Room for the lattice of any frame of this size. Where a side is odd the lattice has a row or a column more or less
+ * by the parity of the frame's first pixel, which changes each time the camera crosses a bake row: many times a
+ * second in flight. A buffer is made with room for the larger count, so it takes either.
+ */
+export function latticeRoom(rect: { w: number; h: number }): number {
+  return ((rect.w + 1) >> 1) * ((rect.h + 1) >> 1);
+}
+
 /** The land the ear listens to. */
 export interface EarWorld {
   /** World size, cells. */
@@ -523,7 +532,7 @@ export function createEar(): Ear {
         if (bake.length >= lat.cols * lat.rows) bakeRows(pose, bake, rect, r0, r1, lanes, true);
       } else if (bake.length >= rect.w * rect.h) {
         // A whole frame is gathered to its lattice first, as the page gathers it for the worker: one way of reading it.
-        if (own.length !== lat.cols * lat.rows) own = new Uint32Array(lat.cols * lat.rows);
+        if (own.length < lat.cols * lat.rows) own = new Uint32Array(latticeRoom(rect));
         // (The row above the first is needed again: squares and river neighbours look up.)
         gatherRows(own, rect, bake, rect, Math.max(0, r0 - 1), r1);
         bakeRows(pose, own, rect, r0, r1, lanes, true);
@@ -599,5 +608,35 @@ export function gatherRows(
       }
       into[row + c] = v;
     }
+  }
+}
+
+/**
+ * Copies the frame's pixel rows that lattice rows [r0, r1) of `home` read (each row and the one below it) from the
+ * frame as it is now (`bake`, `rect`) into `into`, a whole frame laid out as `home` is; what has slid out of view is
+ * left as haze (0). Run over a pass, a few rows a frame, it holds what gatherRows would have read, from the same frames:
+ * gathered from it (as the ear's worker does), the lattice is the same but for the last row's look below and the last
+ * column's look east, which see the edge of `home` where the moving frame might still have had a pixel. On the page it
+ * is a native copy a row, a few microseconds a frame, where the gather itself was a read a sample.
+ */
+export function copyRows(
+  into: Uint32Array, home: { x: number; y: number; w: number; h: number }, bake: Uint32Array, rect: { x: number; y: number; w: number; h: number }, r0: number, r1: number,
+): void {
+  const lat = latticeOf(home);
+  const hw = home.w, y0 = lat.py0 + 2 * r0, y1 = Math.min(home.h, lat.py0 + 2 * r1);
+  if (y1 <= y0) return;
+  // Home pixel (x, y) is the frame's (x − dx, y − dy) now.
+  const dx = Math.floor(rect.x) - Math.floor(home.x), dy = Math.floor(rect.y) - Math.floor(home.y), w = rect.w, h = rect.h;
+  const xa = Math.max(0, dx), xb = Math.min(hw, dx + w);
+  for (let y = y0; y < y1; y++) {
+    const row = y * hw, sy = y - dy;
+    if (sy < 0 || sy >= h || xb <= xa) {
+      into.fill(0, row, row + hw);
+      continue;
+    }
+    if (xa > 0) into.fill(0, row, row + xa);
+    if (xb < hw) into.fill(0, row + xb, row + hw);
+    const from = sy * w + (xa - dx);
+    into.set(bake.subarray(from, from + (xb - xa)), row + xa);
   }
 }

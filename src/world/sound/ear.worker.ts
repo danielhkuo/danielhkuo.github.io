@@ -14,8 +14,11 @@ export type EarRequest =
   /** The land: n cells a side, and for each node of the gN × gN grid whether it is sea (1). */
   | { kind: "world"; n: number; gN: number; sea: Uint8Array | null }
   | { kind: "warp"; warp: Uint8Array }
-  /** One pass: the lattice of the frame `rect`, the dragon, and the lane mask. The buffer comes back with the Hearing. */
-  | { kind: "pass"; bake: Uint32Array; heard: Float64Array; rect: { x: number; y: number; w: number; h: number }; x: number; y: number; alt: number; t: number; lanes: number };
+  /**
+   * One pass: the frame `rect` (its pixel rows, as the page copied them, or only its lattice when `packed`), the dragon,
+   * and the lane mask. The buffer comes back with the Hearing.
+   */
+  | { kind: "pass"; bake: Uint32Array; packed: boolean; heard: Float64Array; rect: { x: number; y: number; w: number; h: number }; x: number; y: number; alt: number; t: number; lanes: number };
 
 /** Both buffers come back, transferred: the lattice to be filled again, and the Hearing packed as numbers (types.ts). */
 export interface EarReply {
@@ -43,7 +46,7 @@ scope.onmessage = (event: MessageEvent) => {
     pose.x = m.x;
     pose.y = m.y;
     pose.alt = m.alt;
-    packHearing(ear.pass(pose, { bake: m.bake, rect: m.rect, t: m.t, packed: true }, m.lanes), m.heard);
+    packHearing(ear.pass(pose, { bake: m.bake, rect: m.rect, t: m.t, packed: m.packed }, m.lanes), m.heard);
     scope.postMessage({ heard: m.heard, bake: m.bake } satisfies EarReply, [m.bake.buffer as ArrayBuffer, m.heard.buffer as ArrayBuffer]);
   }
 };

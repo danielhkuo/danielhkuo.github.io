@@ -190,6 +190,37 @@ export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;
 export const BED_OFF_S = 2;
 
+// ── Rain (§13) ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The rain bed's shape (§14.2). The drops (synth/drops.ts) and the plinks (read `plinkRate` times their speed) are
+ * each read three times, `across`: at its rate (a share of the layer's), set at its place (pan), its pitch wandering
+ * on drift channel `drift` by `cents` × `wanderCents` (the drift runs −1 … 1: two of the three never wander together);
+ * the plinks by `plinkCents`.
+ * The plinks (synth/bubbles.ts, `RAIN_PLINKS`: their sizes give them their range of pitch) are read near their own
+ * speed, `plinkSpread`, so each read comes round only every 11 s or so. The sheet: pink noise through a wide band-pass and a low-pass. The water's
+ * fizz: white noise above `fizzHz`, its top
+ * shelved, a share `fizzShare` of the bubbles' level. Q is linear for the band-passes. `landFloor`: the drops' share
+ * over open sea (on the dragon and the waves).
+ */
+export const RAIN = {
+  across: [
+    { rate: 1, pan: -0.8, drift: 0, cents: 1 },
+    { rate: 1.137, pan: 0, drift: 1, cents: 1 },
+    { rate: 0.883, pan: 0.8, drift: 0, cents: -1 },
+  ],
+  wanderCents: 30, plinkCents: 60,
+  sheetHz: 2000, sheetQ: 0.5, sheetTopHz: 4500,
+  plinkHz: 2400, plinkQ: 0.6, plinkRate: 1, plinkSpread: [1.06, 0.95, 1.0], fizzHz: 5000, fizzShare: 0.2,
+  topHz: 7000, topDb: -9,
+  landFloor: 0.25,
+};
+/**
+ * Rain's gains at a full shower (linear). Set (§14.2) so that most drops carry over the wind and the surf: a full
+ * shower alone is −26.4 LUFS over land, −33 over open sea, and adds about 1 LU at the coast.
+ */
+export const K_RAIN = { patter: 0.24, sheet: 0.021, fizz: 0.1 };
+
 // ── Rivers and falls (§3.2, §4.4, §4.5) ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -243,8 +274,11 @@ export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
 /**
  * A call's notes, a startled bird's keks and its wingbeats, linear (their buffers peak at 0.5), and the reverb
  * send's level. Calibrated: a call 40 cells off peaks at −30 LUFS momentary.
+ * `near`: the most a startled bird is given of a lone bird's level (1 within the small class's reference distance),
+ * so the nearest are heard as one about 51 cells off. Without it, birds put up close ahead of a boosting flier, two
+ * at once, peaked at −3.8 dBTP in the recorded flights (§9.1's bar is −4.5); the bench's beach pass is unchanged (§13).
  */
-export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158 };
+export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.7 };
 
 // ── The clock and the moments (§4.8–4.10) ────────────────────────────────────────────────────────────────────────────
 

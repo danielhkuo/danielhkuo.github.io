@@ -154,11 +154,13 @@ Last updated 2026-11-19.
   gulls at the town and the lighthouses (tuned to a published sonogram), startled gulls on a low pass; the clock's
   figures and an original tune; the train, seaplane, ferry and baths, and the church flock, each in step with its
   picture through shared position functions in `live/moments.ts`. Mist muffles the world (not the wind); gulls roost
-  at night. Reduced motion (the options' or the system's) softens the motion-linked sound. The tab hidden or the sound
-  off: faded, then suspended. Listen at `/world-sound` (every scene, live, and offline renders with
-  `node scripts/world-sound.mjs`, checked by `scripts/world-sound-check.mjs` for loudness, clipping, clicks and
-  spectrograms). Frame budget (merged tree, five pairs): +0.10 ms on the 4× p95 with sound on, sound's own work
-  0.1 ms p95 a frame at 1× (design §13).
+  at night; showers bring rain: drops on land, plinks on water, a sheet of hiss in a heavy one, no loop heard twice
+  (design §14.2, four blind A/Bs). Reduced motion (the options' or the system's) softens the motion-linked sound. The
+  tab hidden or the sound off: faded, then suspended. Listen at `/world-sound` (every scene, live, two recorded
+  flights, and offline renders with `node scripts/world-sound.mjs`, checked by `scripts/world-sound-check.mjs` for
+  loudness, clipping, clicks and spectrograms). The whole mix on a recorded flight: −22.9 LUFS, range 6.9 LU, true peak
+  −5.0 dBTP. The live ear went deaf after two seconds until 2026-11-19 (§14.1, fixed); with it working, sound costs a
+  mean of 31 µs a frame at 1× (p95 0.1 ms) and 118 µs at 4×, where it adds about 0.2–0.4 ms to the frame p95 (§14.4).
 - **End-to-end suite and a WebKit pass** (2026-11-19, `claude/e2e-webkit-3824c0`). `npm run e2e` builds the export
   and runs Playwright in Chromium and WebKit, at desktop and phone sizes. It covers opening the world (no haze, the
   frame filling the window), keyboard flight, the lesson, the options, landing and the Codex, the abbey's terminal, a
@@ -261,12 +263,17 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
-- **Sound, what is left.** A rain bed for the showers (drops on land, bubbles on water) and the final re-pin of every
-  level against the whole mix: both wait for Fable (its usage limit, 2026-11-19). Later moments (the airship, the
-  marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12). Headphones (HRTF) as an
-  option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the small hours. Tall
-  falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills, and sounds for the
-  rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
+- **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
+  the way, each for its own A/B: the open sea's wash repeats every 4.855 s (r = 0.97; the rain's pitch wander would
+  break it) and the coast's wind every 5.000 s (r ≈ 0.5); the river's brook loop (9.7 s) should get the same loop
+  test. Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  shower; spec §14.2).
+  The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
+  rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
+  moments (the airship, the marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12).
+  Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
+  small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
+  and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
 
@@ -420,8 +427,7 @@ From the first-flight review:
   ("ambient" session); in desktop Safari, a sound panned hard left (WebKit 257447; the engine pans by gain pairs, not
   StereoPannerNode); with Bluetooth headphones, whether the abbey's bells meet the clock's figures. Listening set:
   `side-session-notes/…/sound-listening/index.html`.
-- Owner: the clock's tune in two public melody indexes (Musipedia's contour search, FolkTuneFinder): both need one
-  "Verify you are human" tick in the app's browser. The corpus check (13,367 tunes) found nothing close; see
-  `research/2026-11-19-clock-tune-originality.md`.
+- ~~The clock's tune in a public melody index~~ Done 2026-11-19: Musipedia's contour search (run by the owner) and the
+  corpus check (13,367 tunes) find nothing that tracks it; see `research/2026-11-19-clock-tune-originality.md`.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
   `PAGES` list once it passes.
