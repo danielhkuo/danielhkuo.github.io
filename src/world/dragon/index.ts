@@ -19,8 +19,8 @@ export interface Dragon {
    * (0 flying … 1 resting) settles the undulation's swing toward REST_SWING.
    */
   step(s: FlightState, dt: number, rest?: number): void;
-  /** Draws the dragon at the flier, with its shadow, depth-tested against the land. */
-  draw(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land): void;
+  /** Draws the dragon at the flier, with its shadow, depth-tested against the land; `wind` false leaves out a boost's streaks. */
+  draw(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, wind?: boolean): void;
   pose: Pose;
 }
 
@@ -37,8 +37,8 @@ export function createDragon(n: number): Dragon {
       const swing = 1 - (1 - REST_SWING) * rest;
       pose.swing += (swing - pose.swing) * Math.min(1, SWING_EASE * dt);
     },
-    draw(out, rect, s, view) {
-      drawRiver(out, rect, s, view, pose, LACQUER);
+    draw(out, rect, s, view, wind = true) {
+      drawRiver(out, rect, s, view, pose, LACQUER, wind);
     },
   };
 }

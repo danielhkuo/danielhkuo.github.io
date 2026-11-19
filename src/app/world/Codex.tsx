@@ -1,7 +1,7 @@
 "use client";
 
 // The Codex: what is kept at the landmark the dragon has landed on, on a leaf of Ink & Glyph paper. Game layer: hand
-// drawn in CSS and SVG, not Astryx. Also the prompt that offers a landing.
+// drawn in CSS and SVG, not Astryx. (The prompt that offers a landing is drawn into the world: controls/guides.ts.)
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { LINKS, PROFILE } from "../../components/terminal/content";
@@ -31,10 +31,6 @@ function dateOf(iso: string): string | null {
 /** A count, in words when there are none: the face's old-style zero reads as a letter o. */
 function count(n: number): string {
   return n === 0 ? "none yet" : n.toLocaleString("en-GB");
-}
-
-function capitalised(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** Four overlapping circles: the quatrefoil, inked, filled with `fill`. */
@@ -239,25 +235,5 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }:
         </p>
       </div>
     </dialog>
-  );
-}
-
-/** The offer to land at a landmark in reach: a button, so a tap lands too. */
-export function LandPrompt({ landmark, onLand }: { landmark: Landmark; onLand: () => void }) {
-  const held = landmark.holds.kind === "project" ? landmark.holds.project.name : landmark.holds.kind === "about" ? "About me" : null;
-  return (
-    <button type="button" className={`${styles.prompt} ${fell.variable}`} onClick={onLand} aria-keyshortcuts="Space Enter">
-      <Quatrefoil className={styles.promptMark} />
-      <span>
-        {capitalised(`land at the ${kindName(landmark.type)}`)}
-        {held ? (
-          <>
-            {" "}
-            · <em>{held}</em>
-          </>
-        ) : null}
-      </span>
-      <kbd>Space</kbd>
-    </button>
   );
 }

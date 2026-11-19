@@ -246,9 +246,10 @@ function turned(a: number, b: number): number {
  * either side by a wave of phase pose.wave, and each ring rolls into the turn the head was making when it passed
  * there (s.bank at the head). Above cruising speed the wind of the boost is drawn under the body. Every pixel is depth-tested against the land.
  */
-export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, pose: Pose, look: Look = LACQUER): void {
+export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, pose: Pose, look: Look = LACQUER, wind = true): void {
   const kit = kitOf(look), n = pose.n;
-  const windy = windAmount(s.speed) > 0;
+  // Without `wind` (reduced motion) a boost draws no streaks.
+  const windy = wind && windAmount(s.speed) > 0;
   const joints = pose.chain.joints(windy ? WIND_JOINTS : JOINTS, FINE);
   const k = (2 * Math.PI) / WAVE_LENGTH;
   const finFrom = FIN_ROOT * FINE;
