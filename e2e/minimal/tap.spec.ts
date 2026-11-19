@@ -2,7 +2,7 @@
 // and file names in the terminal's own output. A tap gives the prompt no focus, so a phone's keyboard stays shut.
 
 import { expect, test } from "../support";
-import { enter, focused, lastCommand, offer, openMinimal, prompt, restingTop, status } from "./minimal";
+import { enter, focused, lastCommand, offer, openMinimal, outputHeight, prompt, restingTop, status } from "./minimal";
 
 test.describe("commands by tap", () => {
   test("the jump button brings the prompt on screen without focusing it, then goes away", async ({ page }) => {
@@ -31,6 +31,11 @@ test.describe("commands by tap", () => {
     await page.locator(".mt-jump").tap();
     await offer(page, "help").tap();
     await expect(lastCommand(page)).toHaveText("help");
+    const height = page.viewportSize()?.height ?? 0;
+    expect(
+      await outputHeight(page),
+      `the premise: help prints more than the ${height}px screen holds. If this fails, help got shorter: use a longer output that does not depend on the pinned repos.`,
+    ).toBeGreaterThan(height);
     // Under the title bar (32px), with nothing of it cut off.
     const top = await restingTop(page);
     expect(top).toBeGreaterThanOrEqual(32);
