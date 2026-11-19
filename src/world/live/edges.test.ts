@@ -309,3 +309,55 @@ test("figures on the town clock cross the frame's edges whole", () => {
   noEdges(sweep(big, () => moments, 4, undefined, 3), "the clock's figures");
 });
 
+
+/**
+ * A flight past the start view's beach, as coast.test.ts flies it: north along the shore low over the gulls, then a
+ * coil down onto the beach, turning ever faster as it slows. The gulls it puts up keep their flight through the turn.
+ */
+function pastTheBeach(): { t: number; fl: Flier }[] {
+  const out: { t: number; fl: Flier }[] = [];
+  const dt = 1 / 30;
+  let x = 5760, y = 3900, heading = -Math.PI / 2, t = 20;
+  for (let k = 0; k < 45; k++, t += dt) {
+    y -= 60 * dt;
+    out.push({ t, fl: { x, y, alt: 20, heading, speed: 60 } });
+  }
+  const cx = 5770, cy = 3800;
+  let phi = Math.atan2(y - cy, x - cx), r = Math.hypot(x - cx, y - cy);
+  for (let k = 0; k < 90; k++, t += dt) {
+    const speed = 60 - 57 * (k / 120);
+    phi -= (speed / r) * dt;
+    r = Math.max(8, r - 0.3);
+    x = cx + r * Math.cos(phi);
+    y = cy + r * Math.sin(phi);
+    heading = phi - Math.PI / 2;
+    out.push({ t, fl: { x, y, alt: 20 - 15 * (k / 120), heading, speed } });
+  }
+  return out;
+}
+
+test("gulls already in the air cross the frame's edges whole while the flier turns away from them", async () => {
+  const big = await shot("start", 640, 400);
+  const path = pastTheBeach();
+  const whole = lifeLayer(ctx);
+  // Cuts whose edges sweep across the beach and the sky over it, each drawn by its own layer, frame after frame.
+  const cuts: { ox: number; oy: number; layer: LiveLayer; bad: number }[] = [];
+  for (let ox = 0; ox <= 240; ox += 30) cuts.push({ ox, oy: 87, layer: lifeLayer(ctx), bad: 0 });
+  for (let oy = 0; oy <= 175; oy += 25) cuts.push({ ox: 120, oy, layer: lifeLayer(ctx), bad: 0 });
+  let flying = 0;
+  for (const { t, fl } of path) {
+    const ref = frameOf(big, t, fl);
+    const log: Placed[] = [];
+    (whole as ReturnType<typeof lifeLayer>).log = log;
+    whole.draw(ref);
+    flying += log.filter((p) => p.kind === "gull-startled").length;
+    for (const c of cuts) {
+      const f = frameOf(cut(big, c.ox, c.oy, 400, 225), t, fl);
+      c.layer.draw(f);
+      for (let r = 0; r < 225; r++) for (let x = 0; x < 400; x++) if (f.out[r * 400 + x] !== ref.out[(c.oy + r) * 640 + c.ox + x]) c.bad++;
+    }
+  }
+  assert.ok(flying > 50, `gulls are up through the flight (${flying} sightings)`);
+  const bad = cuts.filter((c) => c.bad > 0).map((c) => `cut at +${c.ox},+${c.oy}: ${c.bad} px over the flight`);
+  assert.equal(bad.length, 0, `cuts draw differently from the view they were cut from:\n${bad.join("\n")}`);
+});

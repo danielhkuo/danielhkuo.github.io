@@ -12,7 +12,7 @@
 import { hash2 } from "../core/hash.ts";
 import { pcos, psin } from "../core/psin.ts";
 import { isBuilt, isCrop, isWater, MATERIAL as M } from "../look/materials.ts";
-import { artSet, blend, frameX, groundRow, modP, ringDelta, smooth01 } from "./art.ts";
+import { artSet, blend, frameX, frameY, groundRow, modP, ringDelta, smooth01 } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import type { LayerContext } from "./registry.ts";
 import { bakeAt, bakeBox, worldRowAt, type LiveSprite } from "./sprites.ts";
@@ -765,22 +765,44 @@ const NEIGH_Y = [0, 0, 1, -1, 1, 1, -1, -1];
 /**
  * The flier's wake: while it is within WAKE_LOW of water, a short V of foam trails behind it along the way it has
  * come, so it bends through a turn; the marks lie still on the water, spread as they age and are gone within
- * WAKE_LONG cells or WAKE_LASTS seconds. The layer keeps the flier's last few places for this and nothing else; where
- * it has none (the first frame, or after a jump) the heading held straight stands in for them.
+ * WAKE_LONG cells or WAKE_LASTS seconds. The layer keeps the flier's last few places for this and nothing else: where
+ * each was, when, the water's level under it and how strongly the foam was laid there (none over land, or from high
+ * up). Foam already laid stays on its water and fades as it ages whatever the flier does next: crossing the shore,
+ * climbing or slowing. Where the layer has no places (the first frame, or after a jump) the heading held straight
+ * stands in for them.
  */
 export function wakeLayer(): LiveLayer {
   // The track: places the flier has been, newest last, each WAKE_STEP or more from the one before, with how far it
-  // had come by then. Unwrapped, so the track runs on across the world's seam.
+  // had come by then, the time, the water's level under it (NaN where there was none in view) and the foam's strength
+  // there. Unwrapped, so the track runs on across the world's seam.
   const tx = new Float64Array(WAKE_KEEP), ty = new Float64Array(WAKE_KEEP), run = new Float64Array(WAKE_KEEP);
+  const tt = new Float64Array(WAKE_KEEP), tl = new Float64Array(WAKE_KEEP), ts = new Float64Array(WAKE_KEEP);
   let kept = 0, lastT = -Infinity;
-  // The line the foam lies on, from the flier back: its corners, and how far behind the flier each is.
+  // The line the foam lies on, from the flier back: its corners, how far behind the flier each is, how old, and the
+  // water's level and the foam's strength there.
   const lx = new Float64Array(WAKE_KEEP + 2), ly = new Float64Array(WAKE_KEEP + 2), lb = new Float64Array(WAKE_KEEP + 2);
+  const la = new Float64Array(WAKE_KEEP + 2), ll = new Float64Array(WAKE_KEEP + 2), ls = new Float64Array(WAKE_KEEP + 2);
   return {
     name: "wake",
     draw(f: LiveFrame): void {
       const fl = f.flier;
       if (!fl) return;
+      const { out, bake, palette } = f;
+      const w = f.rect.w, h = f.rect.h;
       const hx = pcos(fl.heading), hy = psin(fl.heading);
+
+      // The water under the flier now, if it is in view: its level, and how strongly foam is laid on it (by the
+      // flier's height over it, and fading out as it slows to a stop).
+      // The flier may be past the frame's edge with its foam on it: its water is read from the land there too.
+      let level = NaN, strength = 0;
+      const px = frameX(f, fl.x, WAKE_REACH_X);
+      const gy = px < w + WAKE_REACH_X ? groundRow(f, px, fl.y, WAKE_REACH_Y) : null;
+      if (gy !== null && isWater[bakeAt(f, px, gy) & 255] === 1) {
+        level = 0.8 * worldRowAt(f, px, gy) - (f.rect.y + gy);
+        const over = fl.alt - level;
+        if (over >= 0 && over < WAKE_LOW) strength = smooth01((WAKE_LOW - over) / 10) * smooth01((fl.speed - 4) / 8);
+      }
+
       // Where the flier is, on the track's own turn of the world, and how far it has come.
       let x = fl.x, y = fl.y, come = fl.x * hx + fl.y * hy;
       if (kept > 0) {
@@ -799,80 +821,94 @@ export function wakeLayer(): LiveLayer {
           tx.copyWithin(0, 1);
           ty.copyWithin(0, 1);
           run.copyWithin(0, 1);
+          tt.copyWithin(0, 1);
+          tl.copyWithin(0, 1);
+          ts.copyWithin(0, 1);
           kept--;
         }
         tx[kept] = x;
         ty[kept] = y;
+        tt[kept] = f.t;
+        tl[kept] = level;
+        ts[kept] = strength;
         run[kept++] = come;
       }
-      if (fl.speed < 8) return;
 
-      const { out, bake, palette } = f;
-      const w = f.rect.w, h = f.rect.h;
-      // The foam lies up to WAKE_REACH_X pixels either side of the water under the flier and WAKE_REACH_Y rows above or
-      // below it: water that far past the frame's edge is looked for too.
-      const px = frameX(f, fl.x, WAKE_REACH_X);
-      if (px >= w + WAKE_REACH_X) return;
-      const gy = groundRow(f, px, fl.y, WAKE_REACH_Y);
-      if (gy === null || isWater[bakeAt(f, px, gy) & 255] === 0) return;
-      const surface = 0.8 * worldRowAt(f, px, gy) - (f.rect.y + gy);
-      const over = fl.alt - surface;
-      if (over < 0 || over >= WAKE_LOW) return;
-      const strength = smooth01((WAKE_LOW - over) / 10);
-      const white = palette[(M.whitewash << 8) | 15];
-      const reach = Math.min(WAKE_LONG, fl.speed * WAKE_LASTS);
-
-      // The line: the flier, the track back from it, then straight on the way the last of it ran.
-      let m = 1;
+      // The line: the flier, the track back from it, then straight on the way the last of it ran (as old as it would
+      // be had the flier come that way at its speed, laid as the last of it was).
+      let m = 1, any = strength > 0;
       lx[0] = 0;
       ly[0] = 0;
       lb[0] = 0;
-      for (let k = kept - 1; k >= 0 && lb[m - 1] < reach; k--) {
+      la[0] = 0;
+      ll[0] = level;
+      ls[0] = strength;
+      for (let k = kept - 1; k >= 0 && lb[m - 1] < WAKE_LONG; k--) {
         if (come - run[k] - lb[m - 1] < 0.25) continue;
         lx[m] = tx[k] - x;
         ly[m] = ty[k] - y;
-        lb[m++] = come - run[k];
+        lb[m] = come - run[k];
+        la[m] = f.t - tt[k];
+        ll[m] = tl[k];
+        ls[m] = ts[k];
+        if (ts[k] > 0 && la[m] < WAKE_LASTS) any = true;
+        m++;
       }
-      if (lb[m - 1] < reach) {
+      if (!any) return;
+      if (lb[m - 1] < WAKE_LONG) {
         let ux = -hx, uy = -hy;
         if (m > 1) {
           const len = Math.hypot(lx[m - 1] - lx[m - 2], ly[m - 1] - ly[m - 2]) || 1;
           ux = (lx[m - 1] - lx[m - 2]) / len;
           uy = (ly[m - 1] - ly[m - 2]) / len;
         }
-        const more = reach - lb[m - 1] + 1;
+        const more = WAKE_LONG - lb[m - 1] + 1;
         lx[m] = lx[m - 1] + ux * more;
         ly[m] = ly[m - 1] + uy * more;
         lb[m] = lb[m - 1] + more;
+        la[m] = fl.speed > 0 ? la[m - 1] + more / fl.speed : Infinity;
+        ll[m] = ll[m - 1];
+        ls[m] = ls[m - 1];
         m++;
       }
 
       // Marks every WAKE_STEP of the way come, so each lies where it was laid as the flier goes on.
+      const white = palette[(M.whitewash << 8) | 15];
       const first = Math.floor(come / WAKE_STEP);
       let seg = 1;
       for (let j = 1; ; j++) {
         const behind = come - (first - j) * WAKE_STEP;
-        if (behind >= reach) break;
+        if (behind >= WAKE_LONG || behind >= lb[m - 1]) break;
         while (seg < m - 1 && lb[seg] < behind) seg++;
         const k = (behind - lb[seg - 1]) / (lb[seg] - lb[seg - 1]);
+        // Older the further back: once past WAKE_LASTS, so is all the rest.
+        const age = la[seg - 1] + (la[seg] - la[seg - 1]) * k;
+        if (!(age < WAKE_LASTS)) break;
+        const fade = 1 - Math.max(behind / WAKE_LONG, age / WAKE_LASTS);
+        const a = Math.round(170 * (ls[seg - 1] + (ls[seg] - ls[seg - 1]) * k) * fade);
+        if (a < 6) continue;
+        // The water's level there: where one end of the stretch had none in view, the other's.
+        const l0 = ll[seg - 1], l1 = ll[seg];
+        const lvl = l0 !== l0 ? l1 : l1 !== l1 ? l0 : l0 + (l1 - l0) * k;
         const ex = lx[seg] - lx[seg - 1], ey = ly[seg] - ly[seg - 1];
         const len = Math.sqrt(ex * ex + ey * ey) || 1;
         const cx = lx[seg - 1] + ex * k, cy = ly[seg - 1] + ey * k;
-        const fade = 1 - behind / reach;
         const spread = 1 + behind * WAKE_SPREAD;
-        const a = Math.round(170 * strength * fade);
-        if (a < 6) continue;
         for (let side = -1; side <= 1; side += 2) {
           // Broken foam from the first, thinning to lace before it goes.
           const g = hash2(first - j, side, 0x3a7e) & 255;
           if (g > 60 + 150 * fade) continue;
-          const sx = px + Math.round(cx - (side * spread * ey) / len);
-          const sy = gy + Math.round(0.8 * (cy + (side * spread * ex) / len));
-          // The fleck, and a paler pixel outside it to soften it: either may be on the frame without the other.
-          if (sy < 0 || sy >= h || sx < -1 || sx > w) continue;
+          // Each fleck on its own water: where that is drawn, if it is in view and not behind nearer land or water. The
+          // fleck may lie a pixel past the frame's side with its soft pixel on it, so it is read from the land there.
+          const wx = fl.x + cx - (side * spread * ey) / len, wy = fl.y + cy + (side * spread * ex) / len;
+          const sx = frameX(f, wx, 1), sy = frameY(f, 0.8 * wy - lvl, 0);
+          if (sx > w || sy >= h) continue;
           if (isWater[bakeAt(f, sx, sy) & 255] === 0) continue;
+          const off = worldRowAt(f, sx, sy) - wy;
+          if (Math.abs(off - Math.round(off / f.n) * f.n) > 2) continue;
           const i = sy * w + sx;
           if (sx >= 0 && sx < w) blend(out, i, white, a);
+          // Soft: a paler pixel outside each fleck.
           if (sx + side >= 0 && sx + side < w && isWater[bake[i + side] & 255] === 1) blend(out, i + side, white, a / 3 | 0);
         }
       }
