@@ -722,14 +722,15 @@ the build departs from the sections above:
 - **Not built.** Trimming the workers' caches after a minute hidden (§5) needs a new worker message; phones already run
   two workers, so it waits for a long-flight measurement on a real iPhone. Audio unlock on Take wing waits for the
   world to have sound.
-- **The phone title (§2).** Built in `src/components/title/phone/` (`PhoneTitle`, its own `copy.ts`) and mounted on
-  `/` for phones only. `PhoneSwitch` in `src/app/page.tsx` is one wrapper with a component each side. The title's
-  phone query (`phone.ts`, held to the CSS by a test) shows the phone title. The home page sits in a
-  `display: contents` box, so desktops lay out exactly as before. The hidden side is `display: none`, out of the
-  accessibility tree. The noindex route `/phone-title` stays as the bench Fable judged it on.
-- **Merging the title later.** The desktop title (the parked title-menu work) replaces the desktop side of the switch
-  alone. Its `copy.ts` and `title/phone/copy.ts` name the same four ways in, so the two should become one list
-  then.
+- **The phone title (§2).** Built in `src/components/title/phone/` (`PhoneTitle`, its own `copy.ts`) and shown only
+  at the noindex bench route `/phone-title`, where Fable judged it.
+- **Not yet the front door (coordinator, 2026-11-19).** The owner is picking the desktop title after all, so the two
+  are to be mounted on `/` together. `PhoneSwitch` is ready for it: one wrapper with the phone title on one side and
+  the desktop page on the other. CSS chooses on the title's phone query (`phone.ts`, held to the CSS by a test). The
+  desktop side sits in a `display: contents` box, so it lays out as if unwrapped, and the hidden side is
+  `display: none`, out of the accessibility tree. A trial mount (commit `9b608f4`, reverted afterwards) checked this
+  element by element against the base build at 700, 1280 and 1600 px, and axe passed the phone side. The desktop
+  title's `copy.ts` and `title/phone/copy.ts` name the same four ways in, so they should become one list when mounted.
 - **Links into other branches.** "Read the short version" goes to `/recruiter` (on `feat/dragon-world`), and on a phone
   the abbey's terminal opens `/artificer#terminal`, which exists only once the title-menu work lands.
 
@@ -746,12 +747,12 @@ Tests, as §9 asks:
   throttle p50 was 2.5–2.7 ms and p95 3.8–3.9 ms, against 2.6–2.8 and 4.0. `--phone` flies by touch as an iPhone 17
   in landscape. At 4×, phones hold 60 fps with p50 3.6 ms and p95 4.8 ms; the controls and guide take 0.8 ms p95.
   The phone gate is 8 ms.
-- **Desktop unchanged.** At 700, 1280 and 1600 px every element of `/` has the same box as in the base build, and the
-  phone title is not in the accessibility tree. axe on `/`: the phone side passes in light and dark, where the base
-  build failed. The desktop side keeps the base build's two findings (`.kbd` contrast, no `h1`), left alone so
-  desktops get exactly today's page.
+- **The switch, while trial-mounted.** At 700, 1280 and 1600 px every element of `/` had the same box as in the base
+  build, and the phone title was out of the accessibility tree. axe on `/`: the phone side passed in light and dark,
+  where the base build fails; the desktop side kept the base build's two findings (`.kbd` contrast, no `h1`). axe on
+  the bench `/phone-title` passes at phone and desktop widths, light and dark. `/` is now the base home page again.
 - **Real WebKit.** In the iOS 26.5 Simulator (iPhone 17, Safari), checked by hand:
-  - the phone title opens on `/`, and the Wayfarer card leads to Before you fly;
+  - the phone title opened on `/` while trial-mounted, and the Wayfarer card led to Before you fly;
   - Take wing while upright shows the turn card, and turning to landscape shows Paused, with the Home Screen hint;
   - after Fly on, a drag on the stick steers to the abbey, where Land joins the cluster;
   - a pinch and a long-press do nothing, and the lesson moves on to the touch speed glyphs.

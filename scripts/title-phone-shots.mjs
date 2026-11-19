@@ -1,6 +1,5 @@
-// Screenshots of the phone's title screen for judging its look (mobile spec 2): the bench route and the front door,
-// on an iPhone and a small Android phone, upright and sideways, and the front door at desktop widths (which must be
-// the home page as it was).
+// Screenshots of the phone's title screen for judging its look (mobile spec 2): its noindex bench route on an iPhone,
+// an SE-sized phone and a small Android phone, upright and sideways, and the front door at desktop widths.
 //
 //   npm run build && node scripts/title-phone-shots.mjs [--port 4479] [--out .cache/title-shots]
 
@@ -39,11 +38,10 @@ function resolveFile(urlPath) {
 
 const TOUCH = { isMobile: true, hasTouch: true };
 const SHOTS = [
-  { name: "iphone17-upright", path: "/", viewport: { width: 402, height: 874, deviceScaleFactor: 3, ...TOUCH } },
-  { name: "iphone17-sideways", path: "/", viewport: { width: 874, height: 402, deviceScaleFactor: 3, ...TOUCH, isLandscape: true } },
-  { name: "se-upright", path: "/", viewport: { width: 375, height: 667, deviceScaleFactor: 2, ...TOUCH } },
-  { name: "android-small-upright", path: "/", viewport: { width: 360, height: 760, deviceScaleFactor: 2, ...TOUCH } },
-  { name: "bench-iphone17", path: "/phone-title", viewport: { width: 402, height: 874, deviceScaleFactor: 3, ...TOUCH } },
+  { name: "iphone17-upright", path: "/phone-title", viewport: { width: 402, height: 874, deviceScaleFactor: 3, ...TOUCH } },
+  { name: "iphone17-sideways", path: "/phone-title", viewport: { width: 874, height: 402, deviceScaleFactor: 3, ...TOUCH, isLandscape: true } },
+  { name: "se-upright", path: "/phone-title", viewport: { width: 375, height: 667, deviceScaleFactor: 2, ...TOUCH } },
+  { name: "android-small-upright", path: "/phone-title", viewport: { width: 360, height: 760, deviceScaleFactor: 2, ...TOUCH } },
   { name: "desktop-1280", path: "/", viewport: { width: 1280, height: 800 } },
   { name: "desktop-700", path: "/", viewport: { width: 700, height: 900 } },
 ];

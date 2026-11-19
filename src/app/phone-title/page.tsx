@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-// A bench for the phone's title screen until it has its place at the front door (mobile spec 2): the page a phone
-// opens on, with the Recruiter first.
+// The phone's title screen on its own noindex bench (mobile spec 2), until the front door takes it together with the
+// desktop title through PhoneSwitch: the page a phone will open on, with the Recruiter first.
 export default function PhoneTitleBench() {
   return <PhoneTitle entries={phoneEntries(startBytes() / 1_000_000)} tagline={PHONE_TAGLINE} selected="recruiter" />;
 }
