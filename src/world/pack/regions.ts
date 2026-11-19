@@ -529,7 +529,7 @@ export async function decodeCore(bin: Uint8Array): Promise<Core> {
   }
 }
 
-async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<Omit<RegionGrids, "rx" | "ry">> {
+async function decodeGrids(parts: Map<string, Uint8Array>, core: Core, withTemp: boolean): Promise<Omit<RegionGrids, "rx" | "ry">> {
   const gS = core.regionCells / 4;
   const cS = core.regionCells / 8;
   const g2 = gS * gS;
@@ -551,7 +551,7 @@ async function decodeGrids(parts: Map<string, Uint8Array>, core: Core): Promise<
     heights(DEBRIS, cS),
     loadBytes(requirePart(parts, ROCK), c2),
     Promise.all(planes.map((q) => loadHeights(q, cS, cS))),
-    core.world.temp ? heights(TEMP, cS) : null,
+    core.world.temp && withTemp ? heights(TEMP, cS) : null,
   ]);
   const ground = fromQuantised(groundQ, H_SCALE);
   let base: Float32Array | undefined;
@@ -595,7 +595,8 @@ async function decodeRegionInner(bin: Uint8Array, core: Core, withStamps: boolea
   }
   const stampPart = core.world.stamps ? requirePart(parts, STAMPS) : undefined;
   const [grids, stamps] = await Promise.all([
-    decodeGrids(parts, core),
+    // The page's land reads the ground alone: it is spared the stamps, and the climate with them.
+    decodeGrids(parts, core, withStamps),
     stampPart && withStamps ? loadRaw(stampPart).then(decodeStamps) : undefined,
   ]);
   return { rx, ry, ...grids, stamps };

@@ -446,16 +446,30 @@ On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
 | The warm family: Mediterranean dress, steppe, desert with sand seas and real dunes, gravel, salt, wadis, tiger bush, savanna, jungle | built |
 | Pictures for palms, acacias, umbrella pines and cactus (`bake/sprites.ts`) | built |
 | One landmark of each kind, in its climate; hamlets and houses by climate; pads keep the climate's ground | built |
-| The six new landmarks and the wonders' climates | built by an Opus agent under review; see the commit after this one |
+| The six new landmarks and the wonders' climates | built: drawn by an Opus agent to this design's silhouettes, judged on renders by the lead; first drafts |
 | Haze by climate (a plane in the core); manifest `climate` | built |
 | The map and render tools: `world:map --view cover|climate --wild`, `world:render --wild --no-gates --temperate` | built |
 | Bergs on the sea, mangrove crowns in the shallows (6.3 "stamps on water") | not built: mangroves stand on the mud of the shore; no bergs |
 | A cold sea and a silty river colour | not built: follow-up (6.5) |
 | Fields by climate beyond the Mediterranean (oasis plots are built; paddies are not) | partly |
 
-Measured on seed 3 at 10240: land by cover is about 15 % jungle, 15 % snow and ice, 10 % tundra, 9 % steppe, 7 %
-savanna, 2 % desert; the rest temperate, Mediterranean and taiga. Critic scores and what each round changed are in the
-look ledger ("Climate rounds").
+Measured on seed 3 at 10240 (2026-11-19):
+
+- **Land by cover:** about 15 % jungle, 15 % snow and ice, 10 % tundra, 9 % steppe, 7 % savanna, 2 to 4 % desert; the
+  rest temperate, Mediterranean and taiga. All thirteen landmarks and all nine wonders are placed.
+- **Download:** the whole world 9368 KB (was 9191); before first flight 1485 KB (was 1447); the core 979 KB.
+- **Identity:** the build's own check of the start and abbey views gives the same shares to six figures as the world
+  shipped today; the home view and a temperate hillside elsewhere render byte-identical with and without climates.
+- **Bake:** a tile whose every climate node is on the plateau is built as a temperate world's is. Elsewhere a tile
+  costs about 40 % more on average (62 ms against 43 in Node, under load), most in jungle, sand seas and pack ice.
+  That is over the 15 % this design set itself in section 11; the bake stays above one chunk a second in the browser.
+- **Frame:** nothing new is drawn per frame. `world-fly.mjs` against a build of the base, in turn, on a machine other
+  sessions were loading (load average 8 to 16): at 4× throttle the base's p95 ran 3.7 to 5.1 ms and the new build's
+  4.1 to 5.2; the new code over the old world, whose frames are byte-identical to the base's, ran 4.2 to 5.8. The test
+  could not tell them apart that night. It wants a rerun on a quiet machine before the world ships.
+- **Tests:** 1066, all passing (the dragon's timing test fails under load and passes alone); types and lint clean.
+
+Critic scores and what each round changed are in the look ledger ("Climate rounds").
 
 ## 14. Follow-ups
 

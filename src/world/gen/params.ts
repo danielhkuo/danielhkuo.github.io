@@ -320,7 +320,9 @@ export function paramsFor(n: number): WorldParams {
         inlandFrom: 0.45,
         inlandTemp: 0.06,
         inlandDry: 0.35,
-        homeNear: 64 * s,
+        // Wide enough that the sea the opening flight crosses is the plateau's too: its tiles are then built as a
+        // temperate world's are, at no cost for the climates.
+        homeNear: 240 * s,
         homeFar: 1100 * s,
       },
     },
