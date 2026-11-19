@@ -26,6 +26,10 @@ const db = (x: number) => Math.pow(10, x / 20);
 /** A glide in log frequency from a (at x = 0) to b (at x = 1). */
 const glide = (a: number, b: number, x: number) => a * Math.pow(b / a, clamp01(x));
 
+/** What a beach wave's hiss and body settle to between breaks, as shares of their peaks: the fizz of foam, and the wash under it. */
+const FIZZ = 0.11;
+const WASH = 0.04;
+
 /** The envelope of a wave of `kind` (1 beach, 2 shingle, 3 rock) and `strength` (1, 2, 3): its channels, as played. */
 export function envelope(kind: number, strength: number): Float32Array[] {
   const lasts = lastsOf(kind), lead = leadOf(kind);
@@ -43,7 +47,7 @@ export function envelope(kind: number, strength: number): Float32Array[] {
     /** Seconds after the picture's event (negative before it). */
     const after = t - lead;
     // Every part is faded to nothing over the envelope's last 0.3 s, and in over its first 0.1 s.
-    const edge = ease(t / 0.1) * ease((lasts - t) / 0.3);
+    const edge = ease(t / 0.1) * ease((lasts - t) / (kind === BEACH ? 0.9 : 0.3));
     let low = 0, mid = 0, high = 0, grain = 0, slosh = 0;
     let fLow = ENV_BASE.low, fMid = ENV_BASE.mid, fHigh = ENV_BASE.high, fBand = ENV_BASE.band;
     if (kind === BEACH) {
@@ -52,11 +56,13 @@ export function envelope(kind: number, strength: number): Float32Array[] {
       low = after < 0 ? rise * rise : Math.exp(-after / 0.5);
       fLow = [260, 200, 150][s];
       // Crash: a soft-edged break that travels along the beach (0.35 s in), lower the bigger the wave.
-      mid = after < 0 ? ease((after + 0.38) / 0.38) : Math.exp(-after / 0.6);
+      mid = after < 0 ? ease((after + 0.38) / 0.38) : WASH + (1 - WASH) * Math.exp(-after / 0.6);
       fMid = glide(500, [1100, 850, 650][s], (u - 0.35) / 0.15);
       // Hiss: the foamy sheet running up the sand, thinning and rising in pitch, then the backwash's fizz.
+      // It does not die away between waves: foam keeps fizzing on the wet sand until the next one runs over it, so the
+      // decay settles onto a floor (FIZZ of the peak) that lasts to the envelope's end.
       const peak = (0.55 - 0.5) * WAVE_PERIOD;
-      high = after < peak ? ease((after + 0.3) / (peak + 0.3)) : Math.exp(-(after - peak) / (0.9 * (0.6 + 0.4 * a)));
+      high = after < peak ? ease((after + 0.3) / (peak + 0.3)) : FIZZ + (1 - FIZZ) * Math.exp(-(after - peak) / (0.9 * (0.6 + 0.4 * a)));
       fHigh = u < 0.62 ? glide(1200, 3000, (u - 0.5) / 0.12) : glide(3000, 4500, (u - 0.62) / 0.35);
       low *= K_SURF.beach[0];
       mid *= K_SURF.beach[1];
@@ -80,7 +86,7 @@ export function envelope(kind: number, strength: number): Float32Array[] {
       grain *= K_SURF.shingle[3];
     } else if (kind === ROCK) {
       // A dark swell closes in, nearly silent; the boom as the water slams (40 ms in); spray thrown up, hissing back.
-      const surge = 0.12 * clamp01((u - 0.3) / 0.1);
+      const surge = 0.04 * clamp01((u - 0.3) / 0.1);
       low = after < 0 ? surge : after < 0.04 ? surge + (1 - surge) * ease(after / 0.04) : Math.exp(-(after - 0.04) / 0.45);
       fLow = 110;
       mid = after < 0 ? 0 : after < 0.06 ? ease(after / 0.06) : Math.exp(-(after - 0.06) / 0.3);

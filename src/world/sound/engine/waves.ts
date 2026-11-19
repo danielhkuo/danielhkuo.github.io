@@ -34,6 +34,10 @@ export function emitterTargets(pose: Pose, x: number, y: number, n: number, db: 
 }
 
 interface Emitter {
+  /** Where this emitter's noise comes in: a wave's own source of the Gaussian loop, and of its sign loop. */
+  noiseIn: ChannelSplitterNode;
+  sign: AudioParam;
+  signLoop: number;
   split: ChannelSplitterNode;
   slosh: GainNode;
   chain: GainNode;
@@ -68,8 +72,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
   const emitters: Emitter[] = [];
   const running: { source: AudioBufferSourceNode; end: number }[] = [];
   const shared: AudioScheduledSourceNode[] = [];
-  let a: ChannelSplitterNode, flutter: ChannelSplitterNode, velvetSplit: ChannelSplitterNode;
-  const signs: AudioBufferSourceNode[] = [];
+  let flutter: ChannelSplitterNode, velvetSplit: ChannelSplitterNode;
   const surf: Surf = {
     steps: [],
     nodes: 0,
@@ -103,6 +106,19 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       env.start(when, w.offset * CONTROL_PLAYBACK);
       const lasts = buffer.duration / CONTROL_PLAYBACK - w.offset;
       running.push({ source: env, end: when + lasts + 0.05 });
+      // The wave's noise: its own two sources, each started where a loop running since the context began would be,
+      // so the streams are exactly those of loops that never stop; and stopped with the wave, so an idle emitter's
+      // input is silence and the engine skips its whole graph.
+      const noiseBuffer = kit.buffer("waveA"), signBuffer = kit.buffer(`sign${e.signLoop}`);
+      const noise = loop(ctx, noiseBuffer);
+      noise.connect(e.noiseIn);
+      noise.start(when, when % noiseBuffer.duration);
+      noise.stop(when + lasts + 0.05);
+      const sign = loop(ctx, signBuffer);
+      sign.connect(e.sign);
+      sign.start(when, when % signBuffer.duration);
+      sign.stop(when + lasts + 0.05);
+      running.push({ source: noise, end: when + lasts + 0.1 }, { source: sign, end: when + lasts + 0.1 });
       if (w.kind === ROCK && !opts.hissOnly) {
         // The gully's slosh: the one frozen part, read from a hashed place at a hashed speed.
         const h = hash2(w.cue.k ?? 0, w.cue.cell ?? 0, opts.seed ^ 0x2b07);
@@ -170,21 +186,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
     },
   };
 
-  // The shared sources: the Gaussian loop, the sign loops, the velvet, and the flutter that makes the foam sizzle.
-  surf.steps.push(() => {
-    const src = loop(ctx, kit.buffer("waveA"));
-    src.start(opts.at);
-    a = ctx.createChannelSplitter(2);
-    src.connect(a);
-    for (let j = 0; j < 4; j++) {
-      const s = loop(ctx, kit.buffer(`sign${j}`));
-      s.start(opts.at);
-      signs.push(s);
-      shared.push(s);
-    }
-    shared.push(src);
-    surf.nodes += 6;
-  });
+  // The shared sources: the grain, and the flutter that makes the foam sizzle. (The noise itself is each wave's own.)
   surf.steps.push(() => {
     const vel = loop(ctx, kit.buffer("velvet"));
     vel.start(opts.at);
@@ -201,14 +203,14 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
 
   for (let i = 0; i < opts.emitters; i++) {
     // Each emitter in three steps of a few nodes, so no frame builds more than a handful.
-    let prod: GainNode, split: ChannelSplitterNode, chain: GainNode;
+    let prod: GainNode, split: ChannelSplitterNode, chain: GainNode, noiseIn: ChannelSplitterNode;
     const slosh = { node: null as GainNode | null };
     const env = (ch: number, param: AudioParam) => split.connect(param, ch);
     surf.steps.push(() => {
       // This emitter's own stream: channel i & 1 of the Gaussian loop times sign loop i >> 1.
       prod = gain(ctx, 0);
-      a.connect(prod, i & 1);
-      signs[(i >> 1) & 3].connect(prod.gain);
+      noiseIn = ctx.createChannelSplitter(2);
+      noiseIn.connect(prod, i & 1);
       split = ctx.createChannelSplitter(ENV_CHANNELS);
       chain = gain(ctx, 0);
       const gHigh = gain(ctx, 0);
@@ -225,6 +227,8 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       sizzle.connect(chain);
       env(2, gHigh.gain);
       env(7, high.detune);
+      // The envelope and the flutter move slowly: one value a render quantum is enough, and costs far less.
+      for (const p of [gHigh.gain, high.detune, sizzle.gain]) kRate(p);
     });
     surf.steps.push(() => {
       slosh.node = gain(ctx, 0);
@@ -244,7 +248,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       env(1, gMid.gain);
       env(6, mid.detune);
       // The envelope's detunes move only as fast as a control signal does.
-      for (const f of [low, mid]) kRate(f.detune);
+      for (const p of [low.detune, mid.detune, gLow.gain, gMid.gain]) kRate(p);
     });
     surf.steps.push(() => {
       const sloshGain = slosh.node as GainNode;
@@ -262,7 +266,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
         env(3, gGrain.gain);
         env(4, sloshGain.gain);
         env(8, band.detune);
-        kRate(band.detune);
+        for (const p of [band.detune, gGrain.gain, sloshGain.gain]) kRate(p);
       }
       const air = lowpass(ctx, 1000);
       const pan = panner(ctx, 0);
@@ -270,7 +274,7 @@ export function buildSurf(ctx: Ctx, kit: Kit, out: AudioNode, opts: { emitters: 
       air.connect(pan.left);
       air.connect(pan.right);
       pan.out.connect(out);
-      emitters.push({ split, slosh: sloshGain, chain, air, pan, sentGain: NaN, sentHz: 1000, sentPan: 0 });
+      emitters.push({ noiseIn, sign: prod.gain, signLoop: (i >> 1) & 3, split, slosh: sloshGain, chain, air, pan, sentGain: NaN, sentHz: 1000, sentPan: 0 });
       surf.nodes += opts.hissOnly ? 12 : 20;
     });
   }

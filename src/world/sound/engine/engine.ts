@@ -10,7 +10,7 @@ import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
 import { airCutoff, dbToGain, distanceGain, offsetTo, panOf, SMALL, southCutoff, southGain, southOf } from "../space.ts";
 import { TAIL_S } from "../synth/probe.ts";
-import { EMPTY_CENSUS, emptyHearing, type Hearing, type Pose, type Prefs } from "../types.ts";
+import { EMPTY_CENSUS, emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Hearing, type Pose, type Prefs } from "../types.ts";
 import { bind, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
@@ -33,6 +33,8 @@ export interface EngineOptions {
   beds?: boolean;
   /** The world's size in cells (positions wrap every n). */
   n?: number;
+  /** No waves, laps or beds (a measuring arm). */
+  noSurf?: boolean;
   /** Only the waves' hiss path sounds (no wind, no beds, no other part of a wave): the repetition check's render. */
   hissOnly?: boolean;
   /** A calibration tone into the master chain: dBFS peak and Hz. */
@@ -79,6 +81,8 @@ export interface Engine {
   laneMask(): number;
   /** What the last frame did, as bits (WORK): for the probe, to say where a long frame went. */
   work(): number;
+  /** True when no graph is waiting to be built. */
+  built(): boolean;
   /** True once sound has been enabled and not muted or hidden since. */
   readonly live: boolean;
   stats(): EngineStats;
@@ -255,7 +259,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         if (!offline) return;
       }
     } else windBuilt = true;
-    if (!base || !kit.ready("surf")) return;
+    if (!base || !kit.ready("surf") || opts.noSurf) return;
     if (!surf && !opts.beds) surf = buildSurf(ctx, kit, master.bus.water, { emitters: touch ? 4 : 8, seed: opts.seed, n, at: now, hissOnly: opts.hissOnly });
     if (surf && !surfBuilt) {
       if (stepVoice(surf)) {
@@ -278,7 +282,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
 
   /** Builds a bed when one of its gains can be heard, and lets it go after two seconds when none can. */
   const tendBeds = (t: number, now: number) => {
-    if (opts.hissOnly || !kit.ready("surf") || !kit.ready("noise") || !kit.ready("controls")) return;
+    if (opts.hissOnly || opts.noSurf || !kit.ready("surf") || !kit.ready("noise") || !kit.ready("controls")) return;
     for (const b of beds) {
       let loud = false, quiet = true;
       for (const i of b.gains) {
@@ -556,6 +560,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     },
     laneMask: () => lanes.mask(),
     work: () => work,
+    built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && beds.every((b) => !b.voice || b.built),
     setBus(bus, on) {
       busOn[bus] = on;
       const now = ctx.currentTime;
@@ -605,6 +610,8 @@ export interface Runtime {
   kitMs(): number;
   /** What the last frame did, as bits (WORK). */
   work(): number;
+  /** True once every buffer is made and every graph built. */
+  settled(): boolean;
   /** The Hearing in force. */
   hearing(): Hearing;
   enable(first: boolean): void;
@@ -624,14 +631,14 @@ const KIT_MS = 0.05;
 /** The kit outlives engines (its buffers are not tied to a context), as long as the sample rate is the same. */
 let kept: Kit | null = null;
 
-export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null }): Runtime {
+export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; arm?: string }): Runtime {
   if (!kept || kept.sampleRate !== ctx.sampleRate) {
     kept?.dispose();
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n });
-  const listener = remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land);
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, noSurf: opts.arm === "nosurf" });
+  const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;
   return {
@@ -659,6 +666,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     },
     kitMs: () => kitMs,
     work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0),
+    settled: () => kit.done() && engine.built(),
     hearing: () => listener.hearing(),
     enable: (first) => engine.enable(first),
     mute: () => engine.mute(),
@@ -685,6 +693,12 @@ interface Listener {
 
 type Land = { gN: number; ground: ArrayLike<number> } | null;
 
+/** No ear at all (a measuring arm): open, silent land. */
+function deafEar(): Listener {
+  const hearing = emptyHearing();
+  return { setWarp() {}, step: () => hearing, hearing: () => hearing, dispose() {} };
+}
+
 function localEar(n: number, land: Land): Listener {
   const ear = createEar();
   ear.setWorld({ n, land });
@@ -703,8 +717,14 @@ function remoteEar(n: number, land: Land): Listener | null {
   } catch {
     return null;
   }
-  let hearing = emptyHearing();
+  // The Hearing is filled in place from numbers the worker hands back: nothing is cloned and nothing allocated.
+  const held = pooledHearing();
+  const hearing = held.hearing;
   const spare: Uint32Array[] = [];
+  const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
+  /** The message and its transfer list, reused for every pass. */
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  const transfer: ArrayBuffer[] = [];
   /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
   let into: Uint32Array | null = null;
   const home = { x: 0, y: 0, w: 0, h: 0 };
@@ -714,8 +734,9 @@ function remoteEar(n: number, land: Land): Listener | null {
   let made = 0;
   let dead = false;
   worker.onmessage = (e: MessageEvent) => {
-    const reply = e.data as { hearing: Hearing; bake: Uint32Array };
-    hearing = reply.hearing;
+    const reply = e.data as { heard: Float64Array; bake: Uint32Array };
+    unpackHearing(reply.heard, held);
+    heardSpare.push(reply.heard);
     spare.push(reply.bake);
   };
   worker.onerror = () => {
@@ -742,6 +763,7 @@ function remoteEar(n: number, land: Land): Listener | null {
         // A new pass, when a buffer is free: it begins with this frame's rect and this frame's dragon.
         const lat = latticeOf(rect);
         const size = lat.cols * lat.rows;
+        if (heardSpare.length === 0) return hearing;
         let buffer = spare.pop();
         if (buffer && buffer.length !== size) buffer = undefined;
         if (!buffer && made < 2) {
@@ -766,7 +788,21 @@ function remoteEar(n: number, land: Land): Listener | null {
       gatherRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
       progress = to;
       if (to >= 1) {
-        worker.postMessage({ kind: "pass", bake: into, rect: { x: home.x, y: home.y, w: home.w, h: home.h }, x: at.x, y: at.y, alt: at.alt, t: at.t, lanes: at.lanes }, [into.buffer]);
+        const heard = heardSpare.pop() as Float64Array;
+        message.bake = into;
+        message.heard = heard;
+        message.rect.x = home.x;
+        message.rect.y = home.y;
+        message.rect.w = home.w;
+        message.rect.h = home.h;
+        message.x = at.x;
+        message.y = at.y;
+        message.alt = at.alt;
+        message.t = at.t;
+        message.lanes = at.lanes;
+        transfer[0] = into.buffer as ArrayBuffer;
+        transfer[1] = heard.buffer as ArrayBuffer;
+        worker.postMessage(message, transfer);
         into = null;
       }
       return hearing;

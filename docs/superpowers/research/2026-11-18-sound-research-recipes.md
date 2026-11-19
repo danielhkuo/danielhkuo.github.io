@@ -254,6 +254,13 @@ near beach. No clock: the swell is drawn bending everywhere, and a pulsing open 
   Single-sample velvet (1500 a second) is clicks by construction, and bumps of 2.5 ms still counted as clicks; the
   grain is noise times a smooth random gain (0.3–1, up to 90 Hz). Rougher than hiss, less stony than the recipe.
   Peak −20.5.
+- After the verdict on phase 2: the beach's hiss and body settle onto a floor between breaks (11 % and 4 % of their
+  peaks, the fizz of foam on wet sand) and fade over the envelope's last 0.9 s; the rock's boom is at 16 with almost no
+  swell before it (0.04), and the bed's rumble came down to 0.008 (body 0.07) so the boom stands clear. One lane at a
+  cliff: the 20–200 Hz band goes from −55 to −24 dBFS in 40 ms and falls about 20 dB a second (τ 0.43 s). At a long
+  cliff four lanes' booms overlap, so the band reads as a plateau with peaks 5–8 dB over it.
+- Each wave has its own two noise sources (the Gaussian loop and its sign loop), started where loops running since the
+  context began would be and stopped with the wave: the streams are the same, and an idle emitter's input is silence.
 - The foam's sizzle is the live flutter (0.8 + 0.45 · flutter) on the hiss.
 - Surf bed: `kBody` 0.066 and `kRumble` 0.014 put far surf (250 cells) at about −38.5 LUFS; with the rumble on top, as first
   tried, it sat under every wave as a wall below 200 Hz. Open sea `kO` 0.05: −46.1 LUFS.

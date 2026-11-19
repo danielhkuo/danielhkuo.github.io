@@ -144,15 +144,15 @@ export const WORLD_REST_DB = -6;
 export const K_SURF = {
   beach: [3.2, 1.6, 0.9, 0, 0],
   shingle: [2.0, 1.2, 0.8, 1.6, 0],
-  rock: [11.5, 2.0, 1.1, 0, 0.5],
+  rock: [16, 2.0, 1.1, 0, 0.5],
   /** A wave emitter's chain gain at its nearest. */
   wave: 0.85,
   /** A lap, and the lap that stands for a lull (dB under a lap). */
   lap: 0.12,
   /** The surf bed: hiss, body, rumble, rattle (each × the square root of an energy sum). */
   bedHiss: 0.004,
-  bedBody: 0.066,
-  bedRumble: 0.014,
+  bedBody: 0.07,
+  bedRumble: 0.008,
   bedRattle: 0.01,
   /** The open sea's wash at its fullest. */
   open: 0.05,

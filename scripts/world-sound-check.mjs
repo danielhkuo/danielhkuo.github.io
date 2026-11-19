@@ -449,6 +449,8 @@ function measureMarks(file, marks, l, r, sampleRate, momentary) {
       momentaryMean: mean === null ? null : round(mean, 1),
       momentaryMax: inside.length ? round(Math.max(...inside), 1) : null,
       balanceDb: round(db(Math.sqrt(sl)) - db(Math.sqrt(sr))),
+      /** RMS of the stretch, both channels together, dBFS. */
+      rmsDb: round(db(Math.sqrt((sl + sr) / (2 * Math.max(1, b - a))))),
       midBalanceDb: round(db(Math.sqrt(tl)) - db(Math.sqrt(tr))),
       midDb: round(db(Math.sqrt((tl + tr) / (2 * Math.max(1, b - a))))),
       /** Share of the power under 60 Hz and at 60–120 Hz (marks of 1.4 s or longer). */

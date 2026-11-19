@@ -177,3 +177,74 @@ export function copyHearing(h: Hearing): Hearing {
     startled: h.startled.map((s) => ({ ...s })),
   };
 }
+
+/** Shore points a Hearing can carry, and the numbers a packed Hearing takes. */
+export const MAX_SHORES = 16;
+export const HEARING_FLOATS = 5 + 7 * 4 + MAX_SHORES * 7;
+
+const AREAS = (h: Hearing): Area[] => [h.surf[0], h.surf[1], h.surf[2], h.far, h.river, h.stream, h.white];
+
+/** A Hearing as plain numbers in `out` (HEARING_FLOATS long): what the ear's worker hands back, transferred, not cloned. */
+export function packHearing(h: Hearing, out: Float64Array): void {
+  const n = Math.min(MAX_SHORES, h.shores.length);
+  out[0] = h.t;
+  out[1] = h.ready;
+  out[2] = h.lanes;
+  out[3] = h.sea;
+  out[4] = n;
+  let at = 5;
+  for (const a of AREAS(h)) {
+    out[at++] = a.e;
+    out[at++] = a.dx;
+    out[at++] = a.dy;
+    out[at++] = a.d;
+  }
+  for (let i = 0; i < n; i++) {
+    const p = h.shores[i];
+    out[at++] = p.sector;
+    out[at++] = p.cell;
+    out[at++] = p.kind;
+    out[at++] = p.bend;
+    out[at++] = p.x;
+    out[at++] = p.y;
+    out[at++] = p.w;
+  }
+}
+
+/** A Hearing with its shore points made once, to be filled again and again by `unpackHearing` with no allocation. */
+export function pooledHearing(): { hearing: Hearing; pool: ShorePoint[] } {
+  const pool: ShorePoint[] = [];
+  for (let i = 0; i < MAX_SHORES; i++) pool.push({ sector: 0, cell: 0, kind: 0, bend: 0, x: 0, y: 0, w: 0 });
+  return { hearing: emptyHearing(), pool };
+}
+
+/** Fills `into` (from `pooledHearing`) from packed numbers. Nothing is allocated. */
+export function unpackHearing(from: Float64Array, into: { hearing: Hearing; pool: ShorePoint[] }): Hearing {
+  const h = into.hearing;
+  h.t = from[0];
+  h.ready = from[1];
+  h.lanes = from[2];
+  h.sea = from[3];
+  const n = from[4];
+  let at = 5;
+  for (let k = 0; k < 7; k++) {
+    const a = k < 3 ? h.surf[k] : k === 3 ? h.far : k === 4 ? h.river : k === 5 ? h.stream : h.white;
+    a.e = from[at++];
+    a.dx = from[at++];
+    a.dy = from[at++];
+    a.d = from[at++];
+  }
+  h.shores.length = 0;
+  for (let i = 0; i < n; i++) {
+    const p = into.pool[i];
+    p.sector = from[at++];
+    p.cell = from[at++];
+    p.kind = from[at++] as 0 | 1 | 2 | 3;
+    p.bend = from[at++];
+    p.x = from[at++];
+    p.y = from[at++];
+    p.w = from[at++];
+    h.shores.push(p);
+  }
+  return h;
+}

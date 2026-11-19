@@ -138,7 +138,7 @@ try {
     if (st.wavesPerMinute?.length) console.log(`    waves a minute, by lane: ${st.wavesPerMinute.join(", ")}; closest two of one train in a lane: ${st.closestTrainGap === null ? "—" : st.closestTrainGap.toFixed(2)} s`);
     if (typeof st.repeatMax === "number") console.log(`    repeatMax ${st.repeatMax.toFixed(4)} over ${st.repeatPairs} pairs of ${st.repeatWaves} waves; control (one wave copied over another) ${st.repeatControl?.toFixed(4)}`);
     for (const m of row.marks ?? []) {
-      console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB${m.lowShares ? `  <60 Hz ${(m.lowShares[0] * 100).toFixed(1)} % 60–120 ${(m.lowShares[1] * 100).toFixed(1)} %` : ""}`);
+      console.log(`    ${m.name.padEnd(24)} ${String(m.lufs).padStart(6)} LUFS  M mean ${String(m.momentaryMean).padStart(6)} max ${String(m.momentaryMax).padStart(6)}  bal ${m.balanceDb} dB  rms ${m.rmsDb} dBFS  mid ${m.midDb} dBFS bal ${m.midBalanceDb} dB${m.lowShares ? `  <60 Hz ${(m.lowShares[0] * 100).toFixed(1)} % 60–120 ${(m.lowShares[1] * 100).toFixed(1)} %` : ""}`);
     }
   }
   writeFileSync(path.join(opts.out, "render.json"), JSON.stringify({ origin, browser: opts.browser, mode: opts.mode, rows: rows.map(({ file, renderMs }) => ({ file, renderMs })), broken, errors }, null, 2));

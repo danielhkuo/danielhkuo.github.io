@@ -20,6 +20,8 @@ export interface SoundRuntime {
   frame(pose: Pose, prefs: Prefs, seen: { bake: Uint32Array | null; rect: { x: number; y: number; w: number; h: number } | null; t: number }): void;
   kitMs(): number;
   work(): number;
+  /** True once every buffer is made and every graph built. */
+  settled(): boolean;
   hearing(): Hearing;
   enable(first: boolean): void;
   mute(): void;
@@ -29,7 +31,7 @@ export interface SoundRuntime {
 }
 
 export interface SoundModule {
-  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null }): SoundRuntime;
+  createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; arm?: string }): SoundRuntime;
 }
 
 /** The slice of AudioContext the control uses. */
@@ -63,6 +65,12 @@ export interface ControlEnv {
   calm(): boolean;
   /** Records a flight for the bench (?soundlog), whether sound is on or off. */
   log?: boolean;
+  /**
+   * A measuring arm (?stats&soundarm=…), for bisecting what the sound costs a frame. "noctx": wanted, but no context
+   * is ever made. "frozen": everything runs, then the context is suspended once the kit is done (no audio thread).
+   * "earoff", "earlocal", "nosurf": handed to the runtime (no ear; the ear in the frame loop; no waves or beds).
+   */
+  arm?: string;
 }
 
 /** A recorded flight: one row a frame (t, dt, x, y, alt, heading, speed, bank, rest, index of the Hearing in force). */
@@ -95,6 +103,8 @@ export interface SoundControl {
   kitMs(): number;
   /** What the last frame did, as bits (engine WORK): 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample, 128 the waves' turn. */
   work(): number;
+  /** True once the sound's buffers and graphs are all made. */
+  settled(): boolean;
   state(): SoundState;
   /** The toggle's activation: off → on (the context is made here, in the gesture); waiting → start; on → off. */
   toggle(): void;
@@ -121,7 +131,7 @@ function insideSoundUi(target: EventTarget | null): boolean {
   return !!el && typeof el.closest === "function" && el.closest(`[${SOUND_UI}]`) != null;
 }
 
-export function browserEnv(log = false): ControlEnv {
+export function browserEnv(log = false, arm?: string): ControlEnv {
   let storage: PrefStore | null = null;
   try {
     storage = window.localStorage;
@@ -155,6 +165,7 @@ export function browserEnv(log = false): ControlEnv {
     touch: window.matchMedia("(pointer: coarse)").matches,
     calm: () => calm,
     log,
+    arm,
   };
 }
 
@@ -192,7 +203,10 @@ export function createSoundControl(env: ControlEnv): SoundControl {
   let logFrom = NaN;
   let lastHearing: Hearing | null = null;
 
-  const running = () => ctx !== null && ctx.state === "running";
+  const measuring = env.arm ?? "";
+  /** The "frozen" arm: the context has been suspended on purpose, and the frame loop carries on as if it ran. */
+  let frozen = false;
+  const running = () => ctx !== null && (ctx.state === "running" || frozen);
 
   const state = (): SoundState => {
     if (!wanted) return "off";
@@ -275,7 +289,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         suspendTimer = disposeTimer = null;
         if (mod && ctx && land) {
           const first = rt === null;
-          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed: land.seed, n: land.n, land: land.land });
+          rt ??= mod.createRuntime(ctx as unknown as AudioContext, { touch: env.touch, seed: land.seed, n: land.n, land: land.land, arm: measuring });
           if (!enabled) rt.enable(first);
           enabled = true;
           started = true;
@@ -293,7 +307,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
 
   /** In a gesture: make the context if there is none, and ask it to run. resume()'s promise is never trusted; ctx.state is. */
   function unlock(): void {
-    if (disposed || !wanted) return;
+    if (disposed || !wanted || measuring === "noctx") return;
     if (!ctx) {
       try {
         ctx = env.makeContext();
@@ -450,6 +464,10 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         prefs.volume = volume;
         prefs.calm = env.calm();
         rt.frame(pose, prefs, seen);
+        if (measuring === "frozen" && !frozen && ctx && rt.settled()) {
+          frozen = true;
+          void ctx.suspend().catch(() => undefined);
+        }
         kitMs = rt.kitMs();
         lastWork = rt.work();
       }
@@ -470,6 +488,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
     },
     kitMs: () => kitMs,
     work: () => lastWork,
+    settled: () => rt !== null && rt.settled(),
     state,
     toggle() {
       if (disposed) return;

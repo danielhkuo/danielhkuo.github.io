@@ -151,6 +151,10 @@ function heard(world: FlatWorld, seconds: number, flight: (t: number) => SceneFr
 /** Cruising south, 40 cells off a coast that runs north–south at x = 5040. */
 const alongCoast = (seconds: number, t0: number, y0 = 3000) => flown(seconds, t0, startAt(5000, y0, SOUTH), LEVEL);
 const BEACH_COAST = coastEast(5040, M.sand);
+/** The wind alone. */
+const NO_WATER = { "K_SURF.wave": 0, "K_SURF.lap": 0, "K_SURF.bedHiss": 0, "K_SURF.bedBody": 0, "K_SURF.bedRumble": 0, "K_SURF.bedRattle": 0, "K_SURF.open": 0 };
+/** The approach from 600 cells out at 60 cells a second: one-second stretches centred 400, 300, 200, 100 and 50 cells from the beach. */
+const APPROACH: Mark[] = [400, 300, 200, 100, 50].map((d) => ({ name: `${d} cells out`, t0: (600 - d) / 60 - 0.5, t1: (600 - d) / 60 + 0.5 }));
 /** The water alone: the still surf scenes are solo, so their levels can be read against §3.6. */
 const NO_WIND = { "K_WIND.a": 0, "K_WIND.b": 0, "K_WIND.c": 0, "K_WIND.d": 0, "K_WIND.e": 0, "K_WIND.w": 0 };
 
@@ -320,6 +324,13 @@ export const SCENES: Scene[] = [
     at: heard(coastEast(5025, M.cliffHard), 30, hover(30, 100, 5000, 5000)),
   }),
   scene({
+    name: "surf-rock-one",
+    seconds: 30,
+    set: NO_WIND,
+    about: "One short cliff, so one lane: each boom on its own, a hit and a decay, then the gully. (At a long cliff four lanes' booms overlap.)",
+    at: heard(islet(5025, 5000, 16, M.cliffHard), 30, hover(30, 100, 5000, 5000)),
+  }),
+  scene({
     name: "surf-calm",
     set: NO_WIND,
     seconds: 20,
@@ -362,6 +373,22 @@ export const SCENES: Scene[] = [
     about: "From 600 cells out, straight in, across the beach, inland: far rumble first; waves resolve; they pass under and fall behind, duller.",
     beds: true,
     at: heard(coastEast(5000, M.sand), 40, flown(40, 100, startAt(4400, 5000, 0), LEVEL)),
+  }),
+  scene({
+    name: "sea-to-coast-water",
+    seconds: 40,
+    about: "The same approach with the wind muted: the water alone. It must rise smoothly from about 400 cells out: far rumble, then the bed, then waves.",
+    set: NO_WIND,
+    at: heard(coastEast(5000, M.sand), 40, flown(40, 100, startAt(4400, 5000, 0), LEVEL)),
+    marks: APPROACH,
+  }),
+  scene({
+    name: "sea-to-coast-wind",
+    seconds: 40,
+    about: "The same approach with the water muted: the wind alone, to set the water against.",
+    set: NO_WATER,
+    at: heard(coastEast(5000, M.sand), 40, flown(40, 100, startAt(4400, 5000, 0), LEVEL)),
+    marks: APPROACH,
   }),
   scene({
     name: "surf-repeat",

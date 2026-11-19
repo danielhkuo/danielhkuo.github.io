@@ -72,6 +72,8 @@ interface FlightProbe {
   soundKit: number[];
   /** What the sound did each frame, as bits (see SoundControl.work). */
   soundWork: number[];
+  /** True once the sound's buffers and graphs are all made. */
+  soundSettled: boolean;
   soundState: SoundState;
   /** The flight as recorded for the sound bench, with ?soundlog. */
   soundLog: SoundLog | null;
@@ -152,11 +154,11 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
     const statsOn = params.has("stats");
     // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
     const probe: FlightProbe | null = statsOn
-      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], soundMs: [], soundKit: [], soundWork: [], soundState: "off", soundLog: null, hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+      ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], soundMs: [], soundKit: [], soundWork: [], soundSettled: false, soundState: "off", soundLog: null, hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
       : null;
     if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
     // Sound: off until asked for; with ?stats&soundlog the flight is recorded for the sound bench.
-    const soundControl = createSoundControl(browserEnv(statsOn && params.has("soundlog")));
+    const soundControl = createSoundControl(browserEnv(statsOn && params.has("soundlog"), statsOn ? (params.get("soundarm") ?? undefined) : undefined));
     if (probe) probe.soundLog = soundControl.log();
     const publishSound = () => setSound(soundControl);
     publishSound();
@@ -401,6 +403,7 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
             probe.soundMs.push(soundMs);
             probe.soundKit.push(soundControl.kitMs());
             probe.soundWork.push(soundControl.work());
+            probe.soundSettled = soundControl.settled();
             probe.soundState = soundControl.state();
           }
           const skyStart = performance.now();

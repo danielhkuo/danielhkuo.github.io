@@ -25,6 +25,7 @@ function world(opts: { stored?: string | null; storage?: boolean; resumes?: bool
     frame: () => void calls.push("frame"),
     kitMs: () => 0.01,
     work: () => 4,
+    settled: () => true,
     hearing: () => emptyHearing(),
     enable: (first) => void calls.push(first ? "enable:first" : "enable:again"),
     mute: () => void calls.push("mute"),
