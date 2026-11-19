@@ -19,6 +19,9 @@ make; each has a recommendation, and the build takes the recommendation until th
 - **Landmarks. [Owner]** One of each kind, seven in all: the abbey, and six for the six projects. Each stands in a
   climate that suits it. The six new churches of the first build are cut.
 - **Size. [Owner]** Left to this design. **[Call]** It stays 10240 (section 9).
+- **The land itself. [Owner]** Asked on 2026-11-19 whether the geography differs by climate, or is the same
+  generation as before with new cover. It was the same. Section 6.6 is the answer built now: landforms by climate
+  over the grown land. Growing each climate's land natively is **[Decide 4]** there.
 
 ## 1. The brief
 
@@ -52,7 +55,8 @@ lighthouses, bridges, cathedrals, windmills and yews stand on it.
   season.
 - New live animals and sights per biome (camels, penguins). Listed as follow-ups.
 - New sea and river colours. The live layers key on four water ids; see 6.5.
-- Changing how the land itself is grown. Erosion, coasts and rivers stay as they are.
+- Changing how the land is grown: the plan, erosion, coasts and rivers stay as they are. (The first build stopped
+  there. Since the owner's question of 2026-11-19 the climates do shape the land, over what was grown: 6.6.)
 
 **Anti-goals: it fails, even with every test green, when**
 
@@ -359,6 +363,47 @@ sessions are editing; they are follow-ups once those merge.
 omission. The pack ice covers most polar water and the clear sea is already turquoise, so this is judged on the
 first polar renders; if the open polar sea reads wrong, a cold sea id is added and the five lists with it.
 
+### 6.6 Landforms by climate
+
+**[Owner]** "We're also making new landscapes, right? Like the geography is different in these different areas?"
+In the first build it was not: every climate lay on land grown by one temperate rule, and only its cover, its ice
+and its small dunes differed.
+
+| | What | For | Against |
+|---|---|---|---|
+| **A. A landform stage over the grown land** | After the climate is known, the climate reshapes the ground where it is not temperate: benches and mesas, dune ridges, an ice sheet's smoothing, karst towers, rock domes | Seconds, not minutes; the home island is untouched by construction; every river keeps its bed; judged on renders the same day | The islands' outlines and the rivers' courses are still the temperate generator's |
+| B. Grow each climate's land natively | The plan, uplift, erosion and rain take the climate: plains where it is steppe, plateaux cut by canyons and few rivers in the desert, fjords in the cold, atolls and deltas in the tropics | The real thing | Everything outside home is grown again and judged again (a new land, new sites, new pins); the generator's global steps must be shown not to move the home island; days, not hours |
+| C. Choose each island's archetype by its climate | The six looks that exist, dealt out by latitude | No new landform code | The six are all temperate European country: no mesa, dune sea or tower among them |
+
+**[Call] A now. [Decide 4] B** is the owner's to ask for: it is the larger half of the answer, and its cost is a new
+land everywhere but home.
+
+**The stage.** It runs after the climate, on G, and writes the final ground and the height above drainage. Its
+change is a sum of landforms, each weighted by how far the node is in that landform's climate (0 on the temperate
+plateau, so the home island's ground is the same to the bit), and all of it by two guards:
+
+- **A river keeps its bed.** Nothing moves within 1 unit of height above the nearest drainage, and the change is
+  whole only 7 units above it. No landform lowers ground to within half its height above drainage. So every channel
+  still runs downhill in its valley, and no lake's shore moves.
+- **The coast keeps its line.** Nothing moves within 12 cells of the shore, and the change is whole 48 cells inland,
+  so beaches, cliffs, stacks and coves stand where the coast stage put them.
+
+| Landform | Climate | What it is |
+|---|---|---|
+| **Benches and mesas** | desert (hot, arid) | The ground is stepped by height: level treads 11 units apart with steep risers, the beds wandering a little like strata. Slopes become benches, summits mesas, and valleys canyons with stepped walls; the bolder in some country than other |
+| **Dune ridges** | the desert's sand seas | Long ridges of sand across the wind, some 60 cells apart and up to 8 units high, gentle to windward. The bake's small dunes ride on them |
+| **The ice sheet** | ice | Hollows and gullies fill toward the land's own smoothed surface: domes of ice with the peaks standing out of them. The main valleys stay, each with its frozen river: outlet glaciers |
+| **Karst towers** | jungle, in patches | Steep-sided hills 14 to 24 cells across and 12 to 22 units high, close set on low gentle ground: tower karst, forest to their tops and bare on their sides |
+| **Rock domes** | savanna | Lone domes of bare rock, 40 to 70 cells across, a few hundred cells apart on the plain: inselbergs |
+
+Not changed: temperate, taiga, the warm forest, the Mediterranean and the steppe keep the land as grown. The steppe
+wants plains, and a plain cannot be made over land that is already cut by rivers without leaving them perched; that
+is B's work.
+
+**What follows from it.** Sites, hamlets and roads are placed on the reshaped ground, so a road goes round a scarp.
+The change ships as part of the ground's own planes. The rain, the wind and the temperature are read off the land
+as grown.
+
 ## 7. Shipping
 
 - **Regions** gain one section, `temp`: the C plane, 500 steps over [0, 1]. About 4 KB a region, 16 KB before first
@@ -477,6 +522,9 @@ Tests, written before the code they pin:
   150 cells wide (**[Critic]**: 40 is a tenth of a screen, a line), and it is mixed in clumps, never cell by cell.
 - **Sanity:** no crop, hedge or pasture where shift ≥ 60; no crown on snow; nothing but water ids animates.
 - **Pack:** `temp` and `arid` round-trip; windows from regions equal windows from the whole; a world without `temp` decodes.
+- **Landforms:** nothing moves where the climate is temperate, on water, at a channel or at the shore; no node is
+  lowered to its drainage; the change is periodic and deterministic; desert ground is stepped (its heights gather
+  on the treads) and a sand sea has ridges.
 - **Palette:** the reserved-hue, river and value-mass tests cover the new ids.
 - **Painter:** a tile with no floating crown bakes as before; a floating crown never draws under nearer ground.
 
@@ -494,6 +542,7 @@ and after, scored in the look ledger.
 6. Haze plane; manifest climate; critics; ledger; roadmap.
 7. After the owner's decisions (0): the two sides (curves, `arid`, the dry dress, the warm forest); landmarks back to
    seven, each in its climate; assignments re-pinned.
+8. Landforms by climate (6.6).
 
 Each step ends in renders and a commit.
 
