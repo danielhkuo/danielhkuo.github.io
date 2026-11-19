@@ -27,6 +27,7 @@ import { createControls } from "./controls";
 import { storage } from "./optionsStore";
 import type { TouchLayer } from "./touchLayer";
 
+/** The frame before the window is measured (and on the server): the window's own is in runtime/fit.ts. */
 export const FRAME_W = 400;
 export const FRAME_H = 225;
 /** ?at=<site id> starts this many cells south of the site, heading north. */
@@ -92,6 +93,8 @@ export interface FlightSetup {
   phone?(): boolean;
   /** The touch controls, made once the canvas is in the page; null without touch flight. */
   touch?: (canvas: HTMLCanvasElement, hooks: { options(): Options; ghost(): boolean; touched(): void }) => TouchLayer | null;
+  /** The frame size wanted, in frame pixels, read each frame: the session resizes its frame when it changes. */
+  frame(): { w: number; h: number };
 }
 
 export interface FlightSession {
@@ -101,6 +104,8 @@ export interface FlightSession {
   takeOff(): void;
   /** Starts the first-flight lesson again. */
   teachAgain(): void;
+  /** The frame being drawn, in frame pixels (the canvas's own size). */
+  frameSize(): { w: number; h: number };
   /** Stops the frame loop and the workers, and lets go of the window's keys. */
   dispose(): void;
 }
@@ -126,9 +131,12 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-/** Where the camera sits off the landmark so it shows clear of the Codex: west of a side panel, above a bottom sheet. */
-function codexShift(): { x: number; y: number } {
-  return window.innerWidth >= NARROW ? { x: 0.16 * FRAME_W, y: 0 } : { x: 0, y: 50 };
+/**
+ * Where the camera sits off the landmark so it shows clear of the Codex, in a frame `w` pixels wide: west of a side
+ * panel, above a bottom sheet.
+ */
+function codexShift(w: number): { x: number; y: number } {
+  return window.innerWidth >= NARROW ? { x: 0.16 * w, y: 0 } : { x: 0, y: 50 };
 }
 
 /** What the land prompt names: the project kept there, About me at the abbey, or the landmark itself. */
@@ -183,6 +191,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   const byId = new Map<string, Landmark>();
   const anchors = new Map<string, Anchor | null>();
   let focusSite: { x: number; y: number; alt: number } | null = null;
+  // The frame: its size now, which the frame loop changes when the page asks for another.
+  let fw = FRAME_W, fh = FRAME_H;
 
   // The first-flight lesson, until it has been learned once.
   let lesson = newLesson(store?.getItem(LESSON_KEY) === "learned");
@@ -206,7 +216,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const id = next.approach.id;
     const t = targets.find((x) => x.id === id);
     if (t) {
-      const shift = codexShift();
+      const shift = codexShift(fw);
       const height = anchors.get(id)?.height ?? 20;
       focusSite = { x: t.x + shift.x, y: t.y + shift.y, alt: groundHeight(t.x, t.y) + FOCUS_HEIGHT * height };
     }
@@ -225,7 +235,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     events.phase("flying", null);
   };
 
-  const controls = createControls(canvas, FRAME_W, FRAME_H, {
+  const controls = createControls(canvas, {
     busy: () => (setup.optionsOpen() ? "options" : setup.terminalOpen() ? "terminal" : null),
     closeTerminal: setup.closeTerminal,
     phase: () => phase.kind,
@@ -283,9 +293,12 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!readyFrame || workers.stats().workers === 0) fail();
     };
 
+    const wanted = setup.frame();
+    fw = wanted.w;
+    fh = wanted.h;
     const view = createStreamView(regions, workers, buildPalette(MIDDAY), mask, {
-      width: FRAME_W,
-      height: FRAME_H,
+      width: fw,
+      height: fh,
       sites: loaded.manifest.sites,
       layers: makeLayers({
         seed: loaded.manifest.seed,
@@ -324,11 +337,24 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const sky = createSky(loaded.manifest.seed, regions.n, styleFrom(params.get("clouds")), loaded.manifest.start);
     const dragon = createDragon(worldN);
 
+    canvas.width = fw;
+    canvas.height = fh;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2d");
-    const imageData = ctx.createImageData(FRAME_W, FRAME_H);
-    const buffer = new Uint32Array(imageData.data.buffer);
-    const frame = new Uint32Array(FRAME_W * FRAME_H);
+    let imageData = ctx.createImageData(fw, fh);
+    let buffer = new Uint32Array(imageData.data.buffer);
+    let frame = new Uint32Array(fw * fh);
+    /** A frame of w × h from now on: the canvas, the buffers and the view, on the same camera point. */
+    const resize = (w: number, h: number) => {
+      fw = w;
+      fh = h;
+      canvas.width = w;
+      canvas.height = h;
+      imageData = ctx.createImageData(w, h);
+      buffer = new Uint32Array(imageData.data.buffer);
+      frame = new Uint32Array(w * h);
+      view.resize(w, h);
+    };
     const clock = { last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "", where: 0, wasPaused: true };
     const pacer = isPhone ? createPacer() : null;
     if (pacer) pacerRate = () => pacer.rate();
@@ -342,6 +368,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         return;
       }
       const work = performance.now();
+      const want = setup.frame();
+      if (want.w !== fw || want.h !== fh) resize(want.w, want.h);
       const paused = isPaused();
       const gap = clock.last ? (t - clock.last) / 1000 : 0;
       // Held still, the flight does not move; coming back, it starts from now, not from the pause.
@@ -422,15 +450,15 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       });
       if (guide) {
         const onScreen = (x: number, y: number, alt: number) => ({
-          x: imageOn(Math.round(x), rect.x, worldN, FRAME_W, 1),
-          y: imageOn(Math.round(y * 0.8 - alt), rect.y, worldN * 0.8, FRAME_H, 1),
+          x: imageOn(Math.round(x), rect.x, worldN, fw, 1),
+          y: imageOn(Math.round(y * 0.8 - alt), rect.y, worldN * 0.8, fh, 1),
         });
         const head = onScreen(flight.x, flight.y, flight.alt);
         const body = dragon.pose.chain.joints(BODY_JOINTS, BODY_SPACING).slice(1).map((j) => onScreen(j.x, j.y, j.alt));
         const { w, h } = guide.sprite;
         // Over a bottom sheet the Codex covers the foot of the frame: the take-off prompt goes above the dragon.
         const order = phase.kind === "landed" && window.innerWidth < NARROW ? SLOTS_HIGH : SLOTS;
-        const slot = chooseSlot(place.slot, head, w, h, FRAME_W, FRAME_H, body, order);
+        const slot = chooseSlot(place.slot, head, w, h, fw, fh, body, order);
         const target = slotAt(slot, head, w, h);
         // A guide that moves to another slot glides there from where it stood; one that has just appeared does not.
         if (place.slot === null || reduced) {
@@ -444,16 +472,16 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         place.carryX *= keep;
         place.carryY *= keep;
         place.slot = slot;
-        const at = clampInto({ x: Math.round(target.x + place.carryX), y: Math.round(target.y + place.carryY) }, w, h, FRAME_W, FRAME_H);
+        const at = clampInto({ x: Math.round(target.x + place.carryX), y: Math.round(target.y + place.carryY) }, w, h, fw, fh);
         place.x = at.x;
         place.y = at.y;
-        blit(frame, FRAME_W, FRAME_H, guide.sprite, at.x, at.y, guide.alpha);
+        blit(frame, fw, fh, guide.sprite, at.x, at.y, guide.alpha);
         controls.target({ x: at.x, y: at.y, w, h, tap: guide.tap });
       } else {
         place.slot = null;
         controls.target(null);
       }
-      touchLayer?.draw(frame, FRAME_W, FRAME_H);
+      touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";
       if (say !== clock.say) {
         clock.say = say;
@@ -508,6 +536,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   return {
     land: doLand,
     takeOff: doTakeOff,
+    frameSize: () => ({ w: fw, h: fh }),
     teachAgain() {
       lesson = newLesson(false);
       lessonStored = false;

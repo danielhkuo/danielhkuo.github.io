@@ -3,12 +3,14 @@
 // the start view was ready, main-thread ms per frame (and the sky's and the guides' shares), chunks baked a second, and
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
-//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--phone]
+//   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly]
+//                                              [--viewport 1920x1080] [--query pixels=130000] [--phone]
 //
 // --phone flies as an iPhone 17 in landscape Safari (874×338 at 3×, touch): it takes wing on the first card and flies the
-// same route with the touch stick and the Boost button (mobile spec 8, the phone perf gate).
+// same route with the touch stick and the Boost button (mobile spec 8, the phone perf gate). It sets its own viewport.
 //
-// The page reports through window.__flight (set only with ?stats).
+// The page reports through window.__flight (set only with ?stats). The frame fills the window, so --viewport sets how
+// many frame pixels are drawn (runtime/fit.ts); --query adds to the page's query, e.g. ?pixels= to try another budget.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -26,13 +28,15 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", phone: false };
+  const o = { rate: 4, seconds: 30, port: 4318, out: ".cache/world-fly", width: 1600, height: 900, query: "", phone: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--rate") o.rate = Number(argv[++i]);
     else if (a === "--seconds") o.seconds = Number(argv[++i]);
     else if (a === "--port") o.port = Number(argv[++i]);
     else if (a === "--out") o.out = argv[++i];
+    else if (a === "--viewport") [o.width, o.height] = argv[++i].split("x").map(Number);
+    else if (a === "--query") o.query = argv[++i];
     else if (a === "--phone") o.phone = true;
     else throw new Error(`unknown argument ${a}`);
   }
@@ -107,14 +111,14 @@ async function fly(browser, origin, opts, label, rate) {
     const cdp = await page.createCDPSession();
     await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: PHONE.insets });
   } else {
-    await page.setViewport({ width: 1600, height: 900 });
+    await page.setViewport({ width: opts.width, height: opts.height });
   }
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   if (rate > 1) await page.emulateCPUThrottling(rate);
   const t0 = Date.now();
-  await page.goto(`${origin}world?stats`, { waitUntil: "load" });
+  await page.goto(`${origin}world?stats${opts.query ? `&${opts.query}` : ""}`, { waitUntil: "load" });
   // Under phone emulation the navigation lands in a fresh renderer that drops the throttle: set it again.
   if (opts.phone && rate > 1) await page.emulateCPUThrottling(rate);
   await page.waitForFunction(() => window.__flight?.readyAt != null || window.__flight?.error, { timeout: 60000 });
@@ -154,11 +158,11 @@ async function fly(browser, origin, opts, label, rate) {
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
-  const res = await page.evaluate(() => ({ frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(), state: window.__flight.state?.() ?? null }));
+  const res = await page.evaluate(() => ({ frame: `${document.querySelector("canvas").width}x${document.querySelector("canvas").height}`, frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(), state: window.__flight.state?.() ?? null }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
   return {
-    label, rate, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
+    label, rate, viewport: `${opts.width}x${opts.height}`, frame: res.frame, readyMs: boot.readyAt - boot.navStart, wallToReadyMs: Date.now() - t0 - secs * 1000,
     frames: res.frames, fps: res.frames / secs,
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),

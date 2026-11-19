@@ -13,6 +13,8 @@ Last updated 2026-11-18.
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
 | Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
 | Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
+| The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
+| Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -43,6 +45,11 @@ Last updated 2026-11-18.
   `specs/2026-11-18-wonders-and-larger-map-design.md`.
 - **Frame budget met** (2026-11-18, `frame-budget`). /world's p95 at 4× CPU throttle fell from 6.0 to 3.6 ms, with the
   look pinned byte-identical by differential tests.
+- **Sights stay while they are watched** (2026-11-18, `sights-persist`, `live/linger.ts`). A timed sight in view as its
+  time runs out is no longer cut off or faded: the balloon drifts on, the ship sails on (lying to off shoals), the fox
+  trots on into cover, the heron flies on, the monk walks home, the kite comes down with the child, and each wonder's
+  moment plays out or stays where its time left it, until it is out of view. The clocks are unchanged and every
+  visitor's; what lingers is the watcher's own, and never shows twice at once.
 - **Wonders** (2026-11-18). Nine baked wonders after their Ghibli counterparts, redrawn by Cursor at the owner's request
   and polished over three offense/defense critique rounds (Opus critics, Cursor building), each with a live moment
   (`live/moments.ts`), plus the floating garden and the land-ship. A crowded wonder falls back to half the spacing.
@@ -50,6 +57,23 @@ Last updated 2026-11-18.
   `/agents.md` and `/llms.txt`, generated from `content.ts` and the pinned repos; `npm run a11y` restored.
 - **Tools and tests** read a shipped world in either format (`pack/shipped.ts`). The live-layer tests draw a fixture
   world, the first shipped 6400 world (`src/world/testing/fixture-world/`), so the site can ship any world.
+- **Sprites cross the frame's edges whole** (2026-11-18, `edge-sprites`). Boats, gulls, sheep, smoke, the kite, the
+  fishing boats, the rare sights, the wonders' moments and the wake vanished near the frame's edge, a boat with its
+  whole hull still on screen and a startled gull up to 60 px in, because each layer read the land under a thing only
+  from the frame's own bake. The layers now read the land past the edge (`LiveFrame.bakeSpace`, `live/sprites.ts`
+  `bakeAt`) and cull each thing by how far it reaches; the rare sights no longer fade in at the edge, which only hid the
+  old cull. `live/edges.test.ts` holds every sprite layer to a bigger view of the same land, at three frame sizes. The
+  window's size never mattered then: the frame was 400 × 225, only scaled. Cost: about 0.01 ms a frame in Node; at 4×
+  throttle, seven alternating world-fly runs on a loaded machine gave p50 3.2 ms for both builds and p95 4.5 ms against
+  4.4 ms before. Re-check the p95 against 4 ms on a quiet machine.
+- **The world fills the window** (2026-11-19, `edge-sprites`). /world covers the browser window edge to edge at any
+  size and shape, with no paper round it: the frame takes the window's shape (more world across on a wide window, more
+  up and down on a tall one) at the finest whole number of device pixels per frame pixel that keeps it within 96,000
+  frame pixels (`runtime/fit.ts`). 1600 × 900 keeps 400 × 225 at 4×; 1080p gets 384 × 216 at 5×, 1440p 366 × 206 at 7×,
+  a 390 × 844 phone 195 × 422. It is sized from the visual viewport, keeps its size while a phone's toolbars come and
+  go, and is fitted again when the window really changes or the page comes back; the stream view resizes and keeps its
+  chunks. Each thousand frame pixels costs about 0.03 ms at 4× throttle (`world-fly.mjs --viewport`, `?pixels=` to try
+  another budget): 1080p at today's 4× scale, 480 × 270, measured 5.3 ms p95.
 - **Terrain polish on the 10240 world** (2026-11-18, `terrain-polish`), five critic rounds (look ledger). Snow lit by
   its true normal, parted at each crest into a bright face and a lilac one; rock walls in horizontal beds with lit
   ledges, hatching along the contour; heather only on exposed crests and tops, fresher upland greens; fens as compact
@@ -243,7 +267,12 @@ From the clouds and water (2026-11-18):
 - Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
   50 px from small puffs; a bank can drift over a landmark.
 - Water: flat river reaches have no direction to flow in (the baked phase is water level); spray paints a few rock
-  pixels beside tall falls; surf is missing within 16 px of the frame's edge.
+  pixels beside tall falls; surf is missing within 16 px of the frame's edge. The water's shading also differs in the
+  outer 1–3 px of the frame, and the wind never stirs a crown in its first column: both read neighbours only on the
+  frame (`bakeAt` would fix them, at some cost in their hot loops).
+- Two placements still follow the view: `?sights=all` puts each rare sight near the view's centre (by design), and
+  while the land-ship is out of sight a stand-in runs whatever sand the frame shows (`moments.ts` `frameSand`), so it
+  can jump as the view moves. Decide whether the stand-in should stay.
 - The flight page component is large (React Doctor); split it into hooks.
 - The dragon (2026-11-18): the boost's bow of air reads as loose white curves by the head in some frames, and nearly
   vanishes over pale meadow; judged on stills and one live frame, not watched in motion. `depthAt` used to rebuild a cache
@@ -259,6 +288,12 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Sites painted into the land: a lighthouse pad cut down a sea cliff reads as a green box, and a road runs straight
   down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
+
+From the lingering sights (2026-11-18), for the frame-edge work:
+- A rare sight in its window draws only while its candidate spot is 30 px inside the frame, though the balloon drifts
+  up to 119 px from it, the ship 112, the fox 70 and the heron about 255: moving the view can drop one mid-frame. The
+  ship and the fox are culled by their anchor at the frame's edge; the monk shows only while the abbey's whole road
+  box is in frame. In its window the ship still vanishes where its course meets water shallower than tone 5.
 
 From landing (2026-11-18):
 - Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
@@ -292,6 +327,11 @@ From the first-flight review:
 - **Title menu: parked by the owner** (2026-11-18 evening). The `title-menu` session explored twenty directions (A–T)
   in its browser pane; none is picked or built. Mobile gets a separate title screen (see Ideas).
 - ~~**A bigger map?**~~ Built: 10240 with more islands at today's scale, shipped in regions (see Done).
+- **The story** (2026-11-18, Fable). The owner set aside the first brainstorm, a world with an order, a history and
+  months as places (`specs/2026-11-18-lore-and-story.md`): "I just want something simple", in the spirit of *The
+  Little Prince*, about people and not world-building. `specs/2026-11-18-a-simple-story.md` proposes it: the dragon has
+  never made anything, so it asks the keeper of each landmark why they do, and each page of the Codex ends with one
+  short encounter. No gates, nothing on the text page, and nothing asked of the generator. Not built.
 
 ## Open checks
 

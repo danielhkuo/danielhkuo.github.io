@@ -22,7 +22,7 @@ import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { createStreamView } from "../runtime/stream.ts";
 import { createSky } from "../sky/sky.ts";
 import { styleFrom } from "../sky/styles.ts";
-import { fitScale } from "../runtime/fit.ts";
+import { fitFrame } from "../runtime/fit.ts";
 import { wrap } from "../core/torus.ts";
 import { drawControls, roundel, stickKnob, stickWell, type ControlsScene } from "../mobile/art.ts";
 import { blit } from "../controls/blit.ts";
@@ -101,15 +101,13 @@ const SCREENS: Screen[] = [
 /** The frame for a screen: its size in frame pixels and where it sits, CSS px. */
 function frameFor(s: Screen): { fw: number; fh: number; rect: { x: number; y: number; w: number; h: number } } {
   if (s.fit === "letterbox") {
-    const k = fitScale(s.w * s.dpr, s.h * s.dpr, 400, 225) / s.dpr;
+    // How the 400×225 frame sat before it filled the window: a whole number of device pixels, centred.
+    const k = Math.max(1, Math.floor(Math.min((s.w * s.dpr) / 400, (s.h * s.dpr) / 225))) / s.dpr;
     return { fw: 400, fh: 225, rect: { x: (s.w - 400 * k) / 2, y: (s.h - 225 * k) / 2, w: 400 * k, h: 225 * k } };
   }
-  // Fill (spec 3): the smallest whole scale in device pixels within 110,000 frame pixels.
-  let px = 1;
-  while (Math.ceil((s.w * s.dpr) / px) * Math.ceil((s.h * s.dpr) / px) > 110_000) px++;
-  const fw = Math.ceil((s.w * s.dpr) / px);
-  const fh = Math.ceil((s.h * s.dpr) / px);
-  return { fw, fh, rect: { x: 0, y: 0, w: (fw * px) / s.dpr, h: (fh * px) / s.dpr } };
+  // The window's own fitting (runtime/fit.ts): from the top-left, a whole scale, within its pixel budget.
+  const f = fitFrame(s.w, s.h, s.dpr);
+  return { fw: f.w, fh: f.h, rect: { x: 0, y: 0, w: (f.w * f.scale) / s.dpr, h: (f.h * f.scale) / s.dpr } };
 }
 
 export async function main(): Promise<number> {

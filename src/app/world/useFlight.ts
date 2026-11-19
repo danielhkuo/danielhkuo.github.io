@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { Device } from "../../world/controls/guides";
 import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
+import { getFrameFit } from "./useFrameScale";
 import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
 import type { TerminalLink } from "./useTerminalDrawer";
 
@@ -26,6 +27,8 @@ export interface TouchLink {
   phone(): boolean;
   touch: NonNullable<FlightSetup["touch"]>;
   buzz(what: "landed" | "discovery"): void;
+  /** The frame wanted, when the phone decides it (played sideways); the window's otherwise. */
+  frame?(): { w: number; h: number };
 }
 
 export interface FlightView {
@@ -69,6 +72,8 @@ export function useFlight(
         paused: touch.paused,
         phone: touch.phone,
         touch: touch.touch,
+        // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
+        frame: touch.frame ?? getFrameFit,
       },
       {
         failed: () => setFailed(true),

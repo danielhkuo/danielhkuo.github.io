@@ -705,10 +705,17 @@ The research doc lists every unverified finding; these are the ones that bite he
 Built on `claude/mobile-research-9125c0`, on top of `world/bigmap` (the controls guide, landing and the Codex). Where
 the build departs from the sections above:
 
-- **The frame (§3).** The shared canvas fitting is left to the edge-sprites session's fill-the-window work; the phone's
-  needs were passed on (size from `visualViewport`, whole device pixels per frame pixel, about 110,000 frame pixels at
-  most, the size held steady mid-flight). The touch controls are laid out inside the frame's on-screen rectangle, so
-  they work over today's letterboxed 400×225 and over a filled frame alike.
+- **The frame (§3).** The edge-sprites session's fill-the-window fitting (`runtime/fit.ts`, `useFrameFit`) does it for
+  every screen. It works from `visualViewport` at a whole number of device pixels per frame pixel, within 96,000 frame
+  pixels, and is fitted again on resume rather than when the toolbar twitches. Phones measured on this branch:
+  - iPhone 17 Safari, one tab: 437×169, 2 CSS px a pixel;
+  - with the tab bar: 525×176;
+  - Home Screen: 437×201;
+  - Pixel 7: 401×181;
+  - a 360×800 Android: 400×180.
+  The frame covers the screen in every case. Played sideways, the turned layer gets the same fitting on its own swapped
+  sides (`usePhoneFlight`). The touch controls are laid out inside the frame's on-screen rectangle. The options corner
+  keeps out of the safe areas.
 - **The controls (§4).** As designed, numbers as in §4.1. Boost and Brake carry up and down chevrons, the shared glyph
   set's own touch buttons, so the lesson's small glyphs match the big ones. Land is in the cluster, and the guide's
   prompt by the dragon still lands on a tap too. The stick shows as a faint ghost until the first-flight lesson is

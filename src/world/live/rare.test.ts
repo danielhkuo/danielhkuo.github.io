@@ -2,39 +2,33 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isBuilt, isWater, MATERIAL as M } from "../look/materials.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
-import { differing, drawn, frameOf, manifest, seaFrame, shot, type Shot } from "../testing/liveShot.ts";
+import { differing, drawn, frameOf, levelFrame, levelPixel, manifest, shot, type Shot } from "../testing/liveShot.ts";
 import type { Flier, LiveFrame } from "./live.ts";
 import {
   HERON_LIFT, HILL, isField, isRoad, isSea, RARE, rareLayer, rareSlot, rareWindow, SHIP_DEEP, WAKE_LONG, WAKE_LOW, wakeLayer,
   WHALE_DEEP, type RareKind, type RareSeen,
 } from "./rare.ts";
 import { makeLayers, type LayerContext } from "./registry.ts";
-import { worldRowAt } from "./sprites.ts";
+import { bakeAt, worldRowAt } from "./sprites.ts";
 
 const ctx: LayerContext = { seed: manifest.seed, n: manifest.n, sites: manifest.sites };
 const palette = buildPalette(MIDDAY);
-const W = 400, H = 225;
+const W = 400;
 const kindOf = (kind: RareKind): number => RARE.findIndex((r) => r.kind === kind);
 
-/** Level country of one material, `height` units up, with the tone given; as seaFrame, which is the sea at tone 9. */
+/**
+ * Level country of one material, `height` units up, with the tone given, running on past the frame's edges; drawn as
+ * seaFrame draws the material, at tone 9.
+ */
 function country(rx: number, ry: number, t: number, material: number, tone: number, height: number): LiveFrame {
-  const f = seaFrame(rx, ry, t, palette, ctx.n, material);
-  for (let r = 0; r < H; r++) {
-    const by = ry + r, cy = Math.floor(by / 256);
-    const depth = Math.round(((by + height - 256 * cy) / 0.8) * 8);
-    for (let c = 0; c < W; c++) f.bake[r * W + c] = (material | (tone << 8) | (depth << 16)) >>> 0;
-  }
-  return f;
+  return levelFrame(rx, ry, t, palette, ctx.n, levelPixel(material, tone, height), palette[(material << 8) | 9]);
 }
 
 /** Meadow crossed by a narrow river every 24 rows. */
 function streams(rx: number, ry: number, t: number): LiveFrame {
-  const f = country(rx, ry, t, M.meadowMid, 8, 20);
-  for (let r = 0; r < H; r++) {
-    if ((((ry + r) % 24) + 24) % 24 >= 3) continue;
-    for (let c = 0; c < W; c++) f.bake[r * W + c] = (f.bake[r * W + c] & ~0xff) | M.river;
-  }
-  return f;
+  const meadow = levelPixel(M.meadowMid, 8, 20);
+  const pixel = (by: number): number => ((((by % 24) + 24) % 24 >= 3 ? meadow(by) : (meadow(by) & ~0xff) | M.river) >>> 0);
+  return levelFrame(rx, ry, t, palette, ctx.n, pixel, palette[(M.meadowMid << 8) | 9]);
 }
 
 /** When sight `k` first appears after time `from`, unforced. */
@@ -64,8 +58,9 @@ function sightings(kind: RareKind, at: number, make: (rx: number, ry: number, t:
   return got;
 }
 
-const matAt = (f: LiveFrame, s: RareSeen): number => f.bake[s.py * W + s.px] & 255;
-const toneAt = (f: LiveFrame, s: RareSeen): number => (f.bake[s.py * W + s.px] >>> 8) & 15;
+// What a sight stands on, on the frame or past its edge.
+const matAt = (f: LiveFrame, s: RareSeen): number => bakeAt(f, s.px, s.py) & 255;
+const toneAt = (f: LiveFrame, s: RareSeen): number => (bakeAt(f, s.px, s.py) >>> 8) & 15;
 
 /** What the forced layer shows on a view at time t. */
 async function forcedOn(view: string, t: number): Promise<{ s: Shot; log: RareSeen[]; out: Uint32Array; told: string[] }> {
@@ -166,24 +161,21 @@ test("the heron stands only in a river, a step from the bank, and lifts off at t
   assert.ok(standing.length > 0, "a heron in the stream");
   for (const { f, s } of standing) {
     assert.equal(matAt(f, s), M.river);
-    const near = [f.bake[s.py * W + s.px - 2], f.bake[s.py * W + s.px + 2], f.bake[(s.py - 2) * W + s.px], f.bake[(s.py + 2) * W + s.px]];
+    const near = [bakeAt(f, s.px - 2, s.py), bakeAt(f, s.px + 2, s.py), bakeAt(f, s.px, s.py - 2), bakeAt(f, s.px, s.py + 2)];
     assert.ok(near.some((v) => isWater[v & 255] === 0), "the bank is beside it");
   }
   assert.equal(sightings("heron", 6, (rx, ry, t) => country(rx, ry, t, M.meadowMid, 8, 20)).length, 0, "not in a meadow");
   assert.equal(sightings("heron", 6, (rx, ry, t) => country(rx, ry, t, M.river, 8, 20)).length, 0, "not in midstream");
   // Where there is broad water in reach it stands in that, not in a brook a pixel wide beside it.
   const both = (rx: number, ry: number, t: number): LiveFrame => {
-    const f = streams(rx, ry, t);
-    for (let r = 0; r < H; r++) {
-      if ((((ry + r) % 24) + 24) % 24 !== 12) continue;
-      for (let c = 0; c < W; c++) f.bake[r * W + c] = (f.bake[r * W + c] & ~0xff) | M.river;
-    }
-    return f;
+    const brooks = streams(rx, ry, t).bakeSpace!;
+    const pixel = (by: number): number => ((((by % 24) + 24) % 24 === 12 ? (brooks(0, by) & ~0xff) | M.river : brooks(0, by)) >>> 0);
+    return levelFrame(rx, ry, t, palette, ctx.n, pixel, palette[(M.meadowMid << 8) | 9]);
   };
   const choosy = sightings("heron", 6, both);
   assert.ok(choosy.length > 0);
   for (const { f, s } of choosy) {
-    const up = f.bake[(s.py - 1) * W + s.px] & 255, down = f.bake[(s.py + 1) * W + s.px] & 255;
+    const up = bakeAt(f, s.px, s.py - 1) & 255, down = bakeAt(f, s.px, s.py + 1) & 255;
     assert.ok(up === M.river || down === M.river, "in the broad stream");
   }
   // It reads at a glance: a dozen pixels and more, the white of its neck and the dark of its crest among them.

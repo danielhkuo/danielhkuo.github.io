@@ -76,7 +76,7 @@ function firstDevice(): Device {
 /** Extra frame pixels round a guide that still count as on it: more for a finger than a mouse. */
 const SLOP = { mouse: 4, touch: 10 };
 
-export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH: number, hooks: ControlsHooks): Controls {
+export function createControls(canvas: HTMLCanvasElement, hooks: ControlsHooks): Controls {
   const down = new Set<string>();
   let family: KeyFamily | null = null;
   let device = firstDevice();
@@ -155,9 +155,10 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
     down.clear();
   };
 
+  // The frame is the canvas's own size, whatever the window made it.
   const toFrame = (e: PointerEvent) => {
     const r = canvas.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) * frameW) / r.width, y: ((e.clientY - r.top) * frameH) / r.height };
+    return { x: ((e.clientX - r.left) * canvas.width) / r.width, y: ((e.clientY - r.top) * canvas.height) / r.height };
   };
   const onTarget = (e: PointerEvent): Tap | null => {
     if (!target || !target.tap) return null;

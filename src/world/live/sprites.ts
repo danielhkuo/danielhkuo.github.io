@@ -27,12 +27,41 @@ function imageOn(world: number, origin: number, period: number, view: number, sp
 }
 
 /**
- * World row (fractional) of the land drawn at frame pixel (px, py), as WorldView.depthAt gives it: with by = rect.y + py
- * and cy = floor(by / 256), cy · 320 + depth / 8 from the bake pixel. Under haze (bake pixel 0), the sea-level row by / 0.8.
+ * The bake pixel under frame pixel (px, py), whole numbers, which may lie past the frame's edge: the frame's own on it,
+ * the land's beyond it (f.bakeSpace; 0 where none is baked, or without one). Things are placed by the land under them
+ * through this, so a thing is placed the same wherever the frame's edge falls.
+ */
+export function bakeAt(f: LiveFrame, px: number, py: number): number {
+  const w = f.rect.w;
+  if (px >= 0 && py >= 0 && px < w && py < f.rect.h) return f.bake[py * w + px];
+  return f.bakeSpace ? f.bakeSpace(f.rect.x + px, f.rect.y + py) : 0;
+}
+
+/** The bake pixels of the bw × bh box whose top-left is frame pixel (x0, y0), row by row into `into`, as bakeAt reads them. */
+export function bakeBox(f: LiveFrame, x0: number, y0: number, bw: number, bh: number, into: Uint32Array): void {
+  const w = f.rect.w, h = f.rect.h;
+  // The columns of the box that lie on the frame, copied from it a row at a time; the rest from the land.
+  const c0 = x0 < 0 ? -x0 : 0, c1 = x0 + bw > w ? w - x0 : bw;
+  for (let r = 0; r < bh; r++) {
+    const py = y0 + r, row = r * bw;
+    if (py < 0 || py >= h || c0 >= c1) {
+      for (let c = 0; c < bw; c++) into[row + c] = bakeAt(f, x0 + c, py);
+      continue;
+    }
+    for (let c = 0; c < c0; c++) into[row + c] = bakeAt(f, x0 + c, py);
+    into.set(f.bake.subarray(py * w + x0 + c0, py * w + x0 + c1), row + c0);
+    for (let c = c1; c < bw; c++) into[row + c] = bakeAt(f, x0 + c, py);
+  }
+}
+
+/**
+ * World row (fractional) of the land drawn at frame pixel (px, py), on the frame or past its edge (see bakeAt), as
+ * WorldView.depthAt gives it: with by = rect.y + py and cy = floor(by / 256), cy · 320 + depth / 8 from the bake pixel.
+ * Under haze (bake pixel 0), the sea-level row by / 0.8.
  */
 export function worldRowAt(f: LiveFrame, px: number, py: number): number {
   const by = f.rect.y + py;
-  const v = f.bake[py * f.rect.w + px];
+  const v = bakeAt(f, px, py);
   if (matOf(v) === 0) return by / 0.8;
   const cy = Math.floor(by / CHUNK);
   return cy * CHUNK_ROWS + (v >>> 16) / 8;

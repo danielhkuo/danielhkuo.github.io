@@ -5,11 +5,12 @@
 // page reads as it did on a desktop.
 
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type RefObject } from "react";
-import { fitScale } from "../../world/runtime/fit";
+import { fitFrame } from "../../world/runtime/fit";
 import { layerTransform } from "../../world/mobile/turned";
 import { getOptions } from "./optionsStore";
 import { createTouchLayer } from "./touchLayer";
 import type { TouchLink } from "./useFlight";
+import { getFrameFit, type WindowFrame } from "./useFrameScale";
 import { useShell, type Shell } from "./useShell";
 
 /** Light ticks on a phone that can (Android): a landing touching down, a discovery. */
@@ -27,6 +28,13 @@ export function usePhoneFlight(root: RefObject<HTMLDivElement | null>, panelOpen
   useEffect(() => {
     phoneRef.current = shell.phone;
   }, [shell.phone]);
+
+  // Played sideways, the frame is fitted to the turned layer (its sides the screen's swapped); the session reads it here.
+  const turnedFit = useRef<WindowFrame | null>(null);
+  const { turn, layer } = shell;
+  useEffect(() => {
+    turnedFit.current = turn !== 0 ? layerFit(layer) : null;
+  }, [turn, layer]);
 
   // On a touch screen the options panel holds the flight while it is open.
   useEffect(() => {
@@ -48,6 +56,7 @@ export function usePhoneFlight(root: RefObject<HTMLDivElement | null>, panelOpen
       stall: link.stall,
       phone: () => phoneRef.current,
       buzz,
+      frame: () => turnedFit.current ?? getFrameFit(),
       touch: (canvas, hooks) => {
         const el = root.current;
         if (!el) return null;
@@ -60,19 +69,24 @@ export function usePhoneFlight(root: RefObject<HTMLDivElement | null>, panelOpen
 }
 
 export interface PhoneFrame {
-  /** CSS pixels per frame pixel. */
-  scale: number;
+  /** The frame on the page: frame pixels across and down, and CSS pixels per frame pixel. */
+  fit: WindowFrame;
   /** The page's own style on a touch screen: exactly the visible area, turned if played sideways. */
   page: CSSProperties | undefined;
   turned: boolean;
 }
 
-/** How the frame sits on the page: the shared fitting, except on a turned layer, whose sides are the screen's swapped. */
-export function phoneFrame(shell: Shell, shared: number, frameW: number, frameH: number): PhoneFrame {
-  if (shell.touchFirst !== true) return { scale: shared, page: undefined, turned: false };
-  const turned = shell.turn !== 0;
+/** The frame for a turned layer of w × h CSS pixels: the window's fitting, on the layer's own sides. */
+function layerFit(layer: { w: number; h: number }): WindowFrame {
   const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-  const scale = turned ? fitScale(shell.layer.w * dpr, shell.layer.h * dpr, frameW, frameH) / dpr : shared;
+  const f = fitFrame(layer.w, layer.h, dpr);
+  return { ...f, css: f.scale / dpr };
+}
+
+/** How the frame sits on the page: the window's frame, except on a turned layer, which has its own. */
+export function phoneFrame(shell: Shell, windowFit: WindowFrame): PhoneFrame {
+  if (shell.touchFirst !== true) return { fit: windowFit, page: undefined, turned: false };
+  const turned = shell.turn !== 0;
   const page = {
     "--layer-w": `${shell.layer.w}px`,
     "--layer-h": `${shell.layer.h}px`,
@@ -80,5 +94,5 @@ export function phoneFrame(shell: Shell, shared: number, frameW: number, frameH:
     minHeight: 0,
     transform: turned ? layerTransform(shell.layer.h, shell.layer.w, shell.turn) : undefined,
   } as CSSProperties;
-  return { scale, page, turned };
+  return { fit: turned ? layerFit(shell.layer) : windowFit, page, turned };
 }

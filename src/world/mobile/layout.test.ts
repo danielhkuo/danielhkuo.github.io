@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fitScale } from "../runtime/fit.ts";
+import { fitFrame } from "../runtime/fit.ts";
 import type { Circle, Rect } from "../controls/touch.ts";
 import { EDGE_BUDGET, layoutControls, SIZES, SLOP, targetsOf, TOP_BAND, usableRect, type Hand, type Insets, type LayoutInput, type Platform } from "./layout.ts";
 import { layerInsets, layerSize } from "./turned.ts";
@@ -29,12 +29,16 @@ const DEVICES: Device[] = [
   { name: "iPad 11-inch fullscreen", w: 1194, h: 834, dpr: 2, insets: { top: 0, right: 0, bottom: 20, left: 0 }, platform: "ios" },
 ];
 
-/** The 400×225 frame as the shared fitting places it today: a whole number of device pixels, centred. */
+/** A 400×225 frame letterboxed at a whole number of device pixels, centred: how the frame sat before it filled the window. */
 function letterbox(d: { w: number; h: number; dpr: number }) {
-  const s = fitScale(d.w * d.dpr, d.h * d.dpr, 400, 225) / d.dpr;
+  const s = Math.max(1, Math.floor(Math.min((d.w * d.dpr) / 400, (d.h * d.dpr) / 225))) / d.dpr;
   return { x: (d.w - 400 * s) / 2, y: (d.h - 225 * s) / 2, w: 400 * s, h: 225 * s };
 }
-const fill = (d: { w: number; h: number }) => ({ x: 0, y: 0, w: d.w, h: d.h });
+/** The frame as the window's fitting draws it: from the top-left, overhanging the right and bottom by under a pixel. */
+function fill(d: { w: number; h: number; dpr: number }) {
+  const f = fitFrame(d.w, d.h, d.dpr);
+  return { x: 0, y: 0, w: (f.w * f.scale) / d.dpr, h: (f.h * f.scale) / d.dpr };
+}
 
 function circleIn(c: Circle, r: Rect): boolean {
   return c.x - c.r >= r.x0 - 1e-9 && c.x + c.r <= r.x1 + 1e-9 && c.y - c.r >= r.y0 - 1e-9 && c.y + c.r <= r.y1 + 1e-9;

@@ -101,3 +101,33 @@ test("the kept land draws exactly what composing the whole view draws, frame aft
   }
   assert.ok(haze > 50 && slid > 300, `frames with haze ${haze}, without ${slid}`);
 });
+
+test("a view resized mid-flight draws what a view made at the new size draws, and keeps its chunks", () => {
+  const sizes: [number, number][] = [[400, 225], [384, 216], [427, 240], [200, 300], [400, 225]];
+  const pool = new SlowPool();
+  const resized = createStreamView(data, pool, palette, mask, { width: W, height: H, layers: [blendLayer()] });
+  let x = 600, y = 500;
+  for (let k = 0; k < sizes.length * 12; k++) {
+    const [w, h] = sizes[Math.floor(k / 12)];
+    resized.resize(w, h);
+    x += 3;
+    y += 2;
+    resized.setCamera(x, y);
+    resized.update(0, 0);
+    pool.deliver(100);
+    const got = new Uint32Array(w * h);
+    resized.frame(got, k / 30);
+    // A view made at this size, fed the same chunks.
+    const freshPool = new SlowPool();
+    const fresh = createStreamView(data, freshPool, palette, mask, { width: w, height: h, layers: [blendLayer()] });
+    fresh.setCamera(x, y);
+    fresh.update(0, 0);
+    freshPool.deliver(100);
+    const want = new Uint32Array(w * h);
+    fresh.frame(want, k / 30);
+    assert.deepEqual(resized.rect(), fresh.rect(), `frame ${k}: the same rect at ${w}x${h}`);
+    assert.ok(Buffer.from(got.buffer).equals(Buffer.from(want.buffer)), `frame ${k}: the same pixels at ${w}x${h}`);
+    assert.equal(resized.bakeFrame().length, w * h);
+  }
+  assert.ok(resized.cached() > 0 && resized.ready(), "its chunks were kept");
+});
