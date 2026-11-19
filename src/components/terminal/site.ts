@@ -83,7 +83,7 @@ function projectsIndex(projects: readonly SlimProject[]): string {
   return lines.join("\n");
 }
 
-/** contact.md where the shell is the whole page: every way to get in touch, the résumé among them. */
+/** contact.md where the page has no contact form: every way to get in touch, the résumé among them. */
 function contactCard(): string {
   const links = contactLinks().map((c) => `- **${c.label}** [${c.text}](${c.href})`);
   return ["# Contact", "", ...links, ""].join("\n");
@@ -101,10 +101,11 @@ function sitemap(pages: readonly PageLink[]): string {
  * repository and carries its last update as its date; everything else is
  * dated by the build.
  *
- * Where the shell is the whole page (`site.pages` is given), the tree also
- * holds what that page prints as its sections: projects/README.md, the
- * contact card with the résumé on it, and ~/sitemap.md. The contact card of
- * the old home page points at the form at its foot instead.
+ * Given the site's other pages (`site.pages`: the minimal version, and the
+ * abbey's terminal in /world), the tree also holds what the minimal version
+ * prints as its sections: projects/README.md, the contact card with the
+ * résumé on it, and ~/sitemap.md. The contact card of the old home page
+ * points at the form at its foot instead.
  */
 export function siteTree(projects: readonly SlimProject[], site: SiteInfo): DirNode {
   const built = site.builtAt;

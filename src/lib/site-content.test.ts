@@ -8,6 +8,7 @@ import {
   bareUrl,
   contactLinks,
   formatDay,
+  otherPages,
   personJsonLd,
   profileFacts,
   profileSummary,
@@ -126,6 +127,17 @@ test("the text version is a page of the site, at the address its route folder ha
 test("the terminal has no page of its own: the text version is where it is", () => {
   assert.ok(!SITE_PAGES.some((page) => page.title === "Terminal"));
   assert.match(SITE_PAGES.find((page) => page.path === TEXT_PAGE)?.summary ?? "", /terminal/);
+});
+
+test("a page's list of the others leaves itself out, and carries what a sitemap prints", () => {
+  for (const from of [TEXT_PAGE, "/world"]) {
+    const others = otherPages(from);
+    assert.equal(others.length, SITE_PAGES.length - 1, from);
+    assert.ok(!others.some((page) => page.path === from), from);
+    for (const page of others) assert.deepEqual(Object.keys(page), ["title", "path", "summary"]);
+  }
+  // Flight is a page of the site: were it renamed, /world's terminal would list the page it is on.
+  assert.ok(SITE_PAGES.some((page) => page.path === "/world"));
 });
 
 test("the JSON-LD names the person, the title, the text version and the mailbox", () => {

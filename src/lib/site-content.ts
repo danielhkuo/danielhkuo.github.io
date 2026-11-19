@@ -81,6 +81,14 @@ export const SITE_PAGES: readonly SitePage[] = [
   },
 ];
 
+/**
+ * The site's pages other than the one at `from`, as a terminal on that page lists them in ~/sitemap.md: a page does
+ * not list itself among the places to go.
+ */
+export function otherPages(from: string): Pick<SitePage, "title" | "path" | "summary">[] {
+  return SITE_PAGES.filter((page) => page.path !== from).map(({ title, path, summary }) => ({ title, path, summary }));
+}
+
 /** A site path as a whole address on the live site. Whole addresses (https:, mailto:) pass through. */
 export function absoluteUrl(href: string): string {
   return new URL(href, SITE_URL).href;

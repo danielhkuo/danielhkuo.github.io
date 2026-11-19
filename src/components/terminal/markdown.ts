@@ -121,7 +121,7 @@ function inline(source: string, base: Style = {}): Piece[] {
     plain(source.slice(at, m.index));
     if (m[1] !== undefined) pieces.push({ run: { ...CODE, text: ` ${m[1]} ` }, solid: true });
     else if (m[2] !== undefined) pieces.push({ run: { ...base, bold: true, text: m[2] }, solid: false });
-    else if (isWebLink(m[4])) pieces.push({ run: { ...base, ...LINK, text: m[3], href: m[4] }, solid: false });
+    else if (isWebLink(m[4]) || isSitePath(m[4])) pieces.push({ run: { ...base, ...LINK, text: m[3], href: m[4] }, solid: false });
     else plain(m[3]);
     at = m.index + m[0].length;
   }

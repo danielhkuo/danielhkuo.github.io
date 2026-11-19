@@ -9,9 +9,9 @@ import type { SiteInfo, SlimProject } from "@/components/terminal/types";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
 import { loadPinnedRepos } from "@/lib/github";
 import {
-  SITE_PAGES,
   SITE_URL,
   TEXT_PAGE,
+  otherPages,
   personJsonLd,
   profileSummary,
   publishedProjects,
@@ -63,11 +63,7 @@ export default async function MinimalVersion() {
   const site: SiteInfo = {
     builtAt: new Date().toISOString(),
     resumeBytes: statSync(path.join(process.cwd(), "public", "Daniel-Kuo-Resume.pdf")).size,
-    pages: SITE_PAGES.filter((page) => page.path !== TEXT_PAGE).map(({ title, path: to, summary }) => ({
-      title,
-      path: to,
-      summary,
-    })),
+    pages: otherPages(TEXT_PAGE),
   };
 
   return (

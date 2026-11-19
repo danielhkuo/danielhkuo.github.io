@@ -24,9 +24,11 @@ export interface SiteInfo {
   /** The résumé PDF's size, for `ls -l`. */
   resumeBytes: number;
   /**
-   * The site's other pages. Given, the shell is the whole page (the minimal
-   * version) and its tree holds the files that page prints as its sections:
-   * ~/sitemap.md from these, and projects/README.md. See site.ts.
+   * The site's other pages. Given, the tree holds the files the minimal
+   * version prints as its sections: ~/sitemap.md from these, projects/README.md
+   * and a contact card that stands by itself. The minimal version and the
+   * abbey's terminal in /world give them; the old home page, whose contact
+   * card points at the form at its foot, does not. See site.ts.
    */
   pages?: readonly PageLink[];
 }

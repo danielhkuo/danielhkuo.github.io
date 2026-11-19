@@ -103,12 +103,20 @@ test("a link that wraps is a link on every row it lands on", () => {
   assert.equal(run(rows, "two").href, "mailto:a@b.co");
 });
 
-test("a link to anything but the web or a mailbox is left as plain text", () => {
-  const rows = renderMarkdown("[click](javascript:void) [mail](mailto:a@b.co) [web](HTTPS://b.co)", 60);
+test("a link to anything but the web, a mailbox or a path on this site is left as plain text", () => {
+  const rows = renderMarkdown("[click](javascript:void) [mail](mailto:a@b.co) [web](HTTPS://b.co) [far](//b.co/x)", 60);
   assert.equal(run(rows, "click").href, undefined);
   assert.equal(run(rows, "click").underline, undefined);
+  assert.equal(run(rows, "far").href, undefined);
   assert.equal(run(rows, "mail").href, "mailto:a@b.co");
   assert.equal(run(rows, "web").href, "HTTPS://b.co");
+});
+
+test("a link to a path on this site is a link: the sitemap's pages and the résumé can be followed", () => {
+  const rows = renderMarkdown("- [Flight](/world): fly\n- [Résumé](/Daniel-Kuo-Resume.pdf)", 60);
+  assert.equal(run(rows, "Flight").href, "/world");
+  assert.equal(run(rows, "Flight").underline, true);
+  assert.equal(run(rows, "Résumé").href, "/Daniel-Kuo-Resume.pdf");
 });
 
 test("inline markup works inside list items and headings", () => {
