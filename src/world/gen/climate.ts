@@ -90,10 +90,17 @@ export type LatCurve = readonly (readonly [number, number])[];
 export interface ZoneParams {
   /** The latitude (0 equator … 1 pole) of the home island's core; the pole lies to its north. */
   homeLat: number;
-  /** Sea-level temperature by latitude, 1 at the equator … 0 at the pole; flat at TEMPERATE across the temperate belt. */
+  /** Sea-level temperature by latitude, 1 at the equator … 0 at the pole; flat at TEMPERATE across the temperate belt. On the wet side: the route from the pole to the equator that passes home. */
   temp: LatCurve;
-  /** What the rain is multiplied by, by latitude; 1 across the temperate belt. */
+  /** What the rain is multiplied by, by latitude; 1 across the temperate belt. On the wet side. */
   rain: LatCurve;
+  /**
+   * The dry side: the other route from the pole to the equator. Its own curves, which must meet the wet side's at
+   * φ 0 and φ 1, and which have no temperate plateau. Absent: both routes are the wet side's.
+   */
+  dry?: { temp: LatCurve; rain: LatCurve };
+  /** `arid` rises from 0 to 1 over this much latitude from each of the two lines where the sides meet. */
+  aridRamp?: number;
   /** The isotherms wander: (periods round the world, amplitude in φ) per octave. */
   warp: LatCurve;
   /** Continentality is the land's share within this many C nodes … */
@@ -130,6 +137,8 @@ export interface Climate {
   temp?: Float32Array;
   /** The y of the equator line, in cells; the pole line lies n / 2 from it. Set with `temp`. */
   equatorY?: number;
+  /** 0–1: the dry side's share of a node. 0 on the wet side, the route that passes home; 1 on the dry side, rising from each line where the two meet. Absent: one side. */
+  arid?: Float32Array;
 }
 
 function toCoarseHeight(h: Float64Array, isSea: Uint8Array, gN: number): Float32Array {
@@ -218,6 +227,14 @@ export function latitudeAt(y: number, n: number, equatorY: number): number {
   return (d < 0 ? -d : d) / (n / 2);
 }
 
+/**
+ * Signed latitude of the row y: 0 on the equator line, rising to +1 at the pole line through the home island (the
+ * wet side), and falling to −1 the other way round (the dry side). The pole to the north of home is +1 and −1 at once.
+ */
+export function signedLatitudeAt(y: number, n: number, equatorY: number): number {
+  return -torusDelta(equatorY, y, n) / (n / 2);
+}
+
 const WARP_SEED = 0xc11a7e;
 
 /** Chamfer steps of the home rule's distance: a node east or west costs HOME_X, one north or south HOME_Y, a diagonal HOME_D. */
@@ -289,19 +306,22 @@ function inlandShare(isSea: Uint8Array, gN: number, radius: number): Float32Arra
 }
 
 /**
- * The zones: sea-level temperature on C, and the rain's zonal factor applied to `moisture` in place.
- * Latitude gives the curve; slow noise bends the isotherms; land with much land round it is the more extreme; and
- * round the home island the climate is held at the temperate plateau, as a warm current bends the isotherms.
+ * The zones: sea-level temperature on C, the dry side's share on C, and the rain's zonal factor applied to
+ * `moisture` in place. Latitude gives the curves, one pair a side; slow noise bends the isotherms, and with them the
+ * two lines where the sides meet; land with much land round it is the more extreme; and round the home island the
+ * climate is held at the temperate plateau, as a warm current bends the isotherms.
  */
-function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: ZoneParams, at: ZoneLayout): { temp: Float32Array; equatorY: number } {
+function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: ZoneParams, at: ZoneLayout): { temp: Float32Array; equatorY: number; arid?: Float32Array } {
   const cN = gN / 2, n = at.n, cell = n / cN;
   const equatorY = equatorOf(n, at.homeY, z.homeLat);
   const inland = inlandShare(isSea, gN, z.inlandRadius);
   const home = homeWeight(at.home, cN, cell, z.homeNear, z.homeFar);
   const temp = new Float32Array(cN * cN);
+  const arid = z.dry ? new Float32Array(cN * cN) : undefined;
+  const ramp = z.aridRamp === undefined ? 0.1 : z.aridRamp;
   for (let cy = 0; cy < cN; cy++) {
     const y = (cy + 0.5) * cell;
-    const lat = latitudeAt(y, n, equatorY);
+    const lat = signedLatitudeAt(y, n, equatorY);
     for (let cx = 0; cx < cN; cx++) {
       const i = cy * cN + cx;
       const w = home[i];
@@ -310,14 +330,18 @@ function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: Zo
         continue;
       }
       const x = (cx + 0.5) * cell;
-      let phi = lat;
+      let sl = lat;
       for (let k = 0; k < z.warp.length; k++) {
         const periods = z.warp[k][0];
-        phi += z.warp[k][1] * gradNoise((x * periods) / n, (y * periods) / n, periods, (WARP_SEED + at.seed + k * 977) >>> 0);
+        sl += z.warp[k][1] * gradNoise((x * periods) / n, (y * periods) / n, periods, (WARP_SEED + at.seed + k * 977) >>> 0);
       }
-      phi = phi < 0 ? 0 : phi > 1 ? 1 : phi;
-      let t = curveAt(z.temp, phi);
-      let rain = curveAt(z.rain, phi);
+      // Latitude is a loop: bent past the pole or the equator, a node lies on the other side of it.
+      if (sl > 1) sl -= 2;
+      else if (sl <= -1) sl += 2;
+      const dry = z.dry !== undefined && sl < 0;
+      const phi = sl < 0 ? -sl : sl;
+      let t = curveAt(dry ? (z.dry as { temp: LatCurve }).temp : z.temp, phi);
+      let rain = curveAt(dry ? (z.dry as { rain: LatCurve }).rain : z.rain, phi);
       // Land with much land round it is the more extreme, the further from the temperate plateau the more so.
       const deep = inland[i] > z.inlandFrom ? (inland[i] - z.inlandFrom) / (1 - z.inlandFrom) : 0;
       if (deep > 0) {
@@ -333,9 +357,14 @@ function zoneFields(moisture: Float32Array, isSea: Uint8Array, gN: number, z: Zo
       }
       temp[i] = t;
       if (rain !== 1) moisture[i] = clamp01(moisture[i] * rain);
+      if (arid && dry) {
+        const edge = (phi < 1 - phi ? phi : 1 - phi) / ramp;
+        const a = edge >= 1 ? 1 : edge * edge * (3 - 2 * edge);
+        arid[i] = a * (1 - w);
+      }
     }
   }
-  return { temp, equatorY };
+  return { temp, equatorY, arid };
 }
 
 /** h and rain on G; returns fields on C (gN / 2). With `at`, and zones in the params, the world has its climates. */
@@ -372,5 +401,5 @@ export function climateFields(h: Float64Array, rain: Float64Array, isSea: Uint8A
 
   if (!p.zones || !at) return { moisture, wind };
   const zone = zoneFields(moisture, isSea, gN, p.zones, at);
-  return { moisture, wind, temp: zone.temp, equatorY: zone.equatorY };
+  return { moisture, wind, temp: zone.temp, equatorY: zone.equatorY, arid: zone.arid };
 }

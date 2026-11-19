@@ -55,7 +55,7 @@ test("the coil rests just clear of the walls, never tighter than 9 or wider than
 test("without a building, the radius goes by the kind of landmark", () => {
   assert.equal(restRadius(null, "lighthouse"), 9);
   assert.ok(restRadius(null, "abbey") > restRadius(null, "windmill"));
-  for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew", "hospice", "stave", "hermitage", "monastery", "roundchurch", "chapel"] as const) {
+  for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"] as const) {
     const r = restRadius(null, t);
     assert.ok(r >= 9 && r <= 26, `${t}: ${r}`);
   }

@@ -84,7 +84,7 @@ test("hot dry low ground is desert: no pasture, meadow, hedge or crop", () => {
     const slope = r.range(0, 0.1), e = r.range(1, 30);
     const c = cell({
       x: r.int(n), y: r.int(n), e, slope, steep: slope, form: e, northness: r.range(-1, 1), hand: r.range(1, 20),
-      moisture: r.range(0, 0.12), wind: r.float(), region: REGIONS[r.int(6)], temp: 0.95,
+      moisture: r.range(0, 0.12), wind: r.float(), region: REGIONS[r.int(6)], temp: 0.95, arid: 1,
     });
     const m = cover(c, MASK, n);
     if (isField(m) || PASTURE_MEADOW.has(m)) {
@@ -176,9 +176,9 @@ for (const n of [1024, 10240]) {
   test(`with a climate the cover is pure and tiles on the world (n = ${n})`, () => {
     const inputs = sweep(4405 + n, 300, n);
     const bad: string[] = [];
-    for (const temp of [0.05, 0.2, 0.35, 0.7, 0.95]) {
+    for (const [temp, arid] of [[0.05, 0], [0.2, 0], [0.35, 0], [0.7, 0], [0.95, 0], [0.2, 1], [0.4, 1], [0.5, 1], [0.6, 1], [0.8, 1], [0.95, 0.5]]) {
       for (const input of inputs) {
-        const c = Object.freeze({ ...input, temp });
+        const c = Object.freeze({ ...input, temp, arid });
         const a = cover(c, MASK, n);
         assert.equal(cover(c, MASK, n), a);
         assert.equal(cover({ ...c }, MASK, n), a);
@@ -187,7 +187,7 @@ for (const n of [1024, 10240]) {
         if ([a, bx, by, bxy].includes(M.screeStone)) continue;
         const k = canon(a);
         if (canon(bx) !== k || canon(by) !== k || canon(bxy) !== k) {
-          bad.push(`temp ${temp} water ${c.water} at ${c.x},${c.y}: ${name(a)} / +n x ${name(bx)}, +n y ${name(by)}, -n ${name(bxy)}`);
+          bad.push(`temp ${temp} arid ${arid} water ${c.water} at ${c.x},${c.y}: ${name(a)} / +n x ${name(bx)}, +n y ${name(by)}, -n ${name(bxy)}`);
         }
       }
     }
@@ -265,20 +265,28 @@ for (const [label, region] of [["lakes", LAKES], ["skerry", SKERRY]] as const) {
     assert.ok(Math.max(...ic.slice(0, 1000)) < 0.05, "ice in the first 1000 rows");
   });
 
-  test(`hot dry borders are mixed bands at least 150 cells tall (${label})`, (t) => {
+  test(`the dry side's hot borders are mixed bands at least 150 cells tall (${label})`, (t) => {
     const rows = 3400;
     const desert = (id: number) => DESERT.has(id);
-    const dry = (id: number) => GRASS_HOT.has(id) || id === M.garrigue;
-    const temperate = (id: number) => !desert(id) && !dry(id);
-    const [tem, dr, de] = rowShares(rows, 64, X_LINE, N_REAL, (y) => ({ ...FLAT, moisture: 0.08, region, temp: 0.5 + (0.5 * y) / rows }), [temperate, dry, desert]);
-    const a = bandOf(tem, dr), b = bandOf(dr, de);
-    t.diagnostic(report(`${label} temperate→dry`, a));
-    t.diagnostic(report(`${label} dry→desert`, b));
-    t.diagnostic(report(`${label} temperate→desert`, bandOf(tem, de)));
+    const sward = (id: number) => !desert(id);
+    const [sw, de] = rowShares(rows, 64, X_LINE, N_REAL, (y) => ({ ...FLAT, moisture: 0.08, region, temp: 0.5 + (0.5 * y) / rows, arid: 1 }), [sward, desert]);
+    const b = bandOf(sw, de);
+    t.diagnostic(report(`${label} sward→desert`, b));
     t.diagnostic(`${label} desert at the equator end ${de[rows - 1].toFixed(3)}`);
-    assert.ok(a.rows >= 150, report("temperate→dry", a));
-    assert.ok(b.rows >= 150, report("dry→desert", b));
+    assert.ok(b.rows >= 150, report("sward→desert", b));
     assert.ok(de[rows - 1] > 0.5, `desert at the equator end ${de[rows - 1]}`);
+  });
+
+  test(`the dry side's cold borders are mixed bands at least 150 cells tall (${label})`, (t) => {
+    const rows = 2600;
+    const ice = (id: number) => ICE.has(id), tundra = (id: number) => TUNDRA.has(id), steppe = (id: number) => !ICE.has(id) && !TUNDRA.has(id);
+    const [st, tun, ic] = rowShares(rows, 64, X_LINE, N_REAL, (y) => ({ ...FLAT, moisture: 0.3, region, temp: 0.5 - (0.5 * y) / rows, arid: 1 }), [steppe, tundra, ice]);
+    const a = bandOf(st, tun), b = bandOf(tun, ic);
+    t.diagnostic(report(`${label} steppe→tundra`, a));
+    t.diagnostic(report(`${label} tundra→ice`, b));
+    assert.ok(a.rows >= 150, report("steppe→tundra", a));
+    assert.ok(b.rows >= 150, report("tundra→ice", b));
+    assert.ok(ic[rows - 1] >= 0.95, `ice at the pole end ${ic[rows - 1]}`);
   });
 
   test(`hot wet borders are mixed bands at least 150 cells tall (${label})`, (t) => {
@@ -296,7 +304,73 @@ for (const [label, region] of [["lakes", LAKES], ["skerry", SKERRY]] as const) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Scatter by climate.
+// 5. Each climate once a lap: what is the wet side's is not the dry side's.
+
+const SAND = set([M.desertSand, M.desertSandDeep, M.reg, M.salt]);
+const DRY_ONLY = set([...SAND, ...GRASS_HOT, M.garrigue, M.earthPale]);
+const TAIGA_FLOOR = set([M.floorLichen, M.bog, M.bogRed, M.sedge]);
+
+test("the wet side has no sand, steppe, savanna or garrigue at any temperature, rain shadows included", () => {
+  const n = N_REAL, inputs = sweep(4410, 1500, n);
+  const bad = new Map<string, number>();
+  for (const moisture of [0.08, 0.3, 0.6, 0.95]) {
+    for (let k = 0; k < inputs.length; k++) {
+      const temp = 0.3 + (0.7 * k) / inputs.length;
+      const m = cover({ ...inputs[k], water: 0, moisture, temp }, MASK, n);
+      if (DRY_ONLY.has(m) && !(m === M.earthPale && temp <= 0.5)) bad.set(name(m), (bad.get(name(m)) ?? 0) + 1);
+    }
+  }
+  assert.deepEqual([...bad], [], "dry country on the wet side");
+});
+
+test("the dry side is dressed whole: green sward only by water, no taiga floor, at the plateau's temperature too", () => {
+  const n = N_REAL, r = rngFor(4411, "climate-zones");
+  const count = 4000;
+  for (const temp of [0.42, 0.497, 0.5, 0.503, 0.58]) {
+    let green = 0, taiga = 0;
+    for (let k = 0; k < count; k++) {
+      const slope = r.range(0, 0.25), e = r.range(4, 30);
+      const m = cover(cell({
+        x: r.int(n), y: r.int(n), e, slope, steep: slope, form: e, northness: r.range(-1, 1), hand: r.range(5, 20),
+        moisture: r.range(0.15, 0.4), wind: r.float(), region: REGIONS[r.int(6)], temp, arid: 1,
+      }), MASK, n);
+      if (PASTURE_MEADOW.has(m)) green++;
+      if (TAIGA_FLOOR.has(m)) taiga++;
+    }
+    assert.ok(green / count < 0.1, `green sward share ${green / count} at temp ${temp}`);
+    assert.equal(taiga, 0, `taiga floor at temp ${temp}`);
+  }
+});
+
+test("on the dry side nothing changes where the temperature passes the plateau's: the sward is one across it", () => {
+  const n = N_REAL, r = rngFor(4412, "climate-zones");
+  let differ = 0;
+  const count = 4000;
+  for (let k = 0; k < count; k++) {
+    const slope = r.range(0, 0.25), e = r.range(4, 30);
+    const c = cell({
+      x: r.int(n), y: r.int(n), e, slope, steep: slope, form: e, northness: r.range(-1, 1), hand: r.range(5, 20),
+      moisture: r.range(0.15, 0.4), wind: r.float(), region: REGIONS[r.int(6)], arid: 1,
+    });
+    const below = cover({ ...c, temp: 0.499 }, MASK, n), at = cover({ ...c, temp: 0.5 }, MASK, n), above = cover({ ...c, temp: 0.501 }, MASK, n);
+    if (below !== at || above !== at) differ++;
+  }
+  assert.ok(differ / count < 0.03, `cells that change across the plateau's temperature: ${differ / count}`);
+});
+
+test("the wet side's warm forest closes by degrees: more wood at each step from the plateau to the hot country", () => {
+  const n = N_REAL;
+  const wood = (temp: number): number => {
+    const counts = patchCounts({ ...FLAT, moisture: 0.7, region: LAKES, temp }, n, X_LINE, 4000, 192);
+    return ((counts.get(M.floorBroadleaf) ?? 0) + (counts.get(M.floorJungle) ?? 0)) / (192 * 192);
+  };
+  const shares = [0.52, 0.58, 0.64, 0.7, 0.8].map(wood);
+  for (let k = 1; k < shares.length; k++) assert.ok(shares[k] >= shares[k - 1] - 0.02, `wood shares ${shares.map((v) => v.toFixed(2))}`);
+  assert.ok(shares[0] < 0.6 && shares[shares.length - 1] > 0.9, `wood shares ${shares.map((v) => v.toFixed(2))}`);
+});
+
+// ---------------------------------------------------------------------------
+// 6. Scatter by climate.
 
 /** Every stamp over a 256 × 256 patch of one ground. */
 function stampsOn(ground: number, over: Partial<CoverInput>, n = 1024): { count: number; mats: Set<number> } {
@@ -314,10 +388,10 @@ test("scatter by climate: jungle is crown on crown, savanna sparse acacias, dese
   const jungle = stampsOn(M.floorJungle, { ...flat, moisture: 0.9, temp: 0.97 });
   assert.ok(jungle.count / 65536 >= 0.15, `jungle density ${jungle.count / 65536}`);
   for (const m of jungle.mats) assert.ok(JUNGLE_CROWN.has(m), `${name(m)} in the jungle`);
-  const savanna = stampsOn(M.savannaMid, { ...flat, moisture: 0.5, temp: 0.9 });
+  const savanna = stampsOn(M.savannaMid, { ...flat, moisture: 0.5, temp: 0.9, arid: 1 });
   const sd = savanna.count / 65536;
   assert.ok(sd >= 0.003 && sd <= 0.03, `savanna density ${sd}`);
-  const desert = stampsOn(M.desertSand, { ...flat, moisture: 0.05, temp: 0.85 });
+  const desert = stampsOn(M.desertSand, { ...flat, moisture: 0.05, temp: 0.85, arid: 1 });
   assert.equal(desert.count, 0, `stamps on desert sand: ${[...desert.mats].map(name)}`);
   const tundra = stampsOn(M.tundraMid, { ...flat, moisture: 0.5, temp: 0.2, debris: 0.5 });
   assert.ok(tundra.count > 0, "the tundra has some dwarf birch and erratics");

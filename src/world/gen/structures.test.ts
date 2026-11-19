@@ -4,8 +4,6 @@ import { isBuilt, isCanopy, isWater, MATERIAL as M, MATERIAL_COUNT } from "../lo
 import type { Structure } from "./built.ts";
 import { bridge, harbourWorks, inBasin } from "./settle.ts";
 import * as S from "./structures.ts";
-import type { LandmarkType } from "../sites/assign.ts";
-import { BOX } from "./sites.ts";
 
 /** Columns and rows that hold something standing, and the greatest height of tops and marks. */
 function extent(s: Structure): { w: number; d: number; h: number } {
@@ -67,40 +65,6 @@ test("every landmark stays inside its sprite box (design 5.9)", () => {
     assert.ok(e.h <= h, `${name} height ${e.h}`);
     if (h > 10) assert.ok(e.h >= h * 0.5, `${name} uses its height: ${e.h}`);
   }
-});
-
-test("the six churches of the climates: each within its sprite box, a gilt cross on each, pointed windows, built of built things", () => {
-  const churches: [LandmarkType, Structure][] = [
-    ["hospice", S.hospice()], ["stave", S.staveChurch()], ["hermitage", S.hermitage()],
-    ["monastery", S.monastery()], ["roundchurch", S.roundChurch()], ["chapel", S.riverChapel()],
-  ];
-  const has = (s: Structure, mat: number): number => s.marks.filter((_, k) => k % 5 === 3 && s.marks[k] === mat).length;
-  for (const [type, s] of churches) {
-    wellFormed(s, type);
-    const e = extent(s), box = BOX[type];
-    assert.ok(s.w <= box.w && s.h <= box.d && e.w <= box.w && e.d <= box.d, `${type} footprint ${s.w} × ${s.h}`);
-    assert.ok(e.h <= box.h && e.h >= box.h * 0.5, `${type} height ${e.h}`);
-    assert.ok(has(s, M.gilt) >= 5, `${type}: a cross`);
-    assert.ok(has(s, M.opening) >= 3, `${type}: windows`);
-    for (let i = 0; i < s.top.length; i++) if (s.top[i] > 0) assert.equal(isBuilt[s.mat[i]], 1, type);
-    // The cross is the highest thing on it.
-    let cross = 0;
-    for (let k = 0; k < s.marks.length; k += 5) if (s.marks[k + 3] === M.gilt) cross = Math.max(cross, s.marks[k + 2]);
-    assert.equal(cross, e.h, `${type}: the cross stands highest`);
-  }
-  // The hermitage's bell wall is its tallest part; the stave church has white crosses on its gables.
-  const hm = S.hermitage();
-  let wall = 0, roof = 0;
-  for (let i = 0; i < hm.top.length; i++) {
-    if (hm.mat[i] === M.whitewash) wall = Math.max(wall, hm.top[i]);
-    else roof = Math.max(roof, hm.top[i]);
-  }
-  assert.ok(wall > roof + 3, `bell wall ${wall}, roof ${roof}`);
-  assert.ok(has(S.staveChurch(), M.whitewash) >= 12, "white crosses on three gables");
-  // The landing stage runs the way it is told, planks over its base.
-  const st = S.riverStage(0, 8, 2, 1);
-  wellFormed(st, "stage");
-  assert.ok(st.h >= 9 && st.w <= 6);
 });
 
 test("the churchyard: a yew no wider than 13 and no taller than 18, a chapel within 10 × 7 × 14, a wall with a gate", () => {

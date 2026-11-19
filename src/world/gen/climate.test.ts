@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { seamRatio } from "../testing/seam.ts";
-import { blurTorus, climateFields, curveAt, equatorOf, latitudeAt, type ClimateParams, type LatCurve, TEMPERATE, toCoarse, type ZoneLayout } from "./climate.ts";
+import { blurTorus, climateFields, curveAt, equatorOf, latitudeAt, signedLatitudeAt, type ClimateParams, type LatCurve, TEMPERATE, toCoarse, type ZoneLayout } from "./climate.ts";
 import { paramsFor } from "./params.ts";
 
 const P: ClimateParams = { moistureRadius: 3, windReach: 20, windDropPerNode: 0.8, windScale: 30 };
@@ -200,21 +200,80 @@ test("the home island keeps the temperate plateau exactly, and far from home the
   }
 });
 
-test("rain by zone: the equator is wetter than the dry belt, and the dry belt drier than the temperate plateau", () => {
+test("the two sides: the route through home is wet and has the plateau; the other is dry, has none, and is marked arid", () => {
+  const { h, rain, isSea } = flatWorld(ZG);
+  // Even rain of 0.5 a node, so the zones' factors show unclamped.
+  rain.fill(0.5);
+  const flatParams: ClimateParams = { ...ZP, zones: { ...ZP.zones!, warp: [] } };
+  const c = climateFields(h, rain, isSea, ZG, flatParams, LAYOUT);
+  const base = climateFields(h, rain, isSea, ZG, { ...ZP, zones: undefined });
+  const eq = c.equatorY as number, temp = c.temp as Float32Array, arid = c.arid as Float32Array;
+  assert.equal(arid.length, ZC * ZC);
+  const wetT: number[] = [], dryT: number[] = [];
+  let plateauRows = 0, dryPlateau = 0;
+  for (let y = 0; y < ZC; y++) {
+    const row = (y + 0.5) * 8, s = signedLatitudeAt(row, ZN, eq), phi = Math.abs(s), i = y * ZC + 5;
+    const factor = c.moisture[i] / base.moisture[i];
+    assert.ok(arid[i] >= 0 && arid[i] <= 1);
+    if (s > 0) {
+      assert.equal(arid[i], 0, `the wet side at ${s}`);
+      wetT.push(temp[i]);
+      if (temp[i] === TEMPERATE) plateauRows++;
+      if (phi > 0.3 && phi < 0.6) assert.ok(factor >= 1, `wet side rain factor ${factor} at ${phi}`);
+    } else {
+      if (phi > 0.12 && phi < 0.88) assert.equal(arid[i], 1, `the dry side at ${s}`);
+      dryT.push(temp[i]);
+      if (temp[i] === TEMPERATE) dryPlateau++;
+      if (phi > 0.25 && phi < 0.9) assert.ok(factor < 0.7, `dry side rain factor ${factor} at ${phi}`);
+    }
+  }
+  assert.ok(plateauRows >= 8, `plateau rows on the wet side: ${plateauRows}`);
+  assert.ok(dryPlateau <= 1, `rows at exactly the plateau's temperature on the dry side: ${dryPlateau}`);
+  // Both sides run from the equator's heat to the pole's cold.
+  for (const side of [wetT, dryT]) assert.ok(Math.max(...side) > 0.9 && Math.min(...side) < 0.12, `side from ${Math.min(...side)} to ${Math.max(...side)}`);
+  // The home row is on the wet side, at its latitude.
+  assert.ok(Math.abs(signedLatitudeAt(LAYOUT.homeY, ZN, eq) - ZP.zones!.homeLat) < 1e-9);
+});
+
+test("the two sides meet without a step: across the pole and the equator the fields are as smooth as anywhere", () => {
   const { h, rain, isSea } = flatWorld(ZG);
   const c = climateFields(h, rain, isSea, ZG, ZP, LAYOUT);
-  const eq = c.equatorY as number;
-  const means = rowMeans(c.moisture, ZC);
-  const band = (lo: number, hi: number): number => {
-    let s = 0, k = 0;
-    for (let y = 0; y < ZC; y++) {
-      const lat = latitudeAt((y + 0.5) * 8, ZN, eq);
-      if (lat >= lo && lat <= hi) { s += means[y]; k++; }
+  const temp = c.temp as Float32Array, arid = c.arid as Float32Array;
+  // The largest step between neighbouring nodes, within a few rows of the two lines where the sides meet and
+  // everywhere else: a seam would be a step at those lines larger than any the curves make on their own.
+  const eq = c.equatorY as number, eqRow = Math.floor(eq / 8), poleRow = Math.floor((eq + ZN / 2) / 8);
+  const ring = (a: number, b: number) => Math.min(((a - b) % ZC + ZC) % ZC, ((b - a) % ZC + ZC) % ZC);
+  const steps = (f: Float32Array): [number, number] => {
+    let seam = 0, rest = 0;
+    for (let y = 0; y < ZC; y++) for (let x = 0; x < ZC; x++) {
+      const v = f[y * ZC + x];
+      const d = Math.max(Math.abs(v - f[y * ZC + ((x + 1) % ZC)]), Math.abs(v - f[((y + 1) % ZC) * ZC + x]));
+      if (ring(y, eqRow) <= 3 || ring(y, poleRow) <= 3) seam = Math.max(seam, d);
+      else rest = Math.max(rest, d);
     }
-    assert.ok(k > 0, `rows at ${lo}-${hi}`);
-    return s / k;
+    return [seam, rest];
   };
-  const equator = band(0, 0.04), dry = band(0.28, 0.34), plateau = band(0.56, 0.62);
-  assert.ok(equator > dry + 0.2, `equator ${equator}, dry belt ${dry}`);
-  assert.ok(plateau > dry + 0.2, `plateau ${plateau}, dry belt ${dry}`);
+  for (const [name, f] of [["temperature", temp], ["moisture", c.moisture], ["arid", arid]] as const) {
+    const [seam, rest] = steps(f);
+    assert.ok(seam <= rest * 1.25 + 1e-6, `${name}: step ${seam} where the sides meet, ${rest} elsewhere`);
+  }
+  // The lines wander with the isotherms. Wherever they lie, the dry side's share rises over a tenth of the latitude
+  // (six rows here): a node set on the wrong side of a bent line would be a step of the whole range.
+  const [aSeam, aRest] = steps(arid);
+  assert.ok(Math.max(aSeam, aRest) < 0.4, `arid step ${Math.max(aSeam, aRest)}`);
+  assert.ok(seamRatio(arid, ZC) <= 1, `arid seam ${seamRatio(arid, ZC)}`);
+});
+
+test("with no dry side in the params both routes are the wet side's, and nothing is arid", () => {
+  const { h, rain, isSea } = flatWorld(ZG);
+  const one: ClimateParams = { ...ZP, zones: { ...ZP.zones!, dry: undefined, warp: [] } };
+  const c = climateFields(h, rain, isSea, ZG, one, LAYOUT);
+  assert.equal(c.arid, undefined);
+  const eq = c.equatorY as number, temp = c.temp as Float32Array;
+  for (let d = 1; d < ZC / 2 - 1; d++) {
+    const eqRow = Math.floor(eq / 8);
+    const a = temp[((eqRow + d) % ZC) * ZC + 7], b = temp[((eqRow - d - 1 + ZC) % ZC) * ZC + 7];
+    // The rows do not lie evenly about the line: to within a row's own change.
+    assert.ok(Math.abs(a - b) < 0.025, `rows ${d} either side of the equator: ${a}, ${b}`);
+  }
 });

@@ -24,7 +24,7 @@ function tri(i: number, n: number): number {
 
 /**
  * A 1024 world that holds every climate: the pole on y = 0 and the equator on y = 512, temp a triangle wave between;
- * moisture 0.05 round x = 0 rising to 0.95 round x = 512. Flat skerry land at 6, gentle hills on x 384–640, a sea strip on
+ * moisture 0.05 round x = 0 rising to 0.95 round x = 512, and the dry columns are the dry side of the world. Flat skerry land at 6, gentle hills on x 384–640, a sea strip on
  * x 800–864, and no rivers.
  */
 function climateWorld(): BakeWorld {
@@ -43,9 +43,11 @@ function climateWorld(): BakeWorld {
     }
   }
   w.temp = new Float32Array(cN * cN);
+  w.arid = new Float32Array(cN * cN);
   for (let cy = 0; cy < cN; cy++) for (let cx = 0; cx < cN; cx++) {
     const i = cy * cN + cx;
     w.temp[i] = tri(cy, cN);
+    w.arid[i] = Math.min(1, Math.max(0, (0.5 - tri(cx, cN)) / 0.15));
     w.moisture[i] = 0.05 + 0.9 * Math.min(1, Math.max(0, (tri(cx, cN) - 0.2) / 0.6));
     w.wind[i] = 0.3;
     w.exposure[i] = 0.5;
@@ -104,11 +106,16 @@ test("every tile baked from its window equals the tile baked from the whole clim
 test("a world all at the temperate plateau bakes as one with no temperature", () => {
   const w = world();
   const none: BakeWorld = { ...w, temp: undefined };
-  const plateau: BakeWorld = { ...w, temp: new Float32Array(w.temp!.length).fill(0.5) };
+  // The plateau is the wet side's: with no dry side, and with a dry-side plane that is all 0.
+  const plateau: BakeWorld = { ...w, temp: new Float32Array(w.temp!.length).fill(0.5), arid: undefined };
+  const wetSide: BakeWorld = { ...plateau, arid: new Float32Array(w.temp!.length) };
   const nT = N / 256;
   for (let ty = 0; ty < nT; ty++) for (let tx = 0; tx < nT; tx++) {
-    const a = buildTile(none, look, mask, tx, ty), b = buildTile(plateau, look, mask, tx, ty);
-    for (const k of ARRAYS) assert.deepEqual(b[k], a[k], `tile ${tx},${ty}: ${k}`);
+    const a = buildTile(none, look, mask, tx, ty), b = buildTile(plateau, look, mask, tx, ty), d = buildTile(wetSide, look, mask, tx, ty);
+    for (const k of ARRAYS) {
+      assert.deepEqual(b[k], a[k], `tile ${tx},${ty}: ${k}`);
+      assert.deepEqual(d[k], a[k], `tile ${tx},${ty}, a dry-side plane of 0: ${k}`);
+    }
   }
 });
 

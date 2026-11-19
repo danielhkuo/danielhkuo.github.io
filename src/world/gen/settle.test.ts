@@ -19,8 +19,7 @@ test("a small world is settled leniently: sites of several types, each named in 
   const rules = builtRules(N);
   const have = new Map<string, number>();
   for (const site of s.sites) have.set(site.type, (have.get(site.type) ?? 0) + 1);
-  // One of each kind, each in its own climate: this small world holds five (three before the six churches of the climates).
-  assert.ok(s.sites.length >= 5, `${s.sites.length} sites`);
+  assert.ok(s.sites.length >= 6, `${s.sites.length} sites`);
   assert.ok(have.size >= 4, `types ${[...have.keys()]}`);
   for (const [type, want] of Object.entries(rules.counts)) {
     const got = have.get(type) ?? 0;

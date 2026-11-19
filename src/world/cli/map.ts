@@ -29,12 +29,6 @@ const SITE_RGB: Record<string, [number, number, number]> = {
   cathedral: [120, 40, 160],
   windmill: [230, 220, 60],
   yew: [20, 90, 30],
-  hospice: [90, 200, 255],
-  stave: [60, 30, 10],
-  hermitage: [255, 120, 200],
-  monastery: [255, 60, 0],
-  roundchurch: [0, 0, 0],
-  chapel: [255, 0, 255],
 };
 
 /** The overview's RGBA pixels, `size` a side, one pixel per `step` cells. */
@@ -100,7 +94,7 @@ export function coverOverview(t: Terrain, step: number, mask: Uint8Array, climat
   const size = Math.floor(n / step);
   const rgba = new Uint8Array(size * size * 4);
   const pal = buildPalette(MIDDAY);
-  const sea = t.land.isSea, lake = t.hydro.lakeId, hand = t.hydro.hand, temp = t.climate.temp;
+  const sea = t.land.isSea, lake = t.hydro.lakeId, hand = t.hydro.hand, temp = t.climate.temp, arid = t.climate.arid;
   const G = (gx: number, gy: number): number => (((gy % gN) + gN) % gN) * gN + (((gx % gN) + gN) % gN);
   // River cells at map scale: the pixels a reach of two cells or wider passes through.
   const river = new Uint8Array(size * size);
@@ -138,12 +132,13 @@ export function coverOverview(t: Terrain, step: number, mask: Uint8Array, climat
     c.water = sea[i] ? 1 : lake[i] >= 0 ? 2 : river[py * size + px] ? 3 : 0;
     c.shore = t.land.shoreClass[i];
     c.temp = temp ? temp[ci] : undefined;
+    c.arid = arid ? arid[ci] : undefined;
     let m = cover(c, mask, n);
     // A wood is seen from above as its crowns, not its floor.
     const hsh = Math.imul(px + 1, 0x27d4eb2d) ^ Math.imul(py + 1, 0x165667b1);
     if (m === M.floorJungle) m = M.jungleCool + ((hsh >>> 9) % 3);
     else if (m === M.floorConifer) m = (temp && temp[ci] < 0.45 ? M.spruceCool : M.coniferCool) + ((hsh >>> 9) % 3);
-    else if (m === M.floorBroadleaf) m = temp && temp[ci] > 0.56 ? M.maquis : M.broadleafCool + ((hsh >>> 9) % 3);
+    else if (m === M.floorBroadleaf) m = temp && temp[ci] > 0.56 ? (arid && arid[ci] > 0.5 ? M.maquis : M.jungleCool + ((hsh >>> 9) % 2)) : M.broadleafCool + ((hsh >>> 9) % 3);
     let tone: number;
     if (isWater[m]) {
       const depth = sea[i] ? -e : 3;

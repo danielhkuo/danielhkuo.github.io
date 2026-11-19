@@ -38,6 +38,12 @@ export interface CoverInput {
    * (gen/climate.ts). Absent, or exactly 0.5, the cover is the temperate one. The cover cools it with height.
    */
   temp?: number;
+  /**
+   * Optional: the dry side's share, 0–1 (gen/climate.ts). The world has two routes from its pole to its equator: the
+   * wet side, which passes home, and the dry side. Absent or 0 is the wet side. Above 0 the ground is dressed for dry
+   * country at every temperature, the plateau's own included.
+   */
+  arid?: number;
   /** 0 land, 1 sea, 2 lake, 3 river. */
   water: number;
   /** Shore class from the coast stage: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */

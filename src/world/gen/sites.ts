@@ -1,7 +1,7 @@
-// S10 siting (design 5.6; biomes design 10): one site of each of thirteen
-// kinds. Candidates are scored on G, taken most-constrained type first (abbey
-// with its town, then SITE_ORDER), best score first, under the spacing rule;
-// each kind keeps to its climate (SITE_CLIMATE). Every site must be seen by the fixed camera and stay under the
+// S10 siting (design 5.6): the twelve reserved landmark sites. Candidates are
+// scored on G, taken most-constrained type first (abbey with its town, then
+// lighthouse, bridge, cathedral, windmill, yew), best score first, under the
+// spacing rule. Every site must be seen by the fixed camera and stay under the
 // height cap. A type with no passing site throws, naming the rule that failed.
 //
 // Positions are in cells; G node j sits at cell 4j + 2.
@@ -39,6 +39,8 @@ export interface SiteFields {
   regions: ArrayLike<number>;
   /** C grid: sea-level temperature, 0.5 on the temperate plateau (gen/climate.ts). Absent: one temperate climate. */
   temp?: ArrayLike<number>;
+  /** C grid: the dry side's share, 0 on the wet side … 1 on the dry (gen/climate.ts). Absent: one side. */
+  arid?: ArrayLike<number>;
   reaches: readonly SiteReach[];
   /** Sea stacks from the coast stage, in cells. */
   stacks: readonly { x: number; y: number; r: number; top: number }[];
@@ -77,21 +79,6 @@ export interface SiteRules {
   bridge: { width: number; level: number; deck: readonly [number, number]; clear: number };
   cathedral: { hand: number; slope: number; floor: number; hills: number; hillsWithin: number; river: readonly [number, number] };
   yew: { prominence: readonly [number, number]; alone: number };
-  /**
-   * A bench or saddle in the cold: mean slope under `slope` over the pad, at `height`, with ground `walls` higher on
-   * two opposite sides within `wallsWithin` cells.
-   */
-  hospice: { temp: readonly [number, number]; slope: number; height: readonly [number, number]; walls: number; wallsWithin: number };
-  /** A clearing in the taiga: level ground `water` cells from a river or a lake, with `forest` of the ground within `within` wooded. */
-  stave: { slope: number; hand: number; water: readonly [number, number]; forest: number; within: number };
-  /** The lighthouse's headland or stack rule, with its own numbers. */
-  hermitage: { open: number; exposure: number; cliff: readonly [number, number]; stackTop: number };
-  /** Level ground in the desert, `water` cells from a river of `river` width or a lake. */
-  monastery: { temp: number; moisture: number; slope: number; height: number; hand: number; river: number; water: readonly [number, number] };
-  /** The yew's knoll on the savanna, or open level ground under `slope`. */
-  roundchurch: { temp: number; prominence: readonly [number, number]; alone: number; slope: number };
-  /** Level ground on a jungle river's bank, `near` cells from a river of `river` width. */
-  chapel: { temp: number; moisture: number; slope: number; height: number; hand: number; river: number; near: readonly [number, number] };
 }
 
 /** Sprite boxes (design 5.9): pad width and depth in cells, landmark height in units. */
@@ -103,12 +90,6 @@ export const BOX: Record<LandmarkType, { w: number; d: number; h: number; round:
   bridge: { w: 24, d: 6, h: 14, round: false },
   cathedral: { w: 34, d: 16, h: 26, round: false },
   yew: { w: 20, d: 20, h: 18, round: true },
-  hospice: { w: 20, d: 14, h: 16, round: false },
-  stave: { w: 22, d: 16, h: 26, round: false },
-  hermitage: { w: 12, d: 12, h: 16, round: true },
-  monastery: { w: 30, d: 22, h: 22, round: false },
-  roundchurch: { w: 16, d: 16, h: 16, round: true },
-  chapel: { w: 14, d: 12, h: 16, round: false },
 };
 
 /**
@@ -119,10 +100,7 @@ export function siteRules(n: number): SiteRules {
   const k = lengthScale(n);
   return {
     // One of each, in a world of any size: a project is at the windmill, never at the third lighthouse.
-    counts: {
-      abbey: 1, town: 1, lighthouse: 1, bridge: 1, cathedral: 1, windmill: 1, yew: 1,
-      hospice: 1, stave: 1, hermitage: 1, monastery: 1, roundchurch: 1, chapel: 1,
-    },
+    counts: { abbey: 1, town: 1, lighthouse: 1, bridge: 1, cathedral: 1, windmill: 1, yew: 1 },
     spacing: 1500 * k,
     homeRiver: [1200 * k, 2000 * k],
     visible: 0.8,
@@ -134,12 +112,6 @@ export function siteRules(n: number): SiteRules {
     bridge: { width: 3, level: 2, deck: [1.5, 14], clear: 48 },
     cathedral: { hand: 4, slope: 0.05, floor: 60, hills: 25, hillsWithin: 250, river: [30, 80] },
     yew: { prominence: [6, 15], alone: 120 },
-    hospice: { temp: [0.03, 0.27], slope: 0.14, height: [10, 90], walls: 12, wallsWithin: 250 },
-    stave: { slope: 0.1, hand: 14, water: [30, 220], forest: 0.4, within: 120 },
-    hermitage: { open: 180, exposure: 0.5, cliff: [6, 35], stackTop: 5 },
-    monastery: { temp: 0.7, moisture: 0.24, slope: 0.08, height: 3, hand: 1.5, river: 2, water: [24, 180] },
-    roundchurch: { temp: 0.72, prominence: [4, 18], alone: 80, slope: 0.06 },
-    chapel: { temp: 0.8, moisture: 0.6, slope: 0.1, height: 2, hand: 1, river: 2, near: [12, 40] },
   };
 }
 
@@ -433,6 +405,7 @@ export function coverAtNode(c: SiteContext, gx: number, gy: number): number {
     hand: c.hand[i], moisture: c.moisture[ci], wind: c.wind[ci], exposure: c.exposure[i], debris: d > 1 ? 1 : d,
     rock: c.rock[i], region: region6, water: 0, shore: c.shoreClass[i],
     temp: c.temp ? c.temp[ci] : undefined,
+    arid: c.arid ? c.arid[ci] : undefined,
   };
   return cover(inp, FLAT_MASK, c.n);
 }
@@ -636,73 +609,48 @@ function abbeyCandidates(c: SiteContext, r: SiteRules, mouthReach: number, tally
 // ---------------------------------------------------------------------------
 
 function lighthouseCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  return headlandCandidates(c, r, r.lighthouse, BOX.lighthouse.h, tally);
-}
-
-/** The hermitage: the lighthouse's headland or stack, in the Mediterranean. */
-function hermitageCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  return headlandCandidates(c, r, r.hermitage, BOX.hermitage.h, tally, SITE_CLIMATE.hermitage);
-}
-
-/** True when the sea-level temperature at the node lies in [lo, hi]. */
-function inTemp(c: SiteContext, gx: number, gy: number, lo: number, hi: number): boolean {
-  const t = tempAt(c, cellOf(gx), cellOf(gy));
-  return t >= lo && t <= hi;
-}
-
-/**
- * An exposed headland with a cliff the camera sees, or a sea stack with a top wide enough. `temp`, when given, is
- * the climate the place must lie in (the lighthouse's climate is applied after, with every kind's).
- */
-function headlandCandidates(c: SiteContext, r: SiteRules, hr: SiteRules["lighthouse"], boxH: number, tally: Tally, temp?: readonly [number, number]): Cand[] {
   const { gN } = c;
   const out: Cand[] = [];
   const L = {
-    climate: temp ? `temperature ${temp[0]}–${temp[1]}` : "",
-    shore: `exposed shore (E ≥ ${hr.exposure})`,
-    cliff: `cliff of ${hr.cliff[0]}–${hr.cliff[1]}`,
-    open: `${hr.open}° of open sea within 40 cells`,
+    shore: `exposed shore (E ≥ ${r.lighthouse.exposure})`,
+    cliff: `cliff of ${r.lighthouse.cliff[0]}–${r.lighthouse.cliff[1]}`,
+    open: `${r.lighthouse.open}° of open sea within 40 cells`,
     face: "south- or south-west-facing",
     seen: `visibility ≥ ${r.visible}`,
     cap: `height ≤ ${r.heightCap}`,
   };
-  for (const rule of Object.values(L)) if (rule) tally.declare(rule);
+  for (const rule of Object.values(L)) tally.declare(rule);
   for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
     const i = gy * gN + gx;
-    if (temp) {
-      if (c.isSea[i] || !inTemp(c, gx, gy, temp[0], temp[1])) continue;
-      tally.pass(L.climate);
-    }
-    if (c.isSea[i] || c.exposure[i] < hr.exposure) continue;
+    if (c.isSea[i] || c.exposure[i] < r.lighthouse.exposure) continue;
     // Within two nodes of the sea.
     let near = false;
     for (let k = 0; k < 16 && !near; k += 2) if (c.isSea[idx(c, Math.floor(gx + 0.5 + RX[k] * 2), Math.floor(gy + 0.5 + RY[k] * 2))]) near = true;
     if (!near) continue;
     tally.pass(L.shore);
     const level = c.h[i];
-    if (level < hr.cliff[0] || level > hr.cliff[1]) continue;
+    if (level < r.lighthouse.cliff[0] || level > r.lighthouse.cliff[1]) continue;
     tally.pass(L.cliff);
     const open = openSea(c, gx, gy, 10);
-    if (open * 360 < hr.open) continue;
+    if (open * 360 < r.lighthouse.open) continue;
     tally.pass(L.open);
     // Sea to the south or south-west within 16 cells: the cliff the camera sees.
     let face = 0;
     for (let k = 3; k <= 7; k++) for (let q = 1; q <= 4; q++) if (c.isSea[idx(c, Math.floor(gx + 0.5 + RX[k] * q), Math.floor(gy + 0.5 + RY[k] * q))]) { face++; break; }
     if (face < 2) continue;
     tally.pass(L.face);
-    const seen = seenShare(c, gx, gy, 1, 1, level, boxH);
+    const seen = seenShare(c, gx, gy, 1, 1, level, BOX.lighthouse.h);
     if (seen.box < r.visible || seen.pad < r.visible) continue;
     tally.pass(L.seen);
-    if (level + boxH > r.heightCap) continue;
+    if (level + BOX.lighthouse.h > r.heightCap) continue;
     tally.pass(L.cap);
     out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: open * 2 + c.exposure[i] + face / 5 - Math.abs(level - 22) / 40 - (c.islandSize[c.island[i]] < 400 ? 2 : 0) });
   }
   // A headland a path can reach comes first: a skerry too small for a road scores as a stack does.
   // Stacks with a top wide enough carry a lighthouse and no road.
   for (const s of c.stacks) {
-    if (0.6 * s.r < hr.stackTop || s.top < 8 || s.top + boxH > r.heightCap) continue;
+    if (0.6 * s.r < r.lighthouse.stackTop || s.top < 8 || s.top + BOX.lighthouse.h > r.heightCap) continue;
     const gx = Math.floor(s.x / 4), gy = Math.floor(s.y / 4);
-    if (temp && !inTemp(c, gx, gy, temp[0], temp[1])) continue;
     // A stack within sight of a real shore comes before one alone in open water, where a view shows the tower and nothing else.
     let shore = false;
     for (let d = 8; d <= 32 && !shore; d += 8) for (let k = 0; k < 16; k++) {
@@ -852,69 +800,29 @@ function cathedralCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[]
 }
 
 function yewCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  return knollCandidates(c, r, r.yew, BOX.yew.h, isOpenCover, "meadow or pasture", tally);
-}
-
-/** The round church: the yew's knoll in savanna grass, or open level ground there. */
-function roundchurchCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  const rc = r.roundchurch;
-  return knollCandidates(c, r, rc, BOX.roundchurch.h, (m) => m >= M.savannaCool && m <= M.savannaWarm, "savanna grass", tally, { temp: rc.temp, slope: rc.slope });
-}
-
-/**
- * An isolated knoll in open cover: nothing higher within `alone`, standing `prominence` over the ring round it.
- * `level`, when given, keeps only places at temperature `level.temp` or more, and also admits open ground whose
- * mean slope is under `level.slope`, scored below any knoll.
- */
-function knollCandidates(
-  c: SiteContext, r: SiteRules, kr: { prominence: readonly [number, number]; alone: number }, boxH: number,
-  coverOk: (m: number) => boolean, coverName: string, tally: Tally, level?: { temp: number; slope: number },
-): Cand[] {
   const { gN } = c;
   const out: Cand[] = [];
   const L = {
-    climate: level ? `temperature ≥ ${level.temp}` : "",
-    knoll: `knoll: nothing higher within ${kr.alone}${level ? `, or level ground (s < ${level.slope})` : ""}`,
-    prom: `prominence ${kr.prominence[0]}–${kr.prominence[1]} over a radius of 15–40`,
-    cover: coverName,
+    knoll: `knoll: nothing higher within ${r.yew.alone}`,
+    prom: `prominence ${r.yew.prominence[0]}–${r.yew.prominence[1]} over a radius of 15–40`,
+    cover: "meadow or pasture",
     seen: `visibility ≥ ${r.visible}`,
     cap: `height ≤ ${r.heightCap}`,
   };
-  for (const rule of Object.values(L)) if (rule) tally.declare(rule);
-  const alone = Math.ceil(kr.alone / 4);
+  for (const rule of Object.values(L)) tally.declare(rule);
+  const alone = Math.ceil(r.yew.alone / 4);
   for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
     const i = gy * gN + gx;
-    const level0 = c.h[i];
-    if (c.isSea[i] || level0 < 4 || c.rw[i] > 0 || c.lakeId[i] >= 0) continue;
-    if (level) {
-      if (!inTemp(c, gx, gy, level.temp, 1)) continue;
-      tally.pass(L.climate);
-    }
+    const level = c.h[i];
+    if (c.isSea[i] || level < 4 || c.rw[i] > 0 || c.lakeId[i] >= 0) continue;
     // A quick reject before the wide scan: the top of its 3 × 3.
     let top = true;
-    for (let k = 0; k < 16 && top; k += 2) if (c.h[idx(c, Math.floor(gx + 0.5 + RX[k] * 1.5), Math.floor(gy + 0.5 + RY[k] * 1.5))] > level0) top = false;
-    if (top) {
-      for (let dy = -alone; dy <= alone && top; dy++) for (let dx = -alone; dx <= alone; dx++) {
-        if (dx * dx + dy * dy <= alone * alone && c.h[idx(c, gx + dx, gy + dy)] > level0) { top = false; break; }
-      }
+    for (let k = 0; k < 16 && top; k += 2) if (c.h[idx(c, Math.floor(gx + 0.5 + RX[k] * 1.5), Math.floor(gy + 0.5 + RY[k] * 1.5))] > level) top = false;
+    if (!top) continue;
+    for (let dy = -alone; dy <= alone && top; dy++) for (let dx = -alone; dx <= alone; dx++) {
+      if (dx * dx + dy * dy <= alone * alone && c.h[idx(c, gx + dx, gy + dy)] > level) { top = false; break; }
     }
-    if (!top) {
-      // Level open ground, on every fourth node: a church on the plain.
-      if (!level || (gx & 1) !== 0 || (gy & 1) !== 0) continue;
-      const shape = blockShape(c, gx, gy, 2, 2);
-      if (!shape.land || shape.slope >= level.slope || shape.range > 4) continue;
-      tally.pass(L.knoll);
-      tally.pass(L.prom);
-      if (!coverOk(coverAtNode(c, gx, gy))) continue;
-      tally.pass(L.cover);
-      const seen = seenShare(c, gx, gy, 2, 2, level0, boxH);
-      if (seen.box < r.visible || seen.pad < r.visible) continue;
-      tally.pass(L.seen);
-      if (level0 + boxH > r.heightCap) continue;
-      tally.pass(L.cap);
-      out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level: level0, score: 0.5 + seen.box - shape.slope / level.slope });
-      continue;
-    }
+    if (!top) continue;
     tally.pass(L.knoll);
     // Prominence over the ring where the knoll meets the fields: the best of radii 16–40 cells.
     let prom = 0, sea = false;
@@ -925,218 +833,18 @@ function knollCandidates(
         if (c.isSea[j]) sea = true;
         sum += c.h[j];
       }
-      prom = Math.max(prom, level0 - sum / 16);
+      prom = Math.max(prom, level - sum / 16);
     }
-    if (sea || prom < kr.prominence[0] || prom > kr.prominence[1]) continue;
+    if (sea || prom < r.yew.prominence[0] || prom > r.yew.prominence[1]) continue;
     tally.pass(L.prom);
-    if (!coverOk(coverAtNode(c, gx, gy))) continue;
+    if (!isOpenCover(coverAtNode(c, gx, gy))) continue;
     tally.pass(L.cover);
-    const seen = seenShare(c, gx, gy, 2, 2, level0, boxH);
+    const seen = seenShare(c, gx, gy, 2, 2, level, BOX.yew.h);
     if (seen.box < r.visible || seen.pad < r.visible) continue;
     tally.pass(L.seen);
-    if (level0 + boxH > r.heightCap) continue;
+    if (level + BOX.yew.h > r.heightCap) continue;
     tally.pass(L.cap);
-    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level: level0, score: 2 - Math.abs(prom - 10) / 5 + seen.box });
-  }
-  return out;
-}
-
-/** The nearest node along the sixteen rays, out to `far` nodes, that `wet` admits: its distance in nodes and offset, or Infinity. */
-function nearestWet(c: SiteContext, gx: number, gy: number, far: number, wet: (j: number) => boolean): { d: number; dx: number; dy: number } {
-  let best = Infinity, bx = 0, by = 0;
-  for (let k = 0; k < 16; k++) {
-    for (let q = 1; q <= far && q < best; q++) {
-      const dx = Math.floor(0.5 + RX[k] * q), dy = Math.floor(0.5 + RY[k] * q);
-      if (!wet(idx(c, gx + dx, gy + dy))) continue;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < best) { best = d; bx = dx; by = dy; }
-      break;
-    }
-  }
-  return { d: best, dx: bx, dy: by };
-}
-
-/** The hospice on the pass: a gentle bench or saddle in the ice or the tundra, with higher ground on two opposite sides. */
-function hospiceCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  const { gN } = c, h = r.hospice;
-  const out: Cand[] = [];
-  const L = {
-    climate: `ice or tundra (temperature ${h.temp[0]}–${h.temp[1]})`,
-    height: `height ${h.height[0]}–${h.height[1]}`,
-    bench: `a bench of mean slope < ${h.slope}`,
-    walls: `ground ${h.walls} higher on two opposite sides within ${h.wallsWithin}`,
-    seen: `visibility ≥ ${r.visible}`,
-    cap: `height ≤ ${r.heightCap}`,
-  };
-  for (const rule of Object.values(L)) tally.declare(rule);
-  const far = Math.ceil(h.wallsWithin / 4);
-  for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
-    const i = gy * gN + gx;
-    if (c.isSea[i] || c.lakeId[i] >= 0 || c.rw[i] > 0 || !inTemp(c, gx, gy, h.temp[0], h.temp[1])) continue;
-    tally.pass(L.climate);
-    const level = c.h[i];
-    if (level < h.height[0] || level > h.height[1]) continue;
-    tally.pass(L.height);
-    if (c.slope[i] >= 2 * h.slope) continue;
-    const shape = blockShape(c, gx, gy, 2, 2);
-    if (!shape.land || shape.slope >= h.slope || shape.range > 8) continue;
-    tally.pass(L.bench);
-    let walls = 0;
-    for (let k = 0; k < 8; k++) {
-      let a = 0, b = 0;
-      for (let q = 4; q <= far; q += 2) {
-        a = Math.max(a, c.h[idx(c, Math.floor(gx + 0.5 + RX[k] * q), Math.floor(gy + 0.5 + RY[k] * q))]);
-        b = Math.max(b, c.h[idx(c, Math.floor(gx + 0.5 - RX[k] * q), Math.floor(gy + 0.5 - RY[k] * q))]);
-      }
-      walls = Math.max(walls, Math.min(a, b) - level);
-    }
-    if (walls < h.walls) continue;
-    tally.pass(L.walls);
-    const seen = seenShare(c, gx, gy, 2, 2, level, BOX.hospice.h);
-    if (seen.box < r.visible || seen.pad < r.visible) continue;
-    tally.pass(L.seen);
-    if (level + BOX.hospice.h > r.heightCap) continue;
-    tally.pass(L.cap);
-    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: 1 - shape.slope / h.slope + Math.min(2, walls / 25) + seen.box });
-  }
-  return out;
-}
-
-/** Forest floors: the conifer's, the lichen under thin pines, and the broadleaf's. */
-function isForest(m: number): boolean {
-  return m === M.floorConifer || m === M.floorLichen || m === M.floorBroadleaf;
-}
-
-/** The stave church: a level clearing in the taiga, near a river or a lake and ringed by forest. */
-function staveCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  const { gN } = c, st = r.stave, [lo, hi] = SITE_CLIMATE.stave;
-  const out: Cand[] = [];
-  const L = {
-    climate: `taiga (temperature ${lo}–${hi})`,
-    level: `level ground (s < ${st.slope}, HAND < ${st.hand})`,
-    water: `a river or a lake ${st.water[0]}–${st.water[1]} away`,
-    seen: `visibility ≥ ${r.visible}`,
-    cap: `height ≤ ${r.heightCap}`,
-    forest: `forest on ${st.forest} of the ground within ${st.within}`,
-  };
-  for (const rule of Object.values(L)) tally.declare(rule);
-  const far = Math.ceil(st.water[1] / 4), wet = (j: number): boolean => c.rw[j] > 0 || c.lakeId[j] >= 0;
-  const radii = [Math.max(2, Math.floor(st.within * 0.4 / 4)), Math.floor(st.within * 0.9 / 4)];
-  for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
-    const i = gy * gN + gx;
-    if (c.isSea[i] || c.lakeId[i] >= 0 || c.rw[i] > 0 || !inTemp(c, gx, gy, lo, hi)) continue;
-    tally.pass(L.climate);
-    const level = c.h[i];
-    if (level < 2 || c.slope[i] >= st.slope || c.hand[i] >= st.hand) continue;
-    const shape = blockShape(c, gx, gy, 2, 2);
-    if (!shape.land || shape.slope >= st.slope || shape.range > 5) continue;
-    tally.pass(L.level);
-    const w = nearestWet(c, gx, gy, far, wet);
-    if (4 * w.d < st.water[0] || 4 * w.d > st.water[1]) continue;
-    tally.pass(L.water);
-    const seen = seenShare(c, gx, gy, 2, 2, level, BOX.stave.h);
-    if (seen.box < r.visible || seen.pad < r.visible) continue;
-    tally.pass(L.seen);
-    if (level + BOX.stave.h > r.heightCap) continue;
-    tally.pass(L.cap);
-    let forest = 0, looked = 0;
-    for (let k = 0; k < 16; k++) for (const q of radii) {
-      const nx = Math.floor(gx + 0.5 + RX[k] * q), ny = Math.floor(gy + 0.5 + RY[k] * q), j = idx(c, nx, ny);
-      looked++;
-      if (!c.isSea[j] && c.lakeId[j] < 0 && c.rw[j] === 0 && isForest(coverAtNode(c, nx, ny))) forest++;
-    }
-    if (forest < st.forest * looked) continue;
-    tally.pass(L.forest);
-    // A clearing: open ground under the church itself comes first, and water to the south, where the camera sees it.
-    const clearing = isForest(coverAtNode(c, gx, gy)) ? 0 : 0.5;
-    out.push({
-      gx, gy, x: cellOf(gx), y: cellOf(gy), level,
-      score: forest / looked + clearing + seen.box + 1 - shape.slope / st.slope + (w.dy > 0 ? 0.3 : 0) - Math.abs(4 * w.d - 80) / 300,
-    });
-  }
-  return out;
-}
-
-/** The monastery in the sands: level ground in the desert, back from a river or a lake. */
-function monasteryCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  const { gN } = c, cN = gN / 2, m = r.monastery;
-  const out: Cand[] = [];
-  const L = {
-    climate: `desert (temperature ≥ ${m.temp}, moisture < ${m.moisture})`,
-    level: `level ground (s < ${m.slope}, height ≥ ${m.height}, HAND ≥ ${m.hand})`,
-    water: `a river of w ≥ ${m.river} or a lake ${m.water[0]}–${m.water[1]} away`,
-    seen: `visibility ≥ ${r.visible}`,
-    cap: `height ≤ ${r.heightCap}`,
-  };
-  for (const rule of Object.values(L)) tally.declare(rule);
-  const far = Math.ceil(m.water[1] / 4), wet = (j: number): boolean => c.rw[j] >= m.river || c.lakeId[j] >= 0;
-  for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
-    const i = gy * gN + gx;
-    if (c.isSea[i] || c.lakeId[i] >= 0 || c.rw[i] > 0 || !inTemp(c, gx, gy, m.temp, 1) || c.moisture[(gy >> 1) * cN + (gx >> 1)] >= m.moisture) continue;
-    tally.pass(L.climate);
-    const level = c.h[i];
-    if (level < m.height || c.slope[i] >= m.slope || c.hand[i] < m.hand) continue;
-    const shape = blockShape(c, gx, gy, 3, 2);
-    if (!shape.land || shape.slope >= 1.5 * m.slope || shape.range > 6) continue;
-    tally.pass(L.level);
-    const w = nearestWet(c, gx, gy, far, wet);
-    if (4 * w.d < m.water[0] || 4 * w.d > m.water[1]) continue;
-    tally.pass(L.water);
-    const seen = seenShare(c, gx, gy, 3, 2, level, BOX.monastery.h);
-    if (seen.box < r.visible || seen.pad < r.visible) continue;
-    tally.pass(L.seen);
-    if (level + BOX.monastery.h > r.heightCap) continue;
-    tally.pass(L.cap);
-    out.push({
-      gx, gy, x: cellOf(gx), y: cellOf(gy), level,
-      score: 1 - shape.slope / (1.5 * m.slope) + seen.box + 1 - (4 * w.d) / m.water[1] + (w.dy > 0 ? 0.3 : 0),
-    });
-  }
-  return out;
-}
-
-/** The river chapel: level ground on a jungle river's bank. */
-function chapelCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] {
-  const { gN } = c, cN = gN / 2, ch = r.chapel;
-  const out: Cand[] = [];
-  const L = {
-    climate: `jungle (temperature ≥ ${ch.temp}, moisture ≥ ${ch.moisture})`,
-    level: `level ground (s < ${ch.slope}, height ≥ ${ch.height}, HAND ≥ ${ch.hand})`,
-    river: `a river of w ≥ ${ch.river} ${ch.near[0]}–${ch.near[1]} away`,
-    seen: `visibility ≥ ${r.visible}`,
-    cap: `height ≤ ${r.heightCap}`,
-  };
-  for (const rule of Object.values(L)) tally.declare(rule);
-  const far = Math.ceil(ch.near[1] / 4);
-  for (let gy = 0; gy < gN; gy++) for (let gx = 0; gx < gN; gx++) {
-    const i = gy * gN + gx;
-    if (c.isSea[i] || c.lakeId[i] >= 0 || c.rw[i] > 0 || !inTemp(c, gx, gy, ch.temp, 1) || c.moisture[(gy >> 1) * cN + (gx >> 1)] < ch.moisture) continue;
-    tally.pass(L.climate);
-    const level = c.h[i];
-    if (level < ch.height || c.slope[i] >= ch.slope || c.hand[i] < ch.hand) continue;
-    const shape = blockShape(c, gx, gy, 1, 1);
-    if (!shape.land || shape.slope >= 1.5 * ch.slope || shape.range > 4) continue;
-    tally.pass(L.level);
-    let river = Infinity, rdx = 0, rdy = 0;
-    for (let dy = -far; dy <= far; dy++) for (let dx = -far; dx <= far; dx++) {
-      if (c.rw[idx(c, gx + dx, gy + dy)] < ch.river) continue;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < river) { river = d; rdx = dx; rdy = dy; }
-    }
-    if (4 * river < ch.near[0] || 4 * river > ch.near[1]) continue;
-    tally.pass(L.river);
-    const seen = seenShare(c, gx, gy, 1, 1, level, BOX.chapel.h);
-    if (seen.box < r.visible || seen.pad < r.visible) continue;
-    tally.pass(L.seen);
-    if (level + BOX.chapel.h > r.heightCap) continue;
-    tally.pass(L.cap);
-    const j = idx(c, gx + rdx, gy + rdy);
-    out.push({
-      gx, gy, x: cellOf(gx), y: cellOf(gy), level,
-      // Best with the river to the south, where the camera sees the landing stage run down to it.
-      score: 1 - shape.slope / (1.5 * ch.slope) + seen.box + (rdy > 0 ? 0.6 : 0) - Math.abs(4 * river - 20) / 40,
-      extra: { river: { x: cellOf(gx + rdx), y: cellOf(gy + rdy), level: c.rlev[j], toBay: 0 } },
-    });
+    out.push({ gx, gy, x: cellOf(gx), y: cellOf(gy), level, score: 2 - Math.abs(prom - 10) / 5 + seen.box });
   }
   return out;
 }
@@ -1324,9 +1032,7 @@ function place(c: SiteContext, type: LandmarkType, k: number, q: Cand): PlacedSi
   } else if (extra.stack) {
     approach = { x: q.x, y: q.y, road: false };
   } else {
-    // A building whose door or gate faces the camera is reached from the south.
-    const south = type === "yew" || type === "windmill" || type === "cathedral" || type === "hospice" || type === "stave" || type === "monastery" || type === "roundchurch";
-    const a = approachOf(c, q.x, q.y, q.level, pad, south);
+    const a = approachOf(c, q.x, q.y, q.level, pad, type === "yew" || type === "windmill" || type === "cathedral");
     facing = a.facing;
     approach = { x: a.x, y: a.y, road: true };
   }
@@ -1344,21 +1050,8 @@ export interface PlaceOptions {
   log?: (line: string) => void;
 }
 
-/** The kinds sited by the search, after the abbey and the town. */
-export type SearchedType = Exclude<LandmarkType, "abbey" | "town">;
-
-/** Order the types are taken in after the abbey and the town: the old five, then the new six, most constrained first. */
-export const SITE_ORDER: readonly SearchedType[] = [
-  "lighthouse", "bridge", "cathedral", "windmill", "yew",
-  "chapel", "monastery", "stave", "roundchurch", "hospice", "hermitage",
-];
-
-/** Each kind's candidates: a table, so a kind with no rule of its own is a type error, never another kind's places. */
-const CANDIDATES: Readonly<Record<SearchedType, (c: SiteContext, r: SiteRules, tally: Tally) => Cand[]>> = {
-  lighthouse: lighthouseCandidates, bridge: bridgeCandidates, cathedral: cathedralCandidates, windmill: windmillCandidates, yew: yewCandidates,
-  hospice: hospiceCandidates, stave: staveCandidates, hermitage: hermitageCandidates, monastery: monasteryCandidates,
-  roundchurch: roundchurchCandidates, chapel: chapelCandidates,
-};
+/** Order the types are taken in after the abbey and the town. */
+export const SITE_ORDER: readonly LandmarkType[] = ["lighthouse", "bridge", "cathedral", "windmill", "yew"];
 
 /**
  * The sea-level temperature a kind's site may have (gen/climate.ts: 0.5 is the temperate plateau). The windmill may
@@ -1368,9 +1061,6 @@ export const SITE_CLIMATE: Readonly<Record<LandmarkType, readonly [number, numbe
   abbey: [0, 1], town: [0, 1],
   lighthouse: [0.44, 0.58], bridge: [0.44, 0.58], cathedral: [0.44, 0.58], yew: [0.44, 0.58],
   windmill: [0.44, 0.7],
-  // The six that came with the climates, each in its own.
-  hospice: [0.03, 0.27], stave: [0.28, 0.43], hermitage: [0.56, 0.74],
-  monastery: [0.7, 1], roundchurch: [0.72, 1], chapel: [0.8, 1],
 };
 
 /** Sea-level temperature at a cell: the temperate plateau's where the world has no climates. */
@@ -1428,13 +1118,14 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
   }
 
   // The rest: a depth-first search over each type's best candidates, so an early pick cannot starve a later type.
-  const lists = new Map<SearchedType, Cand[]>(), tallies = new Map<SearchedType, Tally>(), every = new Map<SearchedType, Cand[]>();
-  let slots: SearchedType[] = [];
+  const lists = new Map<LandmarkType, Cand[]>(), tallies = new Map<LandmarkType, Tally>(), every = new Map<LandmarkType, Cand[]>();
+  let slots: LandmarkType[] = [];
   for (const type of SITE_ORDER) {
     const count = rules.counts[type];
     if (count <= 0) continue;
     const tally = new Tally();
-    const all = CANDIDATES[type](c, rules, tally);
+    const all = type === "lighthouse" ? lighthouseCandidates(c, rules, tally) : type === "bridge" ? bridgeCandidates(c, rules, tally)
+      : type === "cathedral" ? cathedralCandidates(c, rules, tally) : type === "windmill" ? windmillCandidates(c, rules, tally) : yewCandidates(c, rules, tally);
     // Each kind keeps to its own climate: the five that came with the temperate land stand in temperate country.
     if (c.temp) {
       const [lo, hi] = SITE_CLIMATE[type];
@@ -1469,7 +1160,7 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
   };
   // Forward check: every later slot still has enough candidates clear of what is chosen.
   // It counts candidates, not whether they clear each other: a cheap bound that prunes most dead ends.
-  let blame: SearchedType | null = null;
+  let blame: LandmarkType | null = null;
   const feasible = (slot: number): boolean => {
     let k = slot;
     while (k < slots.length) {
@@ -1527,12 +1218,12 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
       found = feasible(0) && search(0, 0);
     }
     if (found) break;
-    const type: SearchedType = blame ?? slots[deepest];
+    const type: LandmarkType = blame ?? slots[deepest];
     const list = lists.get(type) as Cand[];
     fail(type, list.length < rules.counts[type] ? (tallies.get(type) as Tally).failed() : `minimum spacing of ${Math.round(rules.spacing)} cells`);
     slots.splice(slots.lastIndexOf(type), 1);
   }
-  const counts = new Map<SearchedType, number>();
+  const counts = new Map<LandmarkType, number>();
   for (let k = 0; k < chosen.length; k++) {
     const type = slots[k], j = counts.get(type) ?? 0;
     counts.set(type, j + 1);

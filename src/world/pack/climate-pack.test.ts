@@ -102,6 +102,7 @@ test("a core of a world with climates carries the haze's washes beside its overv
   const cN = world.cN, temp = new Float32Array(cN * cN);
   for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) temp[y * cN + x] = y / (cN - 1);
   world.temp = temp;
+  world.arid = new Float32Array(cN * cN).fill(1);
   world.moisture.fill(0.05);
   const core = await decodeCore((await encodeTiled(world, { regionCells: 128 })).core.bin);
   const wash = core.overviewWash as Uint8Array;
@@ -110,5 +111,32 @@ test("a core of a world with climates carries the haze's washes beside its overv
   assert.equal(wash[(cN - 1) * cN], MATERIAL.desertSand);
   // The row nearest the plateau is left to the height.
   const mid = Math.round((cN - 1) / 2);
-  assert.ok(wash[mid * cN] === 0 || wash[mid * cN] === MATERIAL.scrubMid || wash[mid * cN] === MATERIAL.spruceMid);
+  assert.ok(wash[mid * cN] === MATERIAL.scrubMid || wash[mid * cN] === MATERIAL.steppeMid);
+  // The same world on the wet side: no sand at the equator, and the plateau's row left to the height.
+  world.arid = undefined;
+  const wet = (await decodeCore((await encodeTiled(world, { regionCells: 128 })).core.bin)).overviewWash as Uint8Array;
+  assert.equal(wet[0], MATERIAL.snow);
+  assert.equal(wet[(cN - 1) * cN], MATERIAL.jungleMid);
+});
+
+test("the dry side's share round-trips, ships only in the regions that have some, and is cut back whole", async () => {
+  const world = blankWorld(256, 3);
+  const { gN, cN } = world;
+  world.temp = new Float32Array(cN * cN).fill(0.7);
+  world.arid = new Float32Array(cN * cN);
+  // The dry side is the right-hand half, with a ramp into it.
+  for (let y = 0; y < cN; y++) for (let x = 0; x < cN; x++) world.arid[y * cN + x] = Math.min(1, Math.max(0, (x - cN / 2) / 4));
+  const whole = await decodeWorld((await encodeWorld(world)).bin);
+  for (let i = 0; i < cN * cN; i++) assert.ok(Math.abs((whole.arid as Float32Array)[i] - world.arid[i]) <= 0.005 + 1e-6, `node ${i}`);
+  const tiled = await encodeTiled(world, { regionCells: 128 });
+  const core = await decodeCore(tiled.core.bin);
+  assert.ok(core.world.arid, "the core says the world has two sides");
+  const regions = new Map<string, RegionGrids>();
+  for (const r of tiled.regions) {
+    const reg = await decodeRegion(r.bin, core);
+    regions.set(`${reg.rx},${reg.ry}`, reg);
+    assert.equal(reg.arid !== undefined, reg.rx === 1, `region ${reg.rx},${reg.ry}`);
+  }
+  const cut = cutFromRegions(core, (rx, ry) => regions.get(`${rx},${ry}`) as RegionGrids, { x0: 0, y0: 0, w: gN, h: gN }, { x0: 0, y0: 0, w: cN, h: cN });
+  assert.deepEqual(cut.arid, whole.arid);
 });

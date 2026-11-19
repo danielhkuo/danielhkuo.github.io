@@ -410,9 +410,15 @@ function zonal(m: number): boolean {
 }
 
 /** Hot ground by what it has to drink: desert, thin steppe and thorn, savanna, open woodland, jungle. */
-function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, heat: number, hl: number, wet: number, st: number, near: number): number {
+function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, heat: number, hl: number, wet: number, st: number, near: number, dryside: boolean): number {
   const j = ruleJitter(mask, x, y, RULE.grass);
   const ef = c.form === undefined ? c.e : c.form;
+  if (!dryside) {
+    // The wet side is forest from the temperate belt to the equator. Its lee slopes, too dry for closed forest, are
+    // green glades in it; sand, thorn and savanna are the other side's.
+    if (wet < 0.5 + 0.08 * soft(x, y, n, 48, WARM_SEED + 33) + 0.012 * j) return M.pastureCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);
+    return hl < 0.56 + 0.1 * soft(x, y, n, 52, WARM_SEED + 17) + 0.06 * soft(x, y, n, 15, WARM_SEED + 26) + 0.03 * j ? M.floorBroadleaf : M.floorJungle;
+  }
   // By water in dry country the bank is green: plots under palms, and the reeds the table left at the water.
   if (c.moisture < STEPPE_RAIN && near > 0.42 && st < 0.25) return M.pastureCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);
   if (wet < DESERT_RAIN + 0.012 * j) {
@@ -458,8 +464,10 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
  * belt the cover is hot country's own (hotGround); short of it the table's cover dries by degrees into the
  * Mediterranean's: sage sward, straw, garrigue and bare earth, the sunny side and the spur first.
  */
-function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, temp: number): number {
+function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, temp: number, arid: number): number {
   const heat = heatOf(temp);
+  // Where the two sides meet, in the jungle of the equator, the dry side's rules come on by patches.
+  const dryside = arid >= 1 || (arid > 0 && arid > 0.5 + 0.7 * soft(x, y, n, 84, WARM_SEED + 30));
   if (c.water !== 0) {
     // The clear sea of the tropics, turquoise over its shelves. Its edge lies in lobes hundreds of cells across.
     if (m === M.sea) return heat > 0.15 && heat > 0.5 + 0.3 * soft(x, y, n, 420, WARM_SEED) + 0.14 * soft(x, y, n, 130, WARM_SEED + 1) + 0.16 * ruleJitter(mask, x, y, RULE.sea) ? M.seaClear : m;
@@ -484,29 +492,69 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
     const wet = c.moisture + (hand < 3 ? 0.1 * (1 - hand / 3) : 0) + 0.26 * near + (curve < 0 ? 0.03 * (curve < -2 ? 1 : -curve / 2) : -0.02 * (curve > 2 ? 1 : curve / 2)) -
       0.07 * (north < 0 ? -north : 0) * steep + 0.075 * soft(x, y, n, 70, WARM_SEED + 20) + 0.035 * soft(x, y, n, 21, WARM_SEED + 21);
     // Rock of dry country is banded sandstone, where it is not the white of limestone or the dark of slate.
-    if (wet < 0.4) {
+    if (dryside && wet < 0.4) {
       if (m === M.rockHard || m === M.rockSed) return M.rockDesert;
       if (m === M.cliffHard || m === M.cliffSed) return M.cliffDesert;
     }
     // Coral sand in the tropics; a dune behind a desert beach is bare; a muddy tropical shore is mangrove's.
     if (m === M.sand) return heat > 0.6 ? M.sandPale : m;
-    if (m === M.duneGrass) return wet < 0.3 ? M.desertSand : m;
+    if (m === M.duneGrass) return dryside && wet < 0.3 ? M.desertSand : m;
     if (m === M.saltmarsh || m === M.saltCreek) return wet > 0.5 ? M.mud : m;
     // Wet ground with no water to keep it is a dry lake's bed: salt, white, with pale silt at its rim.
-    if ((m === M.marsh || m === M.reeds || (m >= M.meadowCool && m <= M.meadowWarm && hand < FLOOD_HAND)) && c.moisture < 0.2 && near < 0.3) {
+    if (dryside && (m === M.marsh || m === M.reeds || (m >= M.meadowCool && m <= M.meadowWarm && hand < FLOOD_HAND)) && c.moisture < 0.2 && near < 0.3) {
       return soft(x, y, n, 30, WARM_SEED + 5) + 0.4 * soft(x, y, n, 8, WARM_SEED + 24) > -0.15 ? M.salt : M.earthPale;
     }
     if (!zonal(m)) return m;
-    return hotGround(c, x, y, mask, n, heat, hl, wet, st, near);
+    return hotGround(c, x, y, mask, n, heat, hl, wet, st, near, dryside);
   }
-  if (!zonal(m) || hl <= 0) return m;
-  // The Mediterranean: how dry the cell is, 0 temperate … 1 and over at the dry belt's edge. The lie of the land and
-  // the rain count for nothing at the plateau's edge and for all they are worth a little way past it, so the dress
-  // comes on from nothing: no line shows where the temperate climate ends.
-  const on = hl >= 0.12 ? 1 : hl / 0.12;
-  const dry = hl / HOT_EDGE + on * (0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
-    (hand < 4 ? 0.25 * (1 - hand / 4) : 0) - 0.3 * near - 0.9 * (c.moisture - 0.5) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j);
+  if (!zonal(m)) return m;
+  if (!dryside) return hl > 0 ? warmWood(m, c, x, y, mask, n, hl) : m;
+  return aridDress(m, c, x, y, mask, n, hl > 0 ? hl / HOT_EDGE : 0, 0, near);
+}
+
+/**
+ * The warm forest of the wet side. From the temperate belt toward the tropics the woods close over the pastures,
+ * the heaths and at last the fields, in patches that grow until they meet; conifers leave the woods. It comes on
+ * from nothing at the plateau's edge, and is whole where hot country's own cover begins.
+ */
+function warmWood(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, hl: number): number {
+  const close = (hl - 0.04) / (HOT_EDGE - 0.04);
+  if (close <= 0) return m;
+  if (m === M.floorBroadleaf) return m;
+  if (m === M.floorConifer) return close > 0.3 + 0.5 * soft(x, y, n, 44, WARM_SEED + 34) ? M.floorBroadleaf : m;
+  // Only what grows low is taken: grass, heath, crops and their hedges. A mountain's ground above the trees is its own.
+  if (m >= M.alpineCool && m <= M.alpineWarm) return m;
+  // People keep their fields clear longest, and the driest lee slopes stay open.
+  const open = 0.5 + 0.8 * soft(x, y, n, 64, WARM_SEED + 31) + 0.3 * soft(x, y, n, 19, WARM_SEED + 32) + 0.06 * ruleJitter(mask, x, y, RULE.hue) +
+    (ruledField ? 0.45 : 0) - 0.6 * (c.moisture - 0.6);
+  return open < 1.4 * close ? M.floorBroadleaf : m;
+}
+
+/**
+ * The dry side's dress over the rule table's cover: sage sward for pasture, khaki and straw steppe on the drier
+ * ground, garrigue on the heather's crests of the warm side, bare earth on the steepest banks and in worn patches,
+ * and green only by water. `hot` is 0 at the plateau's temperature … 1 at the edge of hot country; `cold` is 0 there
+ * … 1 a little way into the cold. The dress is whole at every temperature, and mildest where the two meet: there
+ * the Mediterranean and the steppe are one sward, and only their trees tell them apart.
+ */
+function aridDress(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, hot: number, cold: number, near: number): number {
+  const hand = c.hand;
+  const st = c.steep === undefined ? c.slope : c.steep;
+  const north = c.formNorth === undefined ? c.northness : c.formNorth;
+  const curve = c.curve === undefined ? 0 : c.curve;
+  const steep = st > 0.4 ? 1 : st / 0.4;
+  const j = ruleJitter(mask, x, y, RULE.hue);
+  // How dry the cell is: 0.5 at the mildest latitude … 1 at the desert's edge and in the deep steppe, more or less
+  // by the lie of the land, the rain and the water near.
+  const dry = 0.5 + 0.5 * hot + 0.4 * cold + 0.3 * (north < 0 ? -north : -0.5 * north) * steep + 0.04 * (curve > 2 ? 2 : curve < -2 ? -2 : curve) -
+    (hand < 4 ? 0.25 * (1 - hand / 4) : 0) - 0.3 * near - 0.9 * (c.moisture - 0.5) + 0.3 * soft(x, y, n, 60, WARM_SEED + 22) + 0.12 * soft(x, y, n, 17, WARM_SEED + 23) + 0.04 * j;
   if (dry < 0.26) return m;
+  // Woods are groves on the dry side: they keep to the hollows, the banks and the wetter slopes.
+  if (m === M.floorBroadleaf || m === M.floorConifer) {
+    return dry > 1.02 + 0.3 * soft(x, y, n, 38, WARM_SEED + 35) ? M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n) : m;
+  }
+  // On the steppe the grass is thin on the driest ground: pale earth shows through it in worn patches.
+  if (cold > 0 && !ruledField && dry > 0.95 && soft(x, y, n, 24, WARM_SEED + 12) + 0.4 * soft(x, y, n, 7, WARM_SEED + 13) > 0.62 - 0.3 * (dry - 0.95) && m >= M.meadowCool && m <= M.scrubWarm) return M.earthPale;
   // A field keeps its crop, and its ploughland is red earth; but nobody farms the driest ground, and toward the dry
   // belt the fields are given up, in patches, to the sward round them.
   if (ruledField && dry < 0.86 + 0.25 * soft(x, y, n, 75, WARM_SEED + 25)) return m === M.plough ? M.earthRed : m;
@@ -518,7 +566,7 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
   // Grass moor dries to sage and then to khaki steppe; only the heather's own crests turn to garrigue.
   if (m >= M.moorCool && m <= M.moorWarm) return dry > 0.8 ? M.steppeCool + (m - M.moorCool) : M.scrubCool + (m - M.moorCool);
   // Garrigue is only the heart of what was heather, on the driest crests: the rest is sage and khaki like the hill round it.
-  if (m >= M.heathCool && m <= M.heathWarm) return m === M.heathCool && dry > 0.6 ? M.garrigue : dry > 0.8 ? M.steppeCool + (m - M.heathCool) : M.scrubCool + (m - M.heathCool);
+  if (m >= M.heathCool && m <= M.heathWarm) return m === M.heathCool && dry > 0.6 && cold < 0.25 ? M.garrigue : dry > 0.8 ? M.steppeCool + (m - M.heathCool) : M.scrubCool + (m - M.heathCool);
   if (m === M.bracken) return M.scrubWarm;
   if (m >= M.scrubCool && m <= M.scrubWarm) return dry > 1.05 ? M.steppeCool + (m - M.scrubCool) : m;
   return m;
@@ -626,9 +674,10 @@ function frostEdge(x: number, y: number, n: number): boolean {
 function tundraFlat(c: CoverInput, x: number, y: number, n: number, st: number): number {
   const hand = c.hand;
   if (st >= 0.07 || hand >= 3.5) return 0;
-  const wet = soft(x, y, n, 26, TUNDRA_SEED + 4) + 0.5 * soft(x, y, n, 8, TUNDRA_SEED + 5) - 0.2 * hand;
+  // The dry side's tundra is stony: few pools, little sedge.
+  const wet = soft(x, y, n, 26, TUNDRA_SEED + 4) + 0.5 * soft(x, y, n, 8, TUNDRA_SEED + 5) - 0.2 * hand - 0.3 * aridNow;
   // Pools lie in fields of them, each a rounded water a few cells across: never a sprinkle of single cells.
-  const field = soft(x, y, n, 130, TUNDRA_SEED + 11);
+  const field = soft(x, y, n, 130, TUNDRA_SEED + 11) - 0.25 * aridNow;
   if (field > 0.08 && wet > 0 && soft(x, y, n, 15, TUNDRA_SEED + 6) + 0.25 * soft(x, y, n, 6, TUNDRA_SEED + 12) > 0.34) return M.pool;
   if (wet > -0.2) {
     // Frost polygons show only on the wettest flats, in the same fields.
@@ -644,7 +693,7 @@ function tundraGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: 
   if (flat !== 0) return flat;
   const dry = 0.5 * (curve > 2 ? 1 : curve < -2 ? -1 : curve / 2) + 0.9 * soft(x, y, n, 19, TUNDRA_SEED + 7) + 0.4 * soft(x, y, n, 6, TUNDRA_SEED + 8) + 0.6 * (c.wind - 0.5);
   // A clean lobed edge: a speckled one, on ground this even, would be static.
-  if (dry + 0.25 * soft(x, y, n, 3.5, TUNDRA_SEED + 10) > 0.62) return M.lichen;
+  if (dry + 0.25 * soft(x, y, n, 3.5, TUNDRA_SEED + 10) > 0.62 - 0.3 * aridNow) return M.lichen;
   // Olive in the damp, khaki between, russet only in patches on the drier banks.
   const f = hueField(x, y, HUE_CLASS.moor, n) + 1.3 * soft(x, y, n, 9, TUNDRA_SEED + 9) + 0.5 * j - 0.8 * (c.moisture - 0.5);
   return M.tundraCool + (f < 0.85 ? 0 : f < 1.9 ? 1 : 2);
@@ -675,7 +724,17 @@ function tundraAt(c: CoverInput, x: number, y: number, mask: Uint8Array, n: numb
  * bog, dry sward lichen, sand shingle, and the deep wood's floor lichen where the spruce stand apart. It comes on in
  * patches a few dozen cells across as the latitude cools, and is whole by the taiga. A field keeps what it grows.
  */
-function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, shift: number): number {
+function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Array, n: number, shift: number, arid: number): number {
+  // The dry side: steppe to the tree line, where the wet side has the taiga's moss and sedge. What grows low is
+  // dressed dry; the tundra's own ground, a wood's floor and the shore go on to the cold's dress below.
+  if (arid > 0 && (arid >= 1 || arid > 0.5 + 0.7 * soft(x, y, n, 84, WARM_SEED + 30)) && c.water === 0 &&
+    ((m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.heathCool && m <= M.moorWarm) || m === M.hedge || m === M.wall ||
+      (m >= M.wheatRow && m <= M.stubbleRow) || m === M.bracken || m === M.gorse || m === M.floorBroadleaf || (m === M.floorConifer && shift < 40))) {
+    const rdx = c.riverDx === undefined ? 0 : c.riverDx, rdy = c.riverDy === undefined ? 0 : c.riverDy;
+    const rd = Math.sqrt(rdx * rdx + rdy * rdy);
+    const d = aridDress(m, c, x, y, mask, n, 0, shift >= 24 ? 1 : shift / 24, rd > 0 && rd < 7 ? 1 - rd / 7 : 0);
+    if (d !== M.floorConifer) return d;
+  }
   if (ruledField) return m;
   // How far the dress has come on: nothing at the plateau, whole by a shift of 40, in patches between.
   const patch = 8 + 26 * (0.5 + 0.6 * soft(x, y, n, 33, SKIN_SEED) + 0.25 * soft(x, y, n, 9, SKIN_SEED + 1)) + 4 * ruleJitter(mask, x, y, RULE.hue);
@@ -713,6 +772,8 @@ function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
 
 /** Set by the rule table when the cell it has just covered lies in a field: what people keep is not dressed by a climate. */
 let ruledField = false;
+/** The dry side's share at the cell being covered (CoverInput.arid), for the rules that read it deep in the table. */
+let aridNow = 0;
 
 // What snowAt found beside the score: what steepness and sharpness took off it, the share of that a sharp crest
 // shed, and the fine noise of the snow's edge.
@@ -777,15 +838,18 @@ function snowAt(x: number, y: number, n: number, mask: Uint8Array, ef: number, e
  * table leaves green.
  */
 export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): number {
-  const temp = c.temp;
-  if (isTemperate(temp)) return rules(c, mask, n, 0);
+  const arid = c.arid !== undefined && c.arid > 0 ? (c.arid > 1 ? 1 : c.arid) : 0;
+  aridNow = arid;
+  if (arid === 0 && isTemperate(c.temp)) return rules(c, mask, n, 0);
+  // The dry side has no plateau: a cell of it at the plateau's own temperature is dressed like its neighbours.
+  const temp = c.temp === undefined || c.temp !== c.temp ? TEMPERATE_T : c.temp;
   const x = Math.floor(c.x), y = Math.floor(c.y);
   // Open water far from any ice needs no more than the latitude's own shift: most of a world's cells are sea, and the
   // wandering of the line is three noises a cell.
   // A lake takes the latitude's own shift too, so it freezes whole and not in patches.
-  const shift = c.water !== 0 && (c.water === 2 || (temp as number) > TEMPERATE_T || coldShift(temp as number) < ICE_NEAR) ? coldShift(temp as number) : climateShift(temp as number, x, y, n);
+  const shift = c.water !== 0 && (c.water === 2 || temp >= TEMPERATE_T || coldShift(temp) < ICE_NEAR) ? coldShift(temp) : climateShift(temp, x, y, n);
   const m = rules(c, mask, n, shift);
-  return (temp as number) < TEMPERATE_T ? coldSkin(m, c, x, y, mask, n, shift) : warmSkin(m, c, x, y, mask, n, temp as number);
+  return temp < TEMPERATE_T ? coldSkin(m, c, x, y, mask, n, shift, arid) : warmSkin(m, c, x, y, mask, n, temp, arid);
 }
 
 /**

@@ -9,21 +9,25 @@ import { MATERIAL as M } from "./materials.ts";
 
 /**
  * The wash for one overview sample: `h` its ground in units (0 or less is sea), `temp` and `rain` the climate at
- * the C node it lies on. 0 where the height's own wash is right.
+ * the C node it lies on, `arid` the dry side's share there (0 on the wet side). 0 where the height's own wash is right.
  */
-export function hazeWashAt(h: number, temp: number, rain: number): number {
-  if (!(temp < TEMPERATE) && !(temp > TEMPERATE)) return 0;
+export function hazeWashAt(h: number, temp: number, rain: number, arid: number = 0): number {
+  const dryside = arid > 0.5;
+  if (!dryside && !(temp < TEMPERATE) && !(temp > TEMPERATE)) return 0;
   if (temp < TEMPERATE) {
     const shift = (TEMPERATE - temp) * COLD_SPAN;
     if (h <= 0) return shift > SHIFT_SNOW - 4 ? M.packIce : 0;
     if (h + shift > SHIFT_SNOW) return M.snow;
     if (h + shift > SHIFT_TREELINE + 4) return M.tundraMid;
+    // To the tree line the wet side is taiga and the dry side steppe.
+    if (dryside) return M.steppeMid;
     return shift > 30 ? M.spruceMid : 0;
   }
   const heat = heatOf(temp);
   if (h <= 0) return heat > 0.55 ? M.seaClear : 0;
   const hl = heat - h / HEAT_LAPSE;
-  if (hl <= HOT_EDGE) return hl > 0.22 ? M.scrubMid : 0;
+  if (!dryside) return hl > 0.5 ? M.jungleMid : 0;
+  if (hl <= HOT_EDGE) return hl > 0.2 ? M.steppeMid : M.scrubMid;
   if (rain < DESERT_RAIN) return M.desertSand;
   if (rain < STEPPE_RAIN) return M.steppeMid;
   const belt = hl >= 0.9 ? 0 : hl < 0.68 ? (hl - 0.5) / 0.18 : (0.9 - hl) / 0.22;
@@ -35,12 +39,12 @@ export function hazeWashAt(h: number, temp: number, rain: number): number {
  * The plane for a world: one byte per overview sample, which is one per C node, the ground read at the G node the
  * overview reads (pack/regions.ts overviewOf). `ground` is on G (gN a side), `temp` and `rain` on C (gN / 2).
  */
-export function hazeWash(ground: ArrayLike<number>, gN: number, temp: ArrayLike<number>, rain: ArrayLike<number>): Uint8Array {
+export function hazeWash(ground: ArrayLike<number>, gN: number, temp: ArrayLike<number>, rain: ArrayLike<number>, arid?: ArrayLike<number>): Uint8Array {
   const cN = gN / 2;
   const out = new Uint8Array(cN * cN);
   for (let cy = 0; cy < cN; cy++) for (let cx = 0; cx < cN; cx++) {
     const ci = cy * cN + cx;
-    out[ci] = hazeWashAt(ground[2 * cy * gN + 2 * cx], temp[ci], rain[ci]);
+    out[ci] = hazeWashAt(ground[2 * cy * gN + 2 * cx], temp[ci], rain[ci], arid ? arid[ci] : 0);
   }
   return out;
 }

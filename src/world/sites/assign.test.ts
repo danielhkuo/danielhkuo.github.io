@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Assignments, assignSites, featureFor, type LandmarkType, type Site } from "./assign.ts";
+import { type Assignments, assignSites, featureFor, type Site } from "./assign.ts";
 
 const N = 6400;
 const SITES: Site[] = [
@@ -78,17 +78,6 @@ test("features suit their sites", () => {
   assert.equal(featureFor("windmill"), "sheepfold");
   assert.equal(featureFor("yew"), "sheepfold");
   assert.equal(featureFor("cathedral"), "wayside-cross");
-  assert.equal(featureFor("chapel"), "jetty");
-  assert.equal(featureFor("roundchurch"), "sheepfold");
-  for (const t of ["hospice", "stave", "hermitage", "monastery"] as const) assert.equal(featureFor(t), "wayside-cross");
-});
-
-test("every kind of landmark has a feature for when it stands free", () => {
-  const kinds: LandmarkType[] = [
-    "abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew",
-    "hospice", "stave", "hermitage", "monastery", "roundchurch", "chapel",
-  ];
-  for (const t of kinds) assert.ok(["wayside-cross", "sheepfold", "jetty"].includes(featureFor(t)), t);
 });
 
 test("more projects than sites: extras are left out, deterministically", () => {

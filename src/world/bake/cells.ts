@@ -427,10 +427,15 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     let foreign = false;
     for (let cy = cy0; cy <= cy1 && !foreign; cy++) {
       const row = wrap(cy - cY0, cN) * cStride;
-      for (let cx = cx0; cx <= cx1; cx++) if (climate[row + wrap(cx - cX0, cN)] !== TEMPERATE) { foreign = true; break; }
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const k = row + wrap(cx - cX0, cN);
+        if (climate[k] !== TEMPERATE || (world.arid !== undefined && world.arid[k] > 0)) { foreign = true; break; }
+      }
     }
     if (!foreign) climate = undefined;
   }
+  // The dry side's share, read only where the window has a climate at all.
+  const aridC = climate !== undefined ? world.arid : undefined;
   // Dunes: a desert's sand seas stand in real relief, so they are lit, shade and cast shadow like any hill. A pure
   // function of the cell, the smooth ground and the climate at the C node nearest it; nothing where no sand lies.
   if (climate !== undefined) {
@@ -847,6 +852,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         const t00 = temp[c00], t10 = temp[c10], t01 = temp[c01], t11 = temp[c11];
         c.temp = t00 === t10 && t00 === t01 && t00 === t11 ? t00 : w00 * t00 + w10 * t10 + w01 * t01 + w11 * t11;
         if (c.temp !== TEMPERATE) foreign[i] = 1;
+        if (aridC !== undefined) {
+          const a00 = aridC[c00], a10 = aridC[c10], a01 = aridC[c01], a11 = aridC[c11];
+          c.arid = a00 === a10 && a00 === a01 && a00 === a11 ? a00 : w00 * a00 + w10 * a10 + w01 * a01 + w11 * a11;
+          if (c.arid > 0) foreign[i] = 1;
+        }
       }
       // The cover blends rock kinds where they meet; the flags keep the voted class.
       c.rock = rockW[1] + 2 * rockW[2];

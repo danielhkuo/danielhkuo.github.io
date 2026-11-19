@@ -122,6 +122,7 @@ export function cutWindow(world: BakeWorld, g: GridWindow, c: GridWindow): BakeW
     rock: cutU8(world.rock, world.cN, c),
     regions: cutRegions(world.regions, world.cN, c),
     temp: world.temp ? cutF32(world.temp, world.cN, c) : undefined,
+    arid: world.arid ? cutF32(world.arid, world.cN, c) : undefined,
   };
 }
 
@@ -143,6 +144,7 @@ export function strippedWorld(world: BakeWorld): BakeWorld {
     rock: new Uint8Array(0),
     regions: new Float32Array(0),
     temp: world.temp ? new Float32Array(0) : undefined,
+    arid: world.arid ? new Float32Array(0) : undefined,
   };
 }
 

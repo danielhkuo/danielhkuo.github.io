@@ -30,16 +30,10 @@ export interface Anchor {
 }
 
 /** How far from the site's point its building may stand, cells. The town's point is its pad, not its bell tower. */
-const SEARCH: Record<LandmarkType, number> = {
-  abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24,
-  hospice: 24, stave: 24, hermitage: 24, monastery: 24, roundchurch: 24, chapel: 24,
-};
+const SEARCH: Record<LandmarkType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24 };
 
 /** The coil's radius when nothing is known of the building, by kind (the sprite boxes of design 5.9). */
-const FALLBACK: Record<LandmarkType, number> = {
-  abbey: 23, town: 9, lighthouse: 9, windmill: 10.4, bridge: 20, cathedral: 23, yew: 22,
-  hospice: 14.3, stave: 15.4, hermitage: 10.7, monastery: 21.2, roundchurch: 12.5, chapel: 11.5,
-};
+const FALLBACK: Record<LandmarkType, number> = { abbey: 23, town: 9, lighthouse: 9, windmill: 10.4, bridge: 20, cathedral: 23, yew: 22 };
 
 /** The coil's radius: the body's own width clear of the walls. */
 const CLEAR = 4;

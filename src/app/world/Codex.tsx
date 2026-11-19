@@ -19,12 +19,6 @@ const STANDS: Record<LandmarkType, string> = {
   bridge: "An old stone bridge, carrying the road over the river.",
   cathedral: "A roofless nave, open to the sky.",
   yew: "An old yew in a walled churchyard.",
-  hospice: "A stone refuge on the pass, its bell for travellers in the snow.",
-  stave: "A timber church in a clearing of the pines, by the water.",
-  hermitage: "A white chapel on the rock above the sea, its bells in an open wall.",
-  monastery: "A walled monastery by the water, its bell tower over the sands.",
-  roundchurch: "A round white church in the grass, with a well in its yard.",
-  chapel: "A white chapel on the river bank, with a landing stage for boats.",
 };
 
 const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
