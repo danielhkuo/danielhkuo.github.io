@@ -11,6 +11,7 @@ Last updated 2026-11-18.
 |---|---|
 | What the site is becoming, and the rules every change follows | `.claude/CLAUDE.md` |
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
+| Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -38,6 +39,12 @@ Last updated 2026-11-18.
   summit), a table (flat top, sea walls, falls off the south edge), a fen (winding lodes, meres, saltmarsh, tidal
   flats) and a fjord highland (deep, steep inlets). Stage S5b `gen/forms.ts`. Next batch: more forms (atoll, tombolo
   pairs, sea arches, a drowned ria coast).
+- **Landing and the Codex** (2026-11-18). The build matches the pinned repos to landmarks (sticky in
+  `src/world/sites/assignments.json`, keyed by world). Near a landmark a prompt offers to land (Space, Enter or a tap);
+  the dragon slows, circles and coils down round the landmark's own building, and the Codex opens: the project's name,
+  description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
+  is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
+  discovery, by repository. Preview a site with `/world?at=<site id>`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 
@@ -104,7 +111,7 @@ a seeded roll. Candidates, not yet picked:
 
 ## Interactions
 
-- Landing on a tower or landmark opens that project (needs the landmarks below).
+- ~~Landing on a tower or landmark opens that project.~~ Done (see above).
 - Flying low startles birds from trees and gulls from the harbour.
 - The flier's wake on water, and its shadow on the land (the shadow exists).
 - Passing the abbey rings its bell; passing the windmill turns its sails faster.
@@ -112,11 +119,10 @@ a seeded roll. Candidates, not yet picked:
 
 ## Later
 
-- **The dragon: what's left.** Landing (coiling onto a site's pad), with the landmarks. The river-dragon is built and
-  flying, boost streaks included.
-- **Landmarks and projects.** Sprites for the abbey, lighthouse, windmill, bridge, ruined cathedral, churchyard yew
-  and the town's bell tower; the six pinned repos assigned to sites; landing opens a project page; the abbey holds
-  About Me and the terminal (the Artificer).
+- ~~**The dragon: what's left.**~~ Landing is built: it coils down round the landmark's building.
+- **Landmarks and projects.** Assignments, landing and the Codex are built (see Done). Open: more than six projects.
+  Pins cap the world at six; a GitHub topic (tag a repo, it appears at the next build) would add more with no other
+  upkeep. It touches `src/lib/github.ts` and every page that reads it, so it is its own task.
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
 - **Recruiter page** (text-only, generated from `content.ts` and GitHub) and **Herald** files (`agents.md`, `llms.txt`).
@@ -148,6 +154,13 @@ From the round-9 critics (peaks first):
 - Upland palette: fresher greens; heather only on small exposed spur crests.
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
 - Coves and cliff scallops repeat; sea stacks need surf at their base.
+
+From landing (2026-11-18):
+- A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
+  could part round a landed site.
+- In the town the coil lies among the houses round the bell tower, and the houses hide some of it.
+- `Flight.tsx` grew with landing (React Doctor's giant-component warning was already there); the page's slim-project
+  mapping for the terminal repeats the home page's.
 
 From the first-flight review:
 - Over land not painted yet, the dragon draws over hills that should hide it, and its shadow vanishes.
