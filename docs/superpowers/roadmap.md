@@ -103,7 +103,7 @@ Last updated 2026-11-19.
   lanterns burn on quays, jetties and moored boats with reflections, the five lighthouses sweep warm beams that show
   from afar, and stars glint on calm water (`live/night.ts`); the dragon keeps its own light. Rain falls in pixel
   streaks under the clouds and the flier, with splashes; mist lies in drifting banks (`live/mist.ts`) and stills the
-  wind; every shadow follows the sun (`sunOn`). Rainbows need daylight and the town kite a fair day. `?time=` and
+  wind, as heavy rain does; every shadow follows the sun (`sunOn`). Rainbows need daylight and the town kite a fair day. `?time=` and
   `?weather=` hold either still; `world:live --times --weathers`, `world-fly --query`. Seasons do not follow the clock
   (coordinator, 2026-11-18): the page flies in summer.
 
@@ -294,11 +294,12 @@ From time of day and weather (2026-11-19):
 - No moon: a sheen or glade on the sea needs a live layer (a palette cannot place it).
 - Rain cannot see the clouds, so there are no denser shafts under them.
 - The observatory's dome opens on its own clock; it could open only at night.
-- Frame budget: against the base build, run for run (`world-fly`, 4× throttle, the machine at a load of 10–30 from
-  other work), noon and night rain cost the same and night mist less (thick mist stills the wind, the dearest layer):
-  p95 4.0–4.6 ms for both builds under that load, where the base measured 3.6 on a quiet machine. Re-measure quiet.
-  In Node the night layer costs 18–24 µs a frame, rain and splashes about 22, the mist banks 79–86 at full mist, and
-  the gathered clouds about +80 on the sky.
+- Frame budget, after merging `world/bigmap` (2026-11-19): flown run for run against a build of it (`world-fly`, 4×
+  throttle, a quiet machine), p95 3.5–3.8 ms at noon, 3.5–3.7 on a clear night, 3.1–3.4 in night rain and 3.4–3.8 in
+  night mist, against 3.6–3.8 for `world/bigmap` alone. Thick mist and heavy rain still the wind's gusts in the grass
+  (the dearest layer), which pays for the banks, the rain and the gathered clouds. In Node the night layer costs
+  18–24 µs a frame, rain and splashes about 22, the mist banks 79–86 at full mist, and the gathered clouds about +80
+  on the sky.
 
 From the first-flight review:
 - Over land not painted yet, the dragon draws over hills that should hide it, and its shadow vanishes.
