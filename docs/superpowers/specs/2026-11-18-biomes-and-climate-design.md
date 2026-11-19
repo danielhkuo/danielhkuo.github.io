@@ -651,38 +651,27 @@ On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
 | Fields by climate beyond the Mediterranean and the steppe (oasis plots are built; paddies are not) | partly |
 | The six churches of the climates | built, then cut by the owner: commit `967f669` holds them |
 
-Measured on seed 3 at 10240 (2026-11-19):
+Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7, world `cd3d75d05d9d`):
 
-- **Land by climate**, read off the cover on a 16-cell grid, as shares of all land. Wet side (51 % of the land):
-  temperate and warm-forest woods 12.5, jungle 11.6, open temperate ground 11.4, ice 8.9, tundra 4.8, conifer wood
-  1.8; sand, steppe, savanna and garrigue none. Dry side (49 %): khaki steppe and bare earth 9.1, ice 7.0, tundra
-  6.6, jungle 6.4, sage about 6, desert (sand, gravel, salt, sandstone) 5.4, savanna 3.4, green ground by water
-  about 3.
-- **Landforms:** of 2.28 million land nodes, benches moved 172 000, dune ridges 39 000, the ice sheet 42 000, towers
-  6 000 and domes 400. The greatest rise is about 24 units and the greatest fall 4.7. The stage takes about a second.
-- **Landmarks:** all seven placed in their own climate and side, none let out: lighthouse at temperature 0.18 by
-  the pack ice, yew at 0.52 on the wet side off the home island, cathedral at the equator, windmill at 0.58 on the
-  dry side (the Mediterranean), bridge at 0.46 on the dry side (the steppe). The six projects hold the six that are
-  not the abbey (`assignments.json`, world `df6c80303138`). All nine wonders placed; the tide railway now runs over
-  an ice-free sea.
-- **Download:** the whole world 9682 KB (9191 before climates; 9368 at the first climates build); before first
-  flight 1491 KB (1447; 1485); the core 964 KB. The landforms are most of the growth: they ride in the ground's own
-  planes.
-- **Identity:** the build's start and abbey frames are byte-identical files to those of every earlier build of this
-  branch, as generated and as shipped. A temperate hillside elsewhere renders byte-identical with and without
-  climates (first build's check).
-- **Bake:** a tile whose every climate node is on the wet side's plateau is built as a temperate world's is.
-  Elsewhere a tile costs about 40 % more on average (measured on the first build, under load), most in jungle, sand
-  seas and pack ice. That is over the 15 % this design set itself in section 11.
-- **Frame:** nothing new is drawn per frame. `world-fly.mjs` against a build of the base, in turn, on a machine other
-  sessions were loading (load average 11 to 12, another session flying at the same time): at 4× throttle the new
-  build's p95 ran 4.7 and 4.4 ms and the base's 4.3 and 4.5. The test cannot tell them apart, and neither met 4 ms
-  that night. It wants a rerun on a quiet machine before the world ships.
-- **Tests:** 1073, all passing (the dragon's and the live layers' timing tests fail under load and pass alone);
-  types and lint clean. `npm run build` passes, with the real pinned repos.
-- **Look:** a fresh critic scored the two-sided world: variety 2 to 7 of 10, quality 7 to 5; the globe 2 of 4;
-  benches 3 of 4, dune ridges and towers 1; the Mediterranean and the warm forest read as temperate (1 of 4 each).
-  Round 6 answers most of that and has not been scored (look ledger).
+- **Native land:** of the 43 islands, 19 are grown again for their climate and 6 kept from today's land (home, the
+  temperate cone and caldera, three skerry groups); the rest are cones, calderas and skerries of the cold and wet,
+  which keep their forms but are worn under their own rain. Land is 27 % of the world (34.7 % before; the plains and
+  low deserts stand lower and lose their drowned margins). The land for the climates takes about 4 minutes to grow
+  and is cached apart; the join, the climate and the landforms take seconds on every read.
+- **Landmarks:** all seven placed in their own climate and side, none let out. The six projects hold the six that
+  are not the abbey (`assignments.json`, world `cd3d75d05d9d`, from a build with the real pinned repos). Eight of nine
+  wonders placed; the marsh house finds no marsh 300 cells clear of the landmarks and the other wonders.
+- **Download:** the whole world 8293 KB (9191 before climates); before first flight 1225 KB (1447); the core 686 KB.
+  The new land is lower and smoother, so it packs smaller.
+- **Identity:** the build's start and abbey frames, as generated and as shipped, are the same files, to the byte, as
+  every earlier build's (md5 `9b28eb…`, `b3064c…`, `4af97f…`, `99b54d…`).
+- **Bake** (`scripts/world-climate-cost.ts`: the same tiles of this world built with its climates and as a temperate
+  world, in turn, warm, load average 2 to 4): a tile whose every climate node is on the wet side's plateau costs what
+  it did (37.7 ms against 37.0, +1.8 %); any other tile 61.0 ms against 46.9, **+30 %**, over the 15 % this design set
+  in section 11 (it was about +40 % on the first build). The painter's chunk over cached tiles costs the same
+  (7.5 ms against 8.0). The bake runs in workers; it is the time to a full view, not the frame.
+- **Frame:** FRAMEBUDGET
+- **Tests:** TESTCOUNT
 
 Critic scores and what each round changed are in the look ledger ("Climate rounds").
 
