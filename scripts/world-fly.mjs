@@ -1,11 +1,11 @@
 // First-flight check: serves the static export in out/, opens /world?stats in
 // headless Chrome, flies a scripted route by key presses, and reports how soon
-// the start view was ready, main-thread ms per frame (and the sky's share), chunks baked a second, and
+// the start view was ready, main-thread ms per frame (and the sky's and the guides' shares), chunks baked a second, and
 // how many frames showed haze under the view. Saves screenshots of the canvas.
 //
 //   npm run build && node scripts/world-fly.mjs [--rate 4] [--seconds 30] [--out .cache/world-fly] [--query time=night&weather=rain]
 //
-// --query is added to the page's address: hold the light or the weather still (?time=, ?season=, ?weather=).
+// --query is added to the page's address: hold the light or the weather still (?time=, ?weather=).
 //
 // The page reports through window.__flight (set only with ?stats).
 
@@ -93,7 +93,7 @@ async function fly(browser, origin, opts, label, rate) {
     await canvas.screenshot({ path: file });
     shots.push(file);
   };
-  await page.evaluate(() => { window.__flight.frameMs.length = 0; window.__flight.skyMs.length = 0; window.__flight.hazeFrames = 0; window.__flight.frames = 0; });
+  await page.evaluate(() => { window.__flight.frameMs.length = 0; window.__flight.skyMs.length = 0; if (window.__flight.guideMs) window.__flight.guideMs.length = 0; window.__flight.hazeFrames = 0; window.__flight.frames = 0; });
   const bakedAt0 = (await page.evaluate(() => window.__flight.baked())) ?? 0;
   await shot("00s");
   const start = Date.now();
@@ -107,7 +107,11 @@ async function fly(browser, origin, opts, label, rate) {
     if (t >= 10 && !shots.some((s) => s.endsWith("-10s.png"))) await shot("10s");
   }
   await shot(`${opts.seconds}s`);
-  const res = await page.evaluate(() => ({ frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(), air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])] }));
+  const res = await page.evaluate(() => ({
+    frameMs: [...window.__flight.frameMs], skyMs: [...window.__flight.skyMs], guideMs: [...(window.__flight.guideMs ?? [])],
+    hazeFrames: window.__flight.hazeFrames, frames: window.__flight.frames, baked: window.__flight.baked(),
+    air: window.__flight.air, paletteMs: [...(window.__flight.paletteMs ?? [])],
+  }));
   const secs = (Date.now() - start) / 1000;
   await page.close();
   return {
@@ -115,6 +119,7 @@ async function fly(browser, origin, opts, label, rate) {
     frames: res.frames, fps: res.frames / secs,
     frameMsP50: pct(res.frameMs, 0.5), frameMsP95: pct(res.frameMs, 0.95), frameMsMax: pct(res.frameMs, 1),
     skyMsP50: pct(res.skyMs, 0.5), skyMsP95: pct(res.skyMs, 0.95), skyMsMax: pct(res.skyMs, 1),
+    guideMsP50: pct(res.guideMs, 0.5), guideMsP95: pct(res.guideMs, 0.95), guideMsMax: pct(res.guideMs, 1),
     hazeFrames: res.hazeFrames, chunksPerSecond: (res.baked - bakedAt0) / secs, shots, errors,
     air: res.air, palettes: res.paletteMs.length, paletteMsMax: pct(res.paletteMs, 1),
   };

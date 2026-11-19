@@ -1,449 +1,76 @@
 "use client";
 
-import { IM_Fell_English } from "next/font/google";
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import type { FlightInput, FlightState } from "../../world/runtime/flight";
-import { startState, stepFlight } from "../../world/runtime/flight";
-import { fitScale } from "../../world/runtime/fit";
-import { makeLayers } from "../../world/live/registry";
-import { wondersOf } from "../../world/pack/manifest";
-import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
-import { createPool, type WorkerLike } from "../../world/runtime/pool";
-import { createRegionLand } from "../../world/runtime/regionLand";
-import { createDragon } from "../../world/dragon/index";
-import { createDiscoveries, type KeyValue } from "../../world/runtime/discoveries";
-import { createStreamView } from "../../world/runtime/stream";
-import type { StreamView } from "../../world/runtime/stream";
-import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
-import { dayOfYear, parseTime, SEASONS, sunPhase } from "../../world/sky/clock";
-import { createRain } from "../../world/sky/rain";
-import { createSky } from "../../world/sky/sky";
-import { styleFrom } from "../../world/sky/styles";
-import { parseWeather, weatherAt } from "../../world/sky/weather";
+import { useRef, type CSSProperties } from "react";
+import Terminal from "../../components/terminal/Terminal";
+import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
+import Codex from "./Codex";
+import styles from "./flight.module.css";
+import OptionsPanel, { Corner } from "./OptionsPanel";
+import { setOptions, useOptions } from "./optionsStore";
+import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
+import { FRAME_H, FRAME_W } from "./session";
+import { useFlight } from "./useFlight";
+import { useFrameScale } from "./useFrameScale";
+import { usePanel, useReveal } from "./usePanel";
+import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
 
-const fell = IM_Fell_English({ weight: "400", subsets: ["latin"] });
+/** The corner shows this long after the page opens and after the pointer last moved, ms. */
+const REVEAL_MS = 4000;
 
-const FRAME_W = 400;
-const FRAME_H = 225;
-/** Milliseconds between reads of the clock for the light and the weather. */
-const AIR_EVERY = 200;
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, n));
+export interface FlightProps {
+  /** The landmarks and what each holds, worked out at build time; null when the build had no world. */
+  landmarks: LandmarkSet | null;
+  /** What the terminal at the abbey is handed, as on the home page. */
+  terminal: TerminalProps;
 }
 
-function inputFromKeys(keys: Set<string>): FlightInput {
-  let turn: -1 | 0 | 1 = 0;
-  if (keys.has("ArrowLeft") || keys.has("a") || keys.has("A")) turn = -1;
-  if (keys.has("ArrowRight") || keys.has("d") || keys.has("D")) turn = turn === -1 ? 0 : 1;
-  const boost = keys.has("ArrowUp") || keys.has("w") || keys.has("W") || keys.has("Shift");
-  const brake = keys.has("ArrowDown") || keys.has("s") || keys.has("S");
-  return { turn, boost, brake };
-}
-
-interface FlightProbe {
-  /** The air at the last frame: sun phase, darkness, rain, mist, cloud. */
-  air: Air | null;
-  /** Main-thread ms each palette rebuild took. */
-  paletteMs: number[];
-  navStart: number;
-  readyAt: number | null;
-  frameMs: number[];
-  /** Main-thread ms the sky's two passes took, per frame. */
-  skyMs: number[];
-  hazeFrames: number;
-  frames: number;
-  baked: () => number;
-  error: string | null;
-  workerErrors: string[];
-}
-
-export default function Flight() {
+export default function Flight({ landmarks, terminal }: FlightProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
-  // CSS pixels per frame pixel: a whole number of device pixels, so the frame stays hard-edged at any display scaling.
-  const [scale, setScale] = useState(1);
-  const [failed, setFailed] = useState(false);
-  // Filled from the frame loop when the page is opened with ?stats.
-  const [stats, setStats] = useState<{ fps: number; pool: string; view: string } | null>(null);
-  const [discoveryCaption, setDiscoveryCaption] = useState<string | null>(null);
-  const [discoveryCaptionVisible, setDiscoveryCaptionVisible] = useState(false);
+  const scale = useFrameScale(FRAME_W, FRAME_H);
+  const drawer = useTerminalDrawer(terminal);
+  const panel = usePanel();
+  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link);
+  const options = useOptions();
+  const revealed = useReveal(REVEAL_MS);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const statsOn = new URLSearchParams(window.location.search).has("stats");
-    // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
-    const probe: FlightProbe | null = statsOn
-      ? {
-        air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0,
-        baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [],
-      }
-      : null;
-    if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
-    const recomputeScale = () => {
-      const dpr = window.devicePixelRatio || 1;
-      setScale(fitScale(window.innerWidth * dpr, window.innerHeight * dpr, FRAME_W, FRAME_H) / dpr);
-    };
-    recomputeScale();
-    window.addEventListener("resize", recomputeScale);
+  if (flight.failed) return <LoadFailed />;
 
-    const keys = new Set<string>();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        window.location.href = "/";
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === " ") {
-        e.preventDefault();
-      }
-      keys.add(e.key);
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      keys.delete(e.key);
-    };
-    const onBlur = () => {
-      keys.clear();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
-
-    let alive = true;
-    let raf = 0;
-    let pool: ReturnType<typeof createPool> | null = null;
-    let view: StreamView | null = null;
-    let flight: FlightState | null = null;
-    let worldN = 0;
-    const frame = new Uint32Array(FRAME_W * FRAME_H);
-    let imageData: ImageData | null = null;
-    let readyFrame = false;
-    let lastT = 0;
-    let fpsFrames = 0;
-    let fpsLast = 0;
-    let lastCaptionPoll = 0;
-    let lastPolledCaption: string | null | undefined;
-
-    let storageOrNull: KeyValue | null = null;
-    try {
-      storageOrNull = window.localStorage;
-    } catch {
-      storageOrNull = null;
-    }
-    const discoveries = createDiscoveries(storageOrNull, () => performance.now());
-
-    // Stops the frame loop and the workers, and shows the message in place of the canvas.
-    const fail = () => {
-      if (probe) probe.error = LOAD_FAILED;
-      cancelAnimationFrame(raf);
-      pool?.dispose();
-      if (alive) setFailed(true);
-    };
-
-    void (async () => {
-      try {
-        const loaded = await loadWorld(fetch, "/world");
-        if (!alive) return;
-
-        const maskRes = await fetch("/world/bluenoise.bin");
-        if (!maskRes.ok) throw new Error("mask");
-        const mask = new Uint8Array(await maskRes.arrayBuffer());
-        if (!alive) return;
-
-        const land = createRegionLand(loaded.core, (rx, ry) => loaded.fetchRegion(rx, ry));
-        // Boats plan on the overview: sea is 0 there, and a route treats anything under 0 as water.
-        const coast = new Float32Array(loaded.core.overview.length);
-        for (let i = 0; i < coast.length; i++) coast[i] = loaded.core.overview[i] === 0 ? -1 : loaded.core.overview[i];
-
-        const size = clamp((navigator.hardwareConcurrency ?? 2) - 1, 1, 4);
-        pool = createPool(
-          () =>
-            new Worker(new URL("../../world/runtime/bake.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike,
-          size,
-          // Workers load from blob: URLs, where a root-relative path does not resolve.
-          { url: new URL(loaded.coreUrl, window.location.href).href, mask },
-        );
-        pool.onError = (message) => {
-          if (probe) probe.workerErrors.push(message);
-          // Before the first full view any failure is fatal; after it, only losing every worker is, since the
-          // land would never be painted again.
-          if (!readyFrame || (pool && pool.stats().workers === 0)) fail();
-        };
-
-        // The light and weather: the visitor's own clock (its date sets how long the day is) and the weather everyone
-        // shares at this moment. ?time= and ?weather= hold either still, for testing and screenshots.
-        const params = new URLSearchParams(window.location.search);
-        const today = new Date();
-        const fixedTime = parseTime(params.get("time"), dayOfYear(today.getFullYear(), today.getMonth() + 1, today.getDate()));
-        const fixedWeather = parseWeather(params.get("weather"));
-        const seed = loaded.manifest.seed;
-        const airNow = (): Air => {
-          const d = new Date();
-          const doy = dayOfYear(d.getFullYear(), d.getMonth() + 1, d.getDate());
-          const hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
-          // Always summer, the season the world was tuned in: seasons do not follow the clock.
-          return airOf(fixedTime ?? sunPhase(hour, doy), SEASONS.summer, fixedWeather ?? weatherAt(d.getTime() / 1000, seed));
-        };
-        let builtAir = airNow();
-        let air = builtAir;
-        let airAt = 0;
-        let lit = lightFor(builtAir);
-        let lastBuild = 0;
-        // The page round the frame takes the paper's colour in the same light.
-        const paperBehind = (cream: number) => {
-          if (pageRef.current) pageRef.current.style.background = `rgb(${cream & 255}, ${(cream >>> 8) & 255}, ${(cream >>> 16) & 255})`;
-        };
-        paperBehind(lit.cream);
-
-        view = createStreamView(land, pool, lit.palette, mask, {
-          width: FRAME_W,
-          height: FRAME_H,
-          sites: loaded.manifest.sites,
-          layers: makeLayers({
-            seed: loaded.manifest.seed,
-            n: land.n,
-            sites: loaded.manifest.sites,
-            land: { gN: land.n / 8, ground: coast },
-            wonders: wondersOf(loaded.manifest),
-            discover: (id, label) => {
-              discoveries.discover(id, label);
-            },
-            // ?sights=all shows every rare sight at once, to look them over without waiting for them.
-            forceSights: params.get("sights") === "all",
-            structures: loaded.core.world.built?.built.structures,
-          }),
-          onLayerError: (name, message) => console.warn(`live layer ${name}: ${message}`),
-        });
-        view.setLight(lit.palette, lit.cream, builtAir);
-        flight = startState(loaded.manifest.start, view);
-        worldN = land.n;
-        const sky = createSky(
-          loaded.manifest.seed,
-          land.n,
-          styleFrom(new URLSearchParams(window.location.search).get("clouds")),
-          loaded.manifest.start,
-        );
-
-        const dragon = createDragon(worldN);
-        const rain = createRain(seed);
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("2d");
-        imageData = ctx.createImageData(FRAME_W, FRAME_H);
-        const buffer = new Uint32Array(imageData.data.buffer);
-
-        const tick = (t: number) => {
-          if (!alive || !view || !flight || !pool || !imageData) return;
-          const work = performance.now();
-          const dt = lastT ? (t - lastT) / 1000 : 0;
-          lastT = t;
-
-          // The air, read from the clock a few times a second (it changes slowly). The palette is built again only once
-          // the light has moved a visible step.
-          if (t - airAt >= AIR_EVERY) {
-            air = airNow();
-            airAt = t;
-          }
-          if (lightMoved(builtAir, air) && t - lastBuild >= 400) {
-            const p0 = performance.now();
-            lit = lightFor(air);
-            builtAir = air;
-            lastBuild = t;
-            paperBehind(lit.cream);
-            if (probe) probe.paletteMs.push(performance.now() - p0);
-          }
-          view.setLight(lit.palette, lit.cream, air);
-          sky.setAir(air);
-          dragon.setAir(air);
-          if (probe) probe.air = air;
-
-          flight = stepFlight(flight, inputFromKeys(keys), dt, view, worldN);
-          view.setCamera(flight.x, flight.y - flight.alt / 0.8);
-          view.update(Math.cos(flight.heading) * flight.speed, Math.sin(flight.heading) * flight.speed);
-          view.frame(frame, t / 1000, {
-            x: flight.x,
-            y: flight.y,
-            alt: flight.alt,
-            heading: flight.heading,
-            speed: flight.speed,
-          });
-          const skyStart = performance.now();
-          // The rain falls under the clouds and the flier: they hide it, never it them.
-          rain(frame, view.rect(), t / 1000, air);
-          sky.draw(frame, view.rect(), t / 1000, "below");
-          const skyBelow = performance.now() - skyStart;
-          dragon.step(flight, Math.min(dt, 0.1));
-          dragon.draw(frame, view.rect(), flight, view);
-          const skyAgain = performance.now();
-          sky.draw(frame, view.rect(), t / 1000, "above");
-          if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
-          buffer.set(frame);
-          ctx.putImageData(imageData, 0, 0);
-
-          const ready = view.ready();
-          if (ready) readyFrame = true;
-          if (probe) {
-            probe.frameMs.push(performance.now() - work);
-            probe.frames++;
-            if (!ready) probe.hazeFrames++;
-            else if (probe.readyAt === null) probe.readyAt = performance.now();
-          }
-
-          if (t - lastCaptionPoll >= 250) {
-            lastCaptionPoll = t;
-            const cap = discoveries.caption();
-            if (cap !== lastPolledCaption) {
-              lastPolledCaption = cap;
-              if (cap !== null) {
-                setDiscoveryCaption(cap);
-                setDiscoveryCaptionVisible(true);
-              } else {
-                setDiscoveryCaptionVisible(false);
-              }
-            }
-          }
-
-          if (statsOn) {
-            fpsFrames++;
-            if (t - fpsLast >= 500) {
-              const ps = pool.stats();
-              const vs = view.stats();
-              setStats({
-                fps: Math.round((fpsFrames * 1000) / (t - fpsLast)),
-                pool: `in ${ps.inFlight} q ${ps.queued} baked ${ps.baked} ${ps.bakeMs.toFixed(0)}ms`,
-                view: `chunks ${vs.chunks} ${vs.bakeMs.toFixed(0)}ms cache ${view.cached()}`,
-              });
-              fpsFrames = 0;
-              fpsLast = t;
-            }
-          }
-
-          raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
-      } catch {
-        fail();
-      }
-    })();
-
-    return () => {
-      alive = false;
-      cancelAnimationFrame(raf);
-      pool?.dispose();
-      window.removeEventListener("resize", recomputeScale);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, []);
-
-  if (failed) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f0e8d2",
-          fontFamily: fell.style.fontFamily,
-          color: "#2e2a24",
-        }}
-      >
-        <p>{LOAD_FAILED}</p>
-        <Link href="/" style={{ color: "#2e2a24", marginTop: "1rem" }}>
-          Back to the site
-        </Link>
-      </div>
-    );
-  }
-
+  const at = flight.phase.at;
+  // The panel and the corner draw their glyphs a step finer than the world's pixel, 2 or 3 CSS pixels, so the panel
+  // stays small on any window.
+  const px = Math.max(2, Math.min(3, Math.round(scale) - 1));
+  const stage = { width: FRAME_W * scale, height: FRAME_H * scale } as CSSProperties;
+  // Round the frame the page takes the paper's colour in the hour's light: dark at night, as the frame is.
+  const page = flight.paper ? ({ background: flight.paper } as CSSProperties) : undefined;
   return (
-    <div
-      ref={pageRef}
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#f0e8d2",
-        position: "relative",
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        width={FRAME_W}
-        height={FRAME_H}
-        style={{
-          width: FRAME_W * scale,
-          height: FRAME_H * scale,
-          imageRendering: "pixelated",
+    <div className={styles.page} style={page} data-motion={options.motion}>
+      <div className={styles.stage} style={stage}>
+        <canvas ref={canvasRef} width={FRAME_W} height={FRAME_H} className={styles.canvas} />
+        {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
+      </div>
+      <GuideLine say={flight.say} />
+      <DiscoveryCaption caption={flight.caption} />
+      {at ? (
+        <Codex
+          landmark={at}
+          register={landmarks ? registerFrom(at, landmarks) : []}
+          onTakeOff={flight.takeOff}
+          onOpenTerminal={drawer.show}
+        />
+      ) : null}
+      {at?.holds.kind === "about" ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
+      <OptionsPanel
+        open={panel.open}
+        px={px}
+        options={options}
+        onChange={setOptions}
+        onTeach={() => {
+          flight.teachAgain();
+          panel.link.toggle();
         }}
+        onClose={panel.closed}
       />
-      {discoveryCaption !== null ? (
-        <p
-          style={{
-            position: "fixed",
-            top: "1.25rem",
-            left: "50%",
-            transform: "translateX(-50%)",
-            margin: 0,
-            fontFamily: fell.style.fontFamily,
-            color: "#2e2a24",
-            fontSize: "0.95rem",
-            pointerEvents: "none",
-            background: "rgba(240, 232, 210, 0.85)",
-            padding: "0.25rem 0.9rem",
-            borderRadius: "2px",
-            opacity: discoveryCaptionVisible ? 1 : 0,
-            transition: "opacity 400ms",
-          }}
-        >
-          {discoveryCaption}
-        </p>
-      ) : null}
-      <p
-        style={{
-          position: "fixed",
-          bottom: "1.25rem",
-          left: "50%",
-          transform: "translateX(-50%)",
-          margin: 0,
-          fontFamily: fell.style.fontFamily,
-          color: "rgba(46, 42, 36, 0.8)",
-          fontSize: "0.95rem",
-          pointerEvents: "none",
-          // A strip of paper behind the line, so it reads over the land.
-          background: "rgba(240, 232, 210, 0.82)",
-          padding: "0.15rem 0.7rem",
-          borderRadius: "2px",
-        }}
-      >
-        Arrow keys steer · Up to speed up · Down to slow · Esc to leave
-      </p>
-      {stats ? (
-        <div
-          style={{
-            position: "fixed",
-            top: "0.5rem",
-            left: "0.5rem",
-            fontFamily: "monospace",
-            fontSize: "11px",
-            color: "#2e2a24",
-            background: "rgba(240, 232, 210, 0.85)",
-            padding: "0.35rem 0.5rem",
-            lineHeight: 1.4,
-          }}
-        >
-          <div>fps {stats.fps}</div>
-          <div>{stats.pool}</div>
-          <div>{stats.view}</div>
-        </div>
-      ) : null}
+      {flight.stats ? <StatsReadout stats={flight.stats} /> : null}
     </div>
   );
 }

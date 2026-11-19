@@ -11,6 +11,10 @@ Last updated 2026-11-19.
 |---|---|
 | What the site is becoming, and the rules every change follows | `.claude/CLAUDE.md` |
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
+| Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
+| Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
+| The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
+| Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -41,6 +45,11 @@ Last updated 2026-11-19.
   `specs/2026-11-18-wonders-and-larger-map-design.md`.
 - **Frame budget met** (2026-11-18, `frame-budget`). /world's p95 at 4× CPU throttle fell from 6.0 to 3.6 ms, with the
   look pinned byte-identical by differential tests.
+- **Sights stay while they are watched** (2026-11-18, `sights-persist`, `live/linger.ts`). A timed sight in view as its
+  time runs out is no longer cut off or faded: the balloon drifts on, the ship sails on (lying to off shoals), the fox
+  trots on into cover, the heron flies on, the monk walks home, the kite comes down with the child, and each wonder's
+  moment plays out or stays where its time left it, until it is out of view. The clocks are unchanged and every
+  visitor's; what lingers is the watcher's own, and never shows twice at once.
 - **Wonders** (2026-11-18). Nine baked wonders after their Ghibli counterparts, redrawn by Cursor at the owner's request
   and polished over three offense/defense critique rounds (Opus critics, Cursor building), each with a live moment
   (`live/moments.ts`), plus the floating garden and the land-ship. A crowded wonder falls back to half the spacing.
@@ -60,8 +69,30 @@ Last updated 2026-11-19.
   summit), a table (flat top, sea walls, falls off the south edge), a fen (winding lodes, meres, saltmarsh, tidal
   flats) and a fjord highland (deep, steep inlets). Stage S5b `gen/forms.ts`. Next batch: more forms (atoll, tombolo
   pairs, sea arches, a drowned ria coast).
+- **Landing and the Codex** (2026-11-18). The build matches the pinned repos to landmarks (sticky in
+  `src/world/sites/assignments.json`, keyed by world). Near a landmark a prompt offers to land (Space, Enter or a tap);
+  the dragon slows, circles and coils down round the landmark's own building, and the Codex opens: the project's name,
+  description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
+  is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
+  discovery, by repository. Preview a site with `/world?at=<site id>`.
+- **Teaching the controls** (2026-11-18, `claude/unruffled-jones-c0c8ed`). Guides drawn into the world beside the
+  dragon's head, in the slot its body leaves clearest: a first-flight lesson (steer, then speed, then leave and
+  options) whose pixel key-caps light as they are pressed and fade once learned (`world:lesson`), and prompts to land,
+  pull up and take off that replace the hint line. A click or tap on a prompt acts on it; a live region says it in
+  words. Glyphs follow the device used last: key-caps, a gamepad (stick, triggers, face buttons by position; the pad
+  flies, lands and takes off) or a tapping hand. One glyph set (`src/world/controls/`: our own pixel font, caps, pad and
+  touch glyphs; drawn into the frame by `blit`, into the DOM by `PixelGlyph`) for the mobile work to reuse. O, the
+  pad's Menu or the corner button opens a small pixel options panel: hold or toggle boost, a gentle pace, reduced motion
+  (no boost streaks, a camera cut), rebinding the five letter keys, the lesson again, and leaving. The flight page was
+  first split into a session and hooks (React Doctor 81 → 100). The guides cost 0.1 ms p95 at 4× (`world-fly.mjs`
+  reports `guideMs`); a Fable critic judged two rounds of renders. Design:
+  `specs/2026-11-18-teaching-the-controls-design.md`.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
+- **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
+  landing coil and resting no longer make them jump across the sky or hang in the air; boats float on the water drawn
+  under them, so their keels no longer blink under the sea; the flier's wake stays on the water it was laid on and
+  fades, rather than vanishing the moment the flier crosses the shore. Pinned frame by frame in `live/coast.test.ts`.
 - **Time of day and weather** (2026-11-19, `claude/gracious-hypatia-d55439`; three Fable agents over two critic
   rounds). The light follows the visitor's own clock: sun phase from the local hour, with longer days in summer
   (`sky/clock.ts`). The palette's day runs night, a deeper small hours, blue hour, dawn, golden hour, dusk, split-toned
@@ -149,7 +180,7 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 
 ## Interactions
 
-- Landing on a tower or landmark opens that project (needs the landmarks below).
+- ~~Landing on a tower or landmark opens that project.~~ Done (see above).
 - Flying low startles birds from trees and gulls from the harbour.
 - The flier's wake on water, and its shadow on the land (the shadow exists).
 - Passing the abbey rings its bell; passing the windmill turns its sails faster.
@@ -157,15 +188,14 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 
 ## Later
 
-- **The dragon: what's left.** Landing (coiling onto a site's pad), being built with the Codex in the `landing-codex`
-  session. The river-dragon is built and flying, boost streaks included.
-- **Landmarks and projects.** Sprites for the abbey, lighthouse, windmill, bridge, ruined cathedral, churchyard yew
-  and the town's bell tower; the six pinned repos assigned to sites; landing opens a project page; the abbey holds
-  About Me and the terminal (the Artificer).
+- ~~**The dragon: what's left.**~~ Landing is built: it coils down round the landmark's building.
+- **Landmarks and projects.** Assignments, landing and the Codex are built (see Done). Open: more than six projects.
+  Pins cap the world at six; a GitHub topic (tag a repo, it appears at the next build) would add more with no other
+  upkeep. It touches `src/lib/github.ts` and every page that reads it, so it is its own task.
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
-- **Seasons**, if the lore settles them by place (the months laid out north to south) rather than by the clock: the
-  palette already carries the four, and `world:live --season` previews them.
+- **Seasons**: not from the clock (settled 2026-11-18), and the lore that laid the months out as places is set aside.
+  If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
 - **Sound** (wind, sea, bells) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 
@@ -187,12 +217,9 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
   controls, and a real-device pass.
 
 **Teaching the controls (desktop and mobile)**
-- A first-flight lesson drawn in the world: pixel key-caps (WASD or arrows, Shift) that light as they are pressed and
-  fade once learned, remembered in localStorage.
-- Device-aware prompts: keyboard glyphs, gamepad glyphs when a pad connects (Gamepad API), touch glyphs on phones.
-- Contextual prompts by the dragon, not a HUD: "E to land" near a tower, "Space to take off", "M for the map".
-- Options: remap keys, hold or toggle boost, a slower cruise, reduced motion.
-- Gamepad support, and steering toward the pointer on desktop.
+- ~~Lesson, device-aware prompts, contextual prompts, options, gamepad.~~ Done (see Done). Left: touch flight itself
+  (the mobile work, with the touch glyphs already in `controls/glyphs.ts`), "M for the map" once there is a map, and
+  steering toward the pointer on desktop.
 
 **Finding your way without a minimap**
 - Landmarks visible from afar: smoke columns, ~~the lighthouse's sweeping beam~~ (done), gulls circling towers, banners.
@@ -213,7 +240,7 @@ minimap (a map is for fun only). A `mobile-research` session is writing the rese
 - A pixel loading scene while the core loads (1.5 MB); a clear fallback to the text page if the world fails.
 - OpenGraph postcards per tower; Continue where you left off.
 - An end-to-end suite: title → world → land → Codex → back, on desktop and mobile emulation.
-- Split the flight page component into hooks before the controls and mobile work lands.
+- ~~Split the flight page component into hooks before the controls and mobile work lands.~~ Done: `session.ts` and hooks.
 
 ## Backlog: cosmetic and look
 
@@ -237,6 +264,29 @@ From the 10240 polish critics (2026-11-18; the round-9 items are done unless lis
 - Sites painted into the land: a lighthouse pad cut down a sea cliff reads as a green box, and a road runs straight
   down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
+
+From the lingering sights (2026-11-18), for the frame-edge work:
+- A rare sight in its window draws only while its candidate spot is 30 px inside the frame, though the balloon drifts
+  up to 119 px from it, the ship 112, the fox 70 and the heron about 255: moving the view can drop one mid-frame. The
+  ship and the fox are culled by their anchor at the frame's edge; the monk shows only while the abbey's whole road
+  box is in frame. In its window the ship still vanishes where its course meets water shallower than tone 5.
+
+From landing (2026-11-18):
+- Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
+  (the chain forgot its path), the tail hanging in the air, stiff whiskers and a rolled body at rest; and the dragon is
+  now about 78 % of its first size. See the landing design.
+- A lighthouse stands on a cliff's edge, so its coil is draped from the sea up over the rock behind the tower. A coil
+  wound up the tower itself, held by it, would be the better picture there.
+- Take-off, from the render critic: where the coil is a closed ring (the harbour, a lighthouse) the head crosses its
+  own tail for about half a second as it leaves; at the ruined cathedral the wooded bank in front cuts the rising body
+  in two for a moment. Both pass; a take-off that leaves outward, and climbs faster where it is hidden, would cure them.
+- A cloud bank can drift over the landmark the dragon rests at; the dragon still shows, the building does not. The sky
+  could part round a landed site.
+- ~~In the town the coil lies among the houses round the bell tower, and the houses hide some of it.~~ The town now
+  lands in its harbour. A landmark close behind trees or a bank can still hide part of the resting body (the head is
+  kept in view).
+- `Flight.tsx` grew with landing (React Doctor's giant-component warning was already there); the page's slim-project
+  mapping for the terminal repeats the home page's.
 
 From time of day and weather (2026-11-19):
 - The sailing boats out in the bay carry no lanterns at night (they belong to the life layer); the marsh house's one lit
@@ -265,6 +315,11 @@ From the first-flight review:
 - **Title menu: parked by the owner** (2026-11-18 evening). The `title-menu` session explored twenty directions (A–T)
   in its browser pane; none is picked or built. Mobile gets a separate title screen (see Ideas).
 - ~~**A bigger map?**~~ Built: 10240 with more islands at today's scale, shipped in regions (see Done).
+- **The story** (2026-11-18, Fable). The owner set aside the first brainstorm, a world with an order, a history and
+  months as places (`specs/2026-11-18-lore-and-story.md`): "I just want something simple", in the spirit of *The
+  Little Prince*, about people and not world-building. `specs/2026-11-18-a-simple-story.md` proposes it: the dragon has
+  never made anything, so it asks the keeper of each landmark why they do, and each page of the Codex ends with one
+  short encounter. No gates, nothing on the text page, and nothing asked of the generator. Not built.
 
 ## Open checks
 
