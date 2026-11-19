@@ -1,0 +1,83 @@
+/* The flight page round the canvas: game layer, Ink & Glyph paper. The Codex and the prompts have their own sheets. */
+
+.page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f0e8d2;
+}
+
+.canvas {
+  image-rendering: pixelated;
+}
+
+.failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: #2e2a24;
+  background: #f0e8d2;
+}
+
+.failed a {
+  margin-top: 1rem;
+  color: #2e2a24;
+}
+
+.caption {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  margin: 0;
+  padding: 0.25rem 0.9rem;
+  font-size: 0.95rem;
+  color: #2e2a24;
+  pointer-events: none;
+  background: rgb(240 232 210 / 0.85);
+  border-radius: 2px;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 400ms;
+}
+
+.captionShown {
+  opacity: 1;
+}
+
+.hint {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  max-width: calc(100vw - 2rem);
+  margin: 0;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.95rem;
+  color: rgb(46 42 36 / 0.8);
+  text-align: center;
+  pointer-events: none;
+  /* A strip of paper behind the line, so it reads over the land. */
+  background: rgb(240 232 210 / 0.82);
+  border-radius: 2px;
+  transform: translateX(-50%);
+}
+
+.stats {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #2e2a24;
+  background: rgb(240 232 210 / 0.85);
+}
+
+.stats p {
+  margin: 0;
+}
