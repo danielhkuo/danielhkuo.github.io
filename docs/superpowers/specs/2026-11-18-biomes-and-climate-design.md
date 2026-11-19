@@ -1,13 +1,24 @@
 # Climates and biomes: design
 
-**Date:** 2026-11-18. **Lead:** Fable; Opus subagents map, check and critique.
-**Status:** written for the owner's brief below; the build follows it. Two Opus critics read the first draft (a
-geographer and painter; a builder checking it against the code) and their findings are folded in, marked
-**[Critic]**. Section 13 records what is built.
+**Date:** 2026-11-18, revised 2026-11-19. **Lead:** Fable; Opus subagents map, check and critique.
+**Status:** the owner decided the open points on 2026-11-19 (section 0), and the build follows this document. Two
+Opus critics read the first draft (a geographer and painter; a builder checking it against the code) and their
+findings are folded in, marked **[Critic]**. Section 13 records what is built.
 
-Labels: **[Owner]** is the owner's own words or an earlier decision. **[Decide]** is a decision that is the owner's
-to make; each has a recommendation, and the build takes the recommendation until the owner says otherwise.
+Labels: **[Owner]** is the owner's own words or decision. **[Decide]** is a smaller decision still the owner's to
+make; each has a recommendation, and the build takes the recommendation until the owner says otherwise.
 **[Call]** is this design's choice. Numbers are starting values, tuned on renders.
+
+## 0. The owner's decisions (2026-11-19)
+
+- **Story. [Owner]** Simple and reflective, with no world-building. Nothing in the generator follows the lore: no
+  months as places, no Round.
+- **Climate. [Owner]** Bands of temperature by latitude that loop: a cold band (ice and tundra) at one latitude, a
+  hot band (jungle) at the opposite one, gradual change between, and cooling with height. The two routes between
+  the bands differ by moisture, a wet side and a dry side, so no biome appears twice in a lap.
+- **Landmarks. [Owner]** One of each kind, seven in all: the abbey, and six for the six projects. Each stands in a
+  climate that suits it. The six new churches of the first build are cut.
+- **Size. [Owner]** Left to this design. **[Call]** It stays 10240 (section 9).
 
 ## 1. The brief
 
@@ -24,13 +35,14 @@ lighthouses, bridges, cathedrals, windmills and yews stand on it.
 
 **Goals**
 
-1. The world reads as round: fly north and it grows colder, cross a polar cap, and come down the far side into the
-   tropics.
-2. Nine climates a visitor can name from one frame: ice, tundra, taiga, temperate (today's look), Mediterranean,
-   steppe, desert, savanna, jungle.
+1. The world reads as round, and its two routes differ. Fly north from home and it grows colder, through taiga
+   and tundra to the polar ice. Keep on, and the far side comes down dry: steppe, the Mediterranean, desert and
+   savanna, into the jungle. Keep on again, and warm forest brings you home.
+2. Ten climates a visitor can name from one frame, each met once in a lap: ice, tundra, taiga, temperate (today's
+   look), warm forest, jungle, savanna, desert, Mediterranean, steppe.
 3. Every change between them is gradual and follows the land. No ruled line, no stripe.
 4. One house style: the same paper, washes, ink, three value masses and reserved vermilion and gold.
-5. No landmark kind appears twice. There are enough distinct sites for the six projects, with spares.
+5. Seven landmarks, no kind twice: the abbey, and one site for each of the six projects.
 6. Settlements, fields and wonders suit their climate.
 7. The budgets stand: about 1.5 MB before first flight, under 4 ms a frame at 4× throttle, a worker's window bake.
 
@@ -45,6 +57,8 @@ lighthouses, bridges, cathedrals, windmills and yews stand on it.
 **Anti-goals: it fails, even with every test green, when**
 
 - a biome border runs straight, or the overview map shows latitude stripes;
+- a climate of one side shows on the other: hedged green fields between the steppe and the Mediterranean, or sand
+  and savanna on the way from home to the jungle;
 - green pasture, hedges, wheat or sheep stand on ice or dunes; a hamlet stands on an ice cap;
 - the home island's approved opening flight looks different;
 - a river crosses a desert as a full blue ribbon with no green beside it, or runs liquid across an ice cap;
@@ -80,7 +94,7 @@ lighthouses, bridges, cathedrals, windmills and yews stand on it.
 | D. Two cycles | Two poles and two equators in one lap | More crossings per lap | Each band is half as tall: under 300 cells, one screen |
 | E. Climate in blobs | Noise decides hot and cold, no latitude | Easy | Nothing loops, nothing reads as a globe, and climate is no help finding your way |
 
-**[Decide 1] A.** Recommended, and built. What makes a world feel round to someone flying over it is that climate
+**[Owner] A.** Built. What makes a world feel round to someone flying over it is that climate
 follows latitude and comes round again. A gives exactly that and breaks nothing. East–west already loops like
 longitude.
 
@@ -111,12 +125,34 @@ Rejected: blending by dither alone (a speckled band is static on screen, and sti
    to dwarf birch, acacias thicken to forest.
 4. **Patch noise, then blue noise.** What is left is broken by noise at 60, 15 and 4 cells, and last by the mask.
 
+### 4.4 How the two routes differ
+
+The loop has two routes from the pole to the equator: the one through home, and the one round the back.
+**[Owner]** They differ by moisture, a wet side and a dry side.
+
+| | What | For | Against |
+|---|---|---|---|
+| **A. Each side its own curves, and the side shipped** | Temperature and rain by latitude, one pair of curves a side, meeting at the pole and the equator; a small plane, `arid`, says how far a node lies on the dry side | The dry side needs no temperate plateau, so nothing temperate shows twice; the cover can dress dry ground whole where its temperature passes the plateau's | One more plane, nearly all of it flat |
+| B. Rain alone differs | One temperature curve; the dry side gets less rain | No new field | The dry side keeps a plateau at exactly the temperate temperature, where the cover is by rule today's: a band of hedged green between steppe and Mediterranean |
+| C. The bake works out its own side | From the row, the equator's row and the seed | No bytes | The isotherms' wander must be repeated in the bake, and can drift from the generator's |
+| D. East and west differ, not the two routes | Banded winds: wet east coasts, dry west coasts | A globe's own asymmetry | Every climate still comes round twice in a lap, which is what the owner asked to end |
+
+**[Call] A.** Home is green, so the route through home is the wet side.
+
 ## 5. The climate
 
 ### 5.1 Latitude
 
-`φ(y) = |y − equatorY| / (n/2)` on the torus: 0 on the equator line, 1 on the pole line; `90·φ` is degrees. The half
-of the world north of the equator line is northern latitudes; the other half is southern.
+`φ(y) = |y − equatorY| / (n/2)` on the torus: 0 on the equator line, 1 on the pole line; `90·φ` is degrees.
+
+**The two sides.** Signed latitude `s` runs from 0 on the equator line to +1 on the pole line through home, the
+**wet side**, and from 0 to −1 the other way round, the **dry side**. The wander of 5.2 is added to `s` itself and
+folded at 0 and ±1, so the two lines where the sides meet wander as the isotherms do; φ is `|s|` after it. Both
+sides' curves agree at the pole and at the equator, so nothing shows where they meet: it is ice on both sides of
+one line and jungle on both sides of the other.
+
+`arid` is the dry side's share of a node: 0 on the wet side, 1 on the dry side, rising over a tenth of the
+latitude from each meeting line. It lives on C and ships beside the temperature (7).
 
 **[Call] Anchor.** `equatorY = homeY + 0.62·n/2`, where `homeY` is the home island's core. The home island's core
 sits at 56° north, colder to its north, as in the Europe the land is drawn from; the island reaches further south
@@ -125,7 +161,7 @@ anchor, 51°, left green home beside sand at one latitude: a geographer's catch)
 at y ≈ 6270 and the pole at y ≈ 1150, which by luck gives a table island on the equator, a fen under frost polygons
 on the tundra and a snow-capped volcano with a frozen crater lake by the pole.
 
-**[Decide 2] North is colder at home.** Recommended. The mirror (equator to the north) is one sign.
+**[Decide 1] North is colder at home.** Recommended. The mirror (equator to the north) is one sign.
 
 At 10240 the equator-to-pole run is 5120 cells: 85 s at cruise, 45 s boosting.
 
@@ -133,21 +169,26 @@ At 10240 the equator-to-pole run is 5120 cells: 85 s at cruise, 45 s boosting.
 
 `temp` is sea-level temperature, 0 (pole) to 1 (equator), with **0.5 the temperate plateau**. It lives on C and ships.
 
-1. **The curve.** Piecewise linear in φ, flat across the temperate belt:
+1. **The curves.** Piecewise linear in φ, one a side. The wet side is flat across the temperate belt; the dry side
+   has no plateau and passes the temperate temperature at one latitude:
 
-   | φ | 0 | 0.11 | 0.25 | 0.38 | 0.50 | 0.52–0.66 | 0.73 | 0.85 | 0.92 | 1 |
+   | Wet side, φ | 0 | 0.10 | 0.22 | 0.34 | 0.46 | 0.52–0.66 | 0.73 | 0.85 | 0.92 | 1 |
    |---|---|---|---|---|---|---|---|---|---|---|
-   | temp | 1 | 0.96 | 0.86 | 0.72 | 0.54 | 0.50 | 0.415 | 0.27 | 0.142 | 0.02 |
+   | temp | 1 | 0.97 | 0.88 | 0.74 | 0.58 | 0.50 | 0.415 | 0.27 | 0.142 | 0.02 |
+
+   | Dry side, φ | 0 | 0.08 | 0.22 | 0.30 | 0.46 | 0.56 | 0.62 | 0.72 | 0.84 | 0.94 | 1 |
+   |---|---|---|---|---|---|---|---|---|---|---|---|
+   | temp | 1 | 0.97 | 0.88 | 0.82 | 0.70 | 0.58 | 0.50 | 0.40 | 0.28 | 0.142 | 0.02 |
 
    A plain cosine was weighed and dropped: it has no plateau, so no land would keep today's look. **[Critic]** The
-   belts are cut nearer a globe's shares than equal bands: on a sphere the caps are small and the tropics broad, so
-   ice and tundra take 15 % of the run, not 20 %.
+   belts are cut nearer a globe's shares than equal bands: on a sphere the caps are small and the tropics broad.
+   With each climate met once in a lap, a belt is 600 to 1100 cells tall, two to four screens.
 2. **Warp.** φ is bent by periodic noise at n/2, n/5 and n/13 (about ±400 cells in all), so no isotherm is a ruled
    line. **[Critic]** The first draft's ±150 would have left the pack-ice edge straight across the open sea.
 3. **Sea and coast.** Continentality is the land's share within about 320 cells. Inland is more extreme: colder in
    the cold belts (an island's coast is tundra where its heart is ice), hotter and drier in the hot belts. The sea
    itself keeps the curve. Nothing is added inside the plateau.
-4. **The home rule [Decide 3].** Recommended: the home island keeps exactly today's climate, and the temperate belt
+4. **The home rule [Decide 2].** Recommended: the home island keeps exactly today's climate, and the temperate belt
    swells round it, as a warm current bends the isotherms round Europe. The swell fades over about 1100 cells to the
    north and south and 2500 along the latitude, so it reads as a bend in the belt and not a ring round an island
    (**[Critic]**: a round halo would look like a mistake on the map). The land and cover of the approved opening
@@ -177,8 +218,8 @@ line, where scree grows over, where summits bare. Physical uses (the beach, the 
 | 0.72 | −26 | the snowline stands at 119: the highest summits of the dry belt keep a cap |
 | 1.0 | −60 | no snow; woods climb to 120. **[Critic]** A tropical tree line stands twice as high as an Alpine one |
 
-**[Call] Temperate is the identity.** At `temp = 0.5`, and in any world with no temperature field, the cover, the
-scatter and so the bake are exactly today's. `climate-identity.test.ts` pins it by hash over 300 000 inputs, and the
+**[Call] Temperate is the identity.** At `temp = 0.5` on the wet side (`arid` 0 or absent), and in any world with no
+temperature field, the cover, the scatter and so the bake are exactly today's. `climate-identity.test.ts` pins it by hash over 300 000 inputs, and the
 fixture tests' golden frames pin the bake. It covers the land and its cover. What is built on the land changes by
 design, since the landmark set does (10).
 
@@ -193,14 +234,29 @@ So the cold family adds, each weighted in by the shift and absent at zero:
 
 Only comparisons of height against a climatic line are shifted. Rock beds and strata read the true height.
 
+**[Call] The dry side is dressed whole.** On the wet side the cold and the warm dress both come on from nothing at
+the plateau's edge, so no line shows where the temperate climate ends. The dry side has no plateau: its temperature
+passes 0.5 between the steppe and the Mediterranean, and a dress that faded to nothing there would leave a belt of
+temperate green. So where `arid` is above 0 the dry dress is whole at every temperature, and one rule lays it on
+both sides of that latitude: sage and straw sward, with the Mediterranean's olives, cypress and vines coming in by
+patches on the warm side and the steppe's bare khaki on the cold. Cooling with height is unchanged on both sides.
+
 ### 5.4 Moisture
 
 Today's moisture is blurred orographic rain from a south-west wind, wetter to windward, with rain shadows. It keeps
-that shape and is multiplied by a zonal factor: 1 on the temperate plateau and round home, 1.6 at the equator, 0.3
-in the dry belt (φ 0.27–0.33), 0.6 toward the pole, and a little less inland in the dry belt.
+that shape and is multiplied by a zonal factor, one curve a side:
 
-So within one latitude the south-west sides of high islands are green and their north-east sides dry: deserts lie in
-rain shadows, jungle on windward slopes.
+| Wet side, φ | 0 | 0.30 | 0.46 | 0.52–0.66 | 0.73 | 0.85 | 0.92 | 1 |
+|---|---|---|---|---|---|---|---|---|
+| rain | 1.7 | 1.6 | 1.25 | 1 | 0.98 | 0.85 | 0.65 | 0.5 |
+
+| Dry side, φ | 0 | 0.06 | 0.10 | 0.16 | 0.22 | 0.27 | 0.30–0.44 | 0.50 | 0.58–0.64 | 0.74 | 0.84–0.94 | 1 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| rain | 1.7 | 1.55 | 1.2 | 0.9 | 0.62 | 0.36 | 0.28 | 0.42 | 0.55 | 0.5 | 0.55 | 0.5 |
+
+Inland the dry side is a little drier still. Within one latitude the south-west sides of high islands are the
+greener and their north-east sides the drier: on the dry side the desert is widest in rain shadows and the
+windward slopes keep steppe; on the wet side a lee slope is open glades in the forest, not savanna.
 
 **[Critic] One wind is a simplification.** A globe has trades from the east in the tropics and westerlies beyond,
 mirrored across the equator, which puts real deserts and Mediterranean coasts on the west of the land and wet
@@ -220,19 +276,22 @@ Cold to temperate is one family, decided by the shifted rules. Hot country is a 
 aridity, below a montane line; above that line a tropical mountain wears the shared rules (cloud forest, páramo,
 rock, a cap of snow).
 
-| Biome | Where (φ, at sea level) | Decided by |
-|---|---|---|
-| Ice | 0.92–1 | snow rule, shift ≥ 93 |
-| Tundra | 0.85–0.92 | above the tree line and far from temperate (a new rule, weighted in by the shift) |
-| Taiga | 0.73–0.85 | woods rule; conifers by cold, sooner the larger the shift |
-| Temperate | 0.52–0.66, and round home | today's rules |
-| Mediterranean | 0.40–0.50 | today's rules with less moisture, and a warm skin over grass, moor and woods |
-| Steppe | between Mediterranean, desert and savanna | aridity 0.20–0.34 |
-| Desert | 0.25–0.38, and rain shadows | aridity under 0.20 |
-| Savanna | 0.11–0.25 | aridity 0.34–0.58 |
-| Jungle | 0–0.11, and wet windward slopes | aridity over 0.70; dry forest between |
+| Biome | Side | Where (φ, at sea level) | Decided by |
+|---|---|---|---|
+| Ice | both, one band over the pole | 0.92–1 | snow rule, shift ≥ 93 |
+| Tundra | both, the ice's fringe: boggy on the wet side, stony on the dry | 0.85–0.92 | above the tree line and far from temperate (a new rule, weighted in by the shift) |
+| Taiga | wet | 0.73–0.85 | woods rule; conifers by cold, sooner the larger the shift |
+| Temperate | wet | 0.52–0.66, and round home | today's rules |
+| Warm forest | wet | 0.31–0.50 | the woods close over the fields and pastures as the heat rises; evergreen crowns; palms on the coast |
+| Jungle | both, one band over the equator | wet 0–0.31, dry 0–0.10 | heat and rain enough for closed forest |
+| Savanna | dry | 0.10–0.24 | grass country in the latitudes with a dry season |
+| Desert | dry | 0.26–0.46 | aridity under 0.20; thorn and thin steppe at its edges |
+| Mediterranean | dry | 0.46–0.62 | the dry dress on the warm side of the plateau's temperature |
+| Steppe | dry | 0.62–0.84 | the dry dress on its cold side, to the tree line |
 
-These are where each is at home; every bound is a ramp, and the world has no latitude without a rule.
+These are where each is at home; every bound is a ramp, and the world has no latitude without a rule. A lap from
+home, northward: temperate, taiga, tundra, ice, tundra, steppe, Mediterranean, desert, savanna, jungle, warm
+forest, home.
 
 Aridity is moisture plus local terms: a valley floor and a river bank are wetter, a south face and a spur drier,
 patch noise either way.
@@ -248,6 +307,7 @@ UPLAND, CANOPY, STONE, PALE). Warm grounds sit inside the reserved sector and ke
 | **Tundra** | Russet, ochre and olive in a mosaic; pale lichen on dry rises; sedge and dark pools in the flats; a net of frost polygons on the flattest ground; snow patches in every hollow | dwarf birch and willow in sheltered hollows; boulders | Shingle shores; rivers run; many small pools |
 | **Taiga** | A pale lichen floor under open spruce in the north, dark moss in the south; bog with pools in the flats | spruce (narrow dark spires, close set), birch along water and edges, thinning to krummholz | Grey rock; shingle and dark sand |
 | **Temperate** | unchanged | unchanged | unchanged |
+| **Warm forest** | The temperate fields and pastures, shrinking to clearings as the woods close over them; a dark evergreen floor | glossy evergreen crowns, larger and darker than home's woods, the jungle's own coming in toward the tropics; palms along the shore | Rock and rivers as temperate; pale sand; the clear sea begins |
 | **Mediterranean** | Sage sward and pale stony earth; lavender-grey garrigue on the tops; straw meadow | umbrella pines, cypress spires, olive, shrub thickets; vines and wheat in the fields | Pale stone; white coves; turquoise shallows (the existing clear sea) |
 | **Steppe** | Straw-olive grass that waves in the wind; bare earth patches | sage bushes; poplars by rivers | — |
 | **Desert** | Sand seas with real dunes (low relief added in the bake, so they shade and cast shadow) in lobed patches a few hundred cells across; darker gravel plains between; salt on the flattest basin floors | thorn bushes, in contour bands toward the savanna (tiger bush); columnar cactus on rocky ground; palms and a green strip only by water | Banded ochre sandstone; bare dunes to the shore; small streams are dry wadis, big rivers keep their water and a ribbon of green |
@@ -288,7 +348,7 @@ does: nothing turns a jungle autumnal or greens a desert.
 | Desert, steppe edge | dry wadi | water, with reeds, palms and plots along it | water, an oasis; salt rim |
 | Jungle, savanna | water | water, in a corridor of low green | water |
 
-### 6.5 Water colours [Decide 4]
+### 6.5 Water colours [Decide 3]
 
 Recommended: no new water ids in this pass. The sea is `sea` or `seaClear` (now also the tropics), and rivers and
 lakes are `river` and `lake`. Pack ice, lake ice, river ice and wadis are land-like ids that the water layer leaves
@@ -303,8 +363,10 @@ first polar renders; if the open polar sea reads wrong, a cold sea id is added a
 
 - **Regions** gain one section, `temp`: the C plane, 500 steps over [0, 1]. About 4 KB a region, 16 KB before first
   flight. `moisture` keeps its section with new values.
+- **And a second, `arid`:** the C plane, 100 steps over [0, 1]. It is flat but for two wandering bands, so it packs to
+  almost nothing. Absent, or all 0, means the wet side.
 - **Optional, flagged in meta**, as base and conform are. A world without it decodes and bakes as today.
-- **Windows.** `temp` is cut, stripped and stood in exactly as moisture is; a tile from regions equals a tile from
+- **Windows.** `temp` and `arid` are cut, stripped and stood in exactly as moisture is; a tile from regions equals a tile from
   the whole world, byte for byte.
 - **The manifest** gains `climate: { equatorY, poleY }`, for a latitude readout, the parchment map and the lore.
 - **The haze.** The core gains an optional plane, one byte per overview sample, naming the haze wash where it is not
@@ -335,20 +397,22 @@ first polar renders; if the open polar sea reads wrong, a cold sea id is added a
   and the bridge town in temperate or Mediterranean country, the drowned church in a lake that is not frozen, the
   marsh house off tundra and jungle. The baths prefer cold country; the hotel prefers warm.
 
-## 9. Size [Decide 5]
+## 9. Size
+
+**[Owner]** left this to the design. **[Call]** The world stays 10240.
 
 | | 10240 (today) | 12800 | 15360 |
 |---|---|---|---|
 | Equator to pole at cruise | 85 s | 107 s | 128 s |
-| A typical belt | 460–720 cells, 1.6–2.6 screens | 580–900 | 690–1080 |
+| A typical belt, each climate once a lap | 600–1100 cells, 2–4 screens | 750–1400 | 900–1650 |
 | Islands | 25 and 18 skerry groups | about 39 and 28 | about 56 and 40 |
 | Grow time, peak memory | 4.7 min, 2.9 GB | about 7.5 min, 4.5 GB | about 11 min, 6.5 GB |
 | Whole world | 10 MB | about 15.6 MB | about 22.5 MB |
 | Core (rivers, overview), before first flight | 0.93 MB, 1.45 MB | about 1.4 MB, 2.0 MB | about 2.0 MB, 2.6 MB |
 
-Recommended: **stay at 10240 for this work, and grow as its own step if the owner wants it after seeing the
-biomes.** The reasons:
+It can grow as its own step if the owner wants more after seeing the biomes. The reasons:
 
+- With each climate met once in a lap, every belt is already twice as tall as in the first, mirrored build.
 - Every length in the climate is a share of n, so growing later is one argument and a seed search.
 - Biomes multiply what there is to see far more than 56 % more of one climate would.
 - 12800 gives each belt a quarter more room, which is not a different experience; the first-flight download would
@@ -356,45 +420,40 @@ biomes.** The reasons:
 - A new size is a new land: seed 3's islands, the placed sites and the wonders would all be re-rolled and judged
   again. Doing the biomes on the land that has had fourteen look rounds isolates what changed.
 
-## 10. Landmarks [Decide 6]
+## 10. Landmarks
 
-Today 27 landmark sites share seven kinds. Recommended: **thirteen landmarks, no kind repeated.** A project is then
-"at the windmill", never "at the third lighthouse". Twelve can hold a project (the abbey holds About Me), so six pins
-leave six spares.
+**[Owner]** One of each kind, seven in all: the abbey, and six for the six projects. A project is then "at the
+windmill", never "at the third lighthouse". The abbey holds About Me; the other six hold one project each, with no
+spare, so every one of them must be placed.
 
-| Landmark | Climate | Site | Status |
+| Landmark | Climate | Why there | Site |
 |---|---|---|---|
-| Abbey | home | as today | built |
-| Harbour town | home | as today | built |
-| Lighthouse | temperate | today's rule, the best site in temperate country | built |
-| Old bridge | temperate | the same | built |
-| Ruined cathedral | temperate | the same | built |
-| Windmill | temperate or Mediterranean | the same | built |
-| Churchyard yew | temperate | the same | built |
-| **Hospice on the pass** | ice or tundra | a saddle or bench among snow | new: a long stone block with a bell-cote and cross, smoke at the chimney, a stair path through the snow |
-| **Stave church** | taiga | a clearing in conifer forest by water | new: dark timber on a cross plan, a steep central spire, white gable crosses, a bell tower apart |
-| **Hermitage on the rock** | Mediterranean | a sea cliff or stack top | new: a whitewashed chapel whose bell wall of three openings is its tallest part, a stair cut down the rock |
-| **Monastery in the sands** | desert | by water in the desert | new: a long basilica nave under a pitched red roof, a square bell tower with an open belfry, a walled court with palms |
-| **Round church** | savanna | open grass by a waterhole | new: a white drum under a dark cone, as the round churches of the Baltic; a walled yard and a well |
-| **River chapel** | jungle | a jungle river bank | new: white plank walls on stilts, a steep red roof, an open belfry, a landing stage |
+| Abbey | home, temperate | the opening flight | as today |
+| Harbour town | home, temperate | the opening flight | as today |
+| Lighthouse | the cold coast: taiga or tundra, by the pack ice | a light is for a hard coast | today's rule, on a cape of the cold sea |
+| Churchyard yew | temperate, on another island of home's belt | a yew is a tree of wet, mild country | today's rule |
+| Ruined cathedral | jungle | a roofless nave is most a ruin where the forest has taken it | today's rule, in the forest |
+| Old bridge | the Mediterranean | old stone over a summer river | today's rule, on a river of the dry side |
+| Windmill | the steppe | open grass and wind | today's rule, on a rise in open country |
 
-All six new ones are church-built, European in descent and our own drawings, with pointed windows and a cross on
-each. **[Critic]** Read from above, the first draft's desert domes and slender tower would pass for a mosque, tiered
-stave roofs for a pagoda, a thatched stilt hut for a spirit house, and an adobe mission for a colonial one; the
-forms above were chosen against each reading. No dragon-head finials on the stave church.
+So a lap passes one landmark in every stretch: home's two, the lighthouse at the ice, the windmill and the bridge
+down the dry side, the cathedral at the equator, the yew before home. Seven kinds in five climates are told apart by
+their ground as well as their shape.
 
-Counts no longer scale with area. Each landmark is sited again inside its climate, so today's sites move (four of
-the five lighthouses now stand on ice or in the tropics). The world's id changes with any re-shipped world, so the
-projects are assigned afresh: `src/world/sites/assignments.json` is re-made by the first build of the new world.
+**[Call] A landmark is never dropped.** Each kind is sited in its own climate first. If no ground there passes its
+rule, it is sited in the nearest climate that has some, and the build says so; a project is never left without a
+site.
+
+Counts no longer scale with area. Today's 27 sites become seven, so most move. The world's id changes with any
+re-shipped world, and the projects are assigned afresh: `src/world/sites/assignments.json` is re-pinned from a
+build of the new world with the pinned repos.
 
 Weighed and dropped: keeping five of each but varying their form by climate (a visitor still has five lighthouses to
-tell apart), and keeping two of each (the same, less).
+tell apart); keeping two of each (the same, less); and thirteen, with six new churches of the climates (built first
+as this design's recommendation, then cut by the owner: commit `967f669` holds them should they be wanted again).
 
-**The lore** (checked 2026-11-19, on `claude/lore-168547`: `specs/2026-11-18-a-simple-story.md`). The owner set the
-first lore aside for something simple: the dragon asks the keeper of each landmark why they make what they make, one
-keeper to a kind. It asks nothing of the generator, and one landmark of each kind is exactly what it wants: with two
-lighthouses the same keeper is met twice. It has seven keepers, for the seven kinds that exist. The six new kinds
-would want six more, or they stand without a keeper's words until the owner says; that is part of **[Decide 6]**.
+**The story** (on `claude/lore-168547`: `specs/2026-11-18-a-simple-story.md`) has seven keepers, one to a kind. It
+asks nothing of the generator, and nothing here follows it.
 
 ## 11. Budgets and tests
 
@@ -409,12 +468,15 @@ Tests, written before the code they pin:
 
 - **Identity:** cover and scatter with `temp` absent or 0.5 equal the old functions on a sweep of inputs; the golden
   frames of `water-speed.test.ts` do not change.
-- **Climate:** fields periodic and in range; temp falls from equator to pole; the plateau is exactly 0.5; home land is
-  exactly 0.5; the equator is wetter than the dry belt.
+- **Climate:** fields periodic and in range; temp falls from equator to pole on both sides; the wet side's plateau is
+  exactly 0.5; home land is exactly 0.5; the dry side is the drier at every middle latitude; the two sides agree at
+  the pole and the equator.
+- **Once a lap:** on flat synthetic land the wet route shows no sand, savanna, steppe or garrigue, and the dry route
+  no hedge, crop of the temperate fields, taiga or closed warm forest short of the jungle.
 - **Gradual:** along any north–south line of flat synthetic land each climatic border is a mixed band at least
   150 cells wide (**[Critic]**: 40 is a tenth of a screen, a line), and it is mixed in clumps, never cell by cell.
 - **Sanity:** no crop, hedge or pasture where shift ≥ 60; no crown on snow; nothing but water ids animates.
-- **Pack:** `temp` round-trips; windows from regions equal windows from the whole; a world without `temp` decodes.
+- **Pack:** `temp` and `arid` round-trip; windows from regions equal windows from the whole; a world without `temp` decodes.
 - **Palette:** the reserved-hue, river and value-mass tests cover the new ids.
 - **Painter:** a tile with no floating crown bakes as before; a floating crown never draws under nearer ground.
 
@@ -430,12 +492,16 @@ and after, scored in the look ledger.
 4. Floating crowns: palms, acacias, pines, cactus; bergs and mangroves.
 5. Settlements by climate; landmark counts to one; the six new landmarks.
 6. Haze plane; manifest climate; critics; ledger; roadmap.
+7. After the owner's decisions (0): the two sides (curves, `arid`, the dry dress, the warm forest); landmarks back to
+   seven, each in its climate; assignments re-pinned.
 
 Each step ends in renders and a commit.
 
 ## 13. What is built (2026-11-19)
 
-On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
+On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed. This section describes the first build,
+which mirrored the climates about the equator and placed thirteen landmarks; it is rewritten when step 7 of the
+build order lands.
 
 | Part | State |
 |---|---|
@@ -480,4 +546,4 @@ Critic scores and what each round changed are in the look ledger ("Climate round
 - Black sand on the volcanic islands of the tropics; tidewater glaciers calving in the polar fjords.
 - Islands grown for their climate (atolls and reefs in the tropics, more fjords in the cold): a plan-stage change and
   a new seed search.
-- The larger world, if **[Decide 5]** goes that way.
+- The larger world, as its own step, if the owner wants it after seeing the biomes.
