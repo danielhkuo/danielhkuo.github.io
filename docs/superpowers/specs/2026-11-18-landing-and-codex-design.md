@@ -92,9 +92,9 @@ on a wide screen it sits a little east, so the landmark shows clear of the Codex
   about 58 cells long, so a lighthouse gets a full ring and the abbey less than half a ring.
 - **Sweep.** The head turns the way it is already going round the landmark. The sweep ends at the south point and
   is between 0.9 and 1.9 turns.
-- **Orbit.** The orbit radius starts at the flier's distance, capped at 48. It eases to R by two-thirds of the
-  sweep and holds R for the rest. The heading aims at the tangent, bent in or out by `atan((r − r*) / 10)`. The turn
-  rate is capped at 3.2 rad/s.
+- **Orbit.** The orbit radius starts at the flier's distance, capped at 40. It eases to R by 55 % of the sweep and
+  holds R for the rest. The heading aims at the tangent, bent in or out by `atan((r − r*) / 10)`, on top of the turn
+  that holds the orbit itself. The turn rate is capped at 3.2 rad/s.
 - **Speed.** The lower of the speed it came in with and 2.2 rad/s × r: about 2.9 s a turn near the end. It eases to
   rest over the last 15 % of the sweep.
 - **Height.** The coil's *ring* is the ground at 32 points round R, raised wherever that would bend the body
