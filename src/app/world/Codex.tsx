@@ -76,10 +76,13 @@ function Corner({ className }: { className: string }) {
   );
 }
 
-/** A title whose first letter is illuminated: vermilion, gold-ruled. */
+/**
+ * A title whose first letter is illuminated: vermilion, gold-ruled. The initial is an inline block, which splits the
+ * word in the accessible name ("E mpty-state-repo"), so the heading, and the Codex it labels, is named by the text.
+ */
 function Illuminated({ text }: { text: string }) {
   return (
-    <h2 id="codex-title" className={styles.title}>
+    <h2 id="codex-title" className={styles.title} aria-label={text}>
       <span className={styles.initial}>{text.charAt(0)}</span>
       {text.slice(1)}
     </h2>

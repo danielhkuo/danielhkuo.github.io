@@ -45,15 +45,22 @@
 }
 
 .row {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--px) * 8);
+  justify-content: flex-end;
 }
 
-/* Floated, a legend is laid out as an ordinary child: here, a flex item. */
+/*
+ * Out of flow, a legend is not drawn in the fieldset's border: it sits at the row's left, centred on the choices. (A
+ * float did this in Chromium only: WebKit drops the float of a flex container's child and draws the legend on a line
+ * of its own above the choices.) It takes no room, which is safe while every row is narrower than the keys below it.
+ */
 .legend {
-  float: left;
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  align-items: center;
   padding: 0;
   line-height: 0;
 }
