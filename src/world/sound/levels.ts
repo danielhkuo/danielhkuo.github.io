@@ -185,6 +185,12 @@ export const BED_WANDER = 0.17;
 export const BED_SPREAD = 1;
 /** The open sea: band-pass (LINEAR Q). */
 export const OPEN = { hz: 700, q: 0.4 };
+/**
+ * How far a bed's noise loop wanders in pitch, cents, on one of the hub's slow drifts, so no pass of a loop is played
+ * quite as the last was. Read plainly, a loop is heard to come round: the open sea's wash every 4.855 s, the wind's
+ * rush and breeze every 5.000 s (§14.5; the rain's loops wander likewise, §14.2).
+ */
+export const LOOP_WANDER_CENTS = 30;
 /** A bed is stopped when every gain has been under BED_OFF for BED_OFF_S seconds, and built again when one passes BED_ON. */
 export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;

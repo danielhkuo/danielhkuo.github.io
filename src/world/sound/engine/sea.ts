@@ -6,10 +6,11 @@
 //              white → high-pass 2.5 kHz → low-pass (the air between) → [hiss]
 //              white × velvet (noise in grains) → band-pass 3.6 kHz → [rattle]
 //              sum → its two channels (independent noise) → each [wander] → its own pan
-//   open sea   pink → band-pass 700 Hz → [0.75 + 0.25 · drift] → [level]
+//              (every loop's pitch wanders too, on the drifts: none comes round the same)
+//   open sea   pink (its pitch wandering on the other drift) → band-pass 700 Hz → [0.75 + 0.25 · drift] → [level]
 
 import { rngFor } from "../../core/rng.ts";
-import { BED, BED_WANDER, OPEN } from "../levels.ts";
+import { BED, BED_WANDER, LOOP_WANDER_CENTS, OPEN } from "../levels.ts";
 import { T } from "../mix.ts";
 import { bandpass, bind, bindHz, bindPan, gain, highpass, loop, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Hub } from "./hub.ts";
@@ -19,7 +20,8 @@ import type { Voice } from "./wind.ts";
 interface Parts {
   v: Voice;
   keep<N extends AudioNode>(n: N): N;
-  noise(name: string): AudioBufferSourceNode;
+  /** A noise loop from a seeded place; with `wander`, its pitch rides drift channel `drift` by up to `cents`. */
+  noise(name: string, wander?: { drift: ChannelSplitterNode; ch: number; cents: number }): AudioBufferSourceNode;
 }
 
 function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts {
@@ -32,9 +34,14 @@ function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts
   return {
     v,
     keep,
-    noise(name) {
+    noise(name, wander) {
       const buffer = kit.buffer(name);
       const s = keep(loop(ctx, buffer));
+      if (wander) {
+        const depth = keep(gain(ctx, wander.cents));
+        wander.drift.connect(depth, wander.ch);
+        depth.connect(s.detune);
+      }
       s.start(at, rng.float() * buffer.duration);
       v.sources.push(s);
       return s;
@@ -45,17 +52,20 @@ function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts
 export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
   const p = parts(ctx, kit, opts.seed, "bed", opts.at);
   const { v, keep } = p;
+  // Every loop of the bed wanders in pitch, on one drift or the other and one way or the other, so none comes round
+  // the same (read plainly, the bed was heard to repeat every 4.855 s).
+  const wanders = (ch: number, sign: number) => ({ drift: opts.hub.drift, ch, cents: sign * LOOP_WANDER_CENTS });
   let sum: GainNode;
   v.steps.push(() => {
     sum = keep(gain(ctx, 1));
     const rumbleLow = keep(lowpass(ctx, BED.rumbleHz));
     const rumble = keep(gain(ctx, 0));
-    p.noise("brown0").connect(rumbleLow);
+    p.noise("brown0", wanders(0, 1)).connect(rumbleLow);
     rumbleLow.connect(rumble);
     rumble.connect(sum);
     const bodyBand = keep(bandpass(ctx, BED.bodyHz, BED.bodyQ));
     const body = keep(gain(ctx, 0));
-    p.noise("pink0").connect(bodyBand);
+    p.noise("pink0", wanders(1, 1)).connect(bodyBand);
     bodyBand.connect(body);
     body.connect(sum);
     v.bindings.push(bind(T.BED_RUMBLE, [rumble.gain]), bind(T.BED_BODY, [body.gain]));
@@ -64,7 +74,7 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     const high = keep(highpass(ctx, BED.hissHz));
     const air = keep(lowpass(ctx, 1000));
     const hiss = keep(gain(ctx, 0));
-    p.noise("white0").connect(high);
+    p.noise("white0", wanders(0, -1)).connect(high);
     high.connect(air);
     air.connect(hiss);
     hiss.connect(sum);
@@ -72,9 +82,9 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     const band = keep(bandpass(ctx, BED.rattleHz, BED.rattleQ));
     const rattle = keep(gain(ctx, 0));
     const grainSplit = keep(ctx.createChannelSplitter(2));
-    p.noise("velvet").connect(grainSplit);
+    p.noise("velvet", wanders(1, -1)).connect(grainSplit);
     const noiseSplit = keep(ctx.createChannelSplitter(2));
-    p.noise("white0").connect(noiseSplit);
+    p.noise("white0", wanders(1, 1)).connect(noiseSplit);
     const grains = keep(ctx.createChannelMerger(2));
     for (let c = 0; c < 2; c++) {
       const g = keep(gain(ctx, 0));
@@ -122,7 +132,9 @@ export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     opts.hub.drift.connect(depth, 0);
     depth.connect(swell.gain);
     const lev = keep(gain(ctx, 0));
-    p.noise("pink0").connect(band);
+    // Its pitch wanders on the other drift, so the loop never comes round the same (read plainly it was heard to,
+    // every 4.855 s).
+    p.noise("pink0", { drift: opts.hub.drift, ch: 1, cents: LOOP_WANDER_CENTS }).connect(band);
     band.connect(swell);
     swell.connect(lev);
     lev.connect(out);
