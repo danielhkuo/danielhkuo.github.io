@@ -308,8 +308,9 @@
 
 /* ---- Help (^G) and Go To Line (^/) ---------------------------------------- */
 
-/* Popovers: the UA's box (centred, bordered, light) is cleared. Each sets its
-   own display only while open, or it would show while closed. */
+/* Dialogs shown as popovers: the UA's box (centred, bordered, light) is
+   cleared. Each sets its own display only while open: a closed one keeps the
+   UA's display: none. */
 .nano-panel {
   margin: 0;
   padding: 0;

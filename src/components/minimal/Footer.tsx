@@ -51,7 +51,7 @@ export default function Footer({ lines }: { lines: number }) {
   // False while the server's HTML is all there is; true once this has hydrated.
   const live = useSyncExternalStore(noSubscription, () => true, () => false);
   const [prompt, setPrompt] = useState(false);
-  const [message, setMessage] = useState(read(lines));
+  const [message, setMessage] = useState(() => read(lines));
   const [told, setTold] = useState("");
   /** The last search, which an empty Enter repeats; the prompt shows it, as nano's does. */
   const [last, setLast] = useState("");
@@ -159,7 +159,8 @@ export default function Footer({ lines }: { lines: number }) {
   // A screen that opens takes focus to its first link or button, so its keys are under the reader's hand; when it
   // closes the browser hands focus back. Choosing a section in Go To Line closes it and moves focus to that section.
   useEffect(() => {
-    const panels = [HELP, GOTO].map((id) => document.getElementById(id)).filter((p): p is HTMLElement => p !== null);
+    const help = document.getElementById(HELP);
+    const goto = document.getElementById(GOTO);
     const opened = (e: Event) => {
       if ((e as ToggleEvent).newState !== "open") return;
       (e.currentTarget as HTMLElement).querySelector<HTMLElement>("a, button")?.focus();
@@ -175,11 +176,12 @@ export default function Footer({ lines }: { lines: number }) {
       target.tabIndex = -1;
       target.focus({ preventScroll: true });
     };
-    for (const p of panels) p.addEventListener("toggle", opened);
-    const goto = document.getElementById(GOTO);
+    help?.addEventListener("toggle", opened);
+    goto?.addEventListener("toggle", opened);
     goto?.addEventListener("click", chosen);
     return () => {
-      for (const p of panels) p.removeEventListener("toggle", opened);
+      help?.removeEventListener("toggle", opened);
+      goto?.removeEventListener("toggle", opened);
       goto?.removeEventListener("click", chosen);
     };
   }, []);

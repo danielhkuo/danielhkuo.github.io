@@ -2,9 +2,9 @@ import { FILE_NAME, type Mark } from "./daniel";
 import { GOTO, HELP } from "./ids";
 
 /**
- * The two screens a shortcut opens: Help (^G) and Go To Line (^/). Each is an HTML popover, opened by its key's
- * button with `popovertarget`, so both work with no JavaScript; Esc and a press outside close them. Footer.tsx adds
- * the Control keys and moves focus in and out.
+ * The two screens a shortcut opens: Help (^G) and Go To Line (^/). Each is a `<dialog>` shown as a popover, opened by
+ * its key's button with `popovertarget`, so both work with no JavaScript and read as dialogs; Esc and a press outside
+ * close them. Footer.tsx adds the Control keys and moves focus in and out.
  */
 
 /** The key that closes a screen: ^X, as in nano's help. */
@@ -34,7 +34,7 @@ function Key({ shown, spoken }: { shown: string; spoken: string }) {
 
 export function Help() {
   return (
-    <div id={HELP} popover="auto" className="nano-panel nano-help" role="dialog" aria-labelledby="nano-help-title">
+    <dialog id={HELP} popover="auto" className="nano-panel nano-help" aria-labelledby="nano-help-title">
       <div className="nano-bar" aria-hidden="true">
         <span>GNU nano 8.2</span>
         <span className="nano-file">{FILE_NAME}</span>
@@ -79,13 +79,13 @@ export function Help() {
       <div className="nano-panel-keys">
         <Close panel={HELP} />
       </div>
-    </div>
+    </dialog>
   );
 }
 
 export function GoTo({ marks }: { marks: readonly Mark[] }) {
   return (
-    <div id={GOTO} popover="auto" className="nano-panel nano-goto" role="dialog" aria-labelledby="nano-goto-title">
+    <dialog id={GOTO} popover="auto" className="nano-panel nano-goto" aria-labelledby="nano-goto-title">
       <p id="nano-goto-title" className="nano-prompt">
         Go to line:
       </p>
@@ -105,6 +105,6 @@ export function GoTo({ marks }: { marks: readonly Mark[] }) {
       <div className="nano-panel-keys">
         <Close panel={GOTO} />
       </div>
-    </div>
+    </dialog>
   );
 }
