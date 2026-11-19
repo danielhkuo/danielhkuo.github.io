@@ -47,9 +47,9 @@ function inputFromKeys(keys: Set<string>): FlightInput {
   return { turn, boost, brake };
 }
 
-/** True when a key pressed on `target` belongs to it: a control, a field, or the terminal. */
+/** True when a key pressed on `target` belongs to it: a control or a field. (The terminal takes keys by its own flag.) */
 function ownsKeys(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest("button, a, input, textarea, select, [contenteditable], dialog") !== null;
+  return target instanceof Element && target.closest("button, a, input, textarea, select, [contenteditable]") !== null;
 }
 
 /** Where the camera sits off the landmark so it shows clear of the Codex: west of a side panel, above a bottom sheet. */

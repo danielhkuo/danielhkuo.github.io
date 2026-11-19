@@ -147,7 +147,7 @@ export interface CodexProps {
   onOpenTerminal: (trigger: HTMLElement) => void;
 }
 
-/** The Codex for the landmark the dragon rests at: a labelled dialog that takes focus when it opens. */
+/** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
 export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -218,7 +218,8 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }:
   }
 
   return (
-    <section className={`${styles.codex} ${fell.variable}`} role="dialog" aria-modal="false" aria-labelledby="codex-title">
+    // Non-modal: the scene stays live round it, and the page's keys still reach the dragon.
+    <dialog open className={`${styles.codex} ${fell.variable}`} aria-labelledby="codex-title">
       <Corner className={styles.tl} />
       <Corner className={styles.tr} />
       <Corner className={styles.br} />
@@ -237,7 +238,7 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }:
           </button>
         </p>
       </div>
-    </section>
+    </dialog>
   );
 }
 

@@ -23,6 +23,12 @@
 /* ---- The Codex ---- */
 
 .codex {
+  /* It is a <dialog>: clear the UA's box (auto margins, padding, insets, size) before placing it. */
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  height: auto;
   position: fixed;
   z-index: 20;
   top: 50%;
