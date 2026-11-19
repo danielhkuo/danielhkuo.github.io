@@ -142,6 +142,12 @@ Last updated 2026-11-19.
   wind, as heavy rain does; every shadow follows the sun (`sunOn`). Rainbows need daylight and the town kite a fair day. `?time=` and
   `?weather=` hold either still; `world:live --times --weathers`, `world-fly --query`. Seasons do not follow the clock
   (coordinator, 2026-11-18): the page flies in summer.
+- **End-to-end suite and a WebKit pass** (2026-11-19, `claude/e2e-webkit-3824c0`). `npm run e2e` builds the export
+  and runs Playwright in Chromium and WebKit, at desktop and phone sizes. It covers opening the world (no haze, the
+  frame filling the window), keyboard flight, the lesson, the options, landing and the Codex, the abbey's terminal, a
+  broken world file, and the other pages. WebKit drew the options panel's labels above their choices; that is fixed,
+  as is the Codex's name, which its illuminated initial split ("E mpty-state-repo"). Notes, and what still needs a real
+  Safari or iPhone: `research/2026-11-19-webkit-pass.md`.
 
 ## Next: the world comes alive
 
@@ -282,7 +288,8 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 **Site**
 - A pixel loading scene while the core loads (1.5 MB); a clear fallback to the text page if the world fails.
 - OpenGraph postcards per tower; Continue where you left off.
-- An end-to-end suite: title → world → land → Codex → back, on desktop and mobile emulation.
+- ~~An end-to-end suite: world → land → Codex → back, on desktop and mobile emulation.~~ Done (`npm run e2e`). Left:
+  the title menu, once it is merged.
 - ~~Split the flight page component into hooks before the controls and mobile work lands.~~ Done: `session.ts` and hooks.
 
 ## Backlog: cosmetic and look
@@ -376,7 +383,9 @@ From the first-flight review:
 
 ## Open checks
 
-- Owner: open `/world` in Safari (Chrome is measured; Safari is not).
+- Owner: open `/world` in Safari and on an iPhone. WebKit now runs in `npm run e2e`; what automation cannot see
+  (toolbars and `vh`, touch gestures, keyboard taps, phone performance) is listed in
+  `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.
 - Owner: open `/minimal` on a real iPhone and type at its prompt. The keyboard behaviour is measured in the iOS 26.5
   Simulator only, with synthesised touches, and not on iOS 27.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
