@@ -23,9 +23,13 @@ export const FLAPS = 3;
 
 const unit = (h: number) => h / 4294967296;
 
-/** A bird: its base pitch (Hz) and how its formants are shifted (its size). */
+/**
+ * A bird: its base pitch (Hz) and how its formants are shifted (its size). A typical bird's base is 620 Hz, so its
+ * kyow peaks near 750 Hz, as the published sonogram of a long call has it (https://fssbirding.org.uk/herringgullsonogram.htm);
+ * birds differ by a tenth either way.
+ */
 export function gullVoice(seed: number, voice: number): { base: number; shift: number } {
-  return { base: 620 + 200 * unit(hash2(voice, 1, seed ^ 0x9a11)), shift: 1 + 0.08 * (2 * unit(hash2(voice, 2, seed ^ 0x9a11)) - 1) };
+  return { base: 620 * (0.9 + 0.2 * unit(hash2(voice, 1, seed ^ 0x9a11))), shift: 1 + 0.08 * (2 * unit(hash2(voice, 2, seed ^ 0x9a11)) - 1) };
 }
 
 /** The tract: three formants (Hz, Q, level) and a tenth of the source dry. */
@@ -34,6 +38,8 @@ const DRY = 0.1;
 /** The rasp at its deepest: how much weaker every other pulse of the voice is. */
 export const RASP = 0.5;
 const HARMONICS = 20;
+/** The level every kek is brought to in the band round 2.8 kHz (RMS over its buffer): −22.5 dB. */
+const KEK_BAND_RMS = 0.075;
 
 export interface NoteShape {
   /** Seconds the note sounds (pads apart). */
@@ -56,26 +62,27 @@ export function noteShape(seed: number, voice: number, note: GullNote): NoteShap
   const h = (k: number) => unit(hash2(voice * 16 + GULL_NOTES.indexOf(note), k, seed ^ 0x607e));
   const vary = (k: number, by: number) => 1 + by * (2 * h(k) - 1);
   if (note[0] === "k") {
-    // Kyow: up quickly, held, then falling away. 0.9B → 1.35B in 60 ms → hold 80 ms → 0.8B over 150 ms.
-    const up = 0.06 * vary(1, 0.15), hold = 0.08 * vary(2, 0.2), down = 0.15 * vary(3, 0.15), top = 1.35 * vary(4, 0.03);
+    // Kyow: up quickly, a moment at the top, then falling away: 0.95B → 1.21B in 35 ms → 30 ms → 0.89B over 100 ms.
+    // (Read off the published sonogram: notes 0.15–0.2 s long, peaking near 750 Hz and ending near 550.)
+    const up = 0.035 * vary(1, 0.15), hold = 0.03 * vary(2, 0.2), down = 0.1 * vary(3, 0.12), top = 1.21 * vary(4, 0.03);
     const seconds = up + hold + down;
     const broken = note === "k2";
     return {
       seconds, tract: 1,
       pitch(t) {
-        // The break: for 40 ms at the peak the voice jumps toward its octave and back.
-        if (broken && t >= up + 0.01 && t < up + 0.05) return 1.9;
-        return t < up ? lerp(0.9, top, ease(t / up)) : t < up + hold ? top : lerp(top, 0.8, (t - up - hold) / down);
+        // The break: for 25 ms at the peak the voice jumps toward its octave and back.
+        if (broken && t >= up + 0.004 && t < up + 0.029) return 1.75;
+        return t < up ? lerp(0.95, top, ease(t / up)) : t < up + hold ? top : lerp(top, 0.89, (t - up - hold) / down);
       },
-      level: (t) => ease(t / 0.025) * (0.8 + 0.2 * Math.sin((Math.PI * t) / seconds)) * ease((seconds - t) / 0.075),
+      level: (t) => ease(t / 0.02) * (0.8 + 0.2 * Math.sin((Math.PI * t) / seconds)) * ease((seconds - t) / 0.06),
       // Rough only round the peak: from the top of the rise through the hold.
-      rasp: (t) => RASP * 0.9 * ease((t - up * 0.6) / 0.03) * ease((up + hold + 0.02 - t) / 0.04),
+      rasp: (t) => RASP * 0.9 * ease((t - up * 0.6) / 0.02) * ease((up + hold + 0.02 - t) / 0.03),
     };
   }
   if (note[0] === "s") {
-    // Squeal: long, drawn out, rising slowly (0.8B → 1.45B over 0.9 s), the roughness growing as it goes: the loudest
+    // Squeal: long, drawn out, rising slowly (0.8B → 1.32B over 0.9 s), the roughness growing as it goes: the loudest
     // and highest note of a long call.
-    const seconds = 0.9 * vary(1, 0.12), top = 1.45 * vary(2, 0.03);
+    const seconds = 0.9 * vary(1, 0.12), top = 1.32 * vary(2, 0.03);
     return {
       seconds, tract: 1,
       pitch: (t) => lerp(0.8, top, t / (seconds - 0.08)),
@@ -173,6 +180,22 @@ export function gullNote(seed: number, voice: number, note: GullNote, sampleRate
     if (Math.abs(v) > peak) peak = Math.abs(v);
   }
   for (let i = 0; i < body; i++) out[pad + i] *= 0.5 / peak;
+  if (note[0] === "e") {
+    // A kek is heard against the wind's hiss, where its bark is (2–4 kHz): every bird's kek is brought to the same
+    // level there, so no bird's is lost for being a duller voice.
+    const b = coefficients({ type: "bandpass", hz: 2830, q: 1.4 }, sampleRate);
+    let u1 = 0, u2 = 0, v1 = 0, v2 = 0, e = 0;
+    for (let i = 0; i < out.length; i++) {
+      const y = b.b0 * out[i] + b.b1 * u1 + b.b2 * u2 - b.a1 * v1 - b.a2 * v2;
+      u2 = u1;
+      u1 = out[i];
+      v2 = v1;
+      v1 = y;
+      e += y * y;
+    }
+    const k = KEK_BAND_RMS / Math.sqrt(e / out.length);
+    for (let i = 0; i < out.length; i++) out[i] *= k;
+  }
   return out;
 }
 

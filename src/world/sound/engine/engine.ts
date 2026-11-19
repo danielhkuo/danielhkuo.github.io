@@ -7,7 +7,9 @@ import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, s
 import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
+import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
 import { gullCues, type Colony } from "../schedule/gulls.ts";
+import { planeCues, trainCues } from "../schedule/moments.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
 import { torusDelta } from "../../core/torus.ts";
@@ -15,7 +17,7 @@ import { airCutoff, dbToGain, distanceGain, offsetTo, panOf, SMALL, southCutoff,
 import { RING_S, TENOR } from "../synth/bells.ts";
 import { IR_TAPS } from "../synth/ir.ts";
 import { TAIL_S } from "../synth/probe.ts";
-import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
+import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
 import { bind, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { censusStartles } from "../census.ts";
 import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
@@ -29,6 +31,7 @@ import { buildBells, buildReverb, type Bells } from "./bells.ts";
 import { buildFalls, type Falls } from "./falls.ts";
 import { buildGulls, type Gulls } from "./gulls.ts";
 import { buildHub, type Hub } from "./hub.ts";
+import { buildClock, buildPlane, buildTrain, type Moment } from "./moments.ts";
 import { buildRiverBed } from "./river.ts";
 import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
@@ -60,6 +63,13 @@ export interface EngineOptions {
   gulls?: readonly Wheeler[];
   /** In place of the colonies' own calling: these calls, each from its own fixed place (the bench's `gull-calls`). */
   gullScript?: readonly Cue[];
+  /** The world's towns (the first has the clock) and wonders (the railway has the train, the cove hotel the seaplane). */
+  towns?: readonly Pt[];
+  wonders?: Places["wonders"];
+  /** The page's `?sights=all`: every moment loops with no gap. */
+  forced?: boolean;
+  /** Of the clock, only the tune's chimes (the bench's `clock-tune`). */
+  tuneOnly?: boolean;
 }
 
 /** When a frame is: given by the bench; read from the context by the page. */
@@ -93,6 +103,9 @@ export interface EngineStats {
   gullCalls: { t: number; when: number; colony: number; bird: number; call: number }[];
   gullsDropped: number;
   gullStartles: number;
+  gullKeks: { when: number; d: number; run: number }[];
+  /** Every cue of the clock and the moments that was played: its kind, what it is (`variant`), its number, its world time and the audio time it was started at. */
+  momentCues: { kind: string; variant: number; k: number; t: number; when: number }[];
 }
 
 export interface Engine {
@@ -216,6 +229,21 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       }
       if (near.length) gullCues(opts.seed, near, a, b, out);
     },
+  };
+  /** The clock and the moments, by the kind of their cues; built once their buffers are in. */
+  const moments = new Map<string, Moment>();
+  let momentsBuilt = false, reverbBuilt = false;
+  const momentLog: EngineStats["momentCues"] = [];
+  let lastMoments = NaN;
+  const forced = opts.forced === true;
+  const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
+  const hotel = opts.wonders?.find((w) => w.type === "cove-hotel");
+  const wantMoments = (opts.towns?.length ?? 0) > 0 || !!railway || !!hotel;
+  /** A moment is asked for cues, and followed, only within this many cells (the medium class is gone by 450). */
+  const MOMENT_REACH = 480;
+  const inReach = (m: Moment) => {
+    const dx = torusDelta(last.x, m.x, n), dy = torusDelta(last.y, m.y, n);
+    return dx * dx + dy * dy <= MOMENT_REACH * MOMENT_REACH;
   };
   let falls: Falls | null = null;
   const fallLog: EngineStats["fallLog"] = [];
@@ -375,12 +403,47 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     }
     // The falls: nothing is built until one is heard (each chain is made when its first fall is bound).
     if (!falls && !opts.noSurf && kit.ready("surf") && kit.ready("river")) falls = buildFalls(ctx, kit, master.bus.water, { hub, touch, n, seed: opts.seed, onBind: noteFall });
-    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) {
-      bells = buildBells(ctx, kit, master, { hub, touch });
-      // The reverb with them: its response is the first thing the bells need.
-      bells.steps.unshift(() => {
-        nodes += buildReverb(ctx, kit, master).length;
-      });
+    // The reverb: its response comes with the bells' buffers.
+    if (!reverbBuilt && !opts.beds && kit.ready("bells")) {
+      reverbBuilt = true;
+      nodes += buildReverb(ctx, kit, master).length;
+      work |= WORK.build;
+      if (!offline) return;
+    }
+    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch });
+    if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river")) {
+      momentsBuilt = true;
+      const o = {
+        kit, master, n, seed: opts.seed, forced, at: now,
+        onset: (when: number) => {
+          onsets.push(when + LIMITER_DELAY_S);
+        },
+        play: ((buffer, dest, when, level, x) => {
+          const ok = shots.play(buffer, dest, { when, gain: level, offset: x?.offset, low: x?.low, detune: x?.detune });
+          if (ok && x?.onset) onsets.push(when + PAD + LIMITER_DELAY_S);
+          return ok;
+        }) as Parameters<typeof buildClock>[1]["play"],
+      };
+      const town = opts.towns?.[0];
+      if (town) {
+        const clock = buildClock(ctx, { ...o, town, tuneOnly: opts.tuneOnly });
+        moments.set("clock", clock);
+        sources.push({ kind: "clock", lookBack: WHIRR_END, cues: (a, b, out) => (inReach(clock) ? clockCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (railway) {
+        const shore = railway.anchors.shore, halt = railway.anchors.halt;
+        const train = buildTrain(ctx, { ...o, shore, halt, level: railway.level });
+        moments.set("train", train);
+        sources.push({ kind: "train", lookBack: 0, cues: (a, b, out) => (inReach(train) ? trainCues(opts.seed, shore, halt, n, forced, a, b, out) : undefined) });
+      }
+      if (hotel) {
+        const plane = buildPlane(ctx, { ...o, pontoon: hotel.anchors.pontoon ?? [hotel.x, hotel.y] });
+        moments.set("plane", plane);
+        sources.push({ kind: "plane", lookBack: 0, cues: (a, b, out) => (inReach(plane) ? planeCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      for (const m of moments.values()) nodes += m.nodes;
+      work |= WORK.build;
+      if (!offline) return;
     }
     if (!gulls && !opts.beds && kit.ready("gulls")) {
       lifePool = createPool(ctx, 4, master.bus.life);
@@ -568,6 +631,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (ok && !d.rejoin) onsets.push(when + PAD + LIMITER_DELAY_S);
     } else if (cue.kind === "bell") {
       strike(cue, when, offset, calm);
+    } else if (moments.has(cue.kind)) {
+      (moments.get(cue.kind) as Moment).cue(cue, when, offset, now);
+      if (momentLog.length < 4000) momentLog.push({ kind: cue.kind, variant: cue.variant ?? 0, k: cue.k ?? 0, t: cue.t, when });
     } else if (cue.kind === "gull" && gulls) {
       if (gulls.call(cue, when, now, pose, calm)) gullLog.push({ t: cue.t, when, colony: cue.colony ?? -1, bird: cue.bird ?? 0, call: cue.call ?? 0 });
     }
@@ -672,6 +738,11 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         lastMix = pose.t;
         tendBeds(pose.t, now);
         apply(now, prefs.calm, false);
+        if (moments.size) {
+          const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
+          lastMoments = pose.t;
+          for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+        }
         if (gulls) {
           if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
           sends += gulls.update(pose, now, prefs.calm);
@@ -719,6 +790,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       bells?.stopAll(now + 0.25);
       falls?.stopAll(now + 0.25);
       gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now + 0.25);
+      lastMoments = NaN;
       lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
@@ -740,6 +813,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       bells?.stopAll(now + TAU.hideRamp + 0.01);
       falls?.stopAll(now + TAU.hideRamp + 0.01);
       gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now + TAU.hideRamp + 0.01);
+      lastMoments = NaN;
       lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
@@ -760,6 +835,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       bells?.stopAll(now);
       falls?.stopAll(now);
       gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now);
+      lastMoments = NaN;
       lastFalls = NaN;
       lanes.clear();
       scheduler.clear();
@@ -777,7 +854,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       else for (const b of bindings) if (b.i === T.DUCK) for (let k = 0; k < b.params.length; k++) b.params[k].setTargetAtTime(b.map(targets[T.DUCK] || 1, k), now, 0.03);
     },
     stats() {
-      return { limiterMinDb: limiterMin, onsets: [...onsets], oneShots: shots.started, dropped: shots.dropped, nodes, sends, wavesByLane: [...lanes.started], waves: [...waveLog], strokes: [...strokeLog], fallsBound: falls?.tracker.bound ?? 0, fallHandovers: falls?.tracker.handovers ?? 0, fallLog: [...fallLog], gullCalls: [...gullLog], gullsDropped: gulls?.dropped ?? 0, gullStartles: gulls?.startles ?? 0 };
+      return { limiterMinDb: limiterMin, onsets: [...onsets], oneShots: shots.started, dropped: shots.dropped, nodes, sends, wavesByLane: [...lanes.started], waves: [...waveLog], strokes: [...strokeLog], fallsBound: falls?.tracker.bound ?? 0, fallHandovers: falls?.tracker.handovers ?? 0, fallLog: [...fallLog], gullCalls: [...gullLog], gullsDropped: gulls?.dropped ?? 0, gullStartles: gulls?.startles ?? 0, gullKeks: gulls ? [...gulls.keks] : [], momentCues: [...momentLog] };
     },
     dispose() {
       if (disposed) return;
@@ -836,6 +913,8 @@ export interface Runtime {
   dispose(): void;
 }
 
+const NO_FRAME = { bake: null, rect: null };
+
 /** Kit work in one frame: at most this many slices, and none started after this many ms. */
 const KIT_SLICES = 2;
 const KIT_MS = 0.05;
@@ -843,13 +922,13 @@ const KIT_MS = 0.05;
 /** The kit outlives engines (its buffers are not tied to a context), as long as the sample rate is the same. */
 let kept: Kit | null = null;
 
-export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly Pt[]; gulls?: readonly Wheeler[]; arm?: string }): Runtime {
+export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly Pt[]; gulls?: readonly Wheeler[]; towns?: readonly Pt[]; wonders?: Places["wonders"]; forced?: boolean; arm?: string }): Runtime {
   if (!kept || kept.sampleRate !== ctx.sampleRate) {
     kept?.dispose();
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, noSurf: opts.arm === "nosurf" });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf" });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;
@@ -868,7 +947,10 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
       if (gullList.length > 0 || seen.bake) {
         if (!(pose.t - censusAt < 1 / 15)) {
           censusAt = pose.t;
-          censusStartles(seen, pose, opts.n, opts.seed, gullList, hearing.startled, startlePool);
+          // The beaches' lattice is walked only where the ear has found beach or shingle in the frame.
+          let beach = hearing.surf[0].e > 0 || hearing.surf[1].e > 0;
+          for (let i = 0; !beach && i < hearing.shores.length; i++) beach = hearing.shores[i].kind === 1 || hearing.shores[i].kind === 2;
+          censusStartles(beach ? seen : NO_FRAME, pose, opts.n, opts.seed, gullList, hearing.startled, startlePool);
         }
       }
       engine.frame(pose, hearing, prefs);

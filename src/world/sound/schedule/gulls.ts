@@ -14,6 +14,8 @@ export const P_ANSWER = 0.35;
 export const YELP = 0, KEKS = 1, MEW = 2, LONG = 3;
 /** The longest a call can run, seconds: three squeals and eleven kyows. */
 export const LONGEST_CALL = 9;
+/** Seconds from one kyow of a long call to the next, for a typical performance: read off the published sonogram (https://fssbirding.org.uk/herringgullsonogram.htm). */
+export const KYOW_GAP = 0.29;
 
 export interface Colony {
   /** Its site's index. */
@@ -34,8 +36,8 @@ export interface CallNote {
 
 /**
  * The notes of a call: `voice` is the bird's voice (0 … 5), `key` names the performance (bird and slot), so the same
- * bird never gives the same call twice running. Long call: one to three squeals, then seven to eleven kyows that
- * start 0.33 s apart and slow to 0.45 s, each 1–2 % lower and 0.7 dB quieter. Kek run: three to six at 0.16 s.
+ * bird never gives the same call twice running. Long call: one to three squeals, then seven to eleven kyows about
+ * 0.29 s apart (3.4 a second), slowing a little, each 1–2 % lower and 0.7 dB quieter. Kek run: three to six at 0.16 s.
  */
 export function callNotes(seed: number, voice: number, key: number, call: number, out: CallNote[] = []): CallNote[] {
   out.length = 0;
@@ -56,10 +58,12 @@ export function callNotes(seed: number, voice: number, key: number, call: number
     }
     let rate = 1;
     const step = 0.01 + 0.01 * h(4);
+    // About 3.4 notes a second (0.29 s apart, a tenth either way by the performance), slowing by a tenth at most.
+    const gap = KYOW_GAP * (0.9 + 0.2 * h(5));
     for (let i = 0; i < kyows; i++) {
       const breaks = unit(hash2(key, 40 + i, seed ^ 0xca11)) < 0.25;
       out.push({ dt: t, note: breaks ? "k2" : i & 1 ? "k1" : "k0", rate, db: -0.7 * i });
-      t += 0.33 + (0.12 * i) / (kyows - 1);
+      t += gap * (1 + (0.1 * i) / (kyows - 1));
       rate *= 1 - step;
     }
   }
@@ -151,6 +155,8 @@ export interface StartleNote {
   /** World time. */
   t: number;
   flap: boolean;
+  /** Which run of keks it belongs to (0 the first); 0 for a flap. */
+  run: number;
   note: GullNote;
   take: number;
   rate: number;
@@ -169,7 +175,7 @@ export function startleNotes(seed: number, g: number, t0: number, aloft: number,
   for (let r = 0; r < runs; r++) {
     const start = t0 + (r + 0.9 * h(10 + r)) / 3 * 0.75;
     const n = 3 + Math.floor(4 * h(20 + r));
-    for (let i = 0; i < n; i++) out.push({ t: start + 0.16 * i, flap: false, note: (i + r) & 1 ? "e1" : "e0", take: 0, rate: 1.04 - 0.01 * i, db: -1.5 * r });
+    for (let i = 0; i < n; i++) out.push({ t: start + 0.16 * i, flap: false, run: r, note: (i + r) & 1 ? "e1" : "e0", take: 0, rate: 1.04 - 0.01 * i, db: r === 0 ? 0.6 : -1.5 * r });
   }
   // Downstrokes: the frame index turns to DOWN when t·7 + (g & 3) passes 4k + DOWN.
   const off = g & 3;
@@ -179,7 +185,7 @@ export function startleNotes(seed: number, g: number, t0: number, aloft: number,
     if (t < t0) continue;
     const tau = t - t0;
     // Hardest as it lifts, fading over its time aloft.
-    out.push({ t, flap: true, note: "e0", take: (k + off) % 3, rate: 1, db: -12 * (tau / aloft) });
+    out.push({ t, flap: true, run: 0, note: "e0", take: (k + off) % 3, rate: 1, db: -12 * (tau / aloft) });
   }
   out.sort((a, b) => a.t - b.t);
   return out;

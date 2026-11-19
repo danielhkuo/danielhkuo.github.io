@@ -44,7 +44,7 @@ test("no bird calls over itself; windows tile; the same seed gives the same morn
   assert.equal(new Set(cues.map((c) => c.key)).size, cues.length);
 });
 
-test("a long call: one to three squeals, then seven to eleven kyows that slow from 0.33 s to 0.45 s, each lower and quieter", () => {
+test("a long call: one to three squeals, then seven to eleven kyows about 0.29 s apart, slowing a little, each lower and quieter", () => {
   const counts = new Set<number>();
   for (let key = 0; key < 200; key++) {
     const notes = callNotes(SEED, key % 6, key, LONG).map((n) => ({ ...n }));
@@ -54,13 +54,14 @@ test("a long call: one to three squeals, then seven to eleven kyows that slow fr
     counts.add(kyows.length);
     for (let i = 1; i < kyows.length; i++) {
       const gap = kyows[i].dt - kyows[i - 1].dt;
-      assert.ok(gap >= 0.33 - 1e-9 && gap <= 0.45 + 1e-9);
+      assert.ok(gap >= 0.26 - 1e-9 && gap <= 0.352 + 1e-9, "about 3.4 a second");
       if (i > 1) assert.ok(gap >= kyows[i - 1].dt - kyows[i - 2].dt - 1e-9, "slowing");
       assert.ok(kyows[i].rate < kyows[i - 1].rate && kyows[i].rate > kyows[i - 1].rate * 0.979);
       assert.ok(Math.abs(kyows[i].db - kyows[i - 1].db + 0.7) < 1e-9);
     }
     assert.ok(squeals.every((s) => s.db > kyows[0].db), "the squeals are the loudest");
     assert.ok(callLength(SEED, key % 6, key, LONG) < 9);
+    assert.ok(kyows[kyows.length - 1].dt - kyows[kyows.length - 2].dt <= 1.1001 * (kyows[1].dt - kyows[0].dt), "slowing by a tenth at most");
   }
   assert.ok(counts.size >= 4);
   const keks = callNotes(SEED, 0, 5, KEKS);

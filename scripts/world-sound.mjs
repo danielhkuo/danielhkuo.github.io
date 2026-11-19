@@ -163,6 +163,11 @@ try {
     }
     if (st.falls?.length) console.log(`    falls: ${st.fallsBound} given a chain, ${st.fallHandovers} took the spare (${st.falls.map((f) => `${f.handover ? "handover" : "bound"} at ${f.at} s`).join(", ")})`);
     if (st.gullCalls?.length || st.gullStartles) console.log(`    gulls: ${st.gullCalls.length} calls (${st.gullCalls.map((g) => `${["yelp", "keks", "mew", "long"][g.call]} b${g.bird} ${g.at}`).join(", ")}), ${st.gullsDropped} dropped, ${st.gullStartles} birds put up`);
+    if (st.momentCues?.length) {
+      const by = {};
+      for (const c of st.momentCues) by[`${c.kind}:${c.variant}`] = (by[`${c.kind}:${c.variant}`] ?? 0) + 1;
+      console.log(`    moments: ${Object.entries(by).map(([k, v]) => `${k} ×${v}`).join(", ")}`);
+    }
     if (st.wavesPerMinute?.length) console.log(`    waves a minute, by lane: ${st.wavesPerMinute.join(", ")}; closest two of one train in a lane: ${st.closestTrainGap === null ? "—" : st.closestTrainGap.toFixed(2)} s`);
     if (typeof st.repeatMax === "number") console.log(`    repeatMax ${st.repeatMax.toFixed(4)} over ${st.repeatPairs} pairs of ${st.repeatWaves} waves; control (one wave copied over another) ${st.repeatControl?.toFixed(4)}`);
     for (const m of row.marks ?? []) {

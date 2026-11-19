@@ -6,6 +6,7 @@ import { warpTile } from "../../live/water.ts";
 import { MATERIAL as M } from "../../look/materials.ts";
 import { advance, cameraAt, easeFocus, land, restShare, takeOff, type Phase, type Target } from "../../sites/landing.ts";
 import { wheelersOf } from "../../live/life.ts";
+import { momentWindow } from "../../live/moments.ts";
 import { censusStartles } from "../census.ts";
 import { createEar } from "../ear.ts";
 import { createLanes } from "../engine/lanes.ts";
@@ -66,6 +67,8 @@ export interface Scene {
   impulse?: number;
   /** In place of the colonies' own calling: these calls (times in seconds into the scene), each from its own fixed place. */
   gullScript?: { at: number; call: number; voice: number; x: number; y: number }[];
+  /** Of the clock, only the tune's chimes. */
+  tuneOnly?: boolean;
 }
 
 export const BENCH_PREFS: Prefs = { volume: 1, headphones: false, calm: false, touch: false };
@@ -260,6 +263,21 @@ function landing(seconds: number, t0: number): (t: number) => SceneFrame {
 const TOWN_SITES = [{ type: "town", x: 5000, y: 5000 }];
 const HARBOUR: Places = { worldId: "bench", seed: SEED, n: N, forced: false, abbeys: [], towns: [{ x: 5000, y: 5000 }], lighthouses: [], gulls: wheelersOf(TOWN_SITES, SEED), wonders: [] };
 const NO_GULLS: Places = { ...HARBOUR, towns: [], gulls: [] };
+
+/** A town with its clock and no gulls; a railway across shallow water, shore to halt 288 cells east (18 cells a second on this seed); a cove hotel's pontoon. */
+const CLOCK_TOWN: Places = { ...NO_GULLS, towns: [{ x: 5000, y: 5000 }] };
+const RAILWAY: Places = { ...NO_GULLS, wonders: [{ type: "railway", x: 5000, y: 5000, level: 0, height: 0, anchors: { shore: [4856, 5000], halt: [5144, 5000] } }] };
+const HOTEL: Places = { ...NO_GULLS, wonders: [{ type: "cove-hotel", x: 5000, y: 5000, level: 0, height: 0, anchors: { pontoon: [5000, 5000] } }] };
+/** World time at which `kind` first appears on the bench's seed. */
+function firstAppearance(kind: string): number {
+  for (let t = 0; t < 4000; t += 1) {
+    const at = momentWindow(SEED, kind, t);
+    if (at >= 0) return t - at;
+  }
+  return 0;
+}
+const TRAIN_AT = firstAppearance("train"), PLANE_AT = firstAppearance("plane");
+const WEST = Math.PI;
 
 /** The bench's abbey, and the places that hold it alone. */
 const ABBEY = { x: 5000, y: 5000 };
@@ -550,12 +568,70 @@ export const SCENES: Scene[] = [
     at: heard(coastEast(5040, M.sand), 30, flown(30, 100, startAt(5030, 3000, SOUTH), () => key(0, true)), false, true),
   }),
   scene({
+    name: "gulls-lowpass-wind",
+    set: { ...NO_WATER, "K_GULL.kek": 0, "K_GULL.flap": 0 },
+    seconds: 30,
+    about: "The same pass, the wind alone: what the birds must be heard over.",
+    places: NO_GULLS,
+    at: heard(coastEast(5040, M.sand), 30, flown(30, 100, startAt(5030, 3000, SOUTH), () => key(0, true)), false, true),
+  }),
+  scene({
     name: "gulls-lowpass-birds",
     set: { ...NO_WIND, ...NO_WATER },
     seconds: 30,
     about: "The same pass, the birds alone: keks and wingbeats.",
     places: NO_GULLS,
     at: heard(coastEast(5040, M.sand), 30, flown(30, 100, startAt(5030, 3000, SOUTH), () => key(0, true)), false, true),
+  }),
+  scene({
+    name: "clock",
+    set: NO_WIND,
+    seconds: 40,
+    about: "At the town, 60 cells off, through hour 3: the whirr, the doors, a figure and a phrase at a time to the tune, three strokes, the ratchet only in the gaps, the doors.",
+    places: CLOCK_TOWN,
+    t0: hourTop(3) - 2,
+    at: hover(40, hourTop(3) - 2, 5000, 5060),
+    marks: [{ name: "the tune", t0: 2.6, t1: 24.5 }, { name: "its first bar", t0: 2.6, t1: 4.3 }, { name: "bar 7", t0: 12.64, t1: 14.3 }],
+  }),
+  scene({
+    name: "clock-tune",
+    set: NO_WIND,
+    seconds: 27,
+    about: "The clock's tune alone, chimes only (no mechanism, no count): E Dorian, 6/8, thirteen bars.",
+    places: CLOCK_TOWN,
+    tuneOnly: true,
+    t0: hourTop(3) - 1,
+    at: hover(27, hourTop(3) - 1, 5000, 5060),
+  }),
+  scene({
+    name: "train",
+    set: NO_WIND,
+    seconds: 36,
+    about: "Still, 60 cells off the middle of the line, the train's whole run: chuffs by the wheel, the whistle and its echo, the spray, the turn at the halt, and back.",
+    places: RAILWAY,
+    t0: TRAIN_AT - 2,
+    at: hover(36, TRAIN_AT - 2, 5000, 5060),
+    // The train is nearest (60 cells) 8 s into its run and again 24 s in: a second either side of each. Its whistles sound from 140 cells.
+    marks: [{ name: "chuffs at 60 cells, out", t0: 9, t1: 11 }, { name: "chuffs at 60 cells, back", t0: 25, t1: 27 }, { name: "the long whistle, 140 cells off", t0: 3.05, t1: 4.2 }],
+  }),
+  ...(["", "-alone"] as const).map((part) => scene({
+    name: `train-pass${part}`,
+    set: part ? NO_WIND : undefined,
+    seconds: 20,
+    about: `A cruise pass the other way along the line, 30 cells off, meeting the train as it whistles: the whistle bends while it sounds, by less than a semitone in all.${part ? " (The train alone.)" : ""}`,
+    places: RAILWAY,
+    t0: TRAIN_AT - 2,
+    at: flown(20, TRAIN_AT - 2, startAt(5100, 5030, WEST), LEVEL),
+  })),
+  scene({
+    name: "seaplane",
+    set: NO_WIND,
+    seconds: 25,
+    about: "Still, 60 cells west of the pontoon: the seaplane down from the south, two splashes as its floats skip, the taxi, the engine running down to three last pops.",
+    places: HOTEL,
+    t0: PLANE_AT - 2,
+    at: hover(25, PLANE_AT - 2, 4940, 5000),
+    marks: [{ name: "the approach", t0: 2.5, t1: 8.5 }],
   }),
   scene({
     name: "bell-stroke",

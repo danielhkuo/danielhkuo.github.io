@@ -18,7 +18,7 @@
 
 import { createEngine } from "../engine/engine.ts";
 import type { Kit } from "../engine/kit.ts";
-import { K_BELL, K_GULL, K_RIVER, K_SURF, K_WIND } from "../levels.ts";
+import { K_BELL, K_CLOCK, K_GULL, K_PLANE, K_RIVER, K_SURF, K_TRAIN, K_WIND } from "../levels.ts";
 import { callLength } from "../schedule/gulls.ts";
 import { repeatCheck } from "./repeat.ts";
 import type { Pose } from "../types.ts";
@@ -36,7 +36,7 @@ export interface RenderOptions {
 }
 
 /** The level tables a calibration render may touch. */
-const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL };
+const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL, K_CLOCK, K_TRAIN, K_PLANE };
 
 /** Runs `run` with some level constants replaced, and puts them back: how a layer is soloed to calibrate it. */
 export async function withLevels<R>(set: Record<string, number> | undefined, run: () => Promise<R>): Promise<R> {
@@ -85,6 +85,10 @@ export interface RenderStats {
   gullCalls: { at: number; colony: number; bird: number; call: number }[];
   gullsDropped: number;
   gullStartles: number;
+  /** Every kek of a startled bird: seconds into the scene it is heard at, the bird's distance (cells), its run (0 the first). */
+  gullKeks: { at: number; d: number; run: number }[];
+  /** Every cue of the clock and the moments that was played: kind, what it is, its number, and seconds into the scene (as scheduled, and as started). */
+  momentCues: { kind: string; variant: number; k: number; t: number; at: number }[];
   /** The repetition check, where the scene asks for it: see bench/repeat.ts. `control` is the same check with one wave copied over another: it must find it. */
   repeatMax?: number;
   repeatPairs?: number;
@@ -125,6 +129,10 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
     oneStroke: scene.stroke === undefined ? undefined : scene.t0 + scene.stroke,
     impulse: scene.impulse === undefined ? undefined : scene.t0 + scene.impulse,
     gulls: scene.places?.gulls,
+    towns: scene.places?.towns,
+    wonders: scene.places?.wonders,
+    forced: scene.places?.forced,
+    tuneOnly: scene.tuneOnly,
     gullScript: scene.gullScript?.map((g, i) => ({
       t: scene.t0 + g.at, kind: "gull", key: `script:${i}`, lasts: callLength(3, g.voice, 1000 + i, g.call), call: g.call, k: 1000 + i, variant: g.voice, x: g.x, y: g.y,
     })),
@@ -271,6 +279,8 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
         gullCalls: st.gullCalls.map((g) => ({ at: Math.round((g.when - pre) * 100) / 100, colony: g.colony, bird: g.bird, call: g.call })),
         gullsDropped: st.gullsDropped,
         gullStartles: st.gullStartles,
+        momentCues: st.momentCues.map((c) => ({ kind: c.kind, variant: c.variant, k: c.k, t: Math.round((c.t - scene.t0) * 1000) / 1000, at: Math.round((c.when - pre) * 1000) / 1000 })),
+        gullKeks: st.gullKeks.map((k) => ({ at: Math.round((k.when - pre + 0.026) * 1000) / 1000, d: Math.round(k.d), run: k.run })),
         fallsBound: st.fallsBound,
         fallHandovers: st.fallHandovers,
         falls: st.fallLog.map((f) => ({ at: Math.round((f.when - pre) * 100) / 100, x: Math.round(f.x), y: Math.round(f.y), handover: f.handover })),

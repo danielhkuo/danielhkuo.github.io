@@ -115,6 +115,12 @@ export class FakeContext {
   createDynamicsCompressor(): FakeNode {
     return new FakeNode(this, "compressor", { threshold: -24, knee: 30, ratio: 12, attack: 0.003, release: 0.25 });
   }
+  createDelay(): FakeNode {
+    return new FakeNode(this, "delay", { delayTime: 0 });
+  }
+  createPeriodicWave(): object {
+    return {};
+  }
   createConvolver(): FakeNode {
     return new FakeNode(this, "convolver");
   }

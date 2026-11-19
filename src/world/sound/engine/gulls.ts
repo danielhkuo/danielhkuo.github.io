@@ -50,6 +50,8 @@ export interface Gulls {
   readonly calls: number;
   readonly dropped: number;
   readonly startles: number;
+  /** Every kek of a startled bird that was played: its audio time, how far off the bird was (cells), and its run (0 the first). */
+  readonly keks: { when: number; d: number; run: number }[];
 }
 
 const notes: CallNote[] = [], wing: StartleNote[] = [];
@@ -61,6 +63,7 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
   /** Startled birds voiced lately: key → world time it may be voiced again. */
   const ledger = new Map<number, number>();
   let calls = 0, dropped = 0, startles = 0;
+  const keks: Gulls["keks"] = [];
 
   const make = (): Caller => {
     const g = gain(ctx, 0);
@@ -112,6 +115,7 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
     get startles() {
       return startles;
     },
+    keks,
     call(cue, when, now, pose, calm) {
       let c: Caller | undefined = callers.find((x) => x.until <= when);
       if (!c && callers.length < most) {
@@ -172,11 +176,15 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
       let made = 0;
       for (const [key, until] of ledger) if (until < pose.t) ledger.delete(key);
       for (const s of list) {
-        // Four birds at most are voiced at once; one already voiced is left alone until it has settled.
-        if (ledger.has(s.key) || ledger.size >= 4) continue;
+        // Three birds at most are voiced at once (two on touch); one already voiced is left alone until it has settled.
+        if (ledger.has(s.key) || ledger.size >= most + 1) continue;
         const o = offsetTo(pose.x, pose.y, pose.alt, s.x, s.y, pose.alt - 20, opts.n);
         const b = southOf(o.dx, o.dy);
-        const level = distanceGain(SMALL, o.d) * southGain(b);
+        // A bird put up is heard for what it is from anywhere along the pass: its level falls as the square root of the
+        // distance (the small class's reach, a gentler law), or the further half of them would be lost under the wind.
+        // Several up at once share a little of the level (each n^−¼ of a lone bird's): a flock is not three times as
+        // loud as a gull.
+        const level = (Math.sqrt(distanceGain(SMALL, o.d)) * southGain(b)) / Math.pow(ledger.size + 1, 0.25);
         if (level < 1e-3) continue;
         const end = at(s.t0 + ALOFT) + 0.3;
         const chain = opts.pool.take(now, end, level, airCutoff(o.d) * southCutoff(b), panOf(o.dx, o.dy, calm));
@@ -189,7 +197,7 @@ export function buildGulls(ctx: Ctx, kit: Kit, master: Master, opts: { touch: bo
           // What has already gone by (the bird was found a moment after it rose) is not played late.
           if (when < now + 0.004) continue;
           if (w.flap) opts.play(kit.buffer(flapName(w.take)), chain, when, K_GULL.flap * dbToGain(w.db), 1);
-          else opts.play(kit.buffer(gullName(voice, w.note)), chain, when, K_GULL.kek * dbToGain(w.db + (calm ? -6 : 0)), w.rate);
+          else if (opts.play(kit.buffer(gullName(voice, w.note)), chain, when, K_GULL.kek * dbToGain(w.db + (calm ? -6 : 0)), w.rate) && keks.length < 2000) keks.push({ when, d: o.d, run: w.run });
         }
         startles++;
         made++;

@@ -503,8 +503,15 @@ https://www.researchgate.net/publication/240792763_Herring_Gull_Larus_argentatus
   "kee-ow"**: a single two-part cry.
 - Herring gull calls have a strong, orderly harmonic structure [S, https://www.bioacoustics.info/article/acoustic-signalling-great-black-headed-gull-larus-ichthyaetus-pallas].
 
-Working numbers read from published sonograms [U; check against https://fssbirding.org.uk/herringgullsonogram.htm
-before tuning]: fundamental 500–1000 Hz; a dozen or more harmonics visible to 6–8 kHz; the strongest energy not at the
+**Measured (2026-11-19)** from the published sonogram of a long call at
+https://fssbirding.org.uk/herringgullsonogram.htm (Irvine harbour, 7 March 2010), read at screen resolution: about
+fourteen terminal notes in 3.8 s (3.4 a second, hardly slowing); each 0.15–0.2 s long, a quick rise and then a fall of
+about a quarter; bands near 1.2, 2.0, 2.6, 3.2 and 3.9 kHz, which fit a fundamental near 650 Hz with a weak first
+harmonic, peaking near 750 Hz and ending near 550; the energy between 1.2 and 4 kHz. The library is tuned to these:
+kyow 0.95 B → 1.21 B in 35 ms → 30 ms → 0.89 B over 100 ms with B = 620 Hz ±10 % by bird; kyows 0.29 s apart (±10 %
+by the performance), slowing by a tenth at most. The figures below that differ from these are superseded.
+
+Earlier working numbers, from memory: fundamental 500–1000 Hz; a dozen or more harmonics visible to 6–8 kHz; the strongest energy not at the
 fundamental but in harmonics 2–5 (about 1.5–4 kHz); terminal notes 0.25–0.4 s long at 3–4 a second, each rising
 quickly and then falling ("kyow"); squeals 0.6–1.2 s rising slowly by a third to a fifth; keks 80–120 ms at 5–7 a
 second around 450–600 Hz. The voice breaks: abrupt jumps of pitch, and stretches of rough, subharmonic or chaotic

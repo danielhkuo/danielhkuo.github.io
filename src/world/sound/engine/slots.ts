@@ -25,6 +25,8 @@ export interface OneShotOptions {
   fadeIn?: boolean;
   /** Low classes (laps, flaps, wheel clicks) are dropped unplayed when the cap is reached; nothing sounding is cut. */
   low?: boolean;
+  /** A signal in cents that bends the source's pitch while it sounds (a moving slot's Doppler shift). */
+  detune?: AudioNode;
 }
 
 export interface OneShots {
@@ -63,10 +65,19 @@ export function createOneShots(ctx: Ctx, cap: number): OneShots {
       }
       source.connect(g);
       g.connect(dest);
+      const bend = o.detune;
+      if (bend) bend.connect(source.detune);
       // Ended, both leave the graph: nothing is left for the engine to visit.
       source.onended = () => {
         source.disconnect();
         g.disconnect();
+        if (bend) {
+          try {
+            bend.disconnect(source.detune);
+          } catch {
+            // already gone
+          }
+        }
       };
       source.start(o.when, offset);
       live.push({ source, gain: g, end: o.when + (buffer.duration - offset) / rate + 0.05 });

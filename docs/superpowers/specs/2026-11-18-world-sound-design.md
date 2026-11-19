@@ -677,8 +677,11 @@ and starts only strokes **missing from the ledger**. A missing stroke already pa
 0.12 lighthouse), when in the slot (0–3 s), which bird, which call (55 % yelp, 20 % kek run, 15 % mew, 10 % long
 call). With probability 0.35 a second bird answers 0.6–2 s later. Cue `{ t, colony, bird, call, index }`.
 
-`callNotes(seed, bird, index, call) → { dt, note, rate, db }[]`: as Recipes §6 (long call: 2–3 squeals then 7–12
-kyows from 0.33 s spacing slowing to 0.45 s, each 1–2 % lower and 0.7 dB quieter; kek run: 3–6 at 0.16 s). Only
+`callNotes(seed, bird, index, call) → { dt, note, rate, db }[]`: as Recipes §6 (long call: 1–3 squeals then 7–11
+kyows about 0.29 s apart, 3.4 a second, a tenth either way by the performance and slowing by a tenth at most, each
+1–2 % lower and 0.7 dB quieter; kek run: 3–6 at 0.16 s). The kyow's length (0.15–0.2 s), pitch (peaking near
+750 Hz for a typical bird) and tempo are read off the published sonogram of a herring gull's long call at
+https://fssbirding.org.uk/herringgullsonogram.htm (Irvine harbour, 7 March 2010). Only
 colonies within 350 cells are asked.
 
 **Startles.** At 30 Hz the census runs `eachShoreGull` for lattice cells within 64 cells of the dragon and
@@ -1336,6 +1339,25 @@ graph between waves: every wave of the scene is connected before the render star
   0.3 s aloft, so each is seen four times. A Startle carries the bird's hash `g` (its wingbeat's phase).
 - **A startled beach gull's keks and wingbeats play from where it rested** (a pooled chain set once), not following
   its flight; a caller's slot does follow its bird.
+
+**As built, phase 6 (the clock, the train, the seaplane; the ferry and the flock follow), where it differs:**
+
+- **`live/moments.ts` exports** `figureP`, `figureOut`, `trainAt`, `planeAt`, `ferryAt`, `flockAt` (and `shown`): the
+  layer draws from them and the schedules time themselves by them. The live tests pass unchanged.
+- **Everything struck is rendered by arithmetic at the context's rate** (§4.8 had 32 kHz and offline graphs): chimes,
+  clacks, thud, the ratchet's loop, chuffs, wheel clicks, whistles, the steam swell, splashes, pops.
+- **The ratchet's ticks are registered as onsets**, as one-shots are (a loop of ticks over a quiet whirr is a row of
+  sharp starts to the checker).
+- **The train is one slot**, not two: the carriage's wheel clicks are delayed by its 8 cells and played from the
+  engine's place. Its whistle's echo returns through the same slot.
+- **The seaplane's wave leans on its overtones**: the blade pass (harmonic 4 of the half-order, near 50 Hz) is 9 dB
+  under the firing line, where the recipe has it strongest; as written the engine lost 8 LU on small speakers.
+- **The reverb is built with the bells' buffers whether or not the world has an abbey** (the clock sends to it).
+- **A moment is asked for cues, and followed, only within 480 cells.**
+
+Phase 5, after the sonogram (by ruling): a kyow is 0.15–0.2 s long (0.95 B → 1.21 B → 0.89 B, B = 620 Hz ±10 %),
+kyows come about 3.4 a second; a startled bird's keks are levelled alike round 2.8 kHz, fall as the square root of
+the small class's law, and three birds at most are voiced at once (each n^−¼ of a lone bird's level).
 
 Also by ruling: the fall memory, the stall dip and the second (fallback) clock are cut; HRTF is the last, optional
 phase; the rarely met moments have their own later phase with their dense rhythms as loops; the platform spike

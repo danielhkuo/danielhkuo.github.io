@@ -6,6 +6,8 @@ import { warpTile } from "../../live/water.ts";
 import { BELL_RATIOS, ring, ringName, strike, strikeName } from "./bells.ts";
 import { flap, flapName, FLAPS, GULL_NOTES, GULL_VOICES, gullName, gullNote } from "./gulls.ts";
 import { impulseResponse } from "./ir.ts";
+import { chime, CHIME_NAMES, chimeName, clack, clackName, CLACKS, ratchet, thud } from "./chimes.ts";
+import { chuff, chuffName, click, clickName, pop, splash, swell, whistle, WHISTLE_LONG_S, WHISTLE_SHORT_S } from "./moments.ts";
 import { BROOK, bubbleBed, FLOW, lap, PLUNGE, velvet } from "./bubbles.ts";
 import { CONTROL_RATE, makeControls } from "./controls.ts";
 import { A_HIGHPASS_HZ, A_PEAK, B_SHELF, C_HIGHPASS_HZ, E_BAND, E_LOWPASS_HZ, Q_FLAT_DB } from "../levels.ts";
@@ -23,7 +25,7 @@ export interface Raw {
 }
 
 /** The jobs, in the order they are wanted: wind needs the noises and the controls, surf its own set, the rivers their bubble beds, the abbey its bells and the reverb; the probe is the bench's. */
-export const JOBS = ["noise", "controls", "surf", "river", "bells", "gulls", "probe"] as const;
+export const JOBS = ["noise", "controls", "surf", "river", "bells", "gulls", "moments", "probe"] as const;
 export type Job = (typeof JOBS)[number];
 
 /** Noise loop lengths, samples: unequal, so no two layers loop together. */
@@ -93,6 +95,26 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
     const out: Record<string, Raw> = {};
     for (let voice = 0; voice < GULL_VOICES; voice++) for (const note of GULL_NOTES) out[gullName(voice, note)] = { rate: sampleRate, channels: [gullNote(seed, voice, note, sampleRate)] };
     for (let k = 0; k < FLAPS; k++) out[flapName(k)] = { rate: sampleRate, channels: [flap(seed, k, sampleRate)] };
+    return out;
+  }
+  if (job === "moments") {
+    // The town clock's bars, clacks, thud and ratchet; the train's and the seaplane's one-shots.
+    const out: Record<string, Raw> = {
+      thud: { rate: sampleRate, channels: [thud(seed, sampleRate)] },
+      ratchet: { rate: sampleRate, channels: [ratchet(seed, sampleRate)] },
+      whistleLong: { rate: sampleRate, channels: [whistle(seed, WHISTLE_LONG_S, sampleRate)] },
+      whistleShort: { rate: sampleRate, channels: [whistle(seed, WHISTLE_SHORT_S, sampleRate)] },
+      swell: { rate: sampleRate, channels: [swell(seed, sampleRate)] },
+      splash0: { rate: sampleRate, channels: [splash(seed, 0, sampleRate)] },
+      splash1: { rate: sampleRate, channels: [splash(seed, 1, sampleRate)] },
+    };
+    for (let i = 0; i < CHIME_NAMES.length; i++) out[chimeName(i)] = { rate: sampleRate, channels: [chime(seed, i, sampleRate)] };
+    for (let k = 0; k < CLACKS; k++) out[clackName(k)] = { rate: sampleRate, channels: [clack(seed, k, sampleRate)] };
+    for (let k = 0; k < 4; k++) {
+      out[chuffName(k)] = { rate: sampleRate, channels: [chuff(seed, k, sampleRate)] };
+      out[clickName(k)] = { rate: sampleRate, channels: [click(seed, k, sampleRate)] };
+    }
+    for (let k = 0; k < 3; k++) out[`pop${k}`] = { rate: sampleRate, channels: [pop(seed, k, sampleRate)] };
     return out;
   }
   if (job === "bells") {
