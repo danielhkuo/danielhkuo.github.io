@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { FALL_TONE, FOAM_TONE } from "../bake/chunk.ts";
 import { namedViews, renderStrip } from "../cli/live.ts";
 import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
@@ -14,7 +15,7 @@ import { makeLayers } from "./registry.ts";
 import { TALL_FALL, WAVE_PERIOD, waterLayer } from "./water.ts";
 
 const root = process.cwd();
-const { world, flight, manifest: shippedManifest } = await readShipped(join(root, "public/world"));
+const { world, flight, manifest: shippedManifest } = await readShipped(FIXTURE_WORLD);
 const manifest = shippedManifest as unknown as Manifest;
 const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
 

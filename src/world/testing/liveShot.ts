@@ -7,11 +7,12 @@ import { namedViews, renderStrip } from "../cli/live.ts";
 import type { Flier, LiveFrame, LiveLayer } from "../live/live.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "./fixtureWorld.ts";
 
 const root = process.cwd();
-const worldRoot = join(root, "public/world");
+const worldRoot = FIXTURE_WORLD;
 const shipped = await readShipped(worldRoot);
-const mask = new Uint8Array(readFileSync(join(worldRoot, "bluenoise.bin")));
+const mask = new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin")));
 
 export const manifest = shipped.manifest as unknown as Manifest;
 /** The shipped world's ground grid, as the flight page hands it to the layers. */
