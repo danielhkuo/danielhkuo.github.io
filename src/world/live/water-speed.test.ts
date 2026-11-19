@@ -17,9 +17,9 @@ const TIMES = [0.7, 2.3, 5.1] as const;
  * terrain polish, which repaints the land under the water (snow light, rock beds, upland colours) but not the water.
  */
 const GOLDEN: Record<string, string> = {
-  "start@0.7": "829b3edc0dc092f78a65bc4533128524b8e2d2e66f842303fa245b6b470a188d",
-  "start@2.3": "a72a1a5d0cf11ca649e682b85dc651cfb2a74f475bfc69c0341104873a3b1bc2",
-  "start@5.1": "8af21f0340cb4c8266dfbad54bb24db5acb64cad65fc9c56d3d660cc798366c8",
+  "start@0.7": "5cb014accdef0d82461942bf41c8b4095dd12d021ccff5193a2927cb61a84573",
+  "start@2.3": "5f5d05d0f00436a2990331a691aedf31f520a8993e920a65e3405205c8d06300",
+  "start@5.1": "35b9466f37a8e23ca78a9e48a80b058b227b02376873117e4b738916a8322a68",
   "sea@0.7": "45d6adcf155afd19fda8960411b3664af9d0ea706f40c568bda4d2cc81e2a381",
   "sea@2.3": "1406d71960e5c6dc0c644e91e3e828e04f6953a2ae0462e5c97104012e9a9880",
   "sea@5.1": "a81cb884aaa7a2cbe206a26a4d9963991922c9c1fc8d7c4cb7720e27af1e6c51",

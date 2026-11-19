@@ -320,8 +320,7 @@ test("scree: fans under a cliff's own cells only, thickened by rockfall; graded 
 
 test("shore plants: marram on dunes, saltmarsh cut by creeks; sand only on beaches and cove backs", () => {
   only({ shore: 5, e: 2, slope: 0.1, hand: 2 }, M.duneGrass);
-  // Saltmarsh turf, its creeks, and sea lavender flecking the turf.
-  for (const id of patch({ shore: 6, e: 0.8, slope: 0.02, hand: 0.5 })) assert.ok(id === M.saltmarsh || id === M.saltCreek || id === M.flowerMauve, MATERIAL_NAMES[id]);
+  for (const id of patch({ shore: 6, e: 0.8, slope: 0.02, hand: 0.5 })) assert.ok(id === M.saltmarsh || id === M.saltCreek, MATERIAL_NAMES[id]);
   let creek = 0;
   for (let i = 0; i < 4096; i++) if (cover(cell({ shore: 6, e: 0.8, slope: 0.02, hand: 0.5, x: 300 + (i & 63), y: 700 + (i >> 6) }), MASK) === M.saltCreek) creek++;
   assert.ok(creek > 40 && creek < 700, `creeks on ${creek} of 4096 cells`);

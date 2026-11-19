@@ -32,6 +32,12 @@ Last updated 2026-11-18.
   rainbow; and, very rarely (each about once in 11–16 minutes), a whale, a balloon, a fox, a heron, a tall ship and a
   monk, each logged as a discovery with a caption. The flier leaves a wake on water. Preview every rare sight with
   `/world?sights=all`.
+- **Terrain polish on the 10240 world** (2026-11-18, `terrain-polish`), five critic rounds (look ledger). Snow lit by
+  its true normal, parted at each crest into a bright face and a lilac one; rock walls in horizontal beds with lit
+  ledges, hatching along the contour; heather only on exposed crests and tops, fresher upland greens; fens as compact
+  low islands with meres, reed beds, saltmarsh and a narrow tidal rim; lake beds without pale squares; coves,
+  stream notches and cliff heights vary, stacks stand in surf rings; the harbour opens to the sea through a dredged
+  fairway. Seed 3 at 10240 still places every site; generation 4.7 min, 2.9 GB.
 - **Island variety, first batch** (2026-11-18, `fable-islands`). Islands lie at any strike within 69° of west–east,
   round to long, and come in new forms, each wearing one of the six region looks: a caldera (a ring of sheer walls
   round a shallow lagoon, an islet in it, a narrow mouth), a volcanic cone (radial ravines, a crater lake at the
@@ -141,13 +147,16 @@ From the clouds and water (2026-11-18):
   vanishes over pale meadow; judged on stills and one live frame, not watched in motion. `depthAt` used to rebuild a cache
   key for every pixel, which doubled the throttled frame with the dragon on; it now reuses its last chunk.
 
-From the round-9 critics (peaks first):
-- Peaks: snow and rock lit from true normals so each arête shows a bright side and a cool far side; horizontal strata
-  across walls instead of vertical striping; scree that does not fan like a pinwheel.
-- Harbour basin needs a mouth to the sea.
-- Upland palette: fresher greens; heather only on small exposed spur crests.
+From the 10240 polish critics (2026-11-18; the round-9 items are done unless listed):
+- Peaks: a snow massif parts along one line, not one per arête (the land needs more, sharper arêtes); lit snow is
+  still flat; rock walls keep a faint pleat of ribs under their beds. Scree is almost absent at 10240.
+- Fens: the drainage is a dense branching web, not a few slow lodes (needs a fen-aware channel threshold in
+  hydro/rivers); meres have no reed fringe (the cover cannot see a lake's shore); flats are one width all round.
+- Coast: cliffed shores between stream notches still make equal half-dome headlands; stacks are smooth cylinders
+  (bake/cells.ts reshapeStacks: taper, notch and beds wanted).
+- Sites painted into the land: a lighthouse pad cut down a sea cliff reads as a green box, and a road runs straight
+  down a cliff face (settle.ts pads and roads).
 - Break the straight plateau rim (headward re-entrants); the trunk river that reads as a canal.
-- Coves and cliff scallops repeat; sea stacks need surf at their base.
 
 From the first-flight review:
 - Over land not painted yet, the dragon draws over hills that should hide it, and its shadow vanishes.

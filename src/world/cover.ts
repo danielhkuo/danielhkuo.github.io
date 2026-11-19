@@ -402,9 +402,7 @@ export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): num
   if (c.shore === 6 && e < 2.2 + 2 * dE && s < 0.12 + dS2) {
     // Creeks: the zero lines of slow noise, a cell or two wide, branching toward the water.
     const creek = soft(x, y, n, 14, CREEK_SEED) + 0.4 * soft(x, y, n, 5, CREEK_SEED + 1);
-    if (creek > -0.035 && creek < 0.035 && e < 1.6) return M.saltCreek;
-    // Sea lavender flowers in clumps across the turf in summer.
-    return soft(x, y, n, 9, CREEK_SEED + 3) > 0.28 && (hash2(x, y, CREEK_SEED + 2) & 3) !== 0 ? M.flowerMauve : M.saltmarsh;
+    return creek > -0.035 && creek < 0.035 && e < 1.6 ? M.saltCreek : M.saltmarsh;
   }
   if (c.shore === 2 && s < 0.9 + dS2) {
     if (e < 1 + dE) return M.shingle;
