@@ -193,21 +193,32 @@ export const BED_OFF_S = 2;
 // ── Rain (§13) ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The rain bed's shape: the patter's grains (the velvet read `patterRate` times fast) through a band-pass; a heavy
- * shower's sheet; the drops on water as the brook's bubbles read fast through a band-pass, with a fizz above them.
- * Q is linear for the band-passes. `landFloor`: the patter's share over open sea (drops on the dragon and the waves).
- * `topHz`, `topDb`: a shelf over the sheet and the fizz (not the drops), so the rain leaves the surf's top end its
- * breaks: without it the rain was as loud as the coast above 8 kHz and took 47 % of the breaks' swing there (§13).
+ * The rain bed's shape (§14.2). The drops (synth/drops.ts) and the brook's bubbles (read `plinkRate` times fast) are
+ * each read three times, `across`: at its rate (a share of the layer's), set at its place (pan), its pitch wandering
+ * on drift channel `drift` by `cents` × `wanderCents` (the drift runs −1 … 1: two of the three never wander together).
+ * The brook's three reads take their rates from `plinkSpread` instead (the middle one an octave under the two at the
+ * sides, so the plinks are not all of one pitch, and the sides alike, so the water leans neither way). The sheet: pink noise through a wide band-pass and a low-pass. The water's
+ * fizz: white noise above `fizzHz`, its top
+ * shelved, a share `fizzShare` of the bubbles' level. Q is linear for the band-passes. `landFloor`: the drops' share
+ * over open sea (on the dragon and the waves).
  */
 export const RAIN = {
-  patterRate: 2.5, patterHz: 3200, patterQ: 0.7, knockHz: 120,
-  sheetHz: 2000, sheetQ: 0.5,
-  plinkHz: 3000, plinkQ: 0.8, plinkRate: 2, fizzHz: 5000, fizzShare: 0.35,
+  across: [
+    { rate: 1, pan: -0.8, drift: 0, cents: 1 },
+    { rate: 1.137, pan: 0, drift: 1, cents: 1 },
+    { rate: 0.883, pan: 0.8, drift: 0, cents: -1 },
+  ],
+  wanderCents: 30,
+  sheetHz: 2000, sheetQ: 0.5, sheetTopHz: 4500,
+  plinkHz: 3000, plinkQ: 0.8, plinkRate: 2, plinkSpread: [1.4, 0.72, 1.33], fizzHz: 5000, fizzShare: 0.2,
   topHz: 7000, topDb: -9,
   landFloor: 0.25,
 };
-/** Rain's gains at a full shower (linear). Calibrated against the solo targets of §13. */
-export const K_RAIN = { patter: 0.21, sheet: 0.055, fizz: 0.1 };
+/**
+ * Rain's gains at a full shower (linear). Set (§14.2) so that most drops carry over the wind and the surf: a full
+ * shower alone is −26.4 LUFS over land, −33 over open sea, and adds about 1 LU at the coast.
+ */
+export const K_RAIN = { patter: 0.24, sheet: 0.021, fizz: 0.1 };
 
 // ── Rivers and falls (§3.2, §4.4, §4.5) ──────────────────────────────────────────────────────────────────────────────
 

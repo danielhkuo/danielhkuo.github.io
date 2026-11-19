@@ -1432,3 +1432,132 @@ without it: it must add, not mask. Every A/B is recorded here.
   `tendBeds` (a river come into earshot, the rain, the surf bed coming back) wait up to half a second for its graph.
   Offline renders build every frame, so the A/B of that round could not see it. A newly made bed now clears the wait:
   its graph is built from the next frame, as before.
+
+### 14.2 Rain
+
+- **The bed** (`engine/rain.ts`). Made when a shower is falling and let go two seconds after it has passed (a demand
+  bed, as the surf's and the river's), on the water bus, so mist and the bells' duck reach it. Three layers:
+  - **Drops on land**: a 7.3 s loop made by the kit (`synth/drops.ts`): 14 drops a second, each a tick of noise rung
+    through a resonance (1.1–4.2 kHz, bigger drops lower, longer and a little louder), coming up over 8 ms and dying
+    over 5–14 ms, over a hiss in their own band at 0.15 of their level. Read three times (`RAIN.across`): at rates
+    1, 1.137 and 0.883, set left (−0.8), middle and right (+0.8).
+  - **The sheet**, a heavy shower's hiss: pink noise through a band-pass at 2 kHz (Q 0.5) and a low-pass at 4.5 kHz.
+  - **Drops on water**: the brook's bubbles read fast (plinks), three times across as the drops are, at 2.8, 1.44 and
+    2.66 times (`plinkSpread`: the middle an octave under the sides), through a band-pass at 3 kHz; and a fizz of
+    white noise above 5 kHz, shelved 9 dB above 7 kHz, at 0.2 of the plinks.
+  - **No loop comes round the same.** Every read's pitch wanders on one of the hub's drifts (0.07 and 0.11 Hz) by up
+    to 30 cents, two of the three drop reads against each other, so each pass of a loop is played a little faster or
+    slower than the last; and the reads of a layer run at rates that share no period.
+- **Targets** (`mix.ts`, unit-tested): drops on land `K_RAIN.patter · rain`, a quarter of it over open sea; the
+  sheet `K_RAIN.sheet · rain²` (a light shower has almost none); drops on water `K_RAIN.fizz · rain · sea`.
+  `K_RAIN = { patter: 0.24, sheet: 0.021, fizz: 0.1 }`: a full shower alone is −26.4 LUFS over land (true peak
+  −7.1 dBTP) and −32.8 over open sea; over the coast it adds about 1 LU.
+
+How it got there: four versions, each judged blind by a fresh critic against the same flight without the shower
+(`shower-pass` against `coast-run`), with the two solos (`rain-land`, `rain-sea`).
+
+1. **First version**: the patter as white noise let through in grains (the surf's grain loop, squared), two reads of
+   each loop hard left and right. Critic 1: it adds (the scene untouched, +0.3 LU in the shower, the wind 25 dB clear
+   below 700 Hz) and reads as rain, but above 8 kHz it is as loud as the coast and takes 47 % of the breaks' swing
+   there. Accept with changes: 6–9 dB off the sheet and the fizz above 7–8 kHz. Done (a −9 dB shelf at 7 kHz): 33 %.
+2. **Second version** (the shelf). Critic 2 found what critic 1 had not: **the loops repeat**, the land's hiss every
+   4.40 s (r ≈ 0.8 above 3.5 kHz), the plinks every 4.5–4.9 s (r ≈ 0.75), the rain in the coast mix every 4.86 s
+   (r = 0.92); the land rain is **a hiss, not patter** (kurtosis 3.1–4.0, no drop 10 dB out of it); in the coast mix the
+   drops drown (at most 1.7 a second clear the scene by 6 dB); the top octaves still lose 45–61 % of the breaks; the two
+   channels are unrelated, every drop hard left or right. Accept with changes: break the loops, a real patter on land
+   (10–30 drops a second 10–15 dB over the hiss), the hiss low-passed and the drops up 6 dB, the drops spread across.
+3. **Third version**: the drops loop (4 ms rises over a hiss at 0.45), the wander, three reads across, the sheet
+   low-passed, the fizz at 0.2; levels as before (patter 0.1, sheet 0.03). Critic 3: masks nothing (the top octaves
+   lose 4–5 %), patter on land (kurtosis 11.3, about 32 drops a second), plinks on water, no clicks, no loop at any lag
+   up to 34 s; but **in the coast mix it barely adds**: 18 % of the drops come through as heard events, the shower a
+   faint 0.4–0.75 dB lift at 0.7–4 kHz; the plinks narrow in pitch (the middle half within 0.23 octave). Accept with
+   changes: the drops 9 dB up and the bed under them 3 dB down (simulated: 85 % of the drops through, +1.0 LU, the
+   surf's swing 1.8 dB less at 2–4 kHz); the plinks over at least 0.6 octave.
+4. **Fourth version**: the drops come up over 8 ms over a hiss at 0.15 (a slower edge lets them stand further out of
+   it unflagged), the patter 0.24 and the sheet 0.021, the plinks' reads an octave apart. The table measures every
+   version alike (the rain alone is the shower's render less the dry one; "survive": a drop of the rain alone, 8 dB
+   over its own surroundings, that lifts some band of 1–2, 2–4 or 4–8 kHz of the coast mix by 6 dB):
+
+| | Second | Third | Fourth |
+| --- | --- | --- | --- |
+| Loops: largest correlation at any lag from 0.25 to 12 s (land, sea, coast; three bands) | 0.32–0.80 | ≤ 0.07 | ≤ 0.08 |
+| The surf breaks' swing lost, 1.5–6 / 4–8 / 6–12 / 8–16 kHz | 14 / 20 / 26 / 33 % | 16 / 5 / 4 / 3 % | 8 / 14 / 7 / 6 % |
+| Rain against the coast, below 700 Hz / 2–4 kHz / 8–16 kHz | −25 / −7.1 / −2.4 dB | −21 / −7.6 / −14.9 dB | −14.5 / −1.3 / −11.0 dB |
+| Land: kurtosis; drops a second 6 / 10 / 15 dB out of their surroundings (2–6 kHz, a channel) | 4.2; 1.1 / 0 / 0 | 10.4; 17 / 6.4 / 0.3 | 14.1; 21 / 16 / 7.4 |
+| Sea: plinks a second 6 / 10 dB out (1–4 kHz, a channel); balance | 20 / 9.2; −0.2 dB | 18 / 5.0; +0.5 dB | 19 / 6.9; +0.15 dB |
+| Coast mix: drops that survive; 5 ms windows a second the shower lifts by 6 dB (1.6–2.5 kHz) | —; 0.8 | 12 %; 3.1 | 73 %; 25 |
+| Left/right correlation, rain alone over land | 0.00 | 0.52 | 0.54 |
+| Clicks (`rain-land`, `rain-sea`, `shower-pass`) | 0 | 0 | 0 |
+
+- **What keeps a drop from being a click.** A drop over silence is an edge: the first drops loop (no hiss under it,
+  2 ms rises) gave 172 clicks in `rain-land`. The checker flags a sample whose prediction error stands about 16 dB over
+  what is around it; synthetic trials (four shapes, rises of 1–8 ms, sizes clamped) over silence all left a few. Two
+  things clear it: a hiss in the drops' own band, and a slower rise. At 4 ms the hiss must be 0.45 of the drops'
+  level; at 8 ms, 0.15 is enough, so the drops stand far further out. None is flagged at a light or a full shower. A
+  change to the checker (a click must stand alone beyond the predictor's reach) was tried and dropped: with real clicks
+  injected into eight files it found fewer of them (at −40 dBFS in `gulls-lowpass`, 11 of 30 against 18).
+- **Firefox** (rendering ahead): `rain-land`, `rain-sea`, `shower-pass` within 0.1 LU of Chrome; 0 clicks.
+- **Found on the way** (not rain, not changed): critic 3 measured the open sea's wash repeating every 4.855 s
+  (r = 0.97: the pink loop under it, read plainly) and `coast-run` repeating every 5.000 s (r = 0.48). The rain's
+  wander would serve the wash as it serves the rain; it is Fable's bed, so it waits for its own A/B (roadmap).
+
+### 14.3 The whole mix, measured on a real flight
+
+The recorded flights of §14.1 are the first whole-mix renders that follow the land (48 kHz, volume 1):
+
+| | Target (§9.1) | `long-flight` (120 s) | `flight-replay` (30 s) |
+| --- | --- | --- | --- |
+| Integrated loudness | −22 ±2 LUFS | −22.9 | −21.9 |
+| Loudness range | 6–14 LU | 6.9 | 7.1 |
+| Momentary max | ≤ −12 LUFS | −18.3 | −16.2 |
+| True peak | ≤ −4.5 dBTP | −3.8 → −5.0 | −4.0 → −4.7 |
+| Clicks; the limiter | 0; idle | 0; −0.002 dB | 0; −0.002 dB |
+
+Only the true peak was over, and only at 2.2 and 2.8 s: the route boosts at 2 s low over a beach, and two gulls put up
+close ahead (35 and 40 cells, the bird's level law gives 0.85 and 0.66 of a lone bird's) call their keks together, hard
+left. Without the startled birds the replay's true peak is −9.3 dBTP. Neither the bells nor the clock (both on the hour
+at t = 0) were the cause.
+
+- **The change**: `K_GULL.near`, the most a startled bird is given (1 within the small class's reference distance):
+  0.7, the level of a bird about 51 cells off. Swept on both flights: 0.8 gives −4.2 / −4.2 dBTP, 0.75 −4.4 / −4.6, 0.7
+  −4.7 / −5.0, 0.6 −5.2 / −5.6. The bench's beach pass (`gulls-lowpass`) is unchanged to the bit at 0.7: there every
+  bird is behind the flier or shares its level, so the kek bar of §12 stands (the nearer half's median 8.8 dB over the
+  wind, all 8.4 dB, 94 % at 3 dB or more). The flights differ only in the three startle stretches (2–6 s, 94–104 s),
+  0.6–0.9 dB lower in 0.7–8 kHz.
+- **A/B, blind** (fresh critic; each flight before and after, unlabelled): it found the one differing sound (the
+  startled gull's laughing call) and preferred the new version in both pairs at about 90 % confidence: only it meets
+  the −4.5 dBTP bar; the call still reads as near and sudden (momentary loudness up 11 LU within 0.4 s, the loudest
+  moment of either flight), and leaving the bar aside it heard no difference but a slightly bolder first call. What
+  it costs: the near call's lead over a far one narrows from 4.2 to 3.0 dB, and the replay passes the bar by 0.15 dB.
+  Kept.
+- **Firefox** (headless, rendering ahead): `flight-replay` and `long-flight` within 0.2 LU of Chrome; 0 clicks.
+
+### 14.4 What the page pays, with the ear working
+
+Every main-thread figure since phase 2 was taken while the ear was stalled (§14.1): from two seconds on, the page
+gathered nothing. With the ear working, the first frame budget on the merged tree (`world-fly --arms off,on --pairs 5
+--rates 4,1 --warm 8`) gave sound a mean of 147 µs a frame at 4× (§13 had 49) and 40 µs at 1× (the 40 µs round of §13 had brought it to
+24, the ear stalled). Chrome's sampling profiler, through source maps,
+at 4×: 127 µs of sound code a frame, the largest piece the lattice gather (32 µs, a read a sample, at the limit of
+memory reads), then the engine's own frame (16 µs). Two changes, neither heard:
+
+- **The page copies, the worker gathers.** The page now copies the rows a pass needs, as they are, into a frame laid
+  out as the pass's first (`copyRows`: a native copy a row) and the worker gathers its lattice from that. The lattice
+  is the same to the sample but for the last row's look below and the last column's look east (a test runs both ways
+  over a moving camera, a stream in view, at all four pixel parities). The gather's 32 µs became the copy's 12.
+- **The scheduler looks at most sixty times a second** on the page (it looks a quarter of a second ahead; on a 120 Hz
+  display a look every other frame only widens its window). Offline renders step at 60 and look every step.
+
+Renders of `flight-replay`, `long-flight` and `gulls-lowpass` match the previous ones to one float LSB (rms of the
+difference −155 to −157 dBFS). The budget after (five pairs, load 5–6):
+
+| | No sound | Sound | Sound's own work |
+| --- | --- | --- | --- |
+| 4×, frame p95 | 3.90 ms (3.7–4.4) | 4.30 ms (3.6–4.3); paired differences' median +0.2 | mean 118 µs, p95 0.7 ms |
+| 1×, frame p95 | 1.00 ms (0.8–1.1) | 1.10 ms (1.0–1.8) | mean 31 µs, p95 0.1 ms |
+
+The brief's bar (sound under 0.3 ms a frame) holds. The 4× bars set in §13 (+0.15 ms on the p95, a 100 µs mean)
+were set against a stalled ear and are not met (+0.2 to +0.4, 118 µs); the frames that carry it are the mix's (30 a
+second: the mix, its sends, the moments, the gulls, the falls), now working on real shores. Splitting the mix frame's
+work over more frames is the next step if the 4× margin is wanted back. The 4 ms frame bar at 4× is set by the
+machine's load as much as by the sound: the no-sound arm alone ran 3.7–4.4 ms in this run.

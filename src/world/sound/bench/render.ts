@@ -18,7 +18,7 @@
 
 import { createEngine } from "../engine/engine.ts";
 import type { Kit } from "../engine/kit.ts";
-import { K_BELL, K_CLOCK, K_FERRY, K_FLOCK, K_GULL, K_PLANE, K_RIVER, K_SURF, K_TRAIN, K_WIND } from "../levels.ts";
+import { K_BELL, K_CLOCK, K_FERRY, K_FLOCK, K_GULL, K_PLANE, K_RAIN, K_RIVER, K_SURF, K_TRAIN, K_WIND, RAIN } from "../levels.ts";
 import { callLength } from "../schedule/gulls.ts";
 import { repeatCheck } from "./repeat.ts";
 import type { Pose } from "../types.ts";
@@ -36,7 +36,7 @@ export interface RenderOptions {
 }
 
 /** The level tables a calibration render may touch. */
-const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL, K_CLOCK, K_TRAIN, K_PLANE, K_FERRY, K_FLOCK };
+const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL, K_CLOCK, K_TRAIN, K_PLANE, K_FERRY, K_FLOCK, K_RAIN, RAIN: RAIN as unknown as Record<string, number> };
 
 /** Runs `run` with some level constants replaced, and puts them back: how a layer is soloed to calibrate it. */
 export async function withLevels<R>(set: Record<string, number> | undefined, run: () => Promise<R>): Promise<R> {

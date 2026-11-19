@@ -9,6 +9,7 @@ import { impulseResponse } from "./ir.ts";
 import { chime, CHIME_NAMES, chimeName, clack, clackName, CLACKS, ratchet, thud } from "./chimes.ts";
 import { chuff, chuffName, click, clickName, horn, HORN_LONG_S, HORN_SHORT_S, pop, splash, swell, thump, whistle, WHISTLE_LONG_S, WHISTLE_SHORT_S } from "./moments.ts";
 import { BROOK, bubbleBed, FLOW, lap, PLUNGE, velvet } from "./bubbles.ts";
+import { DROPS, drops } from "./drops.ts";
 import { CONTROL_RATE, makeControls } from "./controls.ts";
 import { A_HIGHPASS_HZ, A_PEAK, B_SHELF, C_HIGHPASS_HZ, E_BAND, E_LOWPASS_HZ, Q_FLAT_DB } from "../levels.ts";
 import { envelope, envelopeName } from "./envelopes.ts";
@@ -88,6 +89,8 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
     return {
       brook: { rate: sampleRate, channels: [bubbleBed(BROOK, sampleRate, rngFor(seed, "sound/brook"))] },
       flow: { rate: sampleRate, channels: [bubbleBed(FLOW, sampleRate, rngFor(seed, "sound/flow"))] },
+      /** Rain's drops on land (made with the river's: the rain bed waits for both). */
+      drops: { rate: sampleRate, channels: [drops(DROPS, sampleRate, rngFor(seed, "sound/drops"))] },
     };
   }
   if (job === "gulls") {
