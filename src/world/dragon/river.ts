@@ -255,7 +255,7 @@ export function drawRiver(out: Uint32Array, rect: ViewRect, s: FlightState, view
   for (let j = 0; j < JOINTS; j++) {
     const jt = joints[j], d = j * FINE;
     // The fin whips a little wider than the body that carries it.
-    const amp = WAVE_SWING * smooth(d / 22) * (1 + 0.35 * smooth((d - finFrom) / 10)), arg = pose.wave - d * k;
+    const amp = WAVE_SWING * pose.swing * smooth(d / 22) * (1 + 0.35 * smooth((d - finFrom) / 10)), arg = pose.wave - d * k;
     const off = amp * Math.sin(arg);
     const sin = Math.sin(jt.heading), cos = Math.cos(jt.heading);
     px[j] = jt.x - sin * off;
