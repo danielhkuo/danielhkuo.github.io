@@ -34,8 +34,8 @@ const FOCUS_HEIGHT = 0.35;
 /** Below this width the Codex is a sheet along the bottom (codex.module.css). */
 const NARROW = 760;
 /** The body's joints a guide keeps clear of: this many, this many cells apart (about the dragon's length). */
-const BODY_JOINTS = 30;
-const BODY_SPACING = 3;
+const BODY_JOINTS = 16;
+const BODY_SPACING = 5.5;
 /** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
 const GLIDE = 10;
 
@@ -94,6 +94,8 @@ interface FlightProbe {
   frameMs: number[];
   /** Main-thread ms the sky's two passes took, per frame. */
   skyMs: number[];
+  /** Main-thread ms the controls, the lesson and the guide took, per frame. */
+  guideMs: number[];
   hazeFrames: number;
   frames: number;
   baked: () => number;
@@ -136,7 +138,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   let pool: ReturnType<typeof createPool> | null = null;
   // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
   const probe: FlightProbe | null = statsOn
-    ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
+    ? { navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], hazeFrames: 0, frames: 0, baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [] }
     : null;
   if (probe) (window as unknown as { __flight: FlightProbe }).__flight = probe;
 
@@ -290,7 +292,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       clock.last = t;
       const options = setup.options();
       const reduced = options.motion === "reduced";
+      const controlsStart = performance.now();
       const asked = controls.frame();
+      const controlsMs = performance.now() - controlsStart;
 
       const stepped = advance(phase, flight, asked.input, dt, view, worldN, targets);
       phase = stepped.phase;
@@ -322,6 +326,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (probe) probe.skyMs.push(skyBelow + performance.now() - skyAgain);
 
       // The guide by the dragon: a prompt when there is something to press, else the lesson while it is taught.
+      const guideStart = performance.now();
       const offer = offered(phase, flight.x, flight.y, targets, worldN);
       const prompting = phase.kind !== "flying" || offer !== null;
       const teachable = readyFrame && asked.device !== "touch" && !setup.optionsOpen();
@@ -351,7 +356,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
           y: imageOn(Math.round(y * 0.8 - alt), rect.y, worldN * 0.8, FRAME_H, 1),
         });
         const head = onScreen(flight.x, flight.y, flight.alt);
-        const body = dragon.pose.chain.joints(BODY_JOINTS, BODY_SPACING).slice(2).map((j) => onScreen(j.x, j.y, j.alt));
+        const body = dragon.pose.chain.joints(BODY_JOINTS, BODY_SPACING).slice(1).map((j) => onScreen(j.x, j.y, j.alt));
         const { w, h } = guide.sprite;
         // Over a bottom sheet the Codex covers the foot of the frame: the take-off prompt goes above the dragon.
         const order = phase.kind === "landed" && window.innerWidth < NARROW ? SLOTS_HIGH : SLOTS;
@@ -383,6 +388,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         clock.say = say;
         events.say(say);
       }
+      if (probe) probe.guideMs.push(performance.now() - guideStart + controlsMs);
 
       buffer.set(frame);
       ctx.putImageData(imageData, 0, 0);

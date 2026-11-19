@@ -80,6 +80,8 @@ export function createControls(canvas: HTMLCanvasElement, frameW: number, frameH
   let padSlowBefore = false;
   let pad: PadFamily = "generic";
   let target: TapTarget | null = null;
+  // The page starts out drawing for a keyboard: tell it if this is a touch screen.
+  if (device !== "keyboard") hooks.device(device);
 
   const switchTo = (d: Device) => {
     if (d === device) return;

@@ -5,7 +5,7 @@ import Terminal from "../../components/terminal/Terminal";
 import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
 import styles from "./flight.module.css";
-import OptionsPanel, { OptionsButton } from "./OptionsPanel";
+import OptionsPanel, { Corner } from "./OptionsPanel";
 import { setOptions, useOptions } from "./optionsStore";
 import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
 import { FRAME_H, FRAME_W } from "./session";
@@ -14,7 +14,7 @@ import { useFrameScale } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
 import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
 
-/** The corner button shows this long after the page opens and after the pointer last moved, ms. */
+/** The corner shows this long after the page opens and after the pointer last moved, ms. */
 const REVEAL_MS = 4000;
 
 export interface FlightProps {
@@ -40,10 +40,10 @@ export default function Flight({ landmarks, terminal }: FlightProps) {
   const px = Math.max(2, Math.min(3, Math.round(scale)));
   const stage = { width: FRAME_W * scale, height: FRAME_H * scale } as CSSProperties;
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-motion={options.motion}>
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} width={FRAME_W} height={FRAME_H} className={styles.canvas} />
-        {panel.open ? null : <OptionsButton px={px} device={flight.device} shown={revealed} onOpen={panel.show} />}
+        {panel.open ? null : <Corner px={px} device={flight.device} shown={revealed} onOpen={panel.show} />}
       </div>
       <GuideLine say={flight.say} />
       <DiscoveryCaption caption={flight.caption} />

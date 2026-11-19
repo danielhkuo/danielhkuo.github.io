@@ -178,7 +178,7 @@ export default function OptionsPanel({ open, px, options, onChange, onTeach, onC
   );
 }
 
-export interface OptionsButtonProps {
+export interface CornerProps {
   px: number;
   device: Device;
   /** Shown while the pointer moves, for a while after the page opens, and always on a touch screen. */
@@ -186,20 +186,27 @@ export interface OptionsButtonProps {
   onOpen(): void;
 }
 
-/** The way into the options from the corner of the world: "[O] options" by keyboard, a plate to tap on a touch screen. */
-export function OptionsButton({ px, device, shown, onOpen }: OptionsButtonProps) {
-  const glyph = device === "touch" ? plate("options") : device === "gamepad" ? plate("menu") : keyCap("o");
+/**
+ * The ways out of the flight from the corner of the world: "[esc] leave" and "[O] options" by keyboard, the pad's own
+ * buttons by gamepad, and on a touch screen one plate that opens the options (where Leave is).
+ */
+export function Corner({ px, device, shown, onOpen }: CornerProps) {
+  const touch = device === "touch";
+  const pad = device === "gamepad";
   return (
-    <button
-      type="button"
-      className={`${styles.corner} ${shown || device === "touch" ? styles.cornerShown : ""}`}
-      style={pxVar(px)}
-      onClick={onOpen}
-      aria-keyshortcuts="O"
-    >
-      <PixelGlyph sprite={glyph} px={px} />
-      {device === "touch" ? null : <PixelGlyph sprite={label("options")} px={px} />}
-      <span className={styles.sr}>Options</span>
-    </button>
+    <nav className={`${styles.corner} ${shown || touch ? styles.cornerShown : ""}`} style={pxVar(px)} aria-label="Leave or open the options">
+      {touch ? null : (
+        <Link className={styles.cornerItem} href="/" aria-keyshortcuts="Escape">
+          <PixelGlyph sprite={pad ? plate("view") : keyCap("Escape")} px={px} />
+          <PixelGlyph sprite={label("leave")} px={px} />
+          <span className={styles.sr}>Leave the world</span>
+        </Link>
+      )}
+      <button type="button" className={styles.cornerItem} onClick={onOpen} aria-keyshortcuts="O">
+        <PixelGlyph sprite={touch ? plate("options") : pad ? plate("menu") : keyCap("o")} px={px} />
+        {touch ? null : <PixelGlyph sprite={label("options")} px={px} />}
+        <span className={styles.sr}>Options</span>
+      </button>
+    </nav>
   );
 }

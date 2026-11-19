@@ -1,4 +1,4 @@
-/* The options panel and the corner button that opens it: game layer, drawn in the guides' pixels. Every length is a
+/* The options panel and the corner that leads to it: game layer, drawn in the guides' pixels. Every length is a
    whole number of glyph pixels (--px), so rules and glyphs share one grid. The colours are the Codex sheet's. */
 
 .panel,
@@ -130,8 +130,7 @@
 
 .choice:has(input:focus-visible),
 .key:focus-visible,
-.action:focus-visible,
-.corner:focus-visible {
+.action:focus-visible {
   outline: var(--px) solid var(--vermilion);
   outline-offset: var(--px);
 }
@@ -145,32 +144,49 @@
   clip-path: inset(50%);
 }
 
-/* ---- The corner button ---- */
+/* ---- The corner ---- */
 
 .corner {
   position: absolute;
   z-index: 12;
   top: calc(var(--px) * 3);
   right: calc(var(--px) * 3);
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--px) * 2);
-  padding: 0;
-  line-height: 0;
-  cursor: pointer;
-  background: none;
-  border: 0;
+  display: flex;
+  gap: calc(var(--px) * 5);
   opacity: 0;
   transition: opacity 400ms;
 }
 
 .cornerShown,
-.corner:focus-visible {
+.corner:focus-within {
   opacity: 1;
+}
+
+.cornerItem {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 1);
+  padding: 0;
+  line-height: 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.cornerItem:focus-visible {
+  outline: var(--px) solid var(--vermilion);
+  outline-offset: var(--px);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .corner {
     transition: none;
   }
+}
+
+/* The options' own reduced motion, set on the page. */
+:global([data-motion="reduced"]) .corner {
+  transition: none;
 }
