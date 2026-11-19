@@ -306,16 +306,16 @@ export function paramsFor(n: number): WorldParams {
     talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128, scree: { shed: 0.72 / s, rate: 5 * s, repose: 0.55 / s, wash: 2400 * s * s, passes: 4, sweeps: 24 } },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
     // The zones (gen/climate.ts): latitude is a share of the world, so they fit a world of any size. The home island
-    // lies at 51° north. Temperature is flat at 0.5 across the temperate belt, φ 0.52–0.66; conifers take the woods by
+    // lies at 56° north, so that its long reach to the south ends in the Mediterranean and not at the desert's edge. Temperature is flat at 0.5 across the temperate belt, φ 0.52–0.66; conifers take the woods by
     // 0.42, the tree line reaches the sea at 0.27 and the snowline at 0.14 (cover.ts climateShift). The belts are cut
     // nearer a globe's shares than equal bands: the polar cap is small, the tropics broad.
     climate: {
       moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30,
       zones: {
-        homeLat: 0.57,
+        homeLat: 0.62,
         temp: [[0, 1], [0.11, 0.96], [0.25, 0.86], [0.38, 0.72], [0.5, 0.54], [0.52, 0.5], [0.66, 0.5], [0.73, 0.415], [0.85, 0.27], [0.92, 0.142], [1, 0.02]],
-        rain: [[0, 1.7], [0.04, 1.6], [0.08, 1.3], [0.13, 0.92], [0.19, 0.72], [0.24, 0.5], [0.28, 0.3], [0.34, 0.3], [0.39, 0.55], [0.45, 0.8], [0.52, 1], [0.66, 1], [0.73, 0.95], [0.85, 0.8], [0.92, 0.6], [1, 0.5]],
-        warp: [[2, 0.035], [5, 0.03], [13, 0.014]],
+        rain: [[0, 1.7], [0.06, 1.6], [0.11, 1.3], [0.16, 1], [0.2, 0.76], [0.24, 0.48], [0.27, 0.3], [0.36, 0.3], [0.41, 0.55], [0.46, 0.8], [0.52, 1], [0.66, 1], [0.73, 0.95], [0.85, 0.8], [0.92, 0.6], [1, 0.5]],
+        warp: [[2, 0.07], [5, 0.05], [13, 0.02]],
         inlandRadius: Math.max(2, Math.round(40 * s)),
         inlandFrom: 0.45,
         inlandTemp: 0.06,

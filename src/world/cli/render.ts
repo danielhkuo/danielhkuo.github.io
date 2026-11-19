@@ -169,6 +169,8 @@ export interface RenderOptions {
   wild?: boolean;
   /** Skip the gates (ink, tone, grid, repeat): they cost a minute a view, and a quick look does not need them. */
   noGates?: boolean;
+  /** One temperate climate: the world as it was before climates, for a before-and-after. */
+  temperate?: boolean;
   /** Hamlets to add to the site viewpoints. */
   hamlets?: number;
   /** Read the land from .cache/world-gen/ (and write it there) instead of generating it every run. */
@@ -187,7 +189,8 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const log = opts.log ?? (() => {});
   const { n, seed } = opts;
   const t0 = performance.now();
-  const params = paramsFor(n);
+  const base = paramsFor(n);
+  const params = opts.temperate ? { ...base, climate: { ...base.climate, zones: undefined } } : base;
   // A wild world is its terrain alone; the bake draws no settlement where there is none.
   const made = opts.wild ? (cachedTerrain(params, seed) as World) : opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
   if (!opts.wild) {
@@ -263,7 +266,7 @@ export function main(argv: string[]): void {
   let n = 2048, seed = 7;
   const extra: Viewpoint[] = [];
   let outDir: string | undefined;
-  let views: RenderOptions["views"], hamlets = 0, cache = false, wild = false, noGates = false;
+  let views: RenderOptions["views"], hamlets = 0, cache = false, wild = false, noGates = false, temperate = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--n") n = Number(argv[++i]);
@@ -274,11 +277,12 @@ export function main(argv: string[]): void {
     else if (a === "--cache") cache = true;
     else if (a === "--wild") wild = true;
     else if (a === "--no-gates") noGates = true;
+    else if (a === "--temperate") temperate = true;
     else if (a === "--at") {
       const [name, x, y] = argv[++i].split(":");
       extra.push({ name, x: Number(x), y: Number(y), e: 0 });
     }
   }
-  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, wild, noGates, log: (l) => console.log(l) });
+  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, wild, noGates, temperate, log: (l) => console.log(l) });
   console.log(res.dir);
 }

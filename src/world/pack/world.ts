@@ -96,6 +96,8 @@ export interface Meta {
   roads?: boolean;
   /** The world has climates: a temp plane on C. Absent: one temperate climate. */
   temp?: boolean;
+  /** A core's overview has the climates' washes beside it (look/haze-wash.ts). */
+  wash?: boolean;
   /** Occlusion cell size. Absent when the file has no occlusion section. */
   block?: number;
 }
@@ -697,7 +699,7 @@ function buildMeta(w: BakeWorld, occlusion?: Occlusion): Uint8Array {
   return textEncoder.encode(JSON.stringify(meta));
 }
 
-export function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads" | "temp"): boolean {
+export function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads" | "temp" | "wash"): boolean {
   return meta[key] === true;
 }
 

@@ -42,7 +42,8 @@ export function climateShift(temp: number, x: number, y: number, n: number): num
   const base = temp < TEMPERATE ? (TEMPERATE - temp) * COLD_SPAN : (TEMPERATE - temp) * HOT_SPAN;
   const far = base < 0 ? -base : base;
   const k = far >= 14 ? 1 : far / 14;
-  const wander = 9 * softNoise(x, y, n, 170, SHIFT_SEED) + 5 * softNoise(x, y, n, 60, SHIFT_SEED + 1) + 2.5 * softNoise(x, y, n, 22, SHIFT_SEED + 2);
+  // The finer wanderings are what mix two climates where they meet: patches of each in the other, a few dozen cells across.
+  const wander = 8 * softNoise(x, y, n, 170, SHIFT_SEED) + 7 * softNoise(x, y, n, 60, SHIFT_SEED + 1) + 4.5 * softNoise(x, y, n, 22, SHIFT_SEED + 2);
   return base + k * wander;
 }
 

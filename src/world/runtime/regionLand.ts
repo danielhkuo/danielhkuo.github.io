@@ -120,7 +120,7 @@ export function createRegionLand(core: Core, fetchRegion: (rx: number, ry: numbe
       return core.occlusion[wrap(Math.floor(y / block), bN) * bN + wrap(Math.floor(x / block), bN)];
     },
     haze(palette) {
-      return hazeFromSamples(core.overview, n, palette);
+      return hazeFromSamples(core.overview, n, palette, core.overviewWash);
     },
     async want(x, y, reach) {
       const list: { rx: number; ry: number; key: number; d: number }[] = [];

@@ -18,6 +18,7 @@ import { stampReaches, stampReachesWindow } from "../bake/window.ts";
 import { riverIndex, type BakeWorld, type GridWindow } from "../bake/world.ts";
 import { wrap } from "../core/torus.ts";
 import { indexBuilt, type Built } from "../gen/built.ts";
+import { hazeWash } from "../look/haze-wash.ts";
 import type { Stamp as CoastStamp } from "../gen/stamps.ts";
 import { encodeBytes, encodeHeights, readPack, sha256, writePack, type PackSection } from "./codec.ts";
 import {
@@ -83,6 +84,8 @@ export interface Core {
   block: number;
   /** Ground height at one sample per 8 cells, (n / 8)², for the haze: whole units, the sea as 0. */
   overview: Uint8Array;
+  /** Beside the overview in a world with climates: the material whose wash the haze takes at each sample, 0 for the height's own. */
+  overviewWash?: Uint8Array;
 }
 
 const GROUND = "ground";
@@ -108,6 +111,7 @@ const BARS = "bars";
 const BUILT = "built";
 const OCCL = "occl";
 const OVER = "over";
+const OVERW = "overw";
 const RDIG = "rdig";
 const FP = "fp";
 const SUM = "sum";
@@ -187,7 +191,7 @@ function metaBytes(w: BakeWorld, regionCells: number, occlusion: Occlusion | und
   if (at) {
     meta.rx = at.rx;
     meta.ry = at.ry;
-  }
+  } else if (w.temp) meta.wash = true;
   if (w.base) meta.base = true;
   if (w.conform) meta.conform = true;
   if (w.stamps) meta.stamps = true;
@@ -276,6 +280,8 @@ function coreJobs(w: BakeWorld, occlusion: Occlusion | undefined, overview: Uint
   if (w.built) push(BUILT, storeRaw(encodeValue({ ...w.built.built, roads: [] })));
   if (occlusion) push(OCCL, encodeBytes(occlusion.data));
   push(OVER, encodeBytes(overview));
+  // The climates' washes for the haze, read off the ground and the fields as a decoder will have them.
+  if (w.temp) push(OVERW, encodeBytes(hazeWash(quantised(w.ground, H_SCALE), w.gN, quantised(w.temp, TEMP_SCALE), quantised(w.moisture, FIELD_SCALE))));
   return jobs;
 }
 
@@ -509,6 +515,7 @@ async function decodeCoreInner(bin: Uint8Array): Promise<Core> {
   if (!Number.isInteger(oN)) fail("bad overview");
   const overview = await loadBytes(requirePart(parts, OVER), oN * oN);
   const core: Core = { world, regionCells, side, occlusion, block, overview };
+  if (flagged(meta, "wash")) core.overviewWash = await loadBytes(requirePart(parts, OVERW), oN * oN);
   fingerprints.set(core, fp.slice());
   return core;
 }

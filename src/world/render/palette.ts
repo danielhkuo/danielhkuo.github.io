@@ -366,13 +366,13 @@ function buildSpecs(): Spec[] {
   set(M.tundraCool, all([0.675, 0.052, 112]), UPLAND);
   set(M.tundraMid, all([0.71, 0.056, 94]), UPLAND);
   set(M.tundraWarm, all([0.645, 0.062, 62]), UPLAND);
-  set(M.lichen, all([0.86, 0.025, 128]), PALE);
-  set(M.sedge, [[0.7, 0.07, 118], [0.71, 0.072, 112], [0.7, 0.07, 92], [0.7, 0.05, 88]], LAND);
+  set(M.lichen, all([0.8, 0.03, 122]), LAND);
+  set(M.sedge, [[0.67, 0.064, 122], [0.675, 0.062, 118], [0.68, 0.064, 94], [0.68, 0.05, 88]], LAND);
   set(M.bog, all([0.66, 0.068, 98]), LAND);
   set(M.bogRed, all([0.58, 0.06, 28]), LAND);
   // A pool is dark still water seen from above: one flat tone, a little lighter where the sky is in it.
   set(M.pool, all([0.5, 0.045, 238]), LINE);
-  set(M.frostNet, all([0.55, 0.045, 70]), LINE);
+  set(M.frostNet, all([0.64, 0.05, 100]), LINE);
   // Taiga: dark spires on a pale floor.
   set(M.floorLichen, all([0.82, 0.03, 112]), LAND);
   set(M.spruceCool, evergreen([0.31, 0.04, 192]), CANOPY);
@@ -383,9 +383,9 @@ function buildSpecs(): Spec[] {
   // Ice. Floes are a shade bluer than snow and flat; old ice and glacier ice are the blue of the picture.
   const FLOE = { drop: 0.2, rise: 0.6, cool: 0.03, coolHue: 250, warm: 0, ramp: "land" } as const;
   set(M.packIce, all([0.925, 0.016, 232]), FLOE);
-  set(M.packIceBlue, all([0.86, 0.036, 224]), FLOE);
-  set(M.lakeIce, all([0.9, 0.022, 228]), FLOE);
-  set(M.riverIce, all([0.87, 0.03, 226]), FLOE);
+  set(M.packIceBlue, all([0.895, 0.026, 226]), FLOE);
+  set(M.lakeIce, all([0.91, 0.02, 230]), FLOE);
+  set(M.riverIce, all([0.915, 0.02, 232]), FLOE);
   set(M.iceFoot, all([0.86, 0.04, 222]), SNOWY);
   set(M.glacier, all([0.82, 0.055, 218]), SNOWY);
   set(M.berg, all([0.93, 0.022, 226]), SNOWY);
@@ -398,23 +398,24 @@ function buildSpecs(): Spec[] {
   set(M.steppeCool, dryGrass([0.74, 0.052, 104]), LAND);
   set(M.steppeMid, dryGrass([0.78, 0.058, 98]), LAND);
   set(M.steppeWarm, dryGrass([0.805, 0.06, 93]), LAND);
-  set(M.garrigue, [[0.72, 0.03, 310], [0.725, 0.024, 300], [0.71, 0.03, 90], [0.7, 0.025, 95]], UPLAND);
+  set(M.garrigue, [[0.73, 0.024, 310], [0.735, 0.018, 300], [0.72, 0.03, 90], [0.71, 0.025, 95]], UPLAND);
   // Bare earths. Sand, salt and gravel shade warm, as a dune does: a violet shade is stone's.
   const DUNE = { drop: 0.27, rise: 0.4, cool: 0.03, coolHue: 300, warm: 0.045, ramp: "land" } as const;
   set(M.earthPale, all([0.84, 0.036, 80]), DUNE);
-  set(M.earthRed, all([0.6, 0.085, 40]), DUNE);
+  set(M.earthRed, all([0.64, 0.068, 44]), DUNE);
   set(M.desertSand, all([0.865, 0.064, 78]), DUNE);
   set(M.desertSandDeep, all([0.83, 0.072, 70]), DUNE);
   set(M.reg, all([0.77, 0.05, 68]), DUNE);
   set(M.salt, all([0.95, 0.01, 100]), PALE);
-  set(M.wadi, all([0.9, 0.03, 84]), LINE);
+  set(M.wadi, all([0.8, 0.036, 76]), LINE);
   set(M.rockDesert, all([0.7, 0.075, 58]), STONE);
   set(M.cliffDesert, all([0.62, 0.084, 46]), STONE);
-  set(M.tigerBush, evergreen([0.5, 0.045, 115]), LAND);
+  set(M.tigerBush, evergreen([0.44, 0.045, 118]), LAND);
   // Savanna: gold, clear of the reserved gold by its chroma.
-  set(M.savannaCool, dryGrass([0.78, 0.078, 98]), LAND);
-  set(M.savannaMid, dryGrass([0.795, 0.084, 90]), LAND);
-  set(M.savannaWarm, dryGrass([0.755, 0.08, 80]), LAND);
+  // Green-gold: grass that has had its rains, not straw. The desert is the tan country; the savanna is alive.
+  set(M.savannaCool, dryGrass([0.75, 0.088, 112]), LAND);
+  set(M.savannaMid, dryGrass([0.775, 0.086, 104]), LAND);
+  set(M.savannaWarm, dryGrass([0.785, 0.084, 95]), LAND);
   set(M.floorJungle, evergreen([0.38, 0.06, 158]), LAND);
   set(M.mud, all([0.6, 0.045, 75]), LINE);
   // Plants of the warm climates: all evergreen.
@@ -426,9 +427,9 @@ function buildSpecs(): Spec[] {
   set(M.acacia, evergreen([0.5, 0.058, 122]), CANOPY);
   // Jungle: deeper and more saturated than any temperate wood, in greens far enough apart that the canopy is lumpy.
   set(M.jungleCool, evergreen([0.36, 0.072, 160]), CANOPY);
-  set(M.jungleMid, evergreen([0.44, 0.098, 150]), CANOPY);
-  set(M.jungleWarm, evergreen([0.5, 0.108, 141]), CANOPY);
-  set(M.jungleBright, evergreen([0.58, 0.118, 131]), CANOPY);
+  set(M.jungleMid, evergreen([0.44, 0.088, 150]), CANOPY);
+  set(M.jungleWarm, evergreen([0.5, 0.094, 142]), CANOPY);
+  set(M.jungleBright, evergreen([0.57, 0.1, 133]), CANOPY);
   set(M.jungleBloom, all([0.78, 0.045, 355]), CANOPY);
   set(M.palm, evergreen([0.52, 0.092, 138]), CANOPY);
   set(M.mangrove, evergreen([0.43, 0.075, 146]), CANOPY);

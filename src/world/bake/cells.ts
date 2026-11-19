@@ -926,7 +926,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     const sand = look.barSand;
     for (const p of world.bars) {
       forEachPatchCell(p, n, wx0, wy0, W, H, (i) => {
-        if (water[i] !== 0 || riv[i] === 0 || road[i] !== 0) return;
+        // A point bar is pale sand in the temperate land; elsewhere it is whatever the climate lays on that ground.
+        if (water[i] !== 0 || riv[i] === 0 || road[i] !== 0 || foreign[i] !== 0) return;
         gmat[i] = sand;
         crown[i] = -Infinity;
       });
