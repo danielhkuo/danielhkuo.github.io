@@ -408,8 +408,10 @@ function buildSpecs(): Spec[] {
   set(M.reg, all([0.77, 0.05, 68]), DUNE);
   set(M.salt, all([0.95, 0.01, 100]), PALE);
   set(M.wadi, all([0.8, 0.036, 76]), LINE);
-  set(M.rockDesert, all([0.7, 0.075, 58]), STONE);
-  set(M.cliffDesert, all([0.62, 0.084, 46]), STONE);
+  // Sandstone shades warm too: a red-brown scarp in shadow, never the violet of the temperate crags.
+  const SANDSTONE = { drop: 0.4, rise: 0.5, cool: 0.02, coolHue: 330, warm: 0.05, ramp: "land" } as const;
+  set(M.rockDesert, all([0.7, 0.075, 58]), SANDSTONE);
+  set(M.cliffDesert, all([0.62, 0.084, 46]), SANDSTONE);
   set(M.tigerBush, evergreen([0.44, 0.045, 118]), LAND);
   // Savanna: gold, clear of the reserved gold by its chroma.
   // Green-gold: grass that has had its rains, not straw. The desert is the tan country; the savanna is alive.

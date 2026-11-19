@@ -422,6 +422,8 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
   // By water in dry country the bank is green: plots under palms, and the reeds the table left at the water.
   if (c.moisture < STEPPE_RAIN && near > 0.42 && st < 0.25) return M.pastureCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);
   if (wet < DESERT_RAIN + 0.012 * j) {
+    // A steep bank of the desert is bare sandstone: the riser of a bench, a mesa's side, a canyon's wall (gen/landforms.ts).
+    if (st > 0.62 + 0.06 * j) return st > 1.05 ? M.cliffDesert : M.rockDesert;
     // Sand is in seas; between them, and on any slope too steep to hold it, is gravel, with pale earth in patches.
     if (ergAt(x, y, n) > 0 && st < 0.55) return soft(x, y, n, 120, WARM_SEED + 6) + 0.4 * soft(x, y, n, 31, WARM_SEED + 7) > 0.2 ? M.desertSandDeep : M.desertSand;
     // Gravel on the swells; pale silt where the rare water runs and stands, along the washes and on their floors.
@@ -493,8 +495,8 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
       0.07 * (north < 0 ? -north : 0) * steep + 0.075 * soft(x, y, n, 70, WARM_SEED + 20) + 0.035 * soft(x, y, n, 21, WARM_SEED + 21);
     // Rock of dry country is banded sandstone, where it is not the white of limestone or the dark of slate.
     if (dryside && wet < 0.4) {
-      if (m === M.rockHard || m === M.rockSed) return M.rockDesert;
-      if (m === M.cliffHard || m === M.cliffSed) return M.cliffDesert;
+      if (m === M.rockHard || m === M.rockSed || m === M.rockSlate) return M.rockDesert;
+      if (m === M.cliffHard || m === M.cliffSed || m === M.cliffSlate) return M.cliffDesert;
     }
     // Coral sand in the tropics; a dune behind a desert beach is bare; a muddy tropical shore is mangrove's.
     if (m === M.sand) return heat > 0.6 ? M.sandPale : m;
@@ -506,6 +508,12 @@ function warmSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
     }
     if (!zonal(m)) return m;
     return hotGround(c, x, y, mask, n, heat, hl, wet, st, near, dryside);
+  }
+  // The hills of the desert's latitudes stand above the heat, but their rock is the desert's: sandstone, not slate.
+  if (dryside && c.moisture < 0.36 && hl > 0.14 + 0.06 * soft(x, y, n, 70, WARM_SEED + 38)) {
+    if (m === M.rockHard || m === M.rockSed || m === M.rockSlate) return M.rockDesert;
+    if (m === M.cliffHard || m === M.cliffSed || m === M.cliffSlate) return M.cliffDesert;
+    if (m === M.screeSlate) return M.scree;
   }
   if (!zonal(m)) return m;
   if (!dryside) return hl > 0 ? warmWood(m, c, x, y, mask, n, hl) : m;

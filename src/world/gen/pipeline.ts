@@ -2,6 +2,7 @@
 // Stages not built yet are marked; the bake supplies stand-ins for them.
 
 import { type Climate, climateFields, type ZoneLayout } from "./climate.ts";
+import { type Landforms, shapeByClimate } from "./landforms.ts";
 import { coast, coastContext } from "./coast.ts";
 import { drown } from "./drown.ts";
 import { runSchedule } from "./erode.ts";
@@ -102,6 +103,8 @@ export interface Terrain {
   rivers: RiversResult;
   /** Moisture, wind and sea-level temperature on C. */
   climate: Climate;
+  /** G nodes each landform of the climates moved (gen/landforms.ts). Absent in a world with one climate. */
+  landforms?: Landforms["moved"];
 }
 
 export interface World extends Terrain {
@@ -171,11 +174,38 @@ export function climateOf(land: Land, hydro: HydroResult, rv: RiversResult, seed
   return climateFields(rv.ground, hydro.rain, land.isSea, land.p.gN, land.p.climate, zoneLayout(land, seed));
 }
 
-/** The natural land: every stage before siting. */
-export function makeTerrain(p: WorldParams, seed: number): Terrain {
+/** The land as it is grown: every stage before the climate. This is what a cache holds (cli/worldcache.ts). */
+export interface Grown {
+  land: Land;
+  hydro: HydroResult;
+  rivers: RiversResult;
+}
+
+export function growTerrain(p: WorldParams, seed: number): Grown {
   const land = makeLand(p, seed);
   const gN = p.gN;
   const hydro = hydrology(land.g, gN, land.isSea, p.hydro);
   const rv = rivers({ g: land.g, gN, isSea: land.isSea, hydro }, p.rivers, seed);
-  return { land, hydro, rivers: rv, climate: climateOf(land, hydro, rv, seed) };
+  return { land, hydro, rivers: rv };
+}
+
+/**
+ * S8 and S8b: the climate of the grown land, and the landforms the climates give it (gen/landforms.ts). The ground
+ * and the height above drainage that come back are final for the natural land; the rain, the wind and the
+ * temperature are read off the land as grown. Cheap, so it runs afresh on a cached land.
+ */
+export function climateStage(g: Grown, seed: number): Terrain {
+  const { land, hydro, rivers: rv } = g;
+  const climate = climateOf(land, hydro, rv, seed);
+  const f = shapeByClimate({
+    n: land.p.n, gN: land.p.gN, ground: rv.ground, hand: hydro.hand, isSea: land.isSea, lakeId: hydro.lakeId, shoreDist: land.shoreDist,
+    temp: climate.temp, arid: climate.arid, moisture: climate.moisture,
+  });
+  if (f.ground === rv.ground) return { land, hydro, rivers: rv, climate };
+  return { land, hydro: { ...hydro, hand: f.hand }, rivers: { ...rv, ground: f.ground }, climate, landforms: f.moved };
+}
+
+/** The natural land: every stage before siting. */
+export function makeTerrain(p: WorldParams, seed: number): Terrain {
+  return climateStage(growTerrain(p, seed), seed);
 }
