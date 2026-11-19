@@ -19,21 +19,21 @@ const STREAK_ALPHA = 215;
 /** A streak lives this long (seconds, least and spread), slipping TRAVEL cells back along the body as it goes. */
 const LIFE = 0.7;
 const LIFE_SPREAD = 0.3;
-const TRAVEL = 34;
+const TRAVEL = 26;
 /** Where along the body streaks are shed (cells of path behind the head), and how long they are. */
-const SHED_FROM = 4;
-const SHED_SPAN = 40;
-const LENGTH = 13;
-const LENGTH_SPREAD = 10;
+const SHED_FROM = 3;
+const SHED_SPAN = 31;
+const LENGTH = 10;
+const LENGTH_SPREAD = 8;
 /** How far off the body's flank a streak starts, and how far it drifts outwards over its life, cells. */
-const FLANK = 4.5;
-const FLANK_SPREAD = 4;
-const DRIFT = 2.5;
+const FLANK = 3.5;
+const FLANK_SPREAD = 3;
+const DRIFT = 2;
 /** No streak is drawn farther back along the path than this, cells. */
-export const WIND_BACK = 88;
+export const WIND_BACK = 69;
 /** The bow: its nose this far ahead of the head, swept back to BOW_HALF either side, at most BOW_ALPHA of 256. */
-const BOW_NOSE = 16;
-const BOW_HALF = 6;
+const BOW_NOSE = 12.5;
+const BOW_HALF = 4.7;
 const BOW_SWEEP = 0.2;
 const BOW_ALPHA = 120;
 /** Speed, as a multiple of cruising, at which the wind starts to show, and the further span over which it grows in. */

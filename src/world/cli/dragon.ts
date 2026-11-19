@@ -12,6 +12,8 @@
 //   a-turn.png         held in a right turn and in a left, at 4×
 //   a-boost.png        a boost held for 2 s and let go, at 4×: the wind of it growing in and fading out
 //   a-boost-1x.png     the same moments at 1×
+//   a-landing.png      down onto a lighthouse, the abbey and the town's harbour, landed, at rest for 1 s and 20 s,
+//                      and off again, at 3×
 //   sheet.png          everything on one contact sheet
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,6 +29,9 @@ import { createWorldBakeHost } from "../runtime/bakeHost.ts";
 import { CRUISE, startState, stepFlight, type FlightInput, type FlightState } from "../runtime/flight.ts";
 import type { BakePool, ChunkWant } from "../runtime/pool.ts";
 import { createStreamView, type StreamView } from "../runtime/stream.ts";
+import { restingPlaces } from "../sites/anchor.ts";
+import type { LandmarkType } from "../sites/assign.ts";
+import { advance, land, offered, restShare, takeOff, type Phase } from "../sites/landing.ts";
 import { createSky, type Sky } from "../sky/sky.ts";
 import { styleFrom } from "../sky/styles.ts";
 import { namedViews } from "./live.ts";
@@ -131,9 +136,12 @@ interface Stage {
   out: Uint32Array;
 }
 
-/** Draws one frame with the camera on (cx, cy) at the flier's height: land, live layers, the study, and the sky if asked. */
-function frameOf(st: Stage, dragon: Dragon, s: FlightState, cx: number, cy: number, time: number, clouds: boolean): Uint32Array {
-  st.view.setCamera(cx, cy - s.alt / 0.8);
+/**
+ * Draws one frame with the camera on (cx, cy) at height `camAlt` (the flier's own unless given): land, live layers,
+ * the study, and the sky if asked.
+ */
+function frameOf(st: Stage, dragon: Dragon, s: FlightState, cx: number, cy: number, time: number, clouds: boolean, camAlt = s.alt): Uint32Array {
+  st.view.setCamera(cx, cy - camAlt / 0.8);
   for (let i = 0; i < 10 && !st.view.ready(); i++) st.view.update(0, 0);
   st.view.frame(st.out, time, { x: s.x, y: s.y, alt: s.alt, heading: s.heading, speed: s.speed });
   const rect = st.view.rect();
@@ -348,6 +356,65 @@ export async function main(argv: readonly string[]): Promise<number> {
     written.push(save(dir, "a-boost.png", big));
     written.push(save(dir, "a-boost-1x.png", small));
     bands.push(big, small);
+  }
+
+  // Landing: through the page's own states, at the display's 120 frames a second. Down onto a landmark, landed, at
+  // rest (a second, then twenty: a body that forgot its path would have straightened out by then), and off again.
+  {
+    const LW = 84, LH = 80, LDT = 1 / 120;
+    const KINDS: readonly string[] = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"];
+    const landmarks = manifest.sites.filter((q) => KINDS.includes(q.type)).map((q) => ({ ...q, type: q.type as LandmarkType }));
+    const { targets } = restingPlaces(landmarks, shipped.world.built?.built, st.n);
+    const picks = ["lighthouse", "abbey", "town"].flatMap((kind) => targets.find((q) => q.id.startsWith(kind)) ?? []);
+    const captions = ["DOWN 1.2 S", "DOWN 2.4 S", "LANDED", "REST 1 S", "REST 20 S", "OFF 0.3 S", "OFF 0.6 S", "OFF 1.0 S"];
+    const landing = sheet(captions.length * (LW * 3 + GAP) - GAP, LINE + picks.length * (LH * 3 + LINE));
+    label(landing, 0, 2, "A LANDING AT 3×: DOWN ONTO A LIGHTHOUSE, THE ABBEY AND THE HARBOUR, AT REST, AND OFF AGAIN");
+    const idle: FlightInput = { turn: 0, boost: false, brake: false };
+    picks.forEach((target, row) => {
+      const dragon = createDragon(st.n);
+      let s = startState({ x: target.x, y: wrap(target.y + 150, st.n), dx: 0, dy: -1 }, view);
+      let phase: Phase = { kind: "flying", quiet: null };
+      let t = 0, shots = 0;
+      const camAlt = view.groundHeight(target.x, target.y) + 8;
+      const steps = (seconds: number): void => {
+        for (let k = Math.round(seconds / LDT); k > 0; k--) {
+          ({ phase, s } = advance(phase, s, idle, LDT, view, st.n, targets));
+          t += LDT;
+          dragon.step(s, LDT, restShare(phase));
+        }
+      };
+      const shoot = (): void => {
+        const f = frameOf(st, dragon, s, target.x, target.y, t, false, camAlt);
+        const x = shots * (LW * 3 + GAP), y = LINE + row * (LH * 3 + LINE);
+        blit(landing, x, y, f, LW, LH, 3);
+        label(landing, x, y + LH * 3 + 4, `${target.id.split("-")[0]}  ${captions[shots]}`);
+        shots++;
+      };
+      // Fly up to it as the page would, and land when it is on offer.
+      for (let k = 0; k < 6 / LDT && !offered(phase, s.x, s.y, targets, st.n); k++) steps(LDT);
+      steps(0.4);
+      // As on the page, the view is on the flier when it lands, so the landing can see what the land would hide.
+      st.view.setCamera(s.x, s.y - s.alt / 0.8);
+      for (let k = 0; k < 10 && !st.view.ready(); k++) st.view.update(0, 0);
+      phase = land(phase, s, targets, st.n);
+      steps(1.2);
+      shoot();
+      steps(1.2);
+      shoot();
+      for (let k = 0; k < 12 / LDT && phase.kind === "landing"; k++) steps(LDT);
+      shoot();
+      steps(1);
+      shoot();
+      steps(19);
+      shoot();
+      phase = takeOff(phase);
+      for (const wait of [0.3, 0.3, 0.4]) {
+        steps(wait);
+        shoot();
+      }
+    });
+    written.push(save(dir, "a-landing.png", landing));
+    bands.push(landing);
   }
 
   let total = PAD;

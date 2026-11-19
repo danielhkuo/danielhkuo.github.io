@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CommandHistory, complete, execute, promptFor, tokenize } from "./shell.ts";
+import { CommandHistory, complete, execute, promptFor, suggest, tokenize } from "./shell.ts";
 import type { CommandContext, CommandMap } from "./types";
 
 test("plain words split on runs of whitespace", () => {
@@ -194,4 +194,96 @@ test("a command that throws is reported instead of taking the shell down", () =>
   execute("boom", RUNNABLE, s.ctx);
   assert.equal(s.errs.length, 1);
   assert.match(s.errs[0], /kaput/);
+});
+
+// ---- suggest: the row of buttons that stands in for Tab ------------------------
+
+/** A small registry: commands with no arguments, a required file, optional words, and one that is hidden. */
+function registry(): CommandMap {
+  const run = () => undefined;
+  const files = (typed: string) =>
+    ["about.md", "contact.md", "projects/", "projects/Alpha/", "projects/README.md"].filter((f) => {
+      const cut = typed.lastIndexOf("/") + 1;
+      return f.startsWith(typed) && !f.slice(cut).slice(0, -1).includes("/") && f !== typed.slice(0, cut);
+    });
+  return {
+    help: { desc: "list commands", run },
+    cat: { desc: "read a file", usage: "<file>", args: files, run },
+    cd: { desc: "change directory", usage: "[dir]", args: files, run },
+    clear: { desc: "clear the screen", run },
+    echo: { desc: "print text", usage: "<text>", run },
+    theme: { desc: "switch theme", usage: "[dark|light]", args: ["dark", "light"], run },
+    glow: { desc: "read a file", usage: "<file>", args: files, hidden: true, run },
+  };
+}
+
+test("on an empty line the row offers the featured commands, in their order", () => {
+  assert.deepEqual(
+    suggest("", registry(), ["help", "cat", "theme"]).map((s) => s.label),
+    ["help", "cat", "theme"],
+  );
+});
+
+test("a featured name that is not a command is left out", () => {
+  assert.deepEqual(suggest("", registry(), ["help", "nope"]).map((s) => s.label), ["help"]);
+});
+
+test("with nothing featured an empty line offers nothing", () => {
+  assert.deepEqual(suggest("", registry()), []);
+  assert.deepEqual(suggest("   ", registry()), []);
+});
+
+test("a command that needs nothing more runs as it is", () => {
+  assert.deepEqual(suggest("", registry(), ["help"]), [{ label: "help", line: "help", run: true }]);
+});
+
+test("a command with optional words runs as it is too", () => {
+  assert.deepEqual(suggest("th", registry()), [{ label: "theme", line: "theme", run: true }]);
+});
+
+test("a command that needs a file goes on the prompt, with a space for it", () => {
+  assert.deepEqual(suggest("", registry(), ["cat"]), [{ label: "cat", line: "cat ", run: false }]);
+});
+
+test("while a command is typed the row narrows to those that still match, in any case", () => {
+  assert.deepEqual(suggest("c", registry()).map((s) => s.label), ["cat", "cd", "clear"]);
+  assert.deepEqual(suggest("CL", registry()).map((s) => s.label), ["clear"]);
+  assert.deepEqual(suggest("zz", registry()), []);
+});
+
+test("a hidden command is never offered", () => {
+  assert.deepEqual(suggest("g", registry()), []);
+});
+
+test("a whole command name is still offered, so it can be run by a tap", () => {
+  assert.deepEqual(suggest("clear", registry()), [{ label: "clear", line: "clear", run: true }]);
+});
+
+test("after a command the row is its arguments: a file runs, a directory is gone into", () => {
+  assert.deepEqual(suggest("cat ", registry()), [
+    { label: "about.md", line: "cat about.md", run: true },
+    { label: "contact.md", line: "cat contact.md", run: true },
+    { label: "projects/", line: "cat projects/", run: false },
+  ]);
+});
+
+test("inside a directory the buttons show only the new part of the path", () => {
+  assert.deepEqual(suggest("cat projects/", registry()), [
+    { label: "Alpha/", line: "cat projects/Alpha/", run: false },
+    { label: "README.md", line: "cat projects/README.md", run: true },
+  ]);
+});
+
+test("a half-typed argument narrows the row", () => {
+  assert.deepEqual(suggest("cat ab", registry()), [{ label: "about.md", line: "cat about.md", run: true }]);
+  assert.deepEqual(suggest("theme L", registry()), [{ label: "light", line: "theme light", run: true }]);
+});
+
+test("a command with no arguments to offer, or one that does not exist, offers nothing more", () => {
+  assert.deepEqual(suggest("echo ", registry()), []);
+  assert.deepEqual(suggest("nope ", registry()), []);
+});
+
+test("earlier words of the line are kept as typed", () => {
+  assert.deepEqual(suggest("  cd  -P pro", registry()), [{ label: "projects/", line: "  cd  -P projects/", run: false }]);
 });

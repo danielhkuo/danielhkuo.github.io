@@ -1,0 +1,20 @@
+/* The phone query is the title's (mobile spec 2): a narrow screen, or a touch screen held sideways with a short side.
+   It is repeated in phone.ts, which the tests hold to this file. */
+
+.phone {
+  display: none;
+}
+
+.desk {
+  display: contents;
+}
+
+@media (max-width: 699px), (pointer: coarse) and (max-height: 499px) {
+  .phone {
+    display: block;
+  }
+
+  .desk {
+    display: none;
+  }
+}

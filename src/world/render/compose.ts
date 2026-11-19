@@ -28,8 +28,8 @@ export interface LiveWater {
 /** Packed RGBA drawn where no chunk is baked yet: bare paper. */
 export const PAPER = 0xffd2e8f0;
 
-/** The paper's own colour (the palette's PAPER at noon), as r, g, b. */
-const CREAM: readonly [number, number, number] = [0xf0, 0xe8, 0xd2];
+/** The paper's own colour at noon, packed RGBA: the cream that shows through where the tooth stands proud. */
+export const CREAM = 0xffd2e8f0;
 /** Of 256: how far the tooth of the paper shows through the paint at its highest, and how far pigment darkens its hollows. */
 export const GRAIN_SHOW = 30;
 export const GRAIN_SETTLE = 24;
@@ -76,17 +76,18 @@ export function grainTile(mask: Uint8Array): Int8Array {
  * darker and a touch warmer than a plain multiply: red keeps k + 2, green k, blue k − 2 of 256. At g = 0 nothing
  * changes. Grain values with the same k share their tables: some 55 of them, 42 kB.
  */
-function grainTables(): { lut: Uint8Array; start: Int32Array } {
+function grainTables(cream: number): { lut: Uint8Array; start: Int32Array } {
   const start = new Int32Array(256);
   const keys = new Map<string, number>();
   const effects: ((c: number, ch: number) => number)[] = [];
+  const paper = [cream & 255, (cream >>> 8) & 255, (cream >>> 16) & 255];
   for (let g = -128; g < 128; g++) {
     let key = "none";
     let effect = (c: number, ch: number): number => c + 0 * ch;
     if (g > 0) {
       const k = (g * GRAIN_SHOW) >> 7;
       key = `show ${k}`;
-      effect = (c, ch) => c + (((CREAM[ch] - c) * k) >> 8);
+      effect = (c, ch) => c + (((paper[ch] - c) * k) >> 8);
     } else if (g < 0) {
       const k = 256 + ((g * GRAIN_SETTLE) >> 7);
       key = `settle ${k}`;
@@ -105,7 +106,18 @@ function grainTables(): { lut: Uint8Array; start: Int32Array } {
   for (let e = 0; e < effects.length; e++) for (let ch = 0; ch < 3; ch++) for (let c = 0; c < 256; c++) lut[e * 768 + ch * 256 + c] = effects[e](c, ch);
   return { lut, start };
 }
-const GRAIN = grainTables();
+/** The grain's tables for each paper colour asked for lately: the light moves the paper's colour a step at a time. */
+const GRAINS_BY_CREAM = new Map<number, { lut: Uint8Array; start: Int32Array }>();
+function grainFor(cream: number): { lut: Uint8Array; start: Int32Array } {
+  let hit = GRAINS_BY_CREAM.get(cream);
+  if (!hit) {
+    hit = grainTables(cream);
+    if (GRAINS_BY_CREAM.size >= 8) GRAINS_BY_CREAM.delete(GRAINS_BY_CREAM.keys().next().value!);
+    GRAINS_BY_CREAM.set(cream, hit);
+  }
+  return hit;
+}
+const GRAIN = grainFor(CREAM);
 const GRAIN_AT = new WeakMap<Uint8Array, Uint16Array>();
 
 /** For each pixel of the sheet's 256² tile, where its grain's tables start in GRAIN.lut. */
@@ -124,10 +136,11 @@ function grainAt(mask: Uint8Array): Uint16Array {
  * shows through the paint, and in its hollows the pigment settles a little darker. Indexed by bake pixel, so the
  * grain is fixed in the world and does not swim.
  */
-export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array): void {
+export function paperGrain(out: Uint32Array, view: ViewRect, mask: Uint8Array, cream = CREAM): void {
   const { x: vx, y: vy, w, h } = view;
   const at = grainAt(mask);
-  const lut = GRAIN.lut;
+  // Every paper colour's tables are laid out alike (the effects depend on the grain alone), so one index serves all.
+  const lut = grainFor(cream).lut;
   // Three table reads a pixel (see grainTables), with no branch: the grain's sign is noise, so a branch on it would
   // mispredict on every other pixel.
   for (let r = 0, o = 0; r < h; r++) {

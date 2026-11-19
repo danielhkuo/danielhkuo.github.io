@@ -2,10 +2,13 @@
 // down (design: specs/2026-11-18-landing-and-codex-design.md). Each frame the head steers for the tangent of an orbit
 // round the landmark whose radius shrinks with the angle swept, slowing and sinking as it goes; the body follows the
 // head's path, so it is left lying in a coil. The sweep ends at the landmark's south point, so the head rests in
-// front of the building, facing across the camera. Pure: nothing passed in is changed.
+// front of the building, facing across the camera. Round the coil it follows the ground, bridging what its body could
+// not bend down, and rests at that height: at a cliff's foot, level with the coil and not on the beach below. Pure:
+// nothing passed in is changed.
 
 import { patan2, pcos, PI, psin } from "../core/psin.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
+import { REST_HEIGHT, SETTLE_SLOPE } from "../dragon/body.ts";
 import { CLIMB, DT_MAX, MIN_GAP, stepFlight, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
 
 /** Within this many cells of a landmark the page offers to land there: about two seconds of cruise. */
@@ -20,8 +23,8 @@ export const ORBIT_RATE = 2.2;
 export const START_RADIUS = 40;
 /** The orbit has shrunk to the rest radius by this share of the sweep, and holds it after. */
 export const SHRINK_END = 0.55;
-/** It has sunk to rest height by this share of the sweep. */
-export const SINK_END = 0.85;
+/** It has sunk onto the coil's ring by this share of the sweep. */
+export const SINK_END = 0.7;
 /** Over this last share of the sweep it slows to rest. */
 export const REST_PART = 0.15;
 /** It crawls no slower than this until the sweep is done, cells a second. */
@@ -30,8 +33,12 @@ export const CRAWL = 3;
 export const LOOK = 10;
 /** How hard it turns toward the heading it wants: radians a second for each radian off. */
 export const GAIN = 4;
-/** At rest the head is this far over the ground: the body's own radius. */
-export const REST_LIFT = 2.5;
+/** At rest the head is this far over the ground: where the dragon's body lies (dragon/body.ts). */
+export const REST_LIFT = REST_HEIGHT;
+/** Points round the coil's ring where its height is worked out. */
+const RING_POINTS = 32;
+/** Taking off, the head climbs no more than this for each cell it flies: as steep as the body can follow. */
+export const RISE_SLOPE = 0.9;
 /** A landing still going after this many seconds ends where it is. */
 export const LANDING_CAP = 12;
 /** A sweep is at least this many turns, so there is a coil to lie in. */
@@ -50,6 +57,16 @@ export interface Target {
   x: number;
   y: number;
   radius: number;
+}
+
+/**
+ * What the page's view can also tell the landing, when it is the terrain it is given: the land drawn at a pixel of the
+ * frame (its world row; larger is nearer the viewer) and the frame's place in bake space. With these the head comes to
+ * rest where the land does not hide it.
+ */
+export interface Sight {
+  depthAt(px: number, py: number): number;
+  rect(): { x: number; y: number; w: number; h: number };
 }
 
 /** A landing in progress. */
@@ -71,6 +88,11 @@ export interface Approach {
   /** Speed and height it came in with. */
   v0: number;
   alt0: number;
+  /**
+   * Heights of the ring the coil lies in, RING_POINTS of them from east round by south: the ground under it, raised
+   * where that would bend the body steeper than SETTLE_SLOPE. Null until the first step measures it.
+   */
+  ring: readonly number[] | null;
   /** Seconds since it began. */
   time: number;
 }
@@ -147,18 +169,93 @@ export function beginLanding(s: FlightState, target: Target, n: number): Approac
     phi,
     v0: Math.max(s.speed, 2 * CRAWL),
     alt0: s.alt,
+    ring: null,
     time: 0,
   };
+}
+
+/**
+ * The ring the coil lies in: the ground at RING_POINTS round it, then raised to its upper envelope under SETTLE_SLOPE
+ * (height per cell of arc), so that nowhere round it is steeper than the body bends. Flat ground is left as it is.
+ */
+function ringHeights(a: Approach, terrain: Terrain, n: number): number[] {
+  const h: number[] = [];
+  for (let k = 0; k < RING_POINTS; k++) {
+    const at = (k * TAU) / RING_POINTS;
+    h.push(terrain.groundHeight(wrap(a.cx + a.radius * pcos(at), n), wrap(a.cy + a.radius * psin(at), n)));
+  }
+  const drop = (SETTLE_SLOPE * TAU * a.radius) / RING_POINTS;
+  // Twice round each way: a height can hold up the ring at most half way round from it.
+  for (let k = 1; k < 2 * RING_POINTS; k++) {
+    const i = k % RING_POINTS, from = (k - 1) % RING_POINTS;
+    if (h[i] < h[from] - drop) h[i] = h[from] - drop;
+  }
+  for (let k = 2 * RING_POINTS - 2; k >= 0; k--) {
+    const i = k % RING_POINTS, from = (k + 1) % RING_POINTS;
+    if (h[i] < h[from] - drop) h[i] = h[from] - drop;
+  }
+  return h;
+}
+
+/** The ring's height at angle `phi` round it, between its points. */
+function ringAt(ring: readonly number[], phi: number): number {
+  const at = ((((phi / TAU) % 1) + 1) % 1) * RING_POINTS;
+  const i = Math.floor(at) % RING_POINTS, f = at - Math.floor(at);
+  return ring[i] + (ring[(i + 1) % RING_POINTS] - ring[i]) * f;
+}
+
+/** Sixteenths of a turn from the south point, nearest first, at which the head may come to rest: the front half of the ring. */
+const REST_AT = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+
+/**
+ * True when the view draws no nearer land over the point (x, y) `alt` up, nor over its crown 3 higher: the whole head
+ * shows there. A point outside the frame, or a terrain that is not a view, hides nothing.
+ */
+function shows(terrain: Terrain & Partial<Sight>, x: number, y: number, alt: number, n: number): boolean {
+  if (!terrain.depthAt || !terrain.rect) return true;
+  const rect = terrain.rect(), rows = 0.8 * n;
+  let px = (((Math.round(x) - rect.x) % n) + n) % n;
+  if (px >= rect.w) px -= n;
+  if (px < 0) return true;
+  for (const up of [0, 3]) {
+    const bake = Math.round(0.8 * y - alt - up);
+    const py = (((bake - rect.y) % rows) + rows) % rows;
+    if (py >= rect.h) continue;
+    // The point's row on the turn of the world the frame shows.
+    const row = y + Math.round((rect.y + py - bake) / rows) * n;
+    if (terrain.depthAt(px, py) > row + 1.5) return false;
+  }
+  return true;
+}
+
+/**
+ * The approach with its ring measured, its sweep ending where the head will show: the south point if the land does
+ * not hide it there, else the nearest point round the front of the ring that shows (south again if none does).
+ */
+function surveyed(a: Approach, terrain: Terrain & Partial<Sight>, n: number): Approach {
+  const ring = ringHeights(a, terrain, n);
+  let end = PI / 2;
+  for (const k of REST_AT) {
+    const at = PI / 2 + (k * TAU) / 16;
+    if (!shows(terrain, wrap(a.cx + a.radius * pcos(at), n), wrap(a.cy + a.radius * psin(at), n), ringAt(ring, at) + REST_LIFT, n)) continue;
+    end = at;
+    break;
+  }
+  let sweep = (((a.dir * (end - a.phi)) % TAU) + TAU) % TAU;
+  if (sweep < SWEEP_MIN * TAU) sweep += TAU;
+  return { ...a, ring, sweep };
 }
 
 /**
  * One step of the coil. The orbit's radius eases from r0 to the rest radius by SHRINK_END of the sweep; the head aims
  * along the orbit's tangent, bent toward it by atan((r − r*) / LOOK), turning no faster than MAX_TURN. Its speed is the
  * lesser of what it came in with and ORBIT_RATE round the orbit, less while it faces away, and falls to a crawl over
- * the last REST_PART. Its height sinks to the ground under it plus REST_LIFT by SINK_END. Done when the sweep is, or at
- * LANDING_CAP: then it stops.
+ * the last REST_PART. Its height sinks onto the coil's ring by SINK_END and follows it round, REST_LIFT over it: a
+ * cliff's edge is a ramp, not a jump. Done when the sweep is, or at LANDING_CAP: then it stops.
  */
-function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain, n: number): { s: FlightState; a: Approach; done: boolean } {
+function stepApproach(s: FlightState, from: Approach, dt: number, terrain: Terrain & Partial<Sight>, n: number): { s: FlightState; a: Approach; done: boolean } {
+  // The first step measures the ring, and ends the sweep where the head will show.
+  const a = from.ring ? from : surveyed(from, terrain, n);
   const step = clamp(dt, 0, DT_MAX);
   const dx = torusDelta(a.cx, s.x, n), dy = torusDelta(a.cy, s.y, n);
   const r = Math.sqrt(dx * dx + dy * dy);
@@ -182,15 +279,17 @@ function stepApproach(s: FlightState, a: Approach, dt: number, terrain: Terrain,
 
   const x = wrap(s.x + pcos(heading) * speed * step, n);
   const y = wrap(s.y + psin(heading) * speed * step, n);
-  const ground = terrain.groundHeight(x, y);
-  const altStar = a.alt0 + (ground + REST_LIFT - a.alt0) * smooth(u / SINK_END);
-  const alt = Math.max(s.alt + clamp(altStar - s.alt, -CLIMB * step, CLIMB * step), ground + MIN_GAP);
+  const ring = a.ring ?? [];
+  const altStar = a.alt0 + (ringAt(ring, phi) + REST_LIFT - a.alt0) * smooth(u / SINK_END);
+  // No faster than the flight model climbs, and no steeper than the body bends along the path it will lie on.
+  const most = Math.min(CLIMB, SETTLE_SLOPE * speed) * step;
+  const alt = Math.max(s.alt + clamp(altStar - s.alt, -most, most), terrain.groundHeight(x, y) + MIN_GAP);
 
   const time = a.time + step;
   const done = swept >= a.sweep || time >= LANDING_CAP;
   return {
     s: { x, y, heading, speed: done ? 0 : speed, alt, bank },
-    a: { ...a, swept, phi, time },
+    a: { ...a, swept, phi, ring, time },
     done,
   };
 }
@@ -214,14 +313,19 @@ export function pullUp(phase: Phase): Phase {
 /**
  * One frame. Flying steps the flight model with `input` and lets the quiet site go once the flier is QUIET_FACTOR ×
  * NEAR from it; landing steps the coil, ignoring `input`, and reports the site in `landed` on the step it comes to
- * rest; landed holds still, its bank settling.
+ * rest; landed holds still where the coil's ring put it, its bank settling. Until the quiet site is let go, a climb
+ * is no steeper than RISE_SLOPE, so a take-off draws the body up after the head.
  */
 export function advance(
-  phase: Phase, s: FlightState, input: FlightInput, dt: number, terrain: Terrain, n: number, targets: readonly Target[],
+  phase: Phase, s: FlightState, input: FlightInput, dt: number, terrain: Terrain & Partial<Sight>, n: number, targets: readonly Target[],
 ): { phase: Phase; s: FlightState; landed: string | null } {
   if (phase.kind === "flying") {
-    const next = stepFlight(s, input, dt, terrain, n);
+    let next = stepFlight(s, input, dt, terrain, n);
     if (phase.quiet === null) return { phase, s: next, landed: null };
+    // Leaving a site it rises no steeper than RISE_SLOPE: from rest the flight model would lift the head straight up
+    // off its body.
+    const most = s.alt + RISE_SLOPE * dist(s.x, s.y, next.x, next.y, n);
+    if (next.alt > most) next = { ...next, alt: Math.max(most, terrain.groundHeight(next.x, next.y) + MIN_GAP) };
     const left = targets.find((t) => t.id === phase.quiet);
     const far = !left || dist(next.x, next.y, left.x, left.y, n) > NEAR * QUIET_FACTOR;
     return { phase: far ? { kind: "flying", quiet: null } : phase, s: next, landed: null };
@@ -235,15 +339,18 @@ export function advance(
   return { phase, s: { ...s, speed: 0, bank: s.bank * settle }, landed: null };
 }
 
-/** The dragon starts to rest at this share of the sweep. */
-const REST_FROM = 0.7;
+/** The dragon starts to calm at this share of the sweep. */
+const REST_FROM = 0.45;
 
-/** How much the dragon rests (dragon step's `rest`): 0 flying, rising over the last of the sweep, 1 landed. */
+/**
+ * How much the dragon rests (dragon step's `rest`): 0 flying; rising to a half over the last of the sweep, which
+ * calms its undulation as the coil tightens; 1 landed, when the body lies down.
+ */
 export function restShare(phase: Phase): number {
   if (phase.kind === "flying") return 0;
   if (phase.kind === "landed") return 1;
   const a = phase.approach;
-  return smooth((a.swept / a.sweep - REST_FROM) / (1 - REST_FROM));
+  return 0.5 * smooth((a.swept / a.sweep - REST_FROM) / (1 - REST_FROM));
 }
 
 /** The camera's share of the way from the flier to the landmark, moved on by dt toward 1 (`on`) or 0. */

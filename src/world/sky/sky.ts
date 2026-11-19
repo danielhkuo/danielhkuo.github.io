@@ -3,9 +3,12 @@
 // each bank again as a veil over it, so the flier shows faintly inside the bank.
 
 import type { ViewRect } from "../render/compose.ts";
-import { ALT, makeField, type CloudLayer, type Opening, type SkyField } from "./field.ts";
+import { gradeRgb, lowLight } from "../render/palette.ts";
+import { lightKey, sunOn, type Air } from "./air.ts";
+import { ALT, makeField, weatherClouds, type CloudLayer, type Opening, type SkyField } from "./field.ts";
+import { MIDDAY_RAMP, type Ramp } from "./paint/cumulus.ts";
 import { makeShapes, SHADOW_SLOPE, SHAPE_COUNTS, type CloudShape } from "./shapes.ts";
-import type { Sprite } from "./sprite.ts";
+import { RIM_TONE, type Sprite } from "./sprite.ts";
 import type { CloudStyle } from "./styles.ts";
 
 export interface Sky {
@@ -14,6 +17,11 @@ export interface Sky {
    * banks again at the style's veil, which changes nothing but what was drawn over them since: the flier.
    */
   draw(out: Uint32Array, rect: ViewRect, t: number, pass: "below" | "above"): void;
+  /**
+   * The light and the weather: clouds take the day's light (painted again only when it has moved a step), grey and
+   * gather as the weather builds, and their shadows soften under overcast and at night.
+   */
+  setAir(air: Air): void;
   /** The field and the shapes, for tools and tests. */
   field: SkyField;
   shapes: readonly CloudShape[];
@@ -51,7 +59,7 @@ function mayShow(u: number, period: number, view: number, sprite: number): boole
  */
 export function drawClouds(
   out: Uint32Array, rect: ViewRect, field: SkyField, sprites: readonly Sprite[], t: number, layer: CloudLayer, layerAlpha: number,
-  cull = true,
+  cull = true, cloudiness = 0,
 ): void {
   if (layerAlpha <= 0) return;
   const n = field.n;
@@ -69,6 +77,14 @@ export function drawClouds(
   for (let i = 0; i < clouds.length; i++) {
     const c = clouds[i];
     if (c.layer !== layer) continue;
+    // A weather cloud shows once the weather has built past its need, condensing over a short span: its pixels come
+    // in by an ordered dither fixed to the cloud, each one whole, never a see-through ghost of the cloud.
+    let condense = 16;
+    if (c.need !== undefined) {
+      if (cloudiness <= c.need) continue;
+      condense = Math.floor(((cloudiness - c.need) / CONDENSE) * 16);
+      if (condense <= 0) continue;
+    }
     const sprite = sprites[c.shape];
     const sw = sprite.w;
     const sh = sprite.h;
@@ -91,10 +107,12 @@ export function drawClouds(
     for (let py = y0; py < y1; py++) {
       const di0 = (sy + py) * fw + sx;
       const si = py * sw;
+      const order = BAYER[py & 3];
       for (let px = x0; px < x1; px++) {
         const sp = si + px;
         const a8 = alpha[sp];
         if (a8 === 0) continue;
+        if (condense < 16 && order[px & 3] >= condense) continue;
         const di = di0 + px;
         const src = rgba[sp];
         const a = a8 * scale;
@@ -122,7 +140,7 @@ export function drawClouds(
  */
 export function drawShadows(
   out: Uint32Array, rect: ViewRect, field: SkyField, shapes: readonly CloudShape[], t: number, layer: CloudLayer, keep: readonly [number, number, number],
-  cull = true,
+  cull = true, cloudiness = 0,
 ): void {
   const n = field.n;
   const yPeriod = n * 0.8;
@@ -139,6 +157,7 @@ export function drawShadows(
   for (let i = 0; i < clouds.length; i++) {
     const c = clouds[i];
     if (c.layer !== layer) continue;
+    if (c.need !== undefined && cloudiness < c.need + CONDENSE * 0.5) continue;
     const shadow = shapes[c.shape].shadow;
     const sw = shadow.w;
     const sh = shadow.h;
@@ -170,6 +189,81 @@ export function drawShadows(
   }
 }
 
+/** The span of cloudiness over which a weather cloud condenses from nothing to whole. */
+const CONDENSE = 0.12;
+/** Of 256: a cloud shadow that keeps at least this much of each channel is too faint to see, and is not drawn. */
+const FAINT = 246;
+/** A 4 × 4 ordered dither: the order in which a condensing cloud's pixels come in. */
+const BAYER: readonly (readonly number[])[] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+/** Steps of cloudiness at which the list of weather clouds that can show is made again. */
+const GATHER_STEPS = 32;
+
+/** Before rain the clouds go grey: the storm ramp each tone of the midday one goes toward, rim first. */
+const STORM: readonly number[] = [0xffcec6c0, 0xffcecac6, 0xffb4a8a0, 0xff9a8a80, 0xff84726a, 0xff685648];
+/** How far toward the storm ramp a fully built sky goes. */
+const STORM_SHARE = 1;
+
+function mixRgb(a: number, b: number, t: number): number {
+  const r = (a & 255) + ((b & 255) - (a & 255)) * t;
+  const g = ((a >>> 8) & 255) + (((b >>> 8) & 255) - ((a >>> 8) & 255)) * t;
+  const bl = ((a >>> 16) & 255) + (((b >>> 16) & 255) - ((a >>> 16) & 255)) * t;
+  return (0xff000000 | (Math.round(bl) << 16) | (Math.round(g) << 8) | Math.round(r)) >>> 0;
+}
+
+/**
+ * How far each tone of the ramp is turned to the light, crown to underside; the rim is fully in it. A low sun reaches
+ * well under a cloud, so only its deepest underside (about a quarter of it) is left to the shade's colour: the rest
+ * burns gold or rose. The moon stands high: it lights the rim and the crown, and the body below is a dark mass.
+ */
+const TONE_LIT: readonly number[] = [1, 0.95, 0.85, 0.6, 0.28];
+const MOON_LIT: readonly number[] = [0.85, 0.4, 0.12, 0, 0];
+/** At full dark, the share of its lightness a tone the moon does not reach loses: a night cloud is darker than paper. */
+const NIGHT_BODY = 0.22;
+/** A cloud takes more of the light's colour than the land does, and most on its rim: a low sun burns there. */
+const CATCH = 0.8;
+/** Its undersides are blue-violet already: they take only this share of the shade's colour. */
+const SHADE_TAKE = 0.45;
+/** In a low light the lit tones are paled toward the crown's white first, by up to this share, so they glow over the shade. */
+const GLOW = 0.35;
+
+/**
+ * The cloud ramp in this air: the midday ramp greyed toward the storm by the built cloud, then graded with the light,
+ * the rim and crown in the sun's or the moon's colour and the undersides in the shade's.
+ */
+export function rampIn(air: Air): Ramp {
+  const o = { time: air.time, season: air.season, overcast: air.overcast * 0.5, mist: air.mist };
+  const k = STORM_SHARE * air.cloud;
+  // Under a built sky little direct light is left to catch.
+  const open = 1 - 0.7 * air.cloud;
+  const glow = GLOW * lowLight(air.time) * open * (1 - air.night);
+  const one = (c: number, storm: number, lit: number): number => {
+    let base = glow > 0 ? mixRgb(c, MIDDAY_RAMP.tones[0], glow * lit) : c;
+    if (k > 0) base = mixRgb(base, storm, k);
+    if (air.night > 0) base = mixRgb(base, 0xff000000, NIGHT_BODY * air.night * (1 - lit));
+    return gradeRgb(base, o, lit, SHADE_TAKE + (1 - SHADE_TAKE + CATCH * open) * lit);
+  };
+  const lit = (i: number): number => TONE_LIT[i] + (MOON_LIT[i] - TONE_LIT[i]) * air.night;
+  return {
+    rim: one(MIDDAY_RAMP.rim, STORM[0], 1), tones: MIDDAY_RAMP.tones.map((c, i) => one(c, STORM[i + 1], lit(i))), cuts: MIDDAY_RAMP.cuts,
+  };
+}
+
+/** Paints every sprite again in `ramp`, by the tone each pixel took. Sprites without tones are left as they are. */
+function repaint(sprites: readonly Sprite[], ramp: Ramp): void {
+  for (const s of sprites) {
+    const tone = s.tone;
+    if (!tone) continue;
+    for (let i = 0; i < tone.length; i++) {
+      if (s.alpha[i] === 0) continue;
+      s.rgba[i] = tone[i] === RIM_TONE ? ramp.rim : ramp.tones[tone[i]];
+    }
+  }
+}
+
+/** Steps the air is cut into before the clouds are painted again: time, cloud, overcast and mist. */
+const TIME_STEPS = 96;
+const WEATHER_STEPS = 16;
+
 /**
  * Shapes from SHAPE_COUNTS, painted with the style's painter, and the field, all from `seed`. `opening` is the
  * flight's start: the field composes the first view round it.
@@ -179,20 +273,59 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
   const sprites: Sprite[] = new Array(shapes.length);
   for (let i = 0; i < shapes.length; i++) sprites[i] = style.paint(shapes[i]);
   const field = makeField(seed, n, shapes, opening);
-  const shadows = style.shadowKeep[0] < 256 || style.shadowKeep[1] < 256 || style.shadowKeep[2] < 256;
   // Each layer's clouds on their own, in the field's order, so a pass over the few banks does not walk every low cloud.
   const low: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "low") };
   const banks: SkyField = { ...field, clouds: field.clouds.filter((c) => c.layer === "bank") };
+  // With the weather's clouds among them, north to south, for when the weather has built.
+  // The weather's clouds, and the low layer with those of them the weather has built so far, north to south. The list is
+  // made again only when the cloud has moved a step, so a frame walks just the clouds that can show.
+  const weather = weatherClouds(seed, n, shapes);
+  let gathered: SkyField = low;
+  let gatheredTo = 0;
+  let keep: readonly [number, number, number] = style.shadowKeep;
+  let cloudiness = 0;
+  let painted = -1;
   return {
     field,
     shapes,
+    setAir(air) {
+      cloudiness = air.cloud;
+      const reach = Math.ceil(cloudiness * GATHER_STEPS) / GATHER_STEPS;
+      if (reach !== gatheredTo) {
+        gatheredTo = reach;
+        gathered = reach === 0 ? low : { ...field, clouds: [...low.clouds, ...weather.filter((c) => (c.need ?? 0) < reach)].sort((a, b) => a.y - b.y || a.x - b.x) };
+      }
+      // A cloud's shadow needs the sun on the land round it: it holds while the clouds gather, and fades in the rain,
+      // in mist (whose light comes from everywhere), under a grey sky and as the light goes.
+      const soft = sunOn(air);
+      const sk = style.shadowKeep;
+      keep = [Math.round(256 - (256 - sk[0]) * soft), Math.round(256 - (256 - sk[1]) * soft), Math.round(256 - (256 - sk[2]) * soft)];
+      const key = lightKey(air, TIME_STEPS, WEATHER_STEPS);
+      if (key === painted) return;
+      // The first air seen is noon's plain light: the sprites are as the painter left them.
+      const plain = air.cloud === 0 && air.overcast === 0 && air.mist === 0 && Math.abs(air.time - 0.5) < 0.14;
+      if (plain && painted === -1) {
+        painted = key;
+        return;
+      }
+      painted = key;
+      repaint(sprites, rampIn({
+        ...air,
+        time: Math.round(air.time * TIME_STEPS) / TIME_STEPS,
+        cloud: Math.round(air.cloud * WEATHER_STEPS) / WEATHER_STEPS,
+        overcast: Math.round(air.overcast * WEATHER_STEPS) / WEATHER_STEPS,
+        mist: Math.round(air.mist * WEATHER_STEPS) / WEATHER_STEPS,
+      }));
+    },
     draw(out, rect, t, pass) {
+      const lows = cloudiness > 0 ? gathered : low;
       if (pass === "below") {
-        if (shadows) {
-          drawShadows(out, rect, banks, shapes, t, "bank", style.shadowKeep);
-          drawShadows(out, rect, low, shapes, t, "low", style.shadowKeep);
+        // A shadow that keeps this much of every channel cannot be seen: under a closed sky or at night, none is drawn.
+        if (keep[0] < FAINT || keep[1] < FAINT || keep[2] < FAINT) {
+          drawShadows(out, rect, banks, shapes, t, "bank", keep);
+          drawShadows(out, rect, lows, shapes, t, "low", keep, true, cloudiness);
         }
-        drawClouds(out, rect, low, sprites, t, "low", 255);
+        drawClouds(out, rect, lows, sprites, t, "low", 255, true, cloudiness);
         drawClouds(out, rect, banks, sprites, t, "bank", 255);
         return;
       }

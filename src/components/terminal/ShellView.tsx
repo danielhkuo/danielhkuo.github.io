@@ -124,6 +124,10 @@ function LogLine({ line }: { line: TerminalLine }) {
           {line.text}
         </div>
       );
+    // Only a host that sets documents itself is sent these (useShell's `rich`).
+    case "doc":
+    case "neofetch":
+      return null;
     case "rows":
       return (
         <div className="term-block">

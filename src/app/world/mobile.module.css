@@ -1,0 +1,14 @@
+/* The flight on a touch-first screen (spec 5): the page is exactly the visible area (sized from visualViewport by the
+   shell, never from 100vh, which on landscape iPhone Safari is taller than what shows), fixed in place, and it takes
+   every touch itself. Played sideways, the shell turns it a quarter round its top-left corner. */
+
+.touchPage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--layer-w, 100vw);
+  height: var(--layer-h, 100dvh);
+  overflow: hidden;
+  touch-action: none;
+  transform-origin: 0 0;
+}
