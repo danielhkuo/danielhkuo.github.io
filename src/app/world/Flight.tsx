@@ -26,12 +26,12 @@ const REVEAL_MS = 4000;
  * On a phone the abbey has no terminal (the shell lives in the desktop title's): its button opens the minimal version
  * instead, the whole site as one text file, and says so.
  */
-function openMinimalVersion(): void {
-  window.location.href = MINIMAL_PAGE;
-}
-
-/** What the abbey's button says: what it opens. */
-const OPEN_LABEL = { desktop: "Open the terminal", phone: "Read the minimal version" } as const;
+const PHONE_ABOUT = {
+  open: (): void => {
+    window.location.href = MINIMAL_PAGE;
+  },
+  label: "Read the minimal version",
+};
 
 export interface FlightProps {
   /** The landmarks and what each holds, worked out at build time; null when the build had no world. */
@@ -54,6 +54,8 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
   const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref);
   const options = useOptions();
   const revealed = useReveal(REVEAL_MS);
+  // What the abbey's button opens, and says it opens.
+  const about = shell.phone ? PHONE_ABOUT : { open: drawer.show, label: "Open the terminal" };
 
   if (flight.failed) return <LoadFailed />;
 
@@ -82,8 +84,8 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
           landmark={at}
           register={landmarks ? registerFrom(at, landmarks) : []}
           onTakeOff={flight.takeOff}
-          onOpenTerminal={shell.phone ? openMinimalVersion : drawer.show}
-          openLabel={shell.phone ? OPEN_LABEL.phone : OPEN_LABEL.desktop}
+          onOpenTerminal={about.open}
+          openLabel={about.label}
         />
       ) : null}
       {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
