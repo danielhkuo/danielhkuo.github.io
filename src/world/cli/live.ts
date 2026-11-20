@@ -315,6 +315,7 @@ function storyFrom(argv: readonly string[], worldId: string): StoryContext | und
   if (!argv.includes("--story")) return undefined;
   const file = JSON.parse(readFileSync(fileURLToPath(new URL("../story/places.json", import.meta.url)), "utf8")) as {
     worldId: string;
+    hall?: { x: number; y: number };
     stops: Record<string, { x: number; y: number }>;
   };
   if (file.worldId !== worldId) return undefined;
@@ -322,7 +323,13 @@ function storyFrom(argv: readonly string[], worldId: string): StoryContext | und
   const found = (readFlag(argv, "--found") ?? "").split(",").filter((k) => k !== "") as StopKey[];
   // Found from the strip's second frame, so the first shows the pennant and the piece starts then.
   const from = readNumber(argv, "--t", 0) + 0.5 * readNumber(argv, "--dt", 0.25);
-  return { stops, found: (t) => (t < from ? [] : found) };
+  return { stops, hall: readFlag(argv, "--hall") ? parseHall(readFlag(argv, "--hall")!) : file.hall, found: (t) => (t < from ? [] : found) };
+}
+
+/** --hall x,y tries the hall at another place than places.json's. */
+function parseHall(raw: string): { x: number; y: number } | undefined {
+  const [x, y] = raw.split(",").map(Number);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
 }
 
 function parseAt(argv: readonly string[]): { x: number; y: number } | null {

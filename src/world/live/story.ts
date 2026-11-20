@@ -23,6 +23,8 @@ export interface StoryPlace {
 
 export interface StoryContext {
   stops: readonly StoryPlace[];
+  /** The hall, where every project is kept, when it stands in places.json and not in the baked world. */
+  hall?: { x: number; y: number };
   /** The stops found so far, read each frame (`t` is the frame's seconds). */
   found(t: number): readonly StopKey[];
 }
@@ -100,148 +102,185 @@ export interface StoryLayer extends LiveLayer {
 export function storyLayer(ctx: StoryContext): StoryLayer {
   const paint = paintSet();
 
-  // The inks. Wood and bark from timber; the yew's own dark green; paper and shirts in whitewash and plaster.
-  const yewInk = { Y: [M.yew, 3], y: [M.yew, 6], u: [M.yew, 9], b: [M.timber, 3], B: [M.timber, 6] } as const;
-  const pineInk = { p: [M.hedge, 9], P: [M.hedge, 5], t: [M.timber, 5], o: [M.roofTile, 8], O: [M.roofTile, 5], s: [M.stone, 12], S: [M.stone, 8] } as const;
-
-  // 1. The small pine under the very large yew. The yew is the landmark; the pine, in its pot on a flat stone, is the
-  // thing. Shears lie by it; once found they cut one needle and a cone drops.
+  // 1. The small pine under the very large yew. The yew, twice a forest tree, is what is seen from the air; the pine,
+  // a dark cone in a terracotta pot on the grass beside it, is the thing. Shears lie by it; once found they snip and a
+  // cone drops.
+  const yewInk = { Y: [M.yew, 2], y: [M.yew, 6], u: [M.yew, 10], b: [M.timber, 3], B: [M.timber, 6] } as const;
   const yew = paint.add([
-    "..........yyyyy.........",
-    ".......yyyuuyyyyyy......",
-    ".....yyuuuyyyyYyyyyy....",
-    "...yyyuuyyyyyYYyyuuyyy..",
-    "..yyuuyyyyYYYyyyuuuyyyy.",
-    ".yyyyyyyYYYyyyyyyyyYyyy.",
-    "yyuuyyyYYyyyuuuyyyYYYyyy",
-    "yuuuyyYYyyyuuuyyyyYYyyyy",
-    "yyyyyYYyyyyyyyyyYYYyyuuy",
-    ".yyYYYyyyuuuyyyYYyyyuuy.",
-    ".yYYyyyyuuuyyyYYYyyyyyy.",
-    "..yyyyYYyyyyYYYyyyYYyy..",
-    "...yYYYyyyyYYyyyYYYyy...",
-    ".....YYYyBbYYYYYyy......",
-    "........bBBbb...........",
-    "........bBBb............",
-    "........bBBb............",
-    ".......bbBBbb...........",
-    "......bb.BB.bb..........",
-  ], 9, 18, yewInk);
+    "..........YYYYYYYYYYYY........",
+    ".......YYYYuuYuyuuYYYY........",
+    "......YYYYuyuuyuyuuyuyY.......",
+    "....YYuyuuyuyuuyuyuyyuyYYYY...",
+    "..YYYuyuyuuyuyuyyuyuyyuyyyY...",
+    "..YYyuuyuyuuyuyuyyuyuyyyyyYY..",
+    ".YYYuyuuyuyuyyuyuyyuyyyyyyyY..",
+    "YyuuyuyuuyuyuyyuyuyyyyyyyyyyYY",
+    "YuyuuyuyuyyuyuyyyyyyyyyyyyyyYY",
+    "YYuyuuyuyuyyuyyyyyyyyyyyyyyYYY",
+    "YuyuyuyyuyuyyyyyyyyyyyyyyYYyYY",
+    "YuyyuyuyyuyyyyyyyyyyyyYyYyYYYY",
+    "YyuyyuyuyyyyyyyyyyyyYyYYyYyYYY",
+    ".YyuyyuyyyyyyyyyyyYYyYyYYyYYY.",
+    ".YuyuyyyyyyyyyyyyYyYYyYyYYyY..",
+    ".YYYyyyyyyyyyyyYYyYyYYyYyYYY..",
+    "...YYyyyyyyyYyYyYYyYyYYyYyY...",
+    ".....YyyyyYyYYyYyYYyYyYYYY....",
+    ".....YYyyYyYyYYyYyYYyYYYYY....",
+    "......YYYYYyYyYYyYYYYYY.......",
+    ".............bBBb.............",
+    ".............bBBb.............",
+    ".............bBBb.............",
+    ".............bBBb.............",
+    "............bbBBbb............",
+  ], 15, 24, yewInk);
+  const pineInk = { p: [M.yew, 9], P: [M.yew, 4], t: [M.timber, 4], k: [M.timber, 1], o: [M.roofTile, 9], O: [M.roofTile, 5] } as const;
   const pineRest = paint.add([
-    "..P...",
-    ".pPp..",
-    "pPpPp.",
-    "..t...",
-    ".oOo..",
-    "sSSSSs",
-  ], 2, 5, pineInk);
-  const shears = paint.add(["x.x", ".x.", "x.x"], 1, 1, { x: [M.roofLead, 3] });
-  const shearsOpen = paint.add(["x...x", ".x.x.", "..x.."], 2, 1, { x: [M.roofLead, 3] });
-  const cone = paint.add([".c.", "cCc", ".C."], 1, 2, { c: [M.timber, 7], C: [M.timber, 4] });
+    "..p..",
+    ".pPp.",
+    ".PpP.",
+    "pPpPp",
+    "PpPpP",
+    "..t..",
+    "kkkkk",
+    "koOok",
+    ".kOk.",
+    ".kkk.",
+  ], 2, 9, pineInk);
+  const shearsInk = { x: [M.roofLead, 2], X: [M.roofLead, 9] } as const;
+  const shears = paint.add(["x...", ".X..", "..xx", "..x."], 1, 3, shearsInk);
+  const shearsOpen = paint.add(["x..x", ".xx.", ".XX.", "x..x"], 2, 3, shearsInk);
+  const cone = paint.add([".c.", "cCc", "cCc", ".C."], 1, 3, { c: [M.timber, 7], C: [M.timber, 3] });
 
-  // 2. The novelist at her desk in a hay field, a cart at the gate. She writes; once found she turns a page and a
-  // page flies up.
+  // 2. The novelist at her desk in a hay field, with stooks round her. She writes; once found she turns a page and it
+  // flies up.
   const deskInk = {
-    d: [M.timber, 6], D: [M.timber, 3], w: [M.whitewash, 15], h: [M.timber, 2], f: [M.plaster, 11], c: [M.copper, 8],
-    r: [M.roofTile, 7], k: [M.roofSlate, 5], g: [M.wheat, 10], G: [M.wheat, 6],
+    d: [M.timber, 7], D: [M.timber, 3], w: [M.whitewash, 15], W: [M.whitewash, 10], h: [M.timber, 1], f: [M.plaster, 11],
+    k: [M.roofSlate, 2], g: [M.wheat, 11], G: [M.wheat, 6],
   } as const;
   const deskA = paint.add([
-    "...hh.....",
-    "...hf...k.",
-    "..cccw.rk.",
-    "..ccwwwrkg",
-    "dddddddddd",
-    "d.D....D.d",
-    "d.......Dd",
-  ], 5, 6, deskInk);
+    ".hh.........",
+    ".hf.........",
+    "kkkk..ww....",
+    "kkkkdwwwdddd",
+    ".kk.dddddddd",
+    ".kk.D......D",
+    ".k..D......D",
+  ], 6, 6, deskInk);
   const deskB = paint.add([
-    "...hh.....",
-    "...hf...k.",
-    "..cccww.rk",
-    "..cc.wwrkg",
-    "dddddddddd",
-    "d.D....D.d",
-    "d.......Dd",
-  ], 5, 6, deskInk);
-  const page = paint.add(["www", "wwW", "wW."], 1, 2, { w: [M.whitewash, 15], W: [M.whitewash, 10] });
-  const cart = paint.add([
-    "GgggggG.",
-    "Gg.gg.gG",
-    "dddddddd",
-    ".DD..DD.",
-  ], 4, 3, deskInk);
+    ".hh.........",
+    ".hfk........",
+    "kkk..ww.....",
+    "kkkkdwwwdddd",
+    ".kk.dddddddd",
+    ".kk.D......D",
+    ".k..D......D",
+  ], 6, 6, deskInk);
+  const page = paint.add(["www", "wwW", "wWW"], 1, 2, deskInk);
+  const stook = paint.add([".g.", "ggg", "gGg", "GgG"], 1, 3, deskInk);
 
-  // 3. The bell on a bare hill, hung in a wooden frame, and a wooden figure with a hammer. Once found the figure
-  // strikes it, and it swings.
+  // 3. The bell on a bare hill, hung in a gabled belfry with a cross on its ridge, and a wooden figure with a hammer
+  // raised. Once found the figure strikes, the bell swings, and its ring goes out.
   const bellInk = {
-    t: [M.timber, 6], T: [M.timber, 3], w: [M.timber, 9], W: [M.timber, 5], h: [M.roofLead, 3],
+    t: [M.timber, 7], T: [M.timber, 3], c: [M.timber, 2], w: [M.timber, 9], W: [M.timber, 5], h: [M.roofLead, 2],
     g: "belly", G: "bellyDark", L: "maneLight",
   } as const;
-  const frame = paint.add([
-    "tttttttttt",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "T.......T.",
-    "TT.....TT.",
-  ], 5, 9, bellInk);
+  const belfry = paint.add([
+    "......c......",
+    ".....ccc.....",
+    "......c......",
+    "......T......",
+    ".....TtT.....",
+    "....TtTtT....",
+    "...TtT.TtT...",
+    "..TtT...TtT..",
+    "..TT.....TT..",
+    "..T.......T..",
+    "..T.......T..",
+    "..T.......T..",
+    "..T.......T..",
+    "..T.......T..",
+    ".TTT.....TTT.",
+  ], 6, 14, bellInk);
   const bellStill = paint.add(["..T..", ".LgG.", ".ggG.", "gggGG", "..h.."], 2, 0, bellInk);
   const bellLeft = paint.add(["..T..", ".LgG.", "LggG.", "gggG.", ".h..."], 2, 0, bellInk);
   const bellRight = paint.add(["..T..", ".LgG.", ".ggGG", ".ggGG", "...h."], 2, 0, bellInk);
   const figureRest = paint.add([
-    ".w..",
-    "wWw.",
+    "...h",
+    ".w.h",
     "wWwh",
-    ".W.h",
+    "wWw.",
+    ".W..",
     ".W..",
     "w.w.",
     "w.w.",
-  ], 1, 6, bellInk);
+  ], 1, 7, bellInk);
   const figureStrike = paint.add([
     ".w...",
-    "wWwwh",
-    "wW..h",
+    "wWwhh",
+    "wW...",
     ".W...",
     ".W...",
     "w.w..",
     "w.w..",
   ], 1, 6, bellInk);
 
-  // 4. The mill-shed: sails, a water wheel, one flue and a bell on a pole. The sails always turn; once found a flag
-  // runs up the pole and a hen walks out.
+  // 4. The mill-shed: a white cross of sails on its roof, a water wheel turning in a run of blue, one flue, and a pole.
+  // The sails always turn; once found a flag runs up the pole and a hen walks out.
   const millInk = {
-    s: [M.stone, 11], S: [M.stone, 7], r: [M.roofSlate, 6], R: [M.roofSlate, 3], f: [M.stoneDark, 3], o: [M.opening, 1],
-    t: [M.timber, 5], T: [M.timber, 2], c: [M.sailcloth, 14], C: [M.sailcloth, 9], h: [M.whitewash, 14], e: [M.roofTile, 7],
+    s: [M.stone, 12], S: [M.stone, 7], r: [M.roofSlate, 6], R: [M.roofSlate, 3], f: [M.stoneDark, 3], o: [M.opening, 1],
+    t: [M.timber, 5], T: [M.timber, 2], c: [M.sailcloth, 15], k: [M.timber, 1], h: [M.whitewash, 14], e: [M.roofTile, 7],
+    b: [M.river, 10], B: [M.river, 6],
   } as const;
   const shed = paint.add([
-    "......f.....",
-    "......f.....",
-    ".rrrrrfrrr..",
-    "rrRRRRRRRRr.",
-    "sssssssssss.",
-    "sSsoossSsss.",
-    "sSsoossSsss.",
-    "sssssssssss.",
-  ], 5, 7, millInk);
+    ".......f......",
+    ".......f......",
+    ".rrrrrrfrrrr..",
+    "rrRRRRRRRRRRr.",
+    "ssssssssssssss",
+    "sSsoosssSssoss",
+    "sSsoosssSssoss",
+    "ssssssssssssss",
+  ], 6, 7, millInk);
   const sails = [
-    paint.add(["c...C", ".c.C.", "..t..", ".C.c.", "C...c"], 2, 2, millInk),
-    paint.add(["..c..", "..c..", "CCtcc", "..C..", "..C.."], 2, 2, millInk),
+    paint.add([
+      "kc.........ck",
+      "kcc.......cck",
+      ".kcc.....cck.",
+      "..kcc...cck..",
+      "...kcc.cck...",
+      ".....kTk.....",
+      "...kcc.cck...",
+      "..kcc...cck..",
+      ".kcc.....cck.",
+      "kcc.......cck",
+      "kc.........ck",
+    ], 6, 5, millInk),
+    paint.add([
+      "......k......",
+      ".....kck.....",
+      ".....kck.....",
+      ".....kck.....",
+      ".....kck.....",
+      "kkkkkkTkkkkkk",
+      "cccccc.cccccc",
+      "kkkkkkkkkkkkk",
+      ".....kck.....",
+      ".....kck.....",
+      "......k......",
+    ], 6, 5, millInk),
   ];
   const wheel = [
     paint.add([".tTt.", "t.T.t", "TTtTT", "t.T.t", ".tTt."], 2, 4, millInk),
     paint.add([".tTt.", "tT.Tt", "T.t.T", "tT.Tt", ".tTt."], 2, 4, millInk),
   ];
-  const pole = paint.add(["T", "T", "T", "T", "T", "T", "T", "T", "T", "T"], 0, 9, millInk);
-  const flag = paint.add(["ee", "e."], 0, 0, millInk);
+  const race = paint.add(["bbbbbbbbbb", "bBbbBbbBbb", "BbbBbbBbbB"], 1, 2, millInk);
+  const pole = paint.add(["T", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T", "T"], 0, 11, millInk);
+  const flag = paint.add(["hhh", "hhh"], 0, 0, millInk);
   const hen = [paint.add([".h.", "hhe", ".T."], 1, 2, millInk), paint.add(["h..", "hhe", "T.T"], 1, 2, millInk)];
 
   // 5. The peach basket nailed to a dead oak at a field's edge, and a boy with a ball. He bounces it; once found he
   // throws, misses, throws again and scores.
-  const oakInk = { b: [M.timber, 5], B: [M.timber, 3], g: [M.stoneDark, 7], k: [M.wheat, 9], K: [M.wheat, 5] } as const;
+  const oakInk = { b: [M.timber, 6], B: [M.timber, 3], g: [M.stoneDark, 6], k: [M.wheat, 10], K: [M.wheat, 5] } as const;
   const oak = paint.add([
     "g.....g...g.",
     ".g...g...g..",
@@ -250,18 +289,19 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     ".g..bgg..g..",
     "..g.bB.gg...",
     "...gbB......",
-    "....bB.kKk..",
-    "....bB.kKk..",
-    "....bBg.....",
+    "....bBkkkk..",
+    "....bBKkkK..",
+    "....bB.KK...",
+    "....bB......",
     "....bB......",
     "....bB......",
     "....bB......",
     "...bbBB.....",
-  ], 5, 13, oakInk);
-  const boyInk = { h: [M.timber, 2], f: [M.plaster, 11], s: [M.whitewash, 14], l: [M.roofSlate, 4] } as const;
-  const boy = paint.add([".h.", "sfs", "sss", ".l.", "l.l"], 1, 4, boyInk);
-  const boyThrow = paint.add([".h.s", "sfs.", "sss.", ".l..", "l.l."], 1, 4, boyInk);
-  const ball = paint.add(["oo", "oO"], 0, 1, { o: [M.roofTile, 10], O: [M.roofTile, 6] });
+  ], 5, 14, oakInk);
+  const boyInk = { h: [M.timber, 1], f: [M.plaster, 11], s: [M.whitewash, 14], S: [M.whitewash, 9], l: [M.roofSlate, 3] } as const;
+  const boy = paint.add([".h.", ".f.", "sss", "sSs", ".l.", "l.l"], 1, 5, boyInk);
+  const boyThrow = paint.add([".h.s", ".fs.", "sss.", "sSs.", ".l..", "l.l."], 1, 5, boyInk);
+  const ball = paint.add(["oo", "oO"], 0, 1, { o: [M.roofTile, 10], O: [M.roofTile, 5] });
 
   // The pennant, in the dragon's vermilion, on a pole: two frames of the wind.
   const pennant = [
@@ -276,9 +316,41 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     paint.add(["L"], 0, 0, { L: "maneLight" }),
   ];
   const ring = [
-    paint.add(["g.....g", ".......", "g.....g"], 3, 1, { g: "mane" }),
-    paint.add(["g.......g", ".........", ".........", "g.......g"], 4, 2, { g: "maneLight" }),
+    paint.add(["g.......g", ".........", "g.......g"], 4, 1, { g: "mane" }),
+    paint.add(["g...........g", ".............", ".............", "g...........g"], 6, 2, { g: "maneLight" }),
+    paint.add(["L...............L", ".................", ".................", ".................", "L...............L"], 8, 2, { L: "maneLight" }),
   ];
+
+  // The hall: one long roof with a lantern on its ridge, a wide red door, round-headed windows down its length. Seen
+  // from the south as the baked houses are: the roof's slope above, the front wall below, inked at the edges, with a
+  // shadow cast to the east on the grass.
+  const hallInk = {
+    k: [M.roofSlate, 1], r: [M.roofSlate, 8], R: [M.roofSlate, 5], q: [M.roofSlate, 11],
+    s: [M.stone, 12], S: [M.stone, 9], z: [M.stone, 6], o: [M.opening, 1], O: [M.opening, 3],
+    d: [M.roofTile, 7], D: [M.roofTile, 4], w: [M.whitewash, 14], l: [M.lantern, 10],
+    g: "mane", h: [M.timber, 1, 110],
+  } as const;
+  const hallSprite = paint.add([
+    "...................g....................",
+    "..................kgk...................",
+    ".................kwlwk..................",
+    ".................kwlwk..................",
+    "................kkkkkkk.................",
+    "....kkkkkkkkkkkkkrrrrrkkkkkkkkkkkkkkk...",
+    "...krqrrqrrqrrqrrqrrqrrqrrqrrqrrqrrqk...",
+    "..krrrrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrrk..",
+    ".krrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrk.",
+    "kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRk.",
+    "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
+    ".kssSssssssssssskkkkkkkssssssssssSsssk..",
+    ".ksOsssOsssOssskdddddddksssOsssOsssOsk..",
+    ".ksosSsosSsossskdDdDdDdkssosSsosSsosk.h.",
+    ".ksosssosssossskdDdDdDdksssosssosssosk.h",
+    ".kssssssssssssskdDdDdDdkssssssssssssskhh",
+    ".kzzzzzzzzzzzzzkdDdDdDdkzzzzzzzzzzzzzkhh",
+    ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkhh",
+    "..hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  ], 19, 17, hallInk);
 
   const foundAt = new Map<StopKey, number>();
   const seen = new Set<StopKey>();
@@ -294,27 +366,30 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   }
 
   function drawPine(f: LiveFrame, p: StoryPlace, since: number): void {
-    put(f, yew, p.x - 6, p.y - 3);
-    put(f, pineRest, p.x + 4, p.y + 2);
+    put(f, yew, p.x - 8, p.y - 4);
+    put(f, pineRest, p.x + 8, p.y + 2);
     if (since < 0) {
-      put(f, shears, p.x + 9, p.y + 2);
+      put(f, shears, p.x + 13, p.y + 3);
       return;
     }
     const snip = since < 2 ? Math.floor(since * 4) % 2 : 1;
-    if (since < 2) put(f, snip ? shearsOpen : shears, p.x + 6, p.y + 2, 4);
-    else put(f, shears, p.x + 9, p.y + 2);
+    if (since < 2) put(f, snip ? shearsOpen : shears, p.x + 12, p.y + 2, 7);
+    else put(f, shears, p.x + 13, p.y + 3);
     // The cone falls from the pine's top and stays at its foot.
     const fall = since < 2 ? 0 : Math.min(1, (since - 2) / 0.6);
-    put(f, cone, p.x + 6, p.y + 2, Math.round(6 * (1 - fall)));
+    put(f, cone, p.x + 11, p.y + 3, Math.round(9 * (1 - fall)));
   }
 
   function drawDesk(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
-    put(f, cart, p.x + 16, p.y - 4);
+    put(f, stook, p.x - 12, p.y - 6);
+    put(f, stook, p.x + 12, p.y - 7);
+    put(f, stook, p.x - 9, p.y + 6);
+    put(f, stook, p.x + 14, p.y + 5);
     const writing = since < 0 || since > PIECE ? cycle(t, 1.2, 2) : 1;
     put(f, writing ? deskB : deskA, p.x, p.y);
     if (since >= 0.6 && since < PIECE) {
       const k = (since - 0.6) / (PIECE - 0.6);
-      put(f, page, p.x + 1 + Math.round(6 * k), p.y, 8 + Math.round(18 * k));
+      put(f, page, p.x + 1 + Math.round(5 * k), p.y, 7 + Math.round(18 * k));
     }
   }
 
@@ -331,44 +406,44 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   }
 
   function drawBell(f: LiveFrame, p: StoryPlace, since: number): void {
-    put(f, frame, p.x, p.y);
+    put(f, belfry, p.x, p.y);
     let b = bellStill;
     let strike = false;
     if (since >= 0 && since < PIECE) {
       strike = since < 0.4;
       const swing = Math.floor(since * 5) % 4;
-      const fade = since > 3;
-      b = fade ? bellStill : swing === 1 ? bellLeft : swing === 3 ? bellRight : bellStill;
+      b = since > 3 ? bellStill : swing === 1 ? bellLeft : swing === 3 ? bellRight : bellStill;
     }
-    put(f, b, p.x, p.y, 8);
-    // The ring goes out round the bell twice.
-    if (since >= 0 && since < 2.4) put(f, ring[Math.floor(since * 2.5) % 2], p.x, p.y, 5);
-    put(f, strike ? figureStrike : figureRest, p.x + 6, p.y + 1);
+    put(f, b, p.x, p.y, 9);
+    // The ring goes out round the bell, wider each time, three times.
+    if (since >= 0 && since < 2.4) put(f, ring[Math.min(2, Math.floor(since * 1.25))], p.x, p.y, 6);
+    put(f, strike ? figureStrike : figureRest, p.x + 9, p.y + 1);
   }
 
   function drawMill(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
+    put(f, race, p.x + 6, p.y + 3);
     put(f, shed, p.x, p.y);
-    put(f, sails[cycle(t, 1.6, 2)], p.x - 5, p.y, 9);
-    put(f, wheel[cycle(t, 1.2, 2)], p.x + 8, p.y + 1);
-    put(f, pole, p.x - 8, p.y + 2);
+    put(f, sails[cycle(t, 1.6, 2)], p.x - 2, p.y, 13);
+    put(f, wheel[cycle(t, 1.2, 2)], p.x + 9, p.y + 2);
+    put(f, pole, p.x - 10, p.y + 2);
     // The flag runs up after it is found, and stays up.
     if (since >= 0) {
       const up = Math.min(1, since / 1.5);
-      put(f, flag, p.x - 7, p.y + 2, 2 + Math.round(6 * up) + 2);
+      put(f, flag, p.x - 9, p.y + 2, 3 + Math.round(8 * up));
       if (since > 1.5) {
-        const walk = Math.min(10, (since - 1.5) * 4);
-        put(f, hen[cycle(t, 0.5, 2)], p.x - 1 + Math.round(walk), p.y + 3);
+        const walk = Math.min(12, (since - 1.5) * 4);
+        put(f, hen[cycle(t, 0.5, 2)], p.x - 2 + Math.round(walk), p.y + 5);
       }
     }
   }
 
   function drawBasket(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
     put(f, oak, p.x, p.y);
-    const bx = p.x + 9, by = p.y + 3;
+    const bx = p.x + 10, by = p.y + 4;
     if (since < 0 || since > PIECE) {
       // Bouncing the ball.
       const k = ((t % 0.8) + 0.8) % 0.8 / 0.8;
-      const h = Math.round(4 * Math.abs(1 - 2 * k));
+      const h = Math.round(5 * Math.abs(1 - 2 * k));
       put(f, boy, bx, by);
       put(f, ball, bx + 2, by, h);
       return;
@@ -377,19 +452,17 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     const first = since < 2;
     const s = first ? since : since - 2;
     put(f, s < 0.25 ? boyThrow : boy, bx, by, 0, true);
+    // The basket's rim is 6 px left of the boy's hand and 10 px up from the ground under him.
     if (s < 1.2) {
       const k = Math.min(1, s / 1.2);
-      // From the hand to the basket's rim (6 px left, 9 px up), on an arc.
-      const tx = first ? -6 : -6, ty = first ? 7 : 10;
-      const x = bx - 1 + Math.round(tx * k);
-      const up = 4 + Math.round(ty * k + 8 * k * (1 - k));
+      const x = bx - 1 - Math.round(7 * k);
+      const up = 5 + Math.round((first ? 3 : 6) * k + 12 * k * (1 - k));
       put(f, ball, x, by, up);
     } else if (first) {
       const k = Math.min(1, (s - 1.2) / 0.5);
-      put(f, ball, bx - 6, by, Math.round(11 * (1 - k)));
+      put(f, ball, bx - 7, by, Math.round(8 * (1 - k)));
     } else {
-      // In: it sits in the basket.
-      put(f, ball, bx - 7, by, 13);
+      put(f, ball, bx - 8, by - 4, 11);
     }
   }
 
@@ -397,7 +470,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     name: "story",
     foundAt,
     draw(f: LiveFrame) {
-      if (ctx.stops.length === 0) return;
+      if (ctx.stops.length === 0 && !ctx.hall) return;
       paint.sync(f.palette, f.air ?? NOON_AIR);
       const found = ctx.found(f.t);
       // What was found before the first frame was found on another visit: it rests in its after-pose.
@@ -408,6 +481,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
       }
       primed = true;
       const t = f.t;
+      if (ctx.hall) put(f, hallSprite, ctx.hall.x, ctx.hall.y);
       for (const p of ctx.stops) {
         const col = frameX(f, p.x, REACH + 30);
         if (col < -REACH - 30 || col >= f.rect.w + REACH + 30) continue;

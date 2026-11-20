@@ -64,3 +64,27 @@ show("desk (steppe: dry side, cool-mild, like the bridge)", (c) => c.arid > 0.8 
 show("mill (Mediterranean: dry side, warm, like the windmill)", (c) => c.arid > 0.6 && c.temp > 0.55 && c.temp < 0.75 && c.e > 8, (c) => c.rough * 50 - c.clear / 10);
 show("basket (savanna: hot)", (c) => c.temp > 0.78 && c.arid > 0.3, (c) => c.rough * 50 - c.clear / 10);
 console.log(`\nlandmarks:`, manifest.sites.map((s) => `${s.type} ${s.x},${s.y} temp ${(world.temp?.[cAt(s.x, s.y)] ?? 0).toFixed(2)} arid ${(world.arid?.[cAt(s.x, s.y)] ?? 0).toFixed(2)}`).join("\n  "));
+
+// The hall: a level pad in the start frame (within about 160 cells of the start, ahead of its heading), clear of
+// buildings by 30 cells, so it stands beside the town as a building of its own.
+{
+  const hx = start.x + 90 * start.dx, hy = start.y + 90 * start.dy;
+  const list: { x: number; y: number; rough: number; d: number; near: number }[] = [];
+  for (let y = start.y - 160; y <= start.y + 160; y += 8) for (let x = start.x - 200; x <= start.x + 200; x += 8) {
+    let lo = Infinity, hi = -Infinity, wet = false;
+    for (let dy = -12; dy <= 12; dy += 4) for (let dx = -20; dx <= 20; dx += 4) {
+      const i = gAt(x + dx, y + dy);
+      wet = wet || kind[i] !== 0;
+      lo = Math.min(lo, g[i]);
+      hi = Math.max(hi, g[i]);
+    }
+    if (wet || lo < 2 || hi - lo > 4) continue;
+    let near = Infinity;
+    for (const b of buildings) near = Math.min(near, dist(x, y, b.x, b.y));
+    if (near < 30) continue;
+    list.push({ x, y, rough: hi - lo, d: dist(x, y, hx, hy), near });
+  }
+  list.sort((a, b) => a.d + a.rough * 30 - (b.d + b.rough * 30));
+  console.log(`\nhall (level, open, ahead of the start ${start.x},${start.y}): ${list.length}`);
+  for (const c of list.slice(0, 10)) console.log(`  ${c.x},${c.y}  rough ${c.rough.toFixed(1)} from-ahead ${c.d.toFixed(0)} nearest-building ${c.near.toFixed(0)}`);
+}
