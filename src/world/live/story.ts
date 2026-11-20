@@ -137,7 +137,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   ], 2, 5, pineInk);
   const shears = paint.add(["x.x", ".x.", "x.x"], 1, 1, { x: [M.roofLead, 3] });
   const shearsOpen = paint.add(["x...x", ".x.x.", "..x.."], 2, 1, { x: [M.roofLead, 3] });
-  const cone = paint.add(["c", "C"], 0, 1, { c: [M.timber, 7], C: [M.timber, 4] });
+  const cone = paint.add([".c.", "cCc", ".C."], 1, 2, { c: [M.timber, 7], C: [M.timber, 4] });
 
   // 2. The novelist at her desk in a hay field, a cart at the gate. She writes; once found she turns a page and a
   // page flies up.
@@ -163,7 +163,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     "d.D....D.d",
     "d.......Dd",
   ], 5, 6, deskInk);
-  const page = paint.add(["ww", "w."], 1, 1, { w: [M.whitewash, 15] });
+  const page = paint.add(["www", "wwW", "wW."], 1, 2, { w: [M.whitewash, 15], W: [M.whitewash, 10] });
   const cart = paint.add([
     "GgggggG.",
     "Gg.gg.gG",
@@ -261,12 +261,23 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   const boyInk = { h: [M.timber, 2], f: [M.plaster, 11], s: [M.whitewash, 14], l: [M.roofSlate, 4] } as const;
   const boy = paint.add([".h.", "sfs", "sss", ".l.", "l.l"], 1, 4, boyInk);
   const boyThrow = paint.add([".h.s", "sfs.", "sss.", ".l..", "l.l."], 1, 4, boyInk);
-  const ball = paint.add(["o"], 0, 0, { o: [M.roofTile, 10] });
+  const ball = paint.add(["oo", "oO"], 0, 1, { o: [M.roofTile, 10], O: [M.roofTile, 6] });
 
   // The pennant, in the dragon's vermilion, on a pole: two frames of the wind.
   const pennant = [
     paint.add(["gVVV.", "TVVvv", "TVv..", "T....", "T....", "T....", "T....", "T....", "T....", "T...."], 1, 9, { g: "mane", V: "body", v: "bodyDark", T: [M.timber, 3] }),
     paint.add(["gVV..", "TVVVv", "TVvv.", "T....", "T....", "T....", "T....", "T....", "T....", "T...."], 1, 9, { g: "mane", V: "body", v: "bodyDark", T: [M.timber, 3] }),
+  ];
+
+  // A find's glint: four gold sparks that fly out from the thing and go, and the bell's ring.
+  const spark = [
+    paint.add([".g.", "gLg", ".g."], 1, 1, { g: "mane", L: "maneLight" }),
+    paint.add(["g.g", ".L.", "g.g"], 1, 1, { g: "mane", L: "maneLight" }),
+    paint.add(["L"], 0, 0, { L: "maneLight" }),
+  ];
+  const ring = [
+    paint.add(["g.....g", ".......", "g.....g"], 3, 1, { g: "mane" }),
+    paint.add(["g.......g", ".........", ".........", "g.......g"], 4, 2, { g: "maneLight" }),
   ];
 
   const foundAt = new Map<StopKey, number>();
@@ -307,6 +318,18 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     }
   }
 
+  /** The glint over a thing in the first 1.4 s after it is found: four sparks flying out to the corners. */
+  function glint(f: LiveFrame, p: StoryPlace, since: number, up: number): void {
+    if (since < 0 || since > 1.4) return;
+    const k = since / 1.4;
+    const r = Math.round(4 + 10 * k);
+    const s = spark[k < 0.45 ? 0 : k < 0.8 ? 1 : 2];
+    put(f, s, p.x - r, p.y, up + r);
+    put(f, s, p.x + r, p.y, up + r);
+    put(f, s, p.x - r, p.y, up - Math.round(r / 2));
+    put(f, s, p.x + r, p.y, up - Math.round(r / 2));
+  }
+
   function drawBell(f: LiveFrame, p: StoryPlace, since: number): void {
     put(f, frame, p.x, p.y);
     let b = bellStill;
@@ -318,6 +341,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
       b = fade ? bellStill : swing === 1 ? bellLeft : swing === 3 ? bellRight : bellStill;
     }
     put(f, b, p.x, p.y, 8);
+    // The ring goes out round the bell twice.
+    if (since >= 0 && since < 2.4) put(f, ring[Math.floor(since * 2.5) % 2], p.x, p.y, 5);
     put(f, strike ? figureStrike : figureRest, p.x + 6, p.y + 1);
   }
 
@@ -394,6 +419,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         else if (p.key === "bell") drawBell(f, p, since);
         else if (p.key === "mill") drawMill(f, p, t, since);
         else drawBasket(f, p, t, since);
+        glint(f, p, since, 10);
         if (at === undefined) put(f, pennant[cycle(t + p.x, 0.9, 2)], p.x + 12, p.y + 6);
       }
     },
