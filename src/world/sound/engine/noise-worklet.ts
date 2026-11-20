@@ -100,11 +100,12 @@ export function noiseOptions(name: string, seed: number, sampleRate: number): No
 /**
  * The processor, as source. A function so it cannot mention anything this module imported: the only names it
  * closes over are the worklet globals, which the audio thread provides and the tests stand in for.
+ * The gaussian table is built once, here, so the audio thread has it without importing this module.
  */
 function installFreshNoise(): void {
   "use strict";
 
-  /** lowbias32, so a channel's four seeds do not sit next to each other. */
+  /** lowbias32, so a channel's seeds do not sit next to each other. */
   function mix32(x: number): number {
     x = (x ^ (x >>> 16)) >>> 0;
     x = Math.imul(x, 0x7feb352d);
@@ -148,35 +149,76 @@ function installFreshNoise(): void {
     return coef;
   }
 
+  // Standard normal inverse CDF (Acklam's rational approximation). Built once, below, into the table.
+  const NORM_A = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const NORM_B = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const NORM_C = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const NORM_D = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+
+  function invNorm(p: number): number {
+    const plow = 0.02425;
+    if (p < plow) {
+      const q = Math.sqrt(-2 * Math.log(p));
+      return (((((NORM_C[0] * q + NORM_C[1]) * q + NORM_C[2]) * q + NORM_C[3]) * q + NORM_C[4]) * q + NORM_C[5]) / ((((NORM_D[0] * q + NORM_D[1]) * q + NORM_D[2]) * q + NORM_D[3]) * q + 1);
+    }
+    if (p > 1 - plow) {
+      const q = Math.sqrt(-2 * Math.log(1 - p));
+      return -(((((NORM_C[0] * q + NORM_C[1]) * q + NORM_C[2]) * q + NORM_C[3]) * q + NORM_C[4]) * q + NORM_C[5]) / ((((NORM_D[0] * q + NORM_D[1]) * q + NORM_D[2]) * q + NORM_D[3]) * q + 1);
+    }
+    const q = p - 0.5;
+    const r = q * q;
+    return (((((NORM_A[0] * r + NORM_A[1]) * r + NORM_A[2]) * r + NORM_A[3]) * r + NORM_A[4]) * r + NORM_A[5]) * q / (((((NORM_B[0] * r + NORM_B[1]) * r + NORM_B[2]) * r + NORM_B[3]) * r + NORM_B[4]) * r + 1);
+  }
+
+  // Midpoint quantiles (k + 0.5) / 4096 of the standard normal. One 32-bit draw indexes it twice (the low 12 bits,
+  // then the next 12), so the tails past the end entries are cut, near ±3.7σ. That is fine: those tails are a few
+  // thousandths of the energy, and every noise here is filtered or mixed before it is heard.
+  const GAUSS_SHIFT = 12;
+  const GAUSS_N = 1 << GAUSS_SHIFT;
+  const GAUSS_MASK = GAUSS_N - 1;
+  const GAUSS = new Float32Array(GAUSS_N);
+  for (let k = 0; k < GAUSS_N; k++) GAUSS[k] = invNorm((k + 0.5) / GAUSS_N);
+
+  // Gain, leak, mix and the rest. Held as doubles so a whole number and a fraction are the same kind of value in the sample loop.
+  const U_GAIN = 0;
+  const U_LEAK = 1;
+  const U_GRAIN = 2;
+  const U_FLOOR = 3;
+  const U_SPAN = 4;
+  const U_SLOPE = 5;
+  const U_KNEE = 6;
+  const U_A = 7;
+  const U_B = 8;
+  const U_FEED = 9;
+  const U_DELAY = 10;
+
+  /** The render quantum. A longer block is coloured in chunks of this, still with no allocation. */
+  const BLOCK = 128;
+
   class FreshNoise extends AudioWorkletProcessor {
     /** Context time from which the output is silence and process returns false, so the node can be collected. */
     endAt = Infinity;
     channels = 1;
     /** 0 white, 1 pink, 2 brown, 3 velvet. */
     kind = 0;
-    gain = 1;
-    leak = 0;
-    grainK = 0;
-    floor = 0;
-    span = 0;
-    slope = 0;
-    knee = 0;
-    a = 1;
-    b = 0;
-    feed = 0;
-    delay = 0;
     nf = 0;
-    rng!: Float64Array;
-    spare!: Float64Array;
-    have!: Float64Array;
+    /** gain, leak, grainK, floor, span, slope, knee, a, b, feed, delay. */
+    u!: Float64Array;
+    /** xorshift32 state, one word per channel. */
+    rng!: Uint32Array;
+    /** Six pink poles and the one-sample delay, per channel. */
     pinkS!: Float64Array;
     poles!: Float64Array;
     weights!: Float64Array;
     brown!: Float64Array;
+    /** Velvet's two one-poles, per channel. */
     grain!: Float64Array;
     coef!: Float64Array;
+    /** Biquad direct-form state, four words per filter per channel: x1, x2, y1, y2. */
     mem!: Float64Array;
-    pre!: Float64Array;
+    /** Coloured samples for the chunk, before the stereo mix and the fixed filters. */
+    pre0!: Float32Array;
+    pre1!: Float32Array;
 
     constructor(options: AudioWorkletNodeOptions) {
       super(options);
@@ -185,41 +227,45 @@ function installFreshNoise(): void {
       const colour = (raw as Record<string, unknown>).colour;
       this.channels = num(raw, "channels") === 1 ? 1 : 2;
       this.kind = colour === "pink" ? 1 : colour === "brown" ? 2 : colour === "velvet" ? 3 : 0;
-      this.gain = num(raw, "gain");
-      this.leak = num(raw, "leak");
-      this.grainK = num(raw, "grainK");
-      this.floor = num(raw, "floor");
-      this.span = num(raw, "span");
-      this.slope = num(raw, "slope");
-      this.knee = num(raw, "knee");
-      this.a = num(raw, "a");
-      this.b = num(raw, "b");
-      this.feed = num(raw, "pinkFeed");
-      this.delay = num(raw, "pinkDelay");
+      const u = new Float64Array(11);
+      u[U_GAIN] = num(raw, "gain");
+      u[U_LEAK] = num(raw, "leak");
+      u[U_GRAIN] = num(raw, "grainK");
+      u[U_FLOOR] = num(raw, "floor");
+      u[U_SPAN] = num(raw, "span");
+      u[U_SLOPE] = num(raw, "slope");
+      u[U_KNEE] = num(raw, "knee");
+      u[U_A] = num(raw, "a");
+      u[U_B] = num(raw, "b");
+      u[U_FEED] = num(raw, "pinkFeed");
+      u[U_DELAY] = num(raw, "pinkDelay");
+      this.u = u;
       this.poles = nums(raw, "pinkPoles");
       this.weights = nums(raw, "pinkWeights");
       this.coef = biquadsOf(raw);
       this.nf = this.coef.length / 5;
       const ch = this.channels;
-      // One sfc32 per channel, warmed the way the world's rng is, so the first samples are not the raw seed.
-      this.rng = new Float64Array(ch * 4);
+      // xorshift32, one word per channel, from the same mix as the old four-word seed:
+      // mix32(seed ^ (c + 1) * 0x9e3779b1). A zero word would stick, so that one mix is replaced.
+      // Warmed so the first sample is not the raw seed. The period is 2^32 − 1 draws, two samples each.
+      this.rng = new Uint32Array(ch);
       const seed = num(raw, "seed") >>> 0;
       for (let c = 0; c < ch; c++) {
-        const s = mix32((seed ^ Math.imul(c + 1, 0x9e3779b1)) >>> 0);
-        const i = c * 4;
-        this.rng[i] = s;
-        this.rng[i + 1] = mix32((s ^ 0x85ebca6b) >>> 0);
-        this.rng[i + 2] = mix32((s ^ 0xc2b2ae35) >>> 0);
-        this.rng[i + 3] = 1;
+        let s = mix32((seed ^ Math.imul(c + 1, 0x9e3779b1)) >>> 0);
+        if (s === 0) s = (0x6d2b79f5 ^ (c + 1)) >>> 0;
+        for (let k = 0; k < 12; k++) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+        }
+        this.rng[c] = s >>> 0;
       }
-      this.spare = new Float64Array(ch);
-      this.have = new Float64Array(ch);
       this.pinkS = new Float64Array(ch * 7);
       this.brown = new Float64Array(ch);
       this.grain = new Float64Array(ch * 2);
       this.mem = new Float64Array(ch * this.nf * 4);
-      this.pre = new Float64Array(ch);
-      for (let c = 0; c < ch; c++) for (let k = 0; k < 12; k++) this.rand(c);
+      this.pre0 = new Float32Array(BLOCK);
+      this.pre1 = new Float32Array(BLOCK);
       // The end is a context time, posted from the main thread. Before it arrives the noise runs on.
       this.port.onmessage = (e: MessageEvent) => {
         const data = e.data;
@@ -227,97 +273,219 @@ function installFreshNoise(): void {
       };
     }
 
-    /** sfc32, one state per channel. Returns a float in [0, 1). */
-    rand(c: number): number {
-      const r = this.rng;
-      const i = c * 4;
-      const b = r[i + 1];
-      const c0 = r[i + 2];
-      const d0 = r[i + 3];
-      const t = (((r[i] + b) | 0) + d0) | 0;
-      r[i] = b ^ (b >>> 9);
-      r[i + 1] = (c0 + (c0 << 3)) | 0;
-      r[i + 2] = (((c0 << 21) | (c0 >>> 11)) + t) | 0;
-      r[i + 3] = (d0 + 1) | 0;
-      return (t >>> 0) / 4294967296;
-    }
-
-    /** Standard normal. The second Box–Muller value is kept for the next call, so no uniform is thrown away. */
-    gauss(c: number): number {
-      if (this.have[c] !== 0) {
-        this.have[c] = 0;
-        return this.spare[c];
+    /** White, levelled. Two table lookups from each xorshift32 draw. */
+    fillWhite(n: number): void {
+      const g = GAUSS;
+      const gain = this.u[U_GAIN];
+      const rng = this.rng;
+      const n2 = n - (n & 1);
+      const ch = this.channels;
+      for (let c = 0; c < ch; c++) {
+        const o = c === 0 ? this.pre0 : this.pre1;
+        let s = rng[c];
+        for (let i = 0; i < n2; i += 2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          o[i] = g[s & GAUSS_MASK] * gain;
+          o[i + 1] = g[(s >>> GAUSS_SHIFT) & GAUSS_MASK] * gain;
+        }
+        if (n !== n2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          o[n2] = g[s & GAUSS_MASK] * gain;
+        }
+        rng[c] = s >>> 0;
       }
-      let u = this.rand(c);
-      if (u < 1e-12) u = 1e-12;
-      const v = this.rand(c);
-      const rad = Math.sqrt(-2 * Math.log(u));
-      const ang = 2 * Math.PI * v;
-      this.spare[c] = rad * Math.sin(ang);
-      this.have[c] = 1;
-      return rad * Math.cos(ang);
     }
 
     /** Paul Kellet's filter, the same recurrence as pinkStep: six poles, then the delay from the previous sample. */
-    pink(c: number, w: number): number {
-      const s = this.pinkS;
-      const base = c * 7;
+    fillPink(n: number): void {
+      const g = GAUSS;
+      const u = this.u;
+      const gain = u[U_GAIN];
+      const feed = u[U_FEED];
+      const delay = u[U_DELAY];
       const poles = this.poles;
       const weights = this.weights;
-      let y = w * this.feed + s[base + 6];
-      for (let k = 0; k < 6; k++) {
-        const v = poles[k] * s[base + k] + w * weights[k];
-        s[base + k] = v;
-        y += v;
+      const p0 = poles[0], p1 = poles[1], p2 = poles[2], p3 = poles[3], p4 = poles[4], p5 = poles[5];
+      const w0 = weights[0], w1 = weights[1], w2 = weights[2], w3 = weights[3], w4 = weights[4], w5 = weights[5];
+      const st = this.pinkS;
+      const rng = this.rng;
+      const n2 = n - (n & 1);
+      const ch = this.channels;
+      for (let c = 0; c < ch; c++) {
+        const o = c === 0 ? this.pre0 : this.pre1;
+        let s = rng[c];
+        const base = c * 7;
+        let a0 = st[base], a1 = st[base + 1], a2 = st[base + 2], a3 = st[base + 3], a4 = st[base + 4], a5 = st[base + 5], a6 = st[base + 6];
+        for (let i = 0; i < n2; i += 2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          let w = g[s & GAUSS_MASK];
+          a0 = p0 * a0 + w * w0; a1 = p1 * a1 + w * w1; a2 = p2 * a2 + w * w2;
+          a3 = p3 * a3 + w * w3; a4 = p4 * a4 + w * w4; a5 = p5 * a5 + w * w5;
+          o[i] = (a0 + a1 + a2 + a3 + a4 + a5 + a6 + w * feed) * gain;
+          a6 = w * delay;
+          w = g[(s >>> GAUSS_SHIFT) & GAUSS_MASK];
+          a0 = p0 * a0 + w * w0; a1 = p1 * a1 + w * w1; a2 = p2 * a2 + w * w2;
+          a3 = p3 * a3 + w * w3; a4 = p4 * a4 + w * w4; a5 = p5 * a5 + w * w5;
+          o[i + 1] = (a0 + a1 + a2 + a3 + a4 + a5 + a6 + w * feed) * gain;
+          a6 = w * delay;
+        }
+        if (n !== n2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          const w = g[s & GAUSS_MASK];
+          a0 = p0 * a0 + w * w0; a1 = p1 * a1 + w * w1; a2 = p2 * a2 + w * w2;
+          a3 = p3 * a3 + w * w3; a4 = p4 * a4 + w * w4; a5 = p5 * a5 + w * w5;
+          o[n2] = (a0 + a1 + a2 + a3 + a4 + a5 + a6 + w * feed) * gain;
+          a6 = w * delay;
+        }
+        rng[c] = s >>> 0;
+        st[base] = a0; st[base + 1] = a1; st[base + 2] = a2; st[base + 3] = a3; st[base + 4] = a4; st[base + 5] = a5; st[base + 6] = a6;
       }
-      s[base + 6] = w * this.delay;
-      return y;
     }
 
-    /** One channel, coloured and levelled. Velvet is the logistic grain instead of a levelled noise. */
-    sample(c: number): number {
-      const w = this.gauss(c);
-      if (this.kind === 3) {
-        const g = this.grain;
-        const i = c * 2;
-        const k = this.grainK;
-        g[i] += k * (w - g[i]);
-        g[i + 1] += k * (g[i] - g[i + 1]);
-        const z = g[i + 1] * this.gain;
-        const open = 1 / (1 + Math.exp(-this.slope * (z - this.knee)));
-        return this.floor + this.span * open;
+    /** Leaky integrator, the same recurrence as brownInto. The gain is applied after, and is not part of the state. */
+    fillBrown(n: number): void {
+      const g = GAUSS;
+      const u = this.u;
+      const gain = u[U_GAIN];
+      const leak = u[U_LEAK];
+      const st = this.brown;
+      const rng = this.rng;
+      const n2 = n - (n & 1);
+      const ch = this.channels;
+      for (let c = 0; c < ch; c++) {
+        const o = c === 0 ? this.pre0 : this.pre1;
+        let s = rng[c];
+        let y = st[c];
+        for (let i = 0; i < n2; i += 2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          y = leak * y + g[s & GAUSS_MASK];
+          o[i] = y * gain;
+          y = leak * y + g[(s >>> GAUSS_SHIFT) & GAUSS_MASK];
+          o[i + 1] = y * gain;
+        }
+        if (n !== n2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          y = leak * y + g[s & GAUSS_MASK];
+          o[n2] = y * gain;
+        }
+        rng[c] = s >>> 0;
+        st[c] = y;
       }
-      let y = w;
-      if (this.kind === 1) y = this.pink(c, w);
-      else if (this.kind === 2) {
-        y = this.leak * this.brown[c] + w;
-        this.brown[c] = y;
-      }
-      return y * this.gain;
     }
 
-    /** Direct form I, the same sum filters.ts runs. No filters (the plain noises, the grain) returns the sample. */
-    shape(c: number, input: number): number {
-      const nf = this.nf;
-      if (nf === 0) return input;
+    /** Two one-poles, then gain, then the logistic grain. The exp is the grain's knee, not a noise sample. */
+    fillVelvet(n: number): void {
+      const g = GAUSS;
+      const u = this.u;
+      const k = u[U_GRAIN];
+      const gain = u[U_GAIN];
+      const floor = u[U_FLOOR];
+      const span = u[U_SPAN];
+      const slope = u[U_SLOPE];
+      const knee = u[U_KNEE];
+      const st = this.grain;
+      const rng = this.rng;
+      const n2 = n - (n & 1);
+      const ch = this.channels;
+      for (let c = 0; c < ch; c++) {
+        const o = c === 0 ? this.pre0 : this.pre1;
+        let s = rng[c];
+        const base = c * 2;
+        let a = st[base];
+        let b = st[base + 1];
+        for (let i = 0; i < n2; i += 2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          let w = g[s & GAUSS_MASK];
+          a += k * (w - a);
+          b += k * (a - b);
+          o[i] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
+          w = g[(s >>> GAUSS_SHIFT) & GAUSS_MASK];
+          a += k * (w - a);
+          b += k * (a - b);
+          o[i + 1] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
+        }
+        if (n !== n2) {
+          s ^= s << 13;
+          s ^= s >>> 17;
+          s ^= s << 5;
+          const w = g[s & GAUSS_MASK];
+          a += k * (w - a);
+          b += k * (a - b);
+          o[n2] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
+        }
+        rng[c] = s >>> 0;
+        st[base] = a;
+        st[base + 1] = b;
+      }
+    }
+
+    /** Direct form I over one chunk, the same sum filters.ts runs. State is local for the chunk and written back at the end. */
+    biquadInto(src: Float32Array, n: number, cs: number, ss: number): void {
       const coef = this.coef;
-      const st = this.mem;
-      let v = input;
-      for (let f = 0; f < nf; f++) {
-        const cs = f * 5;
-        const ss = (c * nf + f) * 4;
-        const x1 = st[ss];
-        const x2 = st[ss + 1];
-        const y1 = st[ss + 2];
-        const y2 = st[ss + 3];
-        const y = coef[cs] * v + coef[cs + 1] * x1 + coef[cs + 2] * x2 - coef[cs + 3] * y1 - coef[cs + 4] * y2;
-        st[ss] = v;
-        st[ss + 1] = x1;
-        st[ss + 2] = y;
-        st[ss + 3] = y1;
-        v = y;
+      const mem = this.mem;
+      const b0 = coef[cs], b1 = coef[cs + 1], b2 = coef[cs + 2], a1 = coef[cs + 3], a2 = coef[cs + 4];
+      let x1 = mem[ss], x2 = mem[ss + 1], y1 = mem[ss + 2], y2 = mem[ss + 3];
+      for (let i = 0; i < n; i++) {
+        const v = src[i];
+        const y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+        x2 = x1;
+        x1 = v;
+        y2 = y1;
+        y1 = y;
+        src[i] = y;
       }
-      return v;
+      mem[ss] = x1;
+      mem[ss + 1] = x2;
+      mem[ss + 2] = y1;
+      mem[ss + 3] = y2;
+    }
+
+    /**
+     * Stereo mix, then the fixed biquads. L = a·n0 + b·n1 and R = b·n0 + a·n1; an unmixed pair (a = 1, b = 0) is copied.
+     * A mono noise is the one channel, unmixed. Filters run per channel on the mixed block.
+     */
+    shapeBlock(out: Float32Array[], at: number, n: number): void {
+      const ch = this.channels;
+      const pre0 = this.pre0;
+      const pre1 = this.pre1;
+      const u = this.u;
+      const a = u[U_A];
+      const b = u[U_B];
+      if (ch === 2 && (a !== 1 || b !== 0)) {
+        for (let i = 0; i < n; i++) {
+          const x = pre0[i];
+          const y = pre1[i];
+          pre0[i] = a * x + b * y;
+          pre1[i] = b * x + a * y;
+        }
+      }
+      const nf = this.nf;
+      if (nf !== 0) {
+        for (let c = 0; c < ch; c++) {
+          const src = c === 0 ? pre0 : pre1;
+          for (let f = 0; f < nf; f++) this.biquadInto(src, n, f * 5, (c * nf + f) * 4);
+        }
+      }
+      const o0 = out[0];
+      for (let i = 0; i < n; i++) o0[at + i] = pre0[i];
+      if (ch === 2) {
+        const o1 = out[1];
+        for (let i = 0; i < n; i++) o1[at + i] = pre1[i];
+      }
     }
 
     quiet(out: Float32Array[], from: number, to: number): void {
@@ -344,19 +512,18 @@ function installFreshNoise(): void {
         if (live < 0) live = 0;
         else if (live > n) live = n;
       }
-      const ch = this.channels;
-      const a = this.a;
-      const b = this.b;
-      const pre = this.pre;
-      for (let i = 0; i < live; i++) {
-        for (let c = 0; c < ch; c++) pre[c] = this.sample(c);
-        if (ch === 1) out[0][i] = this.shape(0, pre[0]);
-        else {
-          const n0 = pre[0];
-          const n1 = pre[1];
-          out[0][i] = this.shape(0, a * n0 + b * n1);
-          out[1][i] = this.shape(1, b * n0 + a * n1);
-        }
+      const kind = this.kind;
+      const cap = this.pre0.length;
+      let at = 0;
+      while (at < live) {
+        let len = live - at;
+        if (len > cap) len = cap;
+        if (kind === 1) this.fillPink(len);
+        else if (kind === 2) this.fillBrown(len);
+        else if (kind === 3) this.fillVelvet(len);
+        else this.fillWhite(len);
+        this.shapeBlock(out, at, len);
+        at += len;
       }
       if (live < n) this.quiet(out, live, n);
       return live === n;
