@@ -1,6 +1,6 @@
 # The hall and the quest of five
 
-Status: draft 3, for the owner (Fable, 2026-11-19). Not built. Draft 2 had dialogue and choices; the owner asked for
+Status: draft 4, for the owner (Fable, 2026-11-19). Not built. The owner chose "across the world" for the five. Draft 2 had dialogue and choices; the owner asked for
 none. Draft 2 is in git at `2334b58`.
 
 Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
@@ -16,11 +16,12 @@ Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
 
 The map is large. The five things are small. These rules make them easy to find and easy to use.
 
-1. **They are near home.** All five are in a ring around the home town. Each is 15 to 45 seconds of flight from the
-   start. The full quest takes about 4 minutes.
+1. **The first is near home. The others are across the world.** The first is 15 seconds from the start, so every
+   visitor finds one. Each of the other four is in a different climate, about 60 to 90 seconds of flight from the one
+   before. The world loops, so the route is a circle that ends at home. The full quest takes about 8 minutes.
 2. **They are easy to see.** Each has a tall red pennant. Red is used for nothing else on the land.
 3. **The screen shows the way.** Five quatrefoils are in a corner of the screen. A small marker at the screen edge
-   points to the nearest thing not yet found.
+   points to the nearest thing not yet found. The things are far apart, so the marker is necessary.
 4. **Landing is the interaction.** Near a thing, the usual prompt appears. The visitor presses Space or taps. The
    dragon lands, as it does now.
 5. **The thing responds.** It plays a short animation, 3 to 5 seconds long.
@@ -49,8 +50,10 @@ The visitor uses one button. There is nothing to read first, nothing to choose, 
 | 4 | A small mill-shed with sails, a water wheel and a bell on a pole | The sails turn. A flag goes up. A hen walks out. | Cog | Daniel runs a home lab on Unraid. |
 | 5 | A peach basket on a dead oak. A boy throws a ball at it. | He misses. He throws again. The ball goes in. | Ball | Daniel plays basketball and follows the Houston Rockets. |
 
-- Order: any.
-- Place: number 1 is 15 seconds from the start. Number 3 is on the hill above the abbey.
+- Order: any. The marker points to the nearest, so most visitors follow the circle.
+- Places: 1 on the home island (temperate). 2 on the steppe. 3 on the tundra. 4 in the Mediterranean country. 5 on
+  the savanna. Each thing is in open country where it is easy to see.
+- A visitor can stop at any time. Found things stay found on the next visit.
 - After the fifth: the card shows "That is all five." and a link to email Daniel.
 - The lines come from a new list, `INTERESTS`, in `src/components/terminal/content.ts`. Other pages can use the list.
 
@@ -111,12 +114,13 @@ Any of these can replace one of the five, or make a second quest later.
 
 1. A site of kind `hall`: one building within 150 cells of the start, in the start frame, with a level pad. The home
    start frame changes one time.
-2. Five sites of kind `curio` on the home island: level, open pads, 24 cells wide, 15 to 45 seconds from the start,
-   at least 300 cells apart. One is on the hill above the abbey.
+2. Five sites of kind `curio`: level, open pads, 24 cells wide, at least 300 cells from a landmark or wonder.
+   `curio-0` is on the home island, 15 seconds from the start. The other four are on the steppe, the tundra, the
+   Mediterranean country and the savanna, in that order round the loop, 60 to 90 seconds of flight apart.
 3. One large yew stamped at the first curio. All other parts are live sprites.
 4. No change to the seven landmarks.
 
-Before the new world exists, the quest can run on the present world at five spare sites.
+Before the new world exists, the quest can run on the present world at five spare landmark sites.
 
 ## 10. Originality
 
@@ -130,10 +134,9 @@ Before the new world exists, the quest can run on the present world at five spar
 
 ## 11. Open questions for the owner
 
-1. **Near home or across the world?** This draft puts all five near home, so the quest is short. The other option
-   puts some in other climates, so the quest takes the visitor round the world. Recommended: near home first.
-2. **The edge marker.** It points to the nearest thing not found. Recommended: yes. Without it, the visitor uses the
-   pennants only.
+1. **Answered: across the world.** The first is near home; the other four are in four other climates.
+2. **The edge marker.** It points to the nearest thing not found. Recommended: yes. At these distances the pennants
+   alone are not enough.
 3. **The five.** The table in section 4 is the recommendation. Swap any row with a row from section 5.
 
 ## 12. Left to the builder
