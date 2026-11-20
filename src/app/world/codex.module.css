@@ -28,15 +28,18 @@
   padding: 0;
   max-width: none;
   height: auto;
+  box-sizing: border-box;
   position: fixed;
   z-index: 20;
-  top: 50%;
+  /* Below the sound toggle: top max(3.5rem, safe-area + 3rem), 44px square (sound.module.css), then a small gap. */
+  --codex-clear: calc(max(3.5rem, env(safe-area-inset-top) + 3rem) + 44px + 0.75rem);
+  --codex-foot: 1.25rem;
+  top: var(--codex-clear);
   right: clamp(0.75rem, 3vw, 2.5rem);
   width: min(25rem, 40vw);
-  max-height: min(86vh, 46rem);
+  max-height: min(46rem, calc(100dvh - var(--codex-clear) - var(--codex-foot)));
   display: flex;
   flex-direction: column;
-  transform: translateY(-50%);
   background-color: var(--paper);
   background-image: var(--grain);
   border: 3px double var(--ink);
@@ -50,7 +53,7 @@
 @keyframes codex-in {
   from {
     opacity: 0;
-    transform: translateY(-50%) translateX(12px) scaleY(0.97);
+    transform: translateX(12px) scaleY(0.97);
   }
 }
 
@@ -105,8 +108,17 @@
   transform: scaleY(-1);
 }
 
+.lobes,
+.empty {
+  stroke: none;
+}
+
 .lobes {
   fill: var(--vermilion-bright);
+}
+
+.empty {
+  fill: var(--paper);
 }
 
 .boss {
@@ -387,6 +399,11 @@
   margin: 0.55rem 0 0.35rem;
 }
 
+.closing {
+  margin: 0.15rem 0 0.65rem;
+  line-height: 1.45;
+}
+
 .register .button {
   margin-top: 0.45rem;
 }
@@ -444,7 +461,7 @@
     bottom: 0.6rem;
     left: 0.6rem;
     width: auto;
-    max-height: 58vh;
+    max-height: calc(100dvh - var(--codex-clear) - 0.6rem);
     transform: none;
     animation-name: codex-up;
   }
@@ -487,7 +504,7 @@
    the flight from visualViewport), never vh: on landscape iPhone Safari 86vh is taller than what shows. */
 @media (hover: none) and (pointer: coarse) {
   .codex {
-    max-height: min(calc(var(--vvh, 100dvh) - 1.5rem), 46rem);
+    max-height: min(calc(var(--vvh, 100dvh) - var(--codex-clear) - 0.6rem), 46rem);
   }
 
   .leaf {

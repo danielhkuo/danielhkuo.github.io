@@ -79,7 +79,8 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
         {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
       </div>
       <GuideLine say={flight.say} />
-      <DiscoveryCaption caption={flight.caption} />
+      {/* While a landmark's Codex is open its title is already on the card, so the discovery line waits for the flight. */}
+      {at ? null : <DiscoveryCaption caption={flight.caption} />}
       {at ? (
         <Codex landmark={at} onTakeOff={flight.takeOff} onOpenTerminal={about.open} openLabel={about.label} />
       ) : null}

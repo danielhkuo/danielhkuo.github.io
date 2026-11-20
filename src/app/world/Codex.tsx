@@ -29,6 +29,11 @@ function capitalised(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** A stop's title: drop a leading "the ", then capitalise. "the small pine" → "Small pine". */
+function stopTitle(name: string): string {
+  return capitalised(name.replace(/^the /, ""));
+}
+
 /** Blank lines divide the body. What is between them is text, never markup. */
 function paragraphs(body: string): string[] {
   const out: string[] = [];
@@ -44,20 +49,21 @@ function interestLine(key: string): string {
   return "";
 }
 
-/** Four overlapping circles: the quatrefoil, inked, filled with vermilion when `filled`. */
+/** Four lobes: the quatrefoil, ink round it, vermilion when found and paper when not, so an empty one stays a quatrefoil. */
 function Quatrefoil({ className, filled = true }: { className?: string; filled?: boolean }) {
-  const lobes = [
-    [2.2, 0],
-    [-2.2, 0],
-    [0, 2.2],
-    [0, -2.2],
-  ].map(([cx, cy]) => <circle key={`${cx},${cy}`} cx={cx} cy={cy} r={2.4} />);
+  const lobes = (kind: string) =>
+    [
+      [2.2, 0],
+      [-2.2, 0],
+      [0, 2.2],
+      [0, -2.2],
+    ].map(([cx, cy]) => <circle key={`${kind}${cx},${cy}`} cx={cx} cy={cy} r={2.4} />);
   return (
     <svg className={className} viewBox="-6 -6 12 12" aria-hidden="true" focusable="false">
       <g fill="none" stroke="currentColor" strokeWidth={1.5}>
-        {lobes}
+        {lobes("s")}
       </g>
-      {filled ? <g className={styles.lobes}>{lobes}</g> : null}
+      <g className={filled ? styles.lobes : styles.empty}>{lobes("f")}</g>
     </svg>
   );
 }
@@ -217,7 +223,7 @@ function StopLeaf({ stop }: { stop: StopKey }) {
   return (
     <>
       <Rubric>Found</Rubric>
-      <Illuminated text={capitalised(found ? found.name : stop)} />
+      <Illuminated text={stopTitle(found ? found.name : stop)} />
       <Keepsake stop={stop} className={styles.keepsakeLarge} />
       {line ? <p className={styles.lede}>{line}</p> : null}
       {stop === "pine" ? (
@@ -255,9 +261,10 @@ function AboutLeaf({ kind }: { kind: string }) {
   );
 }
 
-/** The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. */
-function Five({ quest, onFollow }: { quest: QuestState; onFollow: () => void }) {
+/** The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. `shown` is the stop this page already states, so its line is not listed again. */
+function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => void; shown?: StopKey }) {
   const found = STOPS.filter((stop) => quest.found.includes(stop.key));
+  const listed = found.filter((stop) => stop.key !== shown);
   const done = complete(quest);
   return (
     <section className={styles.register} aria-labelledby="codex-five">
@@ -267,9 +274,9 @@ function Five({ quest, onFollow }: { quest: QuestState; onFollow: () => void }) 
           <Quatrefoil key={stop.key} className={styles.foil} filled={quest.found.includes(stop.key)} />
         ))}
       </div>
-      {found.length > 0 ? (
+      {listed.length > 0 ? (
         <ul>
-          {found.map((stop) => (
+          {listed.map((stop) => (
             <li key={stop.key} className={styles.found}>
               <Keepsake stop={stop.key} className={styles.keepsake} />
               <span>{interestLine(stop.interest)}</span>
@@ -280,6 +287,9 @@ function Five({ quest, onFollow }: { quest: QuestState; onFollow: () => void }) 
       {done ? (
         <>
           <p className={styles.allFive}>That is all five.</p>
+          <p className={styles.closing}>
+            {"Those are five of the things Daniel cares about. If you'd like to tell him yours:"}
+          </p>
           <Links links={[{ href: LINKS.email, label: "Write to Daniel", external: false }]} />
         </>
       ) : quest.mode !== "on" ? (
@@ -379,7 +389,7 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
       {/* The leaf scrolls and takes focus, so arrow keys read down it. */}
       <div ref={leaf} className={styles.leaf} tabIndex={-1}>
         {body}
-        <Five quest={quest} onFollow={follow} />
+        <Five quest={quest} onFollow={follow} shown={landmark.holds.kind === "stop" ? landmark.holds.stop : undefined} />
         <p className={styles.actions}>
           {landmark.holds.kind === "about" ? (
             <button type="button" className={styles.button} data-terminal-trigger="" onClick={(e) => onOpenTerminal(e.currentTarget)}>

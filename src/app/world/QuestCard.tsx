@@ -1,7 +1,7 @@
 "use client";
 
 // The quest offer: a small card a few seconds after the lesson. It asks one thing and does not stop the flight. It
-// takes no focus, so Space and the arrows still fly: Q follows, Esc explores, or a click.
+// takes no focus, so Space and the arrows still fly: Q follows, Esc is not now, or a click.
 // Game layer: hand-drawn, not Astryx.
 
 import { useEffect, useState, type CSSProperties } from "react";
@@ -82,12 +82,12 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
         </Words>
       </h2>
       <p className={styles.line}>
-        <Words px={px}>five odd things are out there.</Words>
+        <Words px={px}>five odd things, each a fact about daniel.</Words>
       </p>
       <p className={styles.buttons}>
         <button type="button" className={styles.button} onClick={() => pick("off")}>
-          <PixelGlyph sprite={cardPlate("explore")} px={px} />
-          <span className={styles.sr}>explore</span>
+          <PixelGlyph sprite={cardPlate("not now")} px={px} />
+          <span className={styles.sr}>not now</span>
         </button>
         <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => pick("on")}>
           <PixelGlyph sprite={cardPlate("follow the quest", true)} px={px} />

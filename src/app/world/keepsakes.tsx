@@ -6,9 +6,10 @@ import type { StopKey } from "../../world/story/stops";
 const ICON: Record<StopKey, ReactNode> = {
   pine: (
     <>
-      <path d="M8 1.3v2.1" stroke="var(--gold)" strokeWidth="1.45" />
-      <path d="M8 3.1c2.7.45 4.2 2.7 3.7 5.9-.55 3.15-1.9 5.5-3.7 5.5s-3.15-2.35-3.7-5.5C3.8 5.8 5.3 3.55 8 3.1z" />
-      <path d="M5.15 7.35c1.7-.7 3.95-.7 5.7 0M5 9.85c1.85-.65 4.15-.65 6 0" />
+      <path d="M8 1.3 11.3 8.2H4.7Z" />
+      <path d="M8 8.2v2.5" strokeWidth="1.7" />
+      <path d="M3.3 10.7 5.1 14.7h5.8l1.8-4" />
+      <path d="M2.7 10.7h10.6" stroke="var(--gold)" strokeWidth="1.45" />
     </>
   ),
   desk: (
@@ -28,9 +29,9 @@ const ICON: Record<StopKey, ReactNode> = {
   ),
   mill: (
     <>
-      <circle cx="8" cy="8" r="3.05" strokeWidth="1.35" />
-      <circle cx="8" cy="8" r="1.15" fill="var(--gold)" stroke="none" />
-      <path d="M8 1.45v2.15M8 12.4v2.15M1.45 8h2.15M12.4 8h2.15M3.25 3.25l1.55 1.55M11.2 11.2l1.55 1.55M12.75 3.25l-1.55 1.55M4.8 11.2l-1.55 1.55" strokeWidth="1.5" />
+      <path strokeWidth="1.6" d="M8 6.6v7.6" />
+      <path strokeWidth="1.75" d="M4.2 2.6 6.7 5.1M11.8 2.6 9.3 5.1M4.2 10.6 6.7 8.1M11.8 10.6 9.3 8.1" />
+      <circle cx="8" cy="6.6" r="1.5" fill="var(--gold)" stroke="none" />
     </>
   ),
   basket: (
