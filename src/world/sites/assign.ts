@@ -1,4 +1,4 @@
-// Matching pinned projects to reserved landmark sites (design 5.6). Build-time
+// Matching projects to reserved landmark sites (design 5.6). Build-time
 // only; never touches terrain.
 
 import { hashString } from "../core/hash.ts";
@@ -16,7 +16,7 @@ export interface Site {
 }
 
 export interface Assignments {
-  /** site id → repository name. The abbey is never listed: it holds the terminal. */
+  /** site id → a project's slug. The abbey is never listed: it holds the terminal. */
   bySite: Record<string, string>;
   /** Free site id → the small unnamed feature it holds. */
   features: Record<string, FeatureKind>;

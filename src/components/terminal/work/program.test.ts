@@ -1,51 +1,60 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ProgramHost, SlimProject, TerminalLine } from "../types";
+import type { Project } from "../../../lib/projects.ts";
+import type { ProgramHost, TerminalLine } from "../types";
 import type { Screen } from "../tty/screen.ts";
 import { WorkProgram, hostOf, longDate } from "./program.ts";
 
-const REPOS: SlimProject[] = [
-  {
-    name: "example-project",
-    description: "A sample project showcasing modern web development",
-    url: "https://github.com/danielhkuo/example-project",
-    homepageUrl: "https://example.com",
-    primaryLanguage: { name: "TypeScript", color: "#3178c6" },
+const EXAMPLE: Project = {
+  slug: "example-project",
+  name: "example-project",
+  summary: "A sample project showcasing modern web development",
+  body: "",
+  order: 1,
+  repo: "danielhkuo/example-project",
+  repoUrl: "https://github.com/danielhkuo/example-project",
+  link: "https://example.com",
+  image: null,
+  github: {
+    stars: 42,
+    forks: 7,
+    language: { name: "TypeScript", color: "#3178c6" },
     languages: [
-      { name: "TypeScript", percentage: 65.4 },
-      { name: "JavaScript", percentage: 20.3 },
-      { name: "CSS", percentage: 14.3 },
+      { name: "TypeScript", color: "#3178c6", percentage: 65.4 },
+      { name: "JavaScript", color: "#f1e05a", percentage: 20.3 },
+      { name: "CSS", color: "#563d7c", percentage: 14.3 },
     ],
-    stargazerCount: 42,
-    forkCount: 7,
     updatedAt: "2026-09-08T12:00:00Z",
   },
-  {
-    name: "empty-state-repo",
-    description: "",
-    url: "https://github.com/danielhkuo/empty-state-repo",
-    homepageUrl: null,
-    primaryLanguage: null,
-    languages: [],
-    stargazerCount: 0,
-    forkCount: 0,
-    updatedAt: "2026-09-08T12:00:00Z",
-  },
-  {
-    name: "third-pinned-repo",
-    description: "Placeholder",
-    url: "https://github.com/danielhkuo/third",
-    homepageUrl: null,
-    primaryLanguage: { name: "Python", color: "#3572A5" },
-    languages: [
-      { name: "Python", percentage: 78 },
-      { name: "Shell", percentage: 22 },
-    ],
-    stargazerCount: 18,
-    forkCount: 3,
-    updatedAt: "2026-08-29T12:00:00Z",
-  },
-];
+};
+
+/** On GitHub, with nothing to show there: no language, no stars, no forks. No link. */
+const EMPTY: Project = {
+  slug: "empty-state-repo",
+  name: "empty-state-repo",
+  summary: "Nothing to report",
+  body: "",
+  order: 2,
+  repo: "danielhkuo/empty-state-repo",
+  repoUrl: "https://github.com/danielhkuo/empty-state-repo",
+  link: null,
+  image: null,
+  github: { stars: 0, forks: 0, language: null, languages: [], updatedAt: "2026-09-08T12:00:00Z" },
+};
+
+/** Built without GitHub's stats, as a build without a token is. */
+const NO_STATS: Project = {
+  ...EMPTY,
+  slug: "no-stats-project",
+  name: "no-stats-project",
+  summary: "Built without stats",
+  order: 3,
+  repo: "danielhkuo/no-stats-project",
+  repoUrl: "https://github.com/danielhkuo/no-stats-project",
+  github: null,
+};
+
+const REPOS: Project[] = [EXAMPLE, EMPTY, NO_STATS];
 
 function host() {
   let paints = 0;
@@ -59,9 +68,9 @@ function host() {
   return { h, get paints() { return paints; }, exits };
 }
 
-function boot(rows = 30, cols = 100) {
+function boot(rows = 30, cols = 100, projects: Project[] = REPOS) {
   const opened: string[] = [];
-  const p = new WorkProgram(REPOS, { openUrl: (u) => opened.push(u) });
+  const p = new WorkProgram(projects, { openUrl: (u) => opened.push(u) });
   const h = host();
   const screen = p.start({ rows, cols }, h.h);
   return { p, h, screen, opened };
@@ -79,62 +88,89 @@ function inverseRows(screen: Screen): number[] {
   return out;
 }
 
-test("split layout: header, list pane with the first repo selected, detail pane, keybar", () => {
+test("split layout: header, list pane with the first project selected, detail pane, keybar", () => {
   const { p, screen } = boot();
   const t = rows(screen);
-  assert.match(t[0], /^ work — pinned repositories .*github\.com\/danielhkuo/);
-  assert.match(t[2], /\[1\] repos ─ 3/);
+  assert.match(t[0], /^ work — projects .*github\.com\/danielhkuo/);
+  assert.match(t[2], /\[1\] projects ─ 3/);
   assert.match(t[3], /^ › example-project +★42 │/);
   assert.match(t[4], /^ {3}empty-state-repo +★ 0 │/);
+  // No stats, no count.
+  assert.match(t[5], /^ {3}no-stats-project +│/);
+  assert.doesNotMatch(t[5], /★/);
   assert.deepEqual(inverseRows(screen), [3]);
   assert.match(t[2], /\[2\] detail/);
   const detail = t.join("\n");
   assert.match(detail, /│ example-project\n/);
+  assert.match(detail, /A sample project showcasing modern web development/);
   assert.match(detail, /stars {5}42/);
   assert.match(detail, /updated {3}8 Sep 2026/);
-  assert.match(detail, /homepage {2}example\.com/);
+  assert.match(detail, /repo {6}danielhkuo\/example-project/);
+  assert.match(detail, /link {6}example\.com/);
   assert.match(detail, /TypeScript {2}█+░+ 65\.4%/);
-  assert.match(t[29], /↑↓ move {3}⏎ repository {3}o homepage {3}\/ filter {3}q quit/);
+  assert.match(t[29], /↑↓ move {3}⏎ open {3}o link {3}\/ filter {3}q quit/);
   assert.equal(p.textInput, false);
   assert.equal(p.title, "work");
 });
 
-test("arrows move the selection and the detail follows; Enter and o open links", () => {
+test("arrows move the selection and the detail follows; Enter opens the repository and o the link", () => {
   const { p, screen, opened } = boot();
   p.key("ArrowDown", false);
   assert.equal(p.selected?.name, "empty-state-repo");
   assert.deepEqual(inverseRows(screen), [4]);
-  assert.match(rows(screen).join("\n"), /no description/);
+  assert.match(rows(screen).join("\n"), /Nothing to report/);
   assert.match(rows(screen).join("\n"), /none reported/);
   p.key("Enter", false);
   assert.deepEqual(opened, ["https://github.com/danielhkuo/empty-state-repo"]);
-  p.key("o", false); // no homepage: nothing happens
+  p.key("o", false); // no link: nothing happens
   assert.equal(opened.length, 1);
   p.key("k", false);
   p.key("o", false);
   assert.equal(opened[1], "https://example.com");
   p.key("End", false);
-  assert.equal(p.selected?.name, "third-pinned-repo");
+  assert.equal(p.selected?.name, "no-stats-project");
   p.key("ArrowDown", false);
-  assert.equal(p.selected?.name, "third-pinned-repo");
+  assert.equal(p.selected?.name, "no-stats-project");
+});
+
+test("a project built without GitHub's stats shows no counts or date, and no language mix", () => {
+  const { p, screen } = boot();
+  p.key("End", false);
+  const detail = rows(screen).join("\n");
+  assert.match(detail, /Built without stats/);
+  assert.match(detail, /repo {6}danielhkuo\/no-stats-project/);
+  assert.doesNotMatch(detail, /stars|forks|updated/);
+  assert.match(detail, /none reported/);
+});
+
+test("Enter opens a project's link when it has no repository, and nothing when it has neither", () => {
+  const site: Project = { ...NO_STATS, slug: "site", name: "site", repo: null, repoUrl: null, link: "https://example.com/site" };
+  const novel: Project = { ...site, slug: "novel", name: "novel", link: null };
+  const { p, opened } = boot(30, 100, [site, novel]);
+  p.key("Enter", false);
+  assert.deepEqual(opened, ["https://example.com/site"]);
+  p.key("ArrowDown", false);
+  p.key("Enter", false);
+  p.key("o", false);
+  assert.deepEqual(opened, ["https://example.com/site"]);
 });
 
 test("/ opens the filter, which wants the keyboard; typing narrows the list; Escape cancels", () => {
   const { p, screen } = boot();
   p.key("/", false);
   assert.equal(p.textInput, true);
-  for (const ch of "thi") p.key(ch, false);
+  for (const ch of "no-s") p.key(ch, false);
   const t = rows(screen);
-  assert.match(t[2], /repos ─ 1/);
-  assert.match(t[3], /› third-pinned-repo/);
-  assert.match(t[29], /^ \/ thi .*esc cancel/);
-  assert.equal(p.selected?.name, "third-pinned-repo");
+  assert.match(t[2], /projects ─ 1/);
+  assert.match(t[3], /› no-stats-project/);
+  assert.match(t[29], /^ \/ no-s .*esc cancel/);
+  assert.equal(p.selected?.name, "no-stats-project");
   // The match is picked out in yellow, not inverse.
   const runs = screen.rowRuns(3);
-  assert.ok(runs.some((r) => r.text === "thi" && r.fg === 3 && !r.inverse));
+  assert.ok(runs.some((r) => r.text === "no-s" && r.fg === 3 && !r.inverse));
   p.key("Enter", false);
   assert.equal(p.textInput, false);
-  assert.equal(p.filterText, "thi");
+  assert.equal(p.filterText, "no-s");
   assert.match(rows(screen).join("\n"), /2 hidden by filter/);
   p.key("Escape", false);
   assert.equal(p.filterText, "");
@@ -142,7 +178,7 @@ test("/ opens the filter, which wants the keyboard; typing narrows the list; Esc
   p.key("/", false);
   for (const ch of "zz") p.key(ch, false);
   assert.equal(p.selected, null);
-  assert.match(rows(screen).join("\n"), /no repo matches/);
+  assert.match(rows(screen).join("\n"), /no project matches/);
   p.key("Escape", false);
   assert.equal(p.textInput, false);
   assert.equal(p.filterText, "");
@@ -156,17 +192,31 @@ test("q exits to the shell; Escape with nothing to back out of is declined so th
   assert.deepEqual(h.exits, [undefined]);
 });
 
+test("many projects: the list scrolls to keep the selection in view", () => {
+  const twelve = Array.from({ length: 12 }, (_, i) => ({ ...EXAMPLE, slug: `project-${i + 1}`, name: `project-${i + 1}` }));
+  const { p, screen } = boot(12, 100, twelve);
+  assert.match(rows(screen)[2], /\[1\] projects ─ 12/);
+  p.key("End", false);
+  assert.equal(p.selected?.name, "project-12");
+  assert.ok(rows(screen).some((row) => /^ › project-12 /.test(row)));
+  p.key("Home", false);
+  assert.match(rows(screen)[3], /^ › project-1 /);
+});
+
 test("narrow: 52pt rows with meta, Enter drills into the detail, Escape comes back", () => {
   const { p, screen, opened } = boot(40, 48);
   assert.equal(p.isNarrow, true);
   const t = rows(screen);
-  assert.match(t[0], /^ work — 3 pinned .*github\.com\/danielhkuo/);
+  assert.match(t[0], /^ work — 3 projects .*github\.com\/danielhkuo/);
   assert.match(t[2], /^ › example-project/);
   assert.match(t[3], /^ {3}■ TypeScript · ★ 42 · ⑂ 7/);
   assert.match(t[5], /^ {3}empty-state-repo/);
   assert.match(t[6], /^ {3}no language data · ★ 0 · ⑂ 0/);
+  // Without stats, the summary stands in for them.
+  assert.match(t[8], /^ {3}no-stats-project/);
+  assert.match(t[9], /^ {3}Built without stats$/);
   assert.deepEqual(inverseRows(screen), [2, 3]);
-  assert.match(t[38], /⏎ open.*│.*o site.*│.*\/ filter.*│.*q quit/);
+  assert.match(t[38], /⏎ open.*│.*o link.*│.*\/ filter.*│.*q quit/);
 
   p.key("Enter", false);
   assert.equal(p.screenName, "detail");
@@ -176,11 +226,16 @@ test("narrow: 52pt rows with meta, Enter drills into the detail, Escape comes ba
   assert.match(d[2], /^ {2}example-project/);
   const body = d.join("\n");
   assert.match(body, /TypeScript +65\.4%\n {2}█+░+/);
-  assert.match(d[38], /esc back.*⏎ repository.*o homepage/);
+  assert.match(d[38], /esc back.*⏎ open.*o link/);
   p.key("Enter", false);
   assert.deepEqual(opened, ["https://github.com/danielhkuo/example-project"]);
   p.key("Escape", false);
   assert.equal(p.screenName, "list");
+});
+
+test("narrow: one project is counted as one", () => {
+  const { screen } = boot(40, 48, [EXAMPLE]);
+  assert.match(rows(screen)[0], /^ work — 1 project /);
 });
 
 test("narrow: taps select a row, a second tap opens it, and the keybar buttons act", () => {
@@ -194,7 +249,7 @@ test("narrow: taps select a row, a second tap opens it, and the keybar buttons a
   assert.equal(p.screenName, "list");
   p.tap(38, 2); // ⏎ open
   assert.equal(p.screenName, "detail");
-  p.tap(39, 20); // ⏎ repository, on the blank padding row of the keybar
+  p.tap(39, 20); // ⏎ open, on the blank padding row of the keybar
   assert.deepEqual(opened, ["https://github.com/danielhkuo/empty-state-repo"]);
   p.tap(38, 2); // esc back
   p.tap(38, 46); // q quit

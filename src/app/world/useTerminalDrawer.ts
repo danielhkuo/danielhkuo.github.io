@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { SiteInfo, SlimProject, TerminalApi } from "../../components/terminal/types";
+import type { Project } from "@/lib/projects";
+import type { SiteInfo, TerminalApi } from "../../components/terminal/types";
 import { getTheme, setTheme } from "../../lib/theme";
 
 export interface TerminalProps {
   /** What the terminal at the abbey is handed, as on the home page. */
-  projects: SlimProject[];
+  projects: Project[];
   site: SiteInfo;
 }
 

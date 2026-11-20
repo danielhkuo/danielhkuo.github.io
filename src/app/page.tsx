@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import NeofetchHeader from "@/components/NeofetchHeader";
 import ProjectCard from "@/components/ProjectCard";
 import TerminalLauncher from "@/components/terminal/TerminalLauncher";
-import { fetchPinnedRepos } from "@/lib/github";
+import { loadProjects } from "@/lib/projects";
 import { VStack, HStack, Grid, Heading, Text } from "@astryxdesign/core";
 
 export const metadata: Metadata = {
@@ -25,22 +25,8 @@ const ContactForm = dynamic(() => import("@/components/ContactForm"), {
 });
 
 export default async function Home() {
-  // Fetch pinned repos at build time (SSG)
-  const projects = await fetchPinnedRepos();
-
-  // Slim, JSON-serializable slice for the client terminal: the directory each
-  // repo gets under ~/projects, and the `work` TUI's detail pane.
-  const terminalProjects = projects.map((p) => ({
-    name: p.name,
-    description: p.description,
-    url: p.url,
-    homepageUrl: p.homepageUrl,
-    primaryLanguage: p.primaryLanguage,
-    languages: p.languages.map((l) => ({ name: l.name, percentage: l.percentage })),
-    stargazerCount: p.stargazerCount,
-    forkCount: p.forkCount,
-    updatedAt: p.updatedAt,
-  }));
+  // The projects, read at build time.
+  const projects = await loadProjects();
 
   // What only the build knows, for the terminal's `ls -l`: when this ran, and
   // the size of the résumé that ~/resume.pdf stands for.
@@ -50,13 +36,19 @@ export default async function Home() {
   };
 
   // What the header's `neofetch` prints under Pinned.
-  const headerProjects = projects.map((p) => ({
-    name: p.name,
-    url: p.url,
-    language: p.primaryLanguage,
-    stars: p.stargazerCount,
-    forks: p.forkCount,
-  }));
+  const headerProjects = projects.flatMap((p) => {
+    const url = p.repoUrl ?? p.link;
+    if (!url) return [];
+    return [
+      {
+        name: p.name,
+        url,
+        language: p.github?.language ?? null,
+        stars: p.github?.stars ?? 0,
+        forks: p.github?.forks ?? 0,
+      },
+    ];
+  });
 
   return (
     <VStack gap={0} width="100%" height="100%" className="min-h-screen bg-bg text-text-primary">
@@ -71,7 +63,7 @@ export default async function Home() {
             {projects.length > 0 ? (
               <Grid columns={{ minWidth: 276 }} gap={5} className="items-stretch">
                 {projects.map((project) => (
-                  <ProjectCard key={project.name} project={project} />
+                  <ProjectCard key={project.slug} project={project} />
                 ))}
               </Grid>
             ) : (
@@ -110,7 +102,7 @@ export default async function Home() {
         </HStack>
       </footer>
 
-      <TerminalLauncher projects={terminalProjects} site={site} />
+      <TerminalLauncher projects={projects} site={site} />
     </VStack>
   );
 }

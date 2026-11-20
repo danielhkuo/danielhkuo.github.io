@@ -3,6 +3,9 @@
 //
 //   npm run e2e                    builds, then runs every project
 //   npx playwright test            runs against the out/ already built
+//
+// npm run e2e builds with the fixture projects in e2e/fixtures/projects (PROJECTS_DIR), not the real projects/, so an
+// edit the owner makes in the browser can never break a test.
 //   npx playwright test --project=webkit e2e/site/landing.spec.ts
 //   npm run test:minimal           the minimal version's projects alone, against the out/ already built
 //

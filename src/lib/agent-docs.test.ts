@@ -2,37 +2,73 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMAIL, LINKS, PROFILE } from "../components/terminal/content.ts";
 import { agentsMd, llmsTxt } from "./agent-docs.ts";
-import { SITE_PAGES, type Project } from "./site-content.ts";
+import type { Project } from "./projects.ts";
+import { SITE_PAGES } from "./site-content.ts";
 
 const ZETA: Project = {
+  slug: "zeta-tool",
   name: "zeta-tool",
-  description: "A sample project showcasing modern web development",
-  url: "https://github.com/danielhkuo/zeta-tool",
-  homepageUrl: "https://www.example.com/",
-  primaryLanguage: { name: "TypeScript" },
-  languages: [
-    { name: "TypeScript", percentage: 65.44 },
-    { name: "JavaScript", percentage: 34.52 },
-    { name: "Makefile", percentage: 0.04 },
-  ],
-  stargazerCount: 42,
-  forkCount: 7,
-  updatedAt: "2026-09-08T12:00:00Z",
+  summary: "A sample project showcasing modern web development",
+  body: "It does a great deal.\n\n# How it works\n\nWell.",
+  order: 1,
+  repo: "danielhkuo/zeta-tool",
+  repoUrl: "https://github.com/danielhkuo/zeta-tool",
+  link: "https://www.example.com/",
+  image: null,
+  github: {
+    stars: 42,
+    forks: 7,
+    language: { name: "TypeScript", color: "#3178c6" },
+    languages: [
+      { name: "TypeScript", color: "#3178c6", percentage: 65.44 },
+      { name: "JavaScript", color: "#f1e05a", percentage: 34.52 },
+      { name: "Makefile", color: "#427819", percentage: 0.04 },
+    ],
+    updatedAt: "2026-09-08T12:00:00Z",
+  },
 };
 
+/** A repository with nothing to show on GitHub: no languages, no stars, no forks. */
 const ALPHA: Project = {
+  slug: "Alpha",
   name: "Alpha",
-  description: "",
-  url: "https://github.com/danielhkuo/Alpha",
-  homepageUrl: null,
-  primaryLanguage: null,
-  languages: [],
-  stargazerCount: 0,
-  forkCount: 0,
-  updatedAt: "2026-08-29T12:00:00Z",
+  summary: "The first letter",
+  body: "",
+  order: 2,
+  repo: "danielhkuo/Alpha",
+  repoUrl: "https://github.com/danielhkuo/Alpha",
+  link: null,
+  image: null,
+  github: { stars: 0, forks: 0, language: null, languages: [], updatedAt: "2026-08-29T12:00:00Z" },
 };
 
-const PROJECTS = [ZETA, ALPHA];
+/** A live site with no repository. */
+const SITE: Project = {
+  ...ALPHA,
+  slug: "site",
+  name: "Site",
+  summary: "A site with no source to show",
+  order: 3,
+  repo: null,
+  repoUrl: null,
+  link: "https://example.com/site",
+  github: null,
+};
+
+/** Neither a repository nor a link, and no stats: a build without a token. */
+const NOVEL: Project = { ...SITE, slug: "novel", name: "Novel", summary: "A novel, in drafts", order: 4, link: null };
+
+const PROJECTS = [ZETA, ALPHA, SITE, NOVEL];
+
+/** Nine projects, to show nothing counts on six. */
+const NINE: Project[] = Array.from({ length: 9 }, (_, i) => ({
+  ...ALPHA,
+  slug: `p${i + 1}`,
+  name: `Project ${i + 1}`,
+  order: i + 1,
+  repo: `danielhkuo/p${i + 1}`,
+  repoUrl: `https://github.com/danielhkuo/p${i + 1}`,
+}));
 
 /** Every markdown link target in a document. */
 function targets(md: string): string[] {
@@ -84,16 +120,20 @@ for (const [file, render] of [
     assert.ok(all.includes("https://danielhkuo.github.io/Daniel-Kuo-Resume.pdf"));
   });
 
-  test(`${file} links every pinned project's repository`, () => {
+  test(`${file} links every project's repository, and a project with none its link`, () => {
     const all = targets(render(PROJECTS));
-    assert.ok(all.includes(ZETA.url));
-    assert.ok(all.includes(ALPHA.url));
+    for (const url of [ZETA.repoUrl, ALPHA.repoUrl, SITE.link]) assert.ok(all.includes(url!), url!);
   });
 
   test(`with no projects, ${file} sends readers to the GitHub profile instead`, () => {
     const md = render([]);
-    assert.ok(!targets(md).includes(ZETA.url));
+    assert.ok(!targets(md).includes(ZETA.repoUrl!));
     assert.ok(section(md, "Projects").some((l) => l.includes(`](${LINKS.github})`)));
+  });
+
+  test(`${file} lists every project, however many there are`, () => {
+    const md = render(NINE);
+    for (const p of NINE) assert.ok(md.includes(p.repoUrl!), p.name);
   });
 }
 
@@ -107,7 +147,7 @@ test("in llms.txt, every H2 section is a list of links, as the format asks", () 
   }
 });
 
-test("llms.txt lists a project by name, linked to its repository, with its description", () => {
+test("llms.txt lists a project by name, linked to its repository, with its summary", () => {
   assert.ok(
     section(llmsTxt(PROJECTS), "Projects").includes(
       "- [zeta-tool](https://github.com/danielhkuo/zeta-tool): A sample project showcasing modern web development",
@@ -115,13 +155,23 @@ test("llms.txt lists a project by name, linked to its repository, with its descr
   );
 });
 
-test("llms.txt lists a project without a description by its name alone", () => {
-  assert.ok(section(llmsTxt(PROJECTS), "Projects").includes("- [Alpha](https://github.com/danielhkuo/Alpha)"));
+test("llms.txt links a project with no repository to its link, and one with neither to the text version's list", () => {
+  const projects = section(llmsTxt(PROJECTS), "Projects");
+  assert.ok(projects.includes("- [Site](https://example.com/site): A site with no source to show"));
+  assert.ok(projects.includes("- [Novel](https://danielhkuo.github.io/minimal#projects): A novel, in drafts"));
 });
 
-test("llms.txt folds a description that spans lines onto its project's line", () => {
-  const md = llmsTxt([{ ...ZETA, description: "Line one.\r\n\nLine two." }]);
-  assert.ok(section(md, "Projects").includes(`- [zeta-tool](${ZETA.url}): Line one. Line two.`));
+test("llms.txt lists the projects in the order given", () => {
+  const projects = section(llmsTxt(PROJECTS), "Projects").filter((l) => l.startsWith("- "));
+  assert.deepEqual(
+    projects.map((l) => /^- \[([^\]]+)\]/.exec(l)?.[1]),
+    ["zeta-tool", "Alpha", "Site", "Novel"],
+  );
+});
+
+test("llms.txt folds a summary that spans lines onto its project's line", () => {
+  const md = llmsTxt([{ ...ZETA, summary: "Line one.\r\n\nLine two." }]);
+  assert.ok(section(md, "Projects").includes(`- [zeta-tool](${ZETA.repoUrl}): Line one. Line two.`));
 });
 
 test("llms.txt points to the text page and to agents.md", () => {
@@ -136,32 +186,57 @@ test("agents.md gives the whole profile from content.ts", () => {
   assert.ok(md.includes(EMAIL));
 });
 
-test("agents.md gives each project its description, links, language mix, counts and last update", () => {
-  const block = projectBlock(agentsMd(PROJECTS), "zeta-tool").join("\n");
+test("agents.md gives each project its summary, links, language mix, counts and last update, then its description", () => {
+  const md = agentsMd(PROJECTS);
+  const block = projectBlock(md, "zeta-tool").join("\n");
   assert.match(block, /^A sample project showcasing modern web development$/m);
   assert.match(
     block,
     /^- Repository: \[github\.com\/danielhkuo\/zeta-tool\]\(https:\/\/github\.com\/danielhkuo\/zeta-tool\)$/m,
   );
-  assert.match(block, /^- Homepage: \[example\.com\]\(https:\/\/www\.example\.com\/\)$/m);
+  assert.match(block, /^- Link: \[example\.com\]\(https:\/\/www\.example\.com\/\)$/m);
   assert.match(block, /^- Languages: TypeScript 65%, JavaScript 35%$/m);
   assert.match(block, /^- Stars: 42 · Forks: 7$/m);
   assert.match(block, /^- Updated: 8 Sep 2026$/m);
+  // The description comes after the facts, which are the project's, and its headings sit below the project's.
+  assert.ok(block.indexOf("- Updated") < block.indexOf("It does a great deal."));
+  assert.ok(md.includes("#### How it works\n\nWell.\n"));
+});
+
+test("agents.md moves a description's headings below the project's, so the name stays the only H1", () => {
+  const lines = agentsMd(PROJECTS).split("\n");
+  assert.ok(lines.includes("#### How it works"));
+  assert.ok(!lines.includes("# How it works"));
 });
 
 test("agents.md leaves out a language too small to round above zero", () => {
-  assert.doesNotMatch(projectBlock(agentsMd(PROJECTS), "zeta-tool").join("\n"), /Makefile/);
+  assert.doesNotMatch(agentsMd(PROJECTS), /Makefile/);
 });
 
 test("agents.md leaves out what a project does not have", () => {
   const block = projectBlock(agentsMd(PROJECTS), "Alpha").join("\n");
-  assert.doesNotMatch(block, /Homepage|Languages/);
+  assert.doesNotMatch(block, /Link|Languages/);
   assert.match(block, /^- Repository: \[github\.com\/danielhkuo\/Alpha\]\(https:\/\/github\.com\/danielhkuo\/Alpha\)$/m);
+  assert.match(block, /^- Stars: 0 · Forks: 0$/m);
 });
 
-test("agents.md lists the projects in pinned order", () => {
+test("agents.md gives a project built without GitHub's stats no counts, languages or date", () => {
+  const block = projectBlock(agentsMd(PROJECTS), "Site").join("\n");
+  assert.match(block, /^A site with no source to show$/m);
+  assert.match(block, /^- Link: \[example\.com\/site\]\(https:\/\/example\.com\/site\)$/m);
+  assert.doesNotMatch(block, /Repository|Languages|Stars|Updated/);
+  const novel = projectBlock(agentsMd(PROJECTS), "Novel").join("\n");
+  assert.match(novel, /^A novel, in drafts$/m);
+  assert.doesNotMatch(novel, /^- /m);
+});
+
+test("agents.md lists the projects in the order given", () => {
   const md = agentsMd([ALPHA, ZETA]);
   assert.ok(md.indexOf("### Alpha") < md.indexOf("### zeta-tool"));
+});
+
+test("agents.md gives every project a section of its own, however many there are", () => {
+  assert.equal(agentsMd(NINE).split("\n").filter((l) => l.startsWith("### ")).length, 9);
 });
 
 test("agents.md gives the address of every page on the site", () => {

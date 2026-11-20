@@ -6,6 +6,7 @@
 // it as it is.
 
 import { EMAIL, LINKS, PROFILE } from "../components/terminal/content.ts";
+import type { Project } from "./projects.ts";
 import {
   SITE_PAGES,
   TEXT_PAGE,
@@ -13,16 +14,15 @@ import {
   bareUrl,
   contactLinks,
   formatDay,
+  nestMarkdown,
   profileFacts,
   profileSummary,
-  withScheme,
-  type Project,
   type SitePage,
 } from "./site-content.ts";
 
 const LLMS_TXT = "/llms.txt";
 
-/** A repo description is one line on GitHub, but nothing enforces it; a break would split a list item. */
+/** A summary is one line, but nothing enforces it; a break would split a list item. */
 function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -36,8 +36,8 @@ function pageItem(page: SitePage): string {
   return linkItem(page.title, page.path, page.summary);
 }
 
-/** What stands in for the project list when there are no projects to publish. */
-const GITHUB_PROFILE = linkItem("GitHub profile", LINKS.github, "the projects are pinned there");
+/** What stands in for the project list when there are no projects. */
+const GITHUB_PROFILE = linkItem("GitHub profile", LINKS.github, "the code is there");
 
 function lead(): string[] {
   return [`# ${PROFILE.name}`, "", `> ${profileSummary()}`, ""];
@@ -58,7 +58,7 @@ export function llmsTxt(projects: readonly Project[]): string {
     "## Projects",
     "",
     ...(projects.length
-      ? projects.map((p) => linkItem(p.name, p.url, oneLine(p.description)))
+      ? projects.map((p) => linkItem(p.name, p.repoUrl ?? p.link ?? `${TEXT_PAGE}#projects`, oneLine(p.summary)))
       : [GITHUB_PROFILE]),
     "",
     "## Contact",
@@ -74,30 +74,41 @@ export function llmsTxt(projects: readonly Project[]): string {
 
 /** "TypeScript 65%, JavaScript 35%". A language that rounds to nothing is left out. */
 function languageMix(p: Project): string {
-  return p.languages
+  return (p.github?.languages ?? [])
     .map((l) => ({ name: l.name, share: Math.round(l.percentage) }))
     .filter((l) => l.share > 0)
     .map((l) => `${l.name} ${l.share}%`)
     .join(", ");
 }
 
+/** One project: its summary, then the facts it has, then its description. A blank line between each, and after. */
 function projectSection(p: Project): string[] {
-  const lines = [`### ${p.name}`, ""];
-  const description = oneLine(p.description);
-  if (description) lines.push(description, "");
-  lines.push(`- Repository: [${bareUrl(p.url)}](${p.url})`);
-  if (p.homepageUrl) lines.push(`- Homepage: [${bareUrl(p.homepageUrl)}](${withScheme(p.homepageUrl)})`);
+  const blocks = [`### ${p.name}`];
+  const summary = oneLine(p.summary);
+  if (summary) blocks.push(summary);
+
+  const facts: string[] = [];
+  if (p.repoUrl) facts.push(`- Repository: [${bareUrl(p.repoUrl)}](${p.repoUrl})`);
+  if (p.link) facts.push(`- Link: [${bareUrl(p.link)}](${p.link})`);
   const mix = languageMix(p);
-  if (mix) lines.push(`- Languages: ${mix}`);
-  lines.push(`- Stars: ${p.stargazerCount} · Forks: ${p.forkCount}`, `- Updated: ${formatDay(p.updatedAt)}`, "");
-  return lines;
+  if (mix) facts.push(`- Languages: ${mix}`);
+  if (p.github) {
+    facts.push(`- Stars: ${p.github.stars} · Forks: ${p.github.forks}`);
+    facts.push(`- Updated: ${formatDay(p.github.updatedAt)}`);
+  }
+  if (facts.length) blocks.push(facts.join("\n"));
+
+  const body = p.body.trim();
+  if (body) blocks.push(nestMarkdown(body, 3));
+
+  return [...blocks.join("\n\n").split("\n"), ""];
 }
 
 /** Everything: the profile, the contacts, each project in full, every page, and how to read the site. */
 export function agentsMd(projects: readonly Project[]): string {
   const lines = [
     ...lead(),
-    `This is ${PROFILE.name}'s personal site, described for AI agents. The site is a world explored on dragonback, entered through a title menu; everything on it is also in the plain text version. This file is generated each time the site is built, from the same profile and pinned GitHub repositories the site shows. For a short index, read [llms.txt](${absoluteUrl(LLMS_TXT)}).`,
+    `This is ${PROFILE.name}'s personal site, described for AI agents. The site is a world explored on dragonback, entered through a title menu; everything on it is also in the plain text version. This file is generated each time the site is built, from the same profile and project list the site shows. For a short index, read [llms.txt](${absoluteUrl(LLMS_TXT)}).`,
     "",
     "## Profile",
     "",
@@ -112,7 +123,7 @@ export function agentsMd(projects: readonly Project[]): string {
     "## Projects",
     "",
     ...(projects.length
-      ? ["The repositories pinned on GitHub, in the order they are pinned.", "", ...projects.flatMap(projectSection)]
+      ? ["The projects, in the order the site lists them.", "", ...projects.flatMap(projectSection)]
       : [GITHUB_PROFILE, ""]),
     "## Pages",
     "",
@@ -122,7 +133,7 @@ export function agentsMd(projects: readonly Project[]): string {
     "",
     `- Read the [text version](${absoluteUrl(TEXT_PAGE)}) or this file. The title menu and the flight are interactive ways through the same content and add no facts of their own. The text version is dressed as a file open in nano; its shortcuts only search and move around that page.`,
     "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight needs JavaScript.",
-    "- GitHub is the source of truth for the projects. This file is as current as the site's last build.",
+    "- The project list is kept by hand in the site's repository; the stars, forks and languages come from GitHub when the site is built. This file is as current as the site's last build.",
     `- To reach ${PROFILE.name}, email [${EMAIL}](${LINKS.email}).`,
   ];
   return `${lines.join("\n")}\n`;

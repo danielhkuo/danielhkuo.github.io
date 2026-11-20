@@ -11,6 +11,8 @@ import { parse, YAMLParseError } from "yaml";
 const FIELDS = new Set(["name", "summary", "repo", "link", "image", "order"]);
 const REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/;
 const FENCE = /^---[ \t]*$/;
+// Names compare as a person reads them, numbers by value.
+const NAMES = new Intl.Collator("en", { numeric: true });
 
 /** One project, read from its Markdown file. `slug` is the file's name and the stable key. */
 export interface Project {
@@ -292,10 +294,9 @@ function fail(dir: string, problems: string[]): never {
 }
 
 function sortProjects(projects: Project[]): Project[] {
-  const names = new Intl.Collator("en", { numeric: true });
   projects.sort((a, b) => {
     if (a.order !== b.order) return a.order < b.order ? -1 : 1;
-    const byName = names.compare(a.name, b.name);
+    const byName = NAMES.compare(a.name, b.name);
     if (byName !== 0) return byName;
     if (a.slug < b.slug) return -1;
     if (a.slug > b.slug) return 1;

@@ -5,35 +5,58 @@ import { LINKS } from "./content.ts";
 import { HOME, absPath, type Path } from "./fs.ts";
 import { complete, execute } from "./shell.ts";
 import { siteTree } from "./site.ts";
-import type { CommandContext, ScreenProgram, SiteInfo, SlimProject, TerminalApi, ThemeMode } from "./types";
+import type { Project } from "../../lib/projects.ts";
+import type { CommandContext, ScreenProgram, SiteInfo, TerminalApi, TextRun, ThemeMode } from "./types";
 
-const REPOS: SlimProject[] = [
+const REPOS: Project[] = [
   {
+    slug: "zeta-tool",
     name: "zeta-tool",
-    description: "A sample project showcasing modern web development",
-    url: "https://github.com/danielhkuo/zeta-tool",
-    homepageUrl: "https://example.com",
-    primaryLanguage: { name: "TypeScript", color: "#3178c6" },
-    languages: [
-      { name: "TypeScript", percentage: 65.4 },
-      { name: "CSS", percentage: 34.6 },
-    ],
-    stargazerCount: 42,
-    forkCount: 7,
-    updatedAt: "2026-09-08T12:00:00Z",
+    summary: "A sample project showcasing modern web development",
+    body: "",
+    order: 1,
+    repo: "danielhkuo/zeta-tool",
+    repoUrl: "https://github.com/danielhkuo/zeta-tool",
+    link: "https://example.com",
+    image: null,
+    github: {
+      stars: 42,
+      forks: 7,
+      language: { name: "TypeScript", color: "#3178c6" },
+      languages: [
+        { name: "TypeScript", color: "#3178c6", percentage: 65.4 },
+        { name: "CSS", color: "#563d7c", percentage: 34.6 },
+      ],
+      updatedAt: "2026-09-08T12:00:00Z",
+    },
   },
   {
+    slug: "Alpha",
     name: "Alpha",
-    description: "",
-    url: "https://github.com/danielhkuo/Alpha",
-    homepageUrl: null,
-    primaryLanguage: null,
-    languages: [],
-    stargazerCount: 0,
-    forkCount: 0,
-    updatedAt: "2026-08-29T12:00:00Z",
+    summary: "The first letter",
+    body: "",
+    order: 2,
+    repo: "danielhkuo/Alpha",
+    repoUrl: "https://github.com/danielhkuo/Alpha",
+    link: null,
+    image: null,
+    github: { stars: 0, forks: 0, language: null, languages: [], updatedAt: "2026-08-29T12:00:00Z" },
   },
 ];
+
+/** A project with neither a repository nor a link, built without GitHub's stats. */
+const NOVEL: Project = {
+  slug: "novel",
+  name: "Novel",
+  summary: "In drafts",
+  body: "",
+  order: 3,
+  repo: null,
+  repoUrl: null,
+  link: null,
+  image: null,
+  github: null,
+};
 
 const SITE: SiteInfo = { builtAt: "2026-10-06T09:14:02Z", resumeBytes: 145439 };
 
@@ -42,15 +65,17 @@ const SITE: SiteInfo = { builtAt: "2026-10-06T09:14:02Z", resumeBytes: 145439 };
  * are stand-ins: the page (`opened`, `themes`), the window (`cols`) and the
  * state a React hook holds in the app (the working directory).
  */
-function shell(cols = 80) {
+function shell(cols = 80, projects: Project[] = REPOS) {
   const opened: string[] = [];
   /** What the page was asked for, in order. Its system scheme is light. */
   const themes: string[] = [];
   const programs: ScreenProgram[] = [];
+  /** Rows handed over as runs (`ctx.text`), links and all. */
+  const printed: TextRun[][] = [];
   let theme: ThemeMode = "dark";
   const api: TerminalApi = {
     openUrl: (url) => opened.push(url),
-    getProjects: () => REPOS,
+    getProjects: () => projects,
     getTheme: () => theme,
     setTheme: (mode) => {
       themes.push(mode);
@@ -65,7 +90,7 @@ function shell(cols = 80) {
   let cwd: Path = HOME;
   let old: Path = HOME;
   const session: Session = {
-    root: siteTree(REPOS, SITE),
+    root: siteTree(projects, SITE),
     cwd: () => cwd,
     oldCwd: () => old,
     chdir: (path) => {
@@ -84,7 +109,10 @@ function shell(cols = 80) {
       ok: (t) => out.push(t),
       err: (t) => errs.push(t),
       rows: (rows) => out.push(...rows.map((r) => `${r.k}  ${r.v}`)),
-      text: (rows) => out.push(...rows.map((runs) => runs.map((r) => r.text).join(""))),
+      text: (rows) => {
+        printed.push(...rows);
+        out.push(...rows.map((runs) => runs.map((r) => r.text).join("")));
+      },
       clear: () => undefined,
       close: () => undefined,
       program: (p) => programs.push(p),
@@ -94,7 +122,7 @@ function shell(cols = 80) {
     return { out, errs };
   };
 
-  return { run, commands, opened, themes, pwd: () => absPath(cwd) };
+  return { run, commands, opened, themes, printed, programs, pwd: () => absPath(cwd) };
 }
 
 // ---- cd, pwd ------------------------------------------------------------------
@@ -314,13 +342,34 @@ test("whoami prints the user name", () => {
   assert.deepEqual(shell().run("whoami"), { out: ["daniel"], errs: [] });
 });
 
-test("neofetch prints the host, the bio and the pinned repos", () => {
+test("neofetch prints the host, the bio and the projects", () => {
   const { out, errs } = shell().run("neofetch");
   assert.deepEqual(errs, []);
   assert.equal(out[0], "daniel@portfolio");
   assert.equal(out[1], "----------------");
   assert.ok(out.includes("Name: Daniel Kuo"), JSON.stringify(out));
-  assert.ok(out.some((row) => row.startsWith("Pinned: ") && row.includes("zeta-tool") && row.includes("Alpha")));
+  assert.ok(out.some((row) => row.startsWith("Projects: ") && row.includes("zeta-tool") && row.includes("Alpha")));
+});
+
+test("neofetch links each project to its repository, and names one with nowhere to go in plain text", () => {
+  const sh = shell(80, [...REPOS, NOVEL]);
+  sh.run("neofetch");
+  const row = sh.printed.find((runs) => runs.map((r) => r.text).join("").startsWith("Projects: "));
+  assert.ok(row, "no Projects row");
+  assert.equal(row.find((r) => r.text === "zeta-tool")?.href, "https://github.com/danielhkuo/zeta-tool");
+  const novel = row.find((r) => r.text === "Novel");
+  assert.ok(novel, "Novel is listed");
+  assert.equal(novel.href, undefined);
+});
+
+test("neofetch leaves the projects out when there are none", () => {
+  assert.ok(!shell(80, []).run("neofetch").out.some((row) => row.startsWith("Projects")));
+});
+
+test("work with no projects says so and starts nothing", () => {
+  const sh = shell(80, []);
+  assert.deepEqual(sh.run("work"), { out: ["no projects found."], errs: [] });
+  assert.equal(sh.programs.length, 0);
 });
 
 test("theme switches the page's theme and says which it is now", () => {
