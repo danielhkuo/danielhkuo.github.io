@@ -37,6 +37,12 @@ export class FakeParam {
   cancelScheduledValues(t: number): this {
     return this.note("cancelScheduledValues", [t]);
   }
+  /** Curves set, in order (the call itself is noted with its start and duration). */
+  curves: { values: Float32Array; t: number; d: number }[] = [];
+  setValueCurveAtTime(values: Float32Array | number[], t: number, d: number): this {
+    this.curves.push({ values: Float32Array.from(values), t, d });
+    return this.note("setValueCurveAtTime", [t, d]);
+  }
 }
 
 export class FakeNode {
@@ -68,8 +74,11 @@ export class FakeNode {
     else if (to.connectedAt < 0) to.connectedAt = seq;
     this.outs.push({ to, output, input });
   }
-  disconnect(): void {
-    this.outs = [];
+  /** From everything, or from one node or parameter only. */
+  disconnect(to?: FakeNode | FakeParam): void {
+    const gone = to === undefined ? this.outs : this.outs.filter((o) => o.to === to);
+    this.outs = to === undefined ? [] : this.outs.filter((o) => o.to !== to);
+    for (const o of gone) if (o.to instanceof FakeParam) o.to.inputs = o.to.inputs.filter((n) => n !== this);
   }
   start(when = 0, offset = 0): void {
     this.started = [when, offset];
