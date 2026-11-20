@@ -10,24 +10,22 @@
 import { rngFor } from "../../core/rng.ts";
 import { RIVER } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, bindHz, bindPan, gain, loop, lowpass, panner, type Ctx } from "./graph.ts";
-import type { Hub } from "./hub.ts";
+import { bandpass, bind, bindHz, bindPan, gain, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import type { Voice } from "./wind.ts";
+import type { BedOpts, Voice } from "./wind.ts";
 
-export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/river/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
     v.nodes.push(n);
     return n;
   };
-  const read = (name: string, rate: number): AudioBufferSourceNode => {
+  const read = (name: string, rate: number): AudioNode => {
     const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer, rate));
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    return s;
+    const handle = opts.fresh.read(name, { at: opts.at, offset: rng.float() * buffer.duration, rate, bed: "river" });
+    v.sources.push(handle);
+    return handle.out;
   };
   const halves: GainNode[] = [];
   v.steps.push(() => {

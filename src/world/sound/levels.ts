@@ -193,6 +193,12 @@ export const OPEN = { hz: 700, q: 0.4 };
  * plainly still (§14.5).
  */
 export const LOOP_WANDER_CENTS = 30;
+/**
+ * Fresh loops (§14.8). 1: that bed's reads move to a new generation of each noise before the one playing can come
+ * round. 0: they stay on the first loop, as they did before. Generations are per buffer and shared by every bed that
+ * reads it, so turning one bed off only holds that bed's own reads.
+ */
+export const LOOPS = { wind: 1, sea: 1, rain: 1, river: 1 };
 /** A bed is stopped when every gain has been under BED_OFF for BED_OFF_S seconds, and built again when one passes BED_ON. */
 export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;

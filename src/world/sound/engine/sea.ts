@@ -11,18 +11,17 @@
 import { rngFor } from "../../core/rng.ts";
 import { BED, BED_WANDER, OPEN } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, bindHz, bindPan, gain, highpass, loop, lowpass, panner, type Ctx } from "./graph.ts";
-import type { Hub } from "./hub.ts";
+import { bandpass, bind, bindHz, bindPan, gain, highpass, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import type { Voice } from "./wind.ts";
+import type { BedOpts, Voice } from "./wind.ts";
 
 interface Parts {
   v: Voice;
   keep<N extends AudioNode>(n: N): N;
-  noise(name: string): AudioBufferSourceNode;
+  noise(name: string): AudioNode;
 }
 
-function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts {
+function parts(ctx: Ctx, kit: Kit, fresh: BedOpts["fresh"], seed: number, tag: string, at: number): Parts {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(seed, `sound/${tag}/offsets`);
   const keep = <N extends AudioNode>(n: N): N => {
@@ -34,16 +33,16 @@ function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts
     keep,
     noise(name) {
       const buffer = kit.buffer(name);
-      const s = keep(loop(ctx, buffer));
-      s.start(at, rng.float() * buffer.duration);
-      v.sources.push(s);
-      return s;
+      // The surf bed and the open sea are one bed for the fresh switch: both hold, or both move.
+      const read = fresh.read(name, { at, offset: rng.float() * buffer.duration, bed: "sea" });
+      v.sources.push(read);
+      return read.out;
     },
   };
 }
 
-export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
-  const p = parts(ctx, kit, opts.seed, "bed", opts.at);
+export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
+  const p = parts(ctx, kit, opts.fresh, opts.seed, "bed", opts.at);
   const { v, keep } = p;
   let sum: GainNode;
   v.steps.push(() => {
@@ -112,8 +111,8 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
   return v;
 }
 
-export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
-  const p = parts(ctx, kit, opts.seed, "open", opts.at);
+export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
+  const p = parts(ctx, kit, opts.fresh, opts.seed, "open", opts.at);
   const { v, keep } = p;
   v.steps.push(() => {
     const band = keep(bandpass(ctx, OPEN.hz, OPEN.q));

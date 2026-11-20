@@ -14,28 +14,37 @@
 import { rngFor } from "../../core/rng.ts";
 import { RAIN } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, gain, highpass, highshelf, intoPan, loop, lowpass, panner, type Ctx } from "./graph.ts";
-import type { Hub } from "./hub.ts";
+import { bandpass, bind, gain, highpass, highshelf, intoPan, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import type { Voice } from "./wind.ts";
+import type { BedOpts, Voice } from "./wind.ts";
 
-export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/rain/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
     v.nodes.push(n);
     return n;
   };
-  /** A loop of `name` from a seeded place at `rate`, its pitch wandering on drift channel `drift` by up to `cents`. */
-  const read = (name: string, rate: number, drift: number, cents: number): AudioBufferSourceNode => {
+  /**
+   * A loop of `name` from a seeded place at `rate`, its pitch wandering on drift channel `drift` by up to `cents`.
+   * One wander gain for the read: each new generation is driven by it, and unwire only disconnects that source.
+   */
+  const read = (name: string, rate: number, drift: number, cents: number): AudioNode => {
     const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer, rate));
     const wander = keep(gain(ctx, cents));
     opts.hub.drift.connect(wander, drift);
-    wander.connect(s.detune);
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    return s;
+    const handle = opts.fresh.read(name, {
+      at: opts.at,
+      offset: rng.float() * buffer.duration,
+      rate,
+      bed: "rain",
+      wire: (src) => {
+        wander.connect(src.detune);
+        return () => wander.disconnect(src.detune);
+      },
+    });
+    v.sources.push(handle);
+    return handle.out;
   };
   /** Three reads of a mono loop, at RAIN.across's places and `rates`, wandering by up to `cents`, in one stereo merger. */
   const across = (name: string, rate: number, rates: readonly number[], cents: number): ChannelMergerNode => {

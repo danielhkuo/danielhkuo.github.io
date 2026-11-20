@@ -21,6 +21,7 @@ import {
 import { T } from "../mix.ts";
 import { CONTROL_PLAYBACK } from "../synth/controls.ts";
 import { bandpass, bind, bindHz, bindPan, gain, intoPan, kRate, loop, lowpass, panner, type Binding, type Ctx } from "./graph.ts";
+import type { Fresh } from "./fresh.ts";
 import type { Hub } from "./hub.ts";
 import type { Kit } from "./kit.ts";
 
@@ -28,14 +29,23 @@ export interface Voice {
   /** Build steps still to run, one a frame (all at once offline). */
   steps: (() => void)[];
   bindings: Binding[];
-  sources: AudioScheduledSourceNode[];
+  /** Loops to stop when the voice is let go: a source, or a fresh read (it stops every generation it has going). */
+  sources: { stop(when?: number): void }[];
   nodes: AudioNode[];
+}
+
+/** What a bed's builder is handed. `fresh` is the engine's one reader: generations are shared by every read of a name. */
+export interface BedOpts {
+  hub: Hub;
+  seed: number;
+  at: number;
+  fresh: Fresh;
 }
 
 /** Cents either side of its centre that a share `x` (0.15 for ±15 %) moves a filter. */
 const cents = (x: number) => 1200 * Math.log2(1 + x);
 
-export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/wind/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
@@ -43,17 +53,25 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
     return n;
   };
   /**
-   * A noise loop read from its own place. At its own rate exactly, unless it `wander`s: a loop played off-speed is
-   * resampled every sample. The loops are of unequal lengths and start at their own places, so they never keep step;
-   * but a loop read plainly is heard to come round (the rush and the breeze, every 5.000 s), so every layer wanders.
+   * A noise loop read from its own place, moved onto a new generation before it can come round. One wander gain for
+   * the life of the layer: every generation is bent by the same drift, and letting one go only disconnects that source.
    */
-  const noise = (name: string, wander?: { ch: number; cents: number }): AudioBufferSourceNode => {
+  const noise = (name: string, wander: { ch: number; cents: number }): AudioNode => {
     const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer));
-    if (wander) drive(opts.hub.drift, wander.ch, wander.cents, s.detune);
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    return s;
+    const drift = keep(gain(ctx, wander.cents));
+    opts.hub.drift.connect(drift, wander.ch);
+    const read = opts.fresh.read(name, {
+      at: opts.at,
+      offset: rng.float() * buffer.duration,
+      bed: "wind",
+      wire: (src) => {
+        drift.connect(src.detune);
+        // Once this generation has faded out and stopped, the drift lets it go (or it would keep every old source).
+        return () => drift.disconnect(src.detune);
+      },
+    });
+    v.sources.push(read);
+    return read.out;
   };
   /** Channel `ch` of a control, scaled by `depth`, added to `param`. */
   const drive = (split: ChannelSplitterNode, ch: number, depth: number, param: AudioParam) => {
@@ -141,7 +159,7 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
  * W, the turn whoosh: a voice of its own, built as a turn begins (its level is still under −54 dB then, and rises no
  * faster than the bloom lets it) and let go two seconds after the dragon levels out.
  */
-export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/whoosh/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
@@ -177,7 +195,7 @@ export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub
  * its own: the engine builds it only when the dragon is fast enough for them to be heard (they sit 26 dB under the
  * rush at cruise), and lets it go when it slows. Not on touch.
  */
-export function buildWhistles(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWhistles(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/whistles/offsets");
   const keep = <N extends AudioNode>(n: N): N => {

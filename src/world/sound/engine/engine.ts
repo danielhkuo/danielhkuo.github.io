@@ -4,7 +4,7 @@
 // rendered in one go (the bench's unstepped mode, and how Firefox renders).
 
 import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
-import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, LOOPS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
@@ -21,6 +21,7 @@ import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census
 import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
 import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
+import { createFresh, ownGenerations, type Fresh } from "./fresh.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
 import { BRAIN_AHEAD, coloniesOf, gullCuesNear, REACH, unpackEmitters, type BrainAsk, type BrainInit, type BrainReply, type RemoteBrain } from "./brain.ts";
@@ -35,7 +36,7 @@ import { buildHub, type Hub } from "./hub.ts";
 import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
 import { buildRain } from "./rain.ts";
 import { buildRiverBed } from "./river.ts";
-import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
+import { buildWhistles, buildWhoosh, buildWind, type BedOpts, type Voice } from "./wind.ts";
 
 export interface EngineOptions {
   touch: boolean;
@@ -175,8 +176,8 @@ const MIX_EVERY = 1 / 30;
 const SCHED_EACH = 2;
 const HALF_VOICES = 1, HALF_EMITTERS = 2;
 
-/** What a frame did, as bits. */
-export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048 } as const;
+/** What a frame did, as bits. `fresh` is a request, a move or a cleanup of a bed's loop. */
+export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048, fresh: 4096 } as const;
 /** Level of the bench's pips and tails, dB. */
 const PIP_DB = -18, TAIL_DB = -22;
 /** The pad of digital silence at the head of every one-shot buffer, seconds. */
@@ -184,6 +185,14 @@ const PAD = 0.02;
 
 export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const offline = opts.offline === true;
+  // One reader for the whole engine: a buffer's generations are shared by every bed that reads it.
+  // (Offline, its own generations: a render does not depend on what was rendered on the kit before it.)
+  const fresh: Fresh = createFresh(ctx, offline ? ownGenerations(ctx, kit, opts.seed) : kit, {
+    offline,
+    seed: opts.seed,
+    // (The measuring arm "nofresh" holds every bed on its first loop.)
+    on: (_name, bed) => opts.skip !== "nofresh" && (bed === undefined || LOOPS[bed as keyof typeof LOOPS] !== 0),
+  });
   const master: Master = buildMaster(ctx);
   const busOn: Record<Bus, boolean> = { wind: true, water: true, life: true, moments: true, bells: true };
   const bindings: Binding[] = [
@@ -278,7 +287,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       },
     };
   /** Voices built when they can be heard and let go when they cannot: the surf bed and the open sea. */
-  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: { hub: Hub; seed: number; at: number }) => Voice;
+  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: BedOpts) => Voice;
   const demand = (name: string, gains: number[], make: Make, out: AudioNode, on: number, off: number, surfKit: boolean, riverKit = false) => ({
     name, gains, make, out, on, off, surfKit, riverKit, voice: null as Voice | null, built: false, quietSince: NaN,
   });
@@ -327,6 +336,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   /** True in a frame whose lanes and scheduler are worked elsewhere. */
   let elsewhere = false;
   let lastWaves = NaN;
+  /** World time of the fresh loops' last turn (on the page). */
+  let freshAt = -Infinity;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
   let lastT = NaN;
@@ -411,7 +422,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (!offline) return;
     }
     if (!opts.hissOnly) {
-      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now });
+      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now, fresh });
       if (wind && !windBuilt) {
         if (stepVoice(wind)) {
           windBuilt = true;
@@ -534,7 +545,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       }
       if (!b.voice) {
         if (loud) {
-          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
+          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now, fresh });
           b.built = false;
           b.quietSince = NaN;
           // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
@@ -920,6 +931,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
           lanesHalf(pose, hearing, prefs, now, look);
           emittersHalf(pose, prefs, now);
         }
+        // Offline, every move that is due is made in this step: a render must not wait for an idle frame.
+        if (fresh.frame(now)) work |= WORK.fresh;
         return;
       }
       // Where the lanes and the scheduler are worked elsewhere, what they found comes in here: the waves and laps wait
@@ -967,6 +980,13 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (sources.length && !elsewhere && opts.skip !== "nosched") {
         runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
         schedNext = (schedNext + SCHED_EACH) % scheduler.size;
+      }
+      // A crossfade waits for a frame with neither the mix nor the waves. At 60 Hz every frame has one or the other,
+      // so after a thirtieth of a second it takes a waves frame (the lighter), and after a tenth any frame.
+      const idle = (work & (WORK.mix | WORK.lanes)) === 0, since = pose.t - freshAt;
+      if (idle || since < 0 || (!(since < 1 / 30) && (work & WORK.mix) === 0) || !(since < 0.1)) {
+        freshAt = pose.t;
+        if (fresh.frame(now)) work |= WORK.fresh;
       }
       if (queued.length) playQueued(pose, now, look, prefs.calm);
     },
@@ -1164,7 +1184,8 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
           censused = true;
         }
       }
-      if (kit.done()) {
+      // Generations keep being asked for after the jobs are in: adopt those too, still not in a frame that built a graph.
+      if (kit.done() && !kit.pending()) {
         kitMs = 0;
       } else {
         // A few slices of kit work, stopped as soon as they have taken a tenth of a millisecond.

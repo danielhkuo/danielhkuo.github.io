@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { emptyHearing, type Pose, type Prefs } from "../types.ts";
 import { createEngine, WORK } from "./engine.ts";
 import { FakeContext, fakeKit, FakeNode, type FakeParam } from "./fake.ts";
-import { createFresh, FRESH, type FreshKit } from "./fresh.ts";
+import { createFresh, FRESH, ownGenerations, type FreshKit } from "./fresh.ts";
 import type { Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
 
@@ -226,7 +226,7 @@ test("a name turned off is read as a plain loop and never asked for again", () =
 
 const PREFS: Prefs = { volume: 0.7, headphones: false, calm: false, touch: false };
 
-test("in the engine: the wind, the surf bed, the open sea, the rain and the river all read fresh, moved on page frames with no mix or waves", () => {
+for (const fps of [120, 60]) test(`in the engine at ${fps} Hz: the wind, the surf bed, the open sea, the rain and the river all read fresh, moved on page frames with no mix or waves where there are any`, () => {
   const ctx = new FakeContext();
   const gens = genKit(0.2);
   // The fake kit, with generations. buffer(name) is generation 0 for everyone else (the falls, the moments, the waves'
@@ -242,11 +242,11 @@ test("in the engine: the wind, the surf bed, the open sea, the rain and the rive
   h.stream.e = 3;
   h.stream.d = 20;
   const work: number[] = [];
-  for (let k = 0; k < 120 * 30; k++) {
-    const t = 10 + k / 120;
+  for (let k = 0; k < fps * 30; k++) {
+    const t = 10 + k / fps;
     ctx.currentTime = t;
     gens.tick(t);
-    const pose: Pose = { t, dt: 1 / 120, x: 0, y: 0, alt: 30, heading: 0, speed: 60, bank: 0, rest: 0, rain: 1 };
+    const pose: Pose = { t, dt: 1 / fps, x: 0, y: 0, alt: 30, heading: 0, speed: 60, bank: 0, rest: 0, rain: 1 };
     engine.frame(pose, h, PREFS);
     work.push(engine.work());
   }
@@ -254,10 +254,44 @@ test("in the engine: the wind, the surf bed, the open sea, the rain and the rive
   for (const name of ["buffet", "rush", "hiss", "breeze", "brown0", "pink0", "white0", "velvet", "drops", "plinks", "brook", "flow"]) assert.ok(asked.has(name), `${name} is made fresh`);
   noneWraps(ctx, 40);
   // The moves are made on frames that carry neither the mix nor the waves (WORK.fresh marks them).
+  // (At 60 Hz every frame carries one or the other, and the moves go anyway.)
   const moved = work.filter((w) => w & WORK.fresh);
   assert.ok(moved.length > 20);
-  assert.ok(moved.every((w) => (w & (WORK.mix | WORK.lanes)) === 0));
+  if (fps === 120) assert.ok(moved.every((w) => (w & (WORK.mix | WORK.lanes)) === 0));
   // A wandering layer's new source is driven as the old was: its detune has the drift's gain as an input.
+  // Once a source has stopped and been let go, nothing drives it any more (or the drift would keep every old source).
   const buffets = sources(ctx).filter((s) => genOf(s).name === "buffet" && genOf(s).g > 0);
-  assert.ok(buffets.length > 0 && buffets.every((s) => (s.detune as FakeParam).inputs.length === 1));
+  const live = buffets.filter((s) => s.stopped === null), gone = buffets.filter((s) => s.stopped !== null && s.stopped < 39);
+  assert.ok(live.length > 0 && live.every((s) => (s.detune as FakeParam).inputs.length === 1), "live sources wander");
+  assert.ok(gone.length > 0 && gone.every((s) => (s.detune as FakeParam).inputs.length === 0), "stopped sources are unwired");
+});
+
+test("an offline engine makes its own generations: two renders on one kit, one after the other, read the same", () => {
+  const kit = genKit(0);
+  const once = () => {
+    const ctx = new FakeContext();
+    const own = ownGenerations(ctx as unknown as Ctx, kit, 3);
+    const fresh = createFresh(ctx as unknown as Ctx, own, { offline: true, seed: 3 });
+    fresh.read("white0", { at: 0, offset: 0.3 });
+    for (let k = 0; k < 60 * 12; k++) {
+      ctx.currentTime = k / 60;
+      fresh.frame(k / 60);
+    }
+    return { gens: own.generation("white0"), starts: ctx.nodes.filter((n) => n.kind === "bufferSource").map((n) => `${n.started?.join(",")} ${n.stopped}`) };
+  };
+  const a = once(), b = once();
+  assert.ok(a.gens >= 3);
+  assert.deepEqual(b, a);
+  assert.equal(kit.asked.length, 0, "the shared kit is not asked");
+});
+
+test("a move's source is silent until its fade begins", () => {
+  const ctx = new FakeContext();
+  const kit = genKit(0);
+  const fresh = createFresh(ctx as unknown as Ctx, kit, { offline: false, seed: 3 });
+  fresh.read("pink0", { at: 0, offset: 0 });
+  run(ctx, kit, fresh, 60, 4);
+  const moved = sources(ctx).filter((s) => genOf(s).g > 0);
+  assert.ok(moved.length > 0);
+  for (const s of moved) assert.equal(((s.outs[0].to as FakeNode).gain as FakeParam).value, 0);
 });
