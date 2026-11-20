@@ -300,16 +300,20 @@ export default function Title({ world, header, shell }: TitleProps) {
 
   return (
     <div ref={rootRef} className={`${styles.title} ${fell.variable}`} data-title={mode}>
+      {/* The world is the page's main content, held behind the title until the visitor goes in. */}
       {desk ? (
-        <Flight
-          {...world}
-          // Let go as the window starts to go, so the dragon sets off while it tucks away. The Enter that started it
-          // is taken (preventDefault), and the flight leaves a taken key alone.
-          held={mode === "title" || mode === "returning"}
-          holdAt={holdAt}
-          onLeave={leave}
-          onReady={() => setWorldReady(true)}
-        />
+        // A plain block: the world lays itself out, fixed, behind everything, so this adds nothing to the layout.
+        <main aria-label="The world">
+          <Flight
+            {...world}
+            // Let go as the window starts to go, so the dragon sets off while it tucks away. The Enter that started it
+            // is taken (preventDefault), and the flight leaves a taken key alone.
+            held={mode === "title" || mode === "returning"}
+            holdAt={holdAt}
+            onLeave={leave}
+            onReady={() => setWorldReady(true)}
+          />
+        </main>
       ) : null}
       <div className={styles.paper} data-arrival="" data-arrived={arrived ? "true" : "false"} data-state={start} aria-hidden="true">
         {desk ? <ArrivalPaper start={start} at={holdAt} onArrived={() => setArrived(true)} /> : null}
