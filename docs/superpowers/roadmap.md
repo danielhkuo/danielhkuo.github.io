@@ -280,7 +280,6 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
   small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
   and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
-  - flight-replay's true peak is −4.1 dBTP against the −4.5 bar (it was −4.0 before the wind came down): find which voice.
   - Sound's 4× mean is 105 µs against 100: block row copy, one buffer a pass (spec §14.6). Gated off/on pairs still to run.
   - Owner's first listen (2026-11-19): default volume now Half, wind down 4 dB. The other voices went unnoticed: listen again with the wind down.
 

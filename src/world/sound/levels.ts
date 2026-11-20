@@ -283,10 +283,11 @@ export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
  * A call's notes, a startled bird's keks and its wingbeats, linear (their buffers peak at 0.5), and the reverb
  * send's level. Calibrated: a call 40 cells off peaks at −30 LUFS momentary.
  * `near`: the most a startled bird is given of a lone bird's level (1 within the small class's reference distance),
- * so the nearest are heard as one about 51 cells off. Without it, birds put up close ahead of a boosting flier, two
+ * so the nearest are heard as one about 55 cells off (0.7 at first; with the wind
+ * down 4 dB the recorded flight still peaked at −4.1 dBTP on two birds' keks landing together, and 0.62 gave −4.7). Without it, birds put up close ahead of a boosting flier, two
  * at once, peaked at −3.8 dBTP in the recorded flights (§9.1's bar is −4.5); the bench's beach pass is unchanged (§13).
  */
-export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.7 };
+export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.6 };
 
 // ── The clock and the moments (§4.8–4.10) ────────────────────────────────────────────────────────────────────────────
 

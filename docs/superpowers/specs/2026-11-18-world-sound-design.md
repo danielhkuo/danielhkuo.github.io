@@ -1670,4 +1670,11 @@ per-frame reads of the context's state.
 "When it defaults to full volume, it's really loud. The wind is very, very loud." The gulls were fine; nothing else was
 noticed. So: the default volume is Half (0.5, −12 dB; it was 0.7), and every wind layer is down 4 dB (`K_WIND`). The
 recorded flights now read −24.4 and −25.4 LUFS (flight-replay was −22.1). flight-replay's true peak is −4.1 dBTP
-against §9.1's −4.5; it was −4.0 before the change, so the wind is not its cause. Not yet looked into.
+against §9.1's −4.5; it was −4.0 before the change, so the wind is not its cause.
+
+It is the startled gulls: at 2.50 s two birds put up 35 and 40 cells ahead send their keks within 30 ms of each other.
+`K_GULL.near` (the most a startled bird is given of a lone bird's level) swept: 0.70 −4.1, 0.66 −4.4, 0.62 −4.7 dBTP.
+Set to 0.6 (the nearest heard as one about 55 cells off): flight-replay −4.9, long-flight −5.9 dBTP, every gull scene
+as it was (none reaches the ceiling). The whole suite otherwise passes but for mist-muffle-beds, whose one "click" at
+35.74 s is a smooth noise crest (its first difference 3.6σ, no step) flagged at 6.7 against the detector's 6.5; it is
+there at 39a6303 too, sample for sample, and the fresh beds (§14.8) will change that noise.
