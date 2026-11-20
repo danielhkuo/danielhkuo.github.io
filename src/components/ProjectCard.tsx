@@ -1,9 +1,9 @@
 import { Card, VStack, HStack, Heading, Text } from "@astryxdesign/core";
 import FishLayer from "@/components/fish/FishLayer";
-import type { PinnedRepo } from "@/lib/github";
+import type { Project } from "@/lib/projects";
 
 interface ProjectCardProps {
-  project: PinnedRepo;
+  project: Project;
 }
 
 /** "Sep 8" — the corner date. Year is implied; the full date lives in the shell's `work` view. */
@@ -13,8 +13,8 @@ function shortDate(iso: string): string {
 }
 
 /**
- * A compact repo card: language and date, the name as the loudest thing,
- * two lines of description, the language mix as one segmented rule, then
+ * A compact project card: language and date, the name as the loudest thing,
+ * two lines of summary, the language mix as one segmented rule, then
  * stars/forks and the links as plain text. Three fit in a row.
  *
  * Left alone, the card turns into its project's fish (see fish/tank.ts). The
@@ -22,42 +22,50 @@ function shortDate(iso: string): string {
  * copy that fades out, and the name, which stays.
  */
 export default function ProjectCard({ project }: ProjectCardProps) {
-  const languages = project.languages.filter((lang) => lang.percentage > 1);
-  const hasCounts = project.stargazerCount > 0 || project.forkCount > 0;
+  const github = project.github;
+  const language = github?.language ?? null;
+  const languages = (github?.languages ?? []).filter((lang) => lang.percentage > 1);
+  const href = project.repoUrl ?? project.link;
 
   return (
     <Card padding={5} className="fish-card reveal h-full">
-      <FishLayer name={project.name} />
+      <FishLayer name={project.slug} />
       <VStack gap={3} height="100%" className="fish-copy">
         <HStack gap={2} hAlign="between" vAlign="center">
           <Text type="supporting" as="span" color="secondary" className="text-[13px]">
             <HStack gap={1.5} vAlign="center" as="span">
               <span
                 className="size-2 shrink-0 bg-[var(--border)]"
-                style={project.primaryLanguage ? { backgroundColor: project.primaryLanguage.color } : undefined}
+                style={language ? { backgroundColor: language.color } : undefined}
                 aria-hidden
               />
-              {project.primaryLanguage?.name ?? "No language data"}
+              {language?.name ?? "No language data"}
             </HStack>
           </Text>
-          <Text type="label" as="span" color="secondary" className="caps-label whitespace-nowrap text-[10px]">
-            {shortDate(project.updatedAt)}
-          </Text>
+          {github ? (
+            <Text type="label" as="span" color="secondary" className="caps-label whitespace-nowrap text-[10px]">
+              {shortDate(github.updatedAt)}
+            </Text>
+          ) : null}
         </HStack>
 
         <Heading level={3} className="fish-name font-display text-[26px] leading-[1.1] [overflow-wrap:anywhere]">
-          <a
-            href={project.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-text-primary decoration-accent/30 underline-offset-4 hover:underline"
-          >
-            {project.name}
-          </a>
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-text-primary decoration-accent/30 underline-offset-4 hover:underline"
+            >
+              {project.name}
+            </a>
+          ) : (
+            project.name
+          )}
         </Heading>
 
         <Text type="body" as="p" color="secondary" className="line-clamp-2 min-h-[42px] font-prose text-[13px] leading-[1.5]">
-          {project.description}
+          {project.summary}
         </Text>
 
         {/* The language mix as proportion: one 4px rule, one segment per language. */}
@@ -69,14 +77,16 @@ export default function ProjectCard({ project }: ProjectCardProps) {
 
         <HStack gap={2} hAlign="between" vAlign="center" className="mt-auto text-[13px]">
           <Text type="supporting" as="span" color="secondary" hasTabularNumbers className="text-[13px]">
-            {hasCounts ? `★ ${project.stargazerCount} · ⑂ ${project.forkCount}` : "—"}
+            {github && (github.stars > 0 || github.forks > 0) ? `★ ${github.stars} · ⑂ ${github.forks}` : "—"}
           </Text>
           <HStack gap={3} as="span">
-            <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-              Repo ↗
-            </a>
-            {project.homepageUrl && (
-              <a href={project.homepageUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+            {project.repoUrl && (
+              <a href={project.repoUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                Repo ↗
+              </a>
+            )}
+            {project.link && (
+              <a href={project.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
                 Live ↗
               </a>
             )}

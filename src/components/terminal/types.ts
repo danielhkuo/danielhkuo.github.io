@@ -1,25 +1,11 @@
 // Shared types for the interactive terminal. No React, no `any`.
 
+import type { Project } from "../../lib/projects.ts";
 import type { CellRun, Screen } from "./tty/screen";
-
-/** A serializable slice of a pinned GitHub repo, passed from the server page. */
-export interface SlimProject {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  primaryLanguage: { name: string; color: string } | null;
-  /** Largest first, as GitHub reports them. */
-  languages: { name: string; percentage: number }[];
-  stargazerCount: number;
-  forkCount: number;
-  /** ISO 8601. */
-  updatedAt: string;
-}
 
 /** What only the build knows about the site, passed from the server page. */
 export interface SiteInfo {
-  /** When the site was built, ISO 8601: the date on every file that is not a repo. */
+  /** When the site was built, ISO 8601: the date on every file GitHub gives no date for. */
   builtAt: string;
   /** The résumé PDF's size, for `ls -l`. */
   resumeBytes: number;
@@ -179,7 +165,7 @@ export type ThemeMode = "dark" | "light";
 /** The bridge the terminal uses to reach the surrounding page and the browser. */
 export interface TerminalApi {
   openUrl(url: string): void;
-  getProjects(): SlimProject[];
+  getProjects(): Project[];
   getTheme(): ThemeMode;
   /** Choose a mode, flip it, or with "auto" go back to the system's. Returns the mode now showing. */
   setTheme(mode: ThemeMode | "toggle" | "auto"): ThemeMode;

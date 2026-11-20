@@ -16,7 +16,7 @@
     "favicons": "node scripts/recolor-favicon.mjs",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
     "test:minimal": "playwright test --project=minimal-phone --project=minimal-desktop",
-    "e2e": "npm run build && playwright test",
+    "e2e": "PROJECTS_DIR=e2e/fixtures/projects npm run build && playwright test",
     "world:render": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-render.ts",
     "world:clouds": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-clouds.ts",
     "world:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/world-live.ts",
@@ -36,7 +36,8 @@
     "lucide-react": "^1.18.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.6.2",

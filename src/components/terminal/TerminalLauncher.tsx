@@ -2,13 +2,14 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Terminal from "./Terminal";
-import type { SiteInfo, SlimProject, TerminalApi } from "./types";
+import type { Project } from "@/lib/projects";
+import type { SiteInfo, TerminalApi } from "./types";
 import { getTheme, setTheme } from "@/lib/theme";
 
 /**
  * Owns terminal open-state, global shortcuts (⌘K / backtick), the floating
- * launch button, and the page bridge (`api`). Receives the build-time repo list
- * and build facts as serializable props from the server page. Other parts of
+ * launch button, and the page bridge (`api`). Receives the projects and the
+ * build facts as serializable props from the server page. Other parts of
  * the UI (the neofetch header) request opening via a `terminal:open`
  * CustomEvent, optionally passing the trigger element for focus return.
  */
@@ -16,7 +17,7 @@ export default function TerminalLauncher({
   projects,
   site,
 }: {
-  projects: SlimProject[];
+  projects: Project[];
   site: SiteInfo;
 }) {
   const [open, setOpen] = useState(false);

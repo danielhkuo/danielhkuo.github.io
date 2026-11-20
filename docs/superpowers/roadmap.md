@@ -288,14 +288,15 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - ~~**The dragon: what's left.**~~ Landing is built: it coils down round the landmark's building.
 - **Landmarks and projects.** Assignments, landing and the Codex are built (see Done). The projects are moving into
   one hall by the home town (story design).
-- **Where the projects come from** (owner, 2026-11-20). Stop using the six pinned repos: "the pinned repos are kind
-  of... not the best, and I don't really like all of them, and maybe we'll have more in the future, like more than 6."
-  The owner wants a curated list of substantial projects, of any length, kept outside the pinned set. Where it lives
-  (a file in this repo, or a hosted list read at build) is to be designed with the owner. Until then, everything that
-  lists projects (the hall, `/minimal`, the terminal, the agent files, the Codex) reads them through one interface
-  that never assumes six.
-  Pins cap the world at six; a GitHub topic (tag a repo, it appears at the next build) would add more with no other
-  upkeep. It touches `src/lib/github.ts` and every page that reads it, so it is its own task.
+- ~~**Where the projects come from**~~ (owner, 2026-11-20). Built on `world/projects`: one Markdown file per project
+  in `projects/`, any number of them, in the owner's `order`, read at build by `src/lib/projects.ts` (`loadProjects`,
+  `Project`). The owner edits them in the browser, on github.com or in Pages CMS (`.pages.yml`; he signs in at
+  app.pagescms.org and installs its GitHub App himself), and the push to `main` deploys them. A mistake in a file
+  fails the build with a message naming the file and the field. With a token, one GraphQL request brings GitHub's
+  stars, forks and languages; without one they are left out. `/minimal`, the terminal, the agent files, the fish and
+  the Codex read them all; the landmarks hold the first by order (six in the shipped world), keyed by slug, and the
+  rest wait for the hall. Seeded from the six pinned repos, for the owner to prune and add to. `src/lib/github.ts`
+  and its mock repos are gone; `npm run e2e` builds with fixture projects (`e2e/fixtures/projects`).
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
 - **Minimal version: what's left.** The desktop title menu's link to it, and its window growing into the page (the

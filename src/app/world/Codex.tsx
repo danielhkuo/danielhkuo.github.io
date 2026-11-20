@@ -6,7 +6,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { LINKS, PROFILE } from "../../components/terminal/content";
 import type { LandmarkType } from "../../world/sites/assign";
-import { kindName, type Landmark, type RegisterLine } from "../../world/sites/landmarks";
+import { kindName, type Landmark, type ProjectEntry, type RegisterLine } from "../../world/sites/landmarks";
 import styles from "./codex.module.css";
 import { fell } from "./fonts";
 
@@ -151,6 +151,30 @@ export interface CodexProps {
   openLabel: string;
 }
 
+/** A project's page: what it is, then its ledger and its links, each only when the project has something for it. */
+function ProjectPage({ project, kind }: { project: ProjectEntry; kind: string }) {
+  const updated = project.updatedAt ? dateOf(project.updatedAt) : null;
+  const rows: [string, ReactNode][] = [];
+  if (project.language) rows.push(["Written in", project.language]);
+  if (project.stars !== null) rows.push(["Stars", count(project.stars)]);
+  if (project.forks !== null) rows.push(["Forks", count(project.forks)]);
+  if (updated) rows.push(["Last worked on", updated]);
+  const links: { href: string; label: string; external: boolean }[] = [];
+  if (project.repoUrl) links.push({ href: project.repoUrl, label: "Read the source", external: true });
+  if (project.link) links.push({ href: project.link, label: "Visit it", external: true });
+  return (
+    <>
+      <p className={styles.rubric}>
+        <span aria-hidden="true">¶ </span>Kept at the {kind}
+      </p>
+      <Illuminated text={project.name} />
+      <p className={styles.lede}>{project.summary}</p>
+      {rows.length > 0 ? <Ledger rows={rows} /> : null}
+      {links.length > 0 ? <Links links={links} /> : null}
+    </>
+  );
+}
+
 /** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
 export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
@@ -161,25 +185,7 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, o
   const kind = kindName(landmark.type);
   let body: ReactNode;
   if (landmark.holds.kind === "project") {
-    const p = landmark.holds.project;
-    const updated = dateOf(p.updatedAt);
-    const rows: [string, ReactNode][] = [];
-    if (p.language) rows.push(["Written in", p.language]);
-    rows.push(["Stars", count(p.stars)], ["Forks", count(p.forks)]);
-    if (updated) rows.push(["Last worked on", updated]);
-    const links = [{ href: p.url, label: "Read the source", external: true }];
-    if (p.homepageUrl) links.push({ href: p.homepageUrl, label: "Visit it", external: true });
-    body = (
-      <>
-        <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>Kept at the {kind}
-        </p>
-        <Illuminated text={p.name} />
-        <p className={styles.lede}>{p.description || "No description is written."}</p>
-        <Ledger rows={rows} />
-        <Links links={links} />
-      </>
-    );
+    body = <ProjectPage project={landmark.holds.project} kind={kind} />;
   } else if (landmark.holds.kind === "about") {
     body = (
       <>
