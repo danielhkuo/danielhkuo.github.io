@@ -37,6 +37,13 @@ export const GENIE_SLOW = 10;
 /** The first part of the minimize draws the bottom down into the neck. The rest of the window follows after it. */
 export const GENIE_SPLIT = 0.42;
 
+/**
+ * Where the sides bend, as shares of the way from the window's top to the floor: straight down from the top corners
+ * first (the square shoulders macOS keeps), an S between, then the long thin neck straight down into the floor.
+ */
+const SHOULDER = 0.12;
+const BEND = 0.55;
+
 // Slow at both ends, so the bottom leaves the window gently and settles into the neck gently.
 function inOut(u: number): number {
   return 0.5 - 0.5 * Math.cos(Math.PI * u);
@@ -68,7 +75,7 @@ export function genieBands(s: GenieSetup, t: number, bands: number): Band[] {
   // How far this row has been gathered into the neck. The whole curve runs from the window's top
   // to the floor; a floor already at the top is the end of that curve, not a division by zero.
   const span = floorY - y0;
-  const intoNeck = (y: number): number => smoothstep(span === 0 ? 1 : (y - y0) / span) * p1;
+  const intoNeck = (y: number): number => smoothstep(span === 0 ? 1 : ((y - y0) / span - SHOULDER) / BEND) * p1;
   const left = (y: number): number => x0 + (neckX - neckHalf - x0) * intoNeck(y);
   const right = (y: number): number => x1 + (neckX + neckHalf - x1) * intoNeck(y);
 

@@ -1013,7 +1013,8 @@ iframe[src*="hcaptcha"] {
    world's own pixel key cap (title/ReturnKey.tsx), set on the line's middle. */
 .nf-out .nf-key {
   display: inline-block;
-  margin: 0 0.4em;
+  /* The cap is taller than the type: these margins keep its row the height of every other. */
+  margin: -4px 0.4em;
   line-height: 0;
   vertical-align: -7px;
 }

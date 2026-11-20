@@ -17,19 +17,36 @@ const BAYER8 = [
   63, 31, 55, 23, 61, 29, 53, 21,
 ];
 
+/**
+ * The share of a pixel's turn the dither decides. Narrow, so the front reads as an edge advancing in pixel steps (about
+ * 18 frame pixels deep) rather than a dissolve across the screen.
+ */
+const DITHER = 0.06;
+
+/** Frame pixels round the dragon that arrive in the first frame, so it is there whole before the world spreads out. */
+const DRAGON_R = 20;
+
 /** One threshold in [0, 1] per pixel, row-major. A smaller value arrives sooner. */
 export function arrivalOrder(w: number, h: number, cx: number, cy: number): Float32Array {
   const order = new Float32Array(w * h);
-  // A fraction of the frame's diagonal: on a centred dragon the wave passes the far corners while the
-  // dither is still playing. Vertical distance counts a little extra, so the front stays wide.
-  const reach = Math.hypot(w, h) * 0.62;
+  // The front reaches the corner farthest from the dragon just as the arrival ends, wherever the dragon is held, so no
+  // corner arrives all at once. Vertical distance counts a little extra, so the front stays wide.
+  const reach = Math.max(
+    Math.hypot(cx, cy * 1.25), Math.hypot(w - cx, cy * 1.25), Math.hypot(cx, (h - cy) * 1.25), Math.hypot(w - cx, (h - cy) * 1.25), 1,
+  );
   for (let y = 0; y < h; y++) {
     const dy = (y - cy) * 1.25;
     const row = y * w;
     const bayerRow = (y & 7) * 8;
     for (let x = 0; x < w; x++) {
+      const near = Math.hypot(x - cx, y - cy);
+      if (near <= DRAGON_R) {
+        // The dragon's own patch: all of it within the first frame, the centre first.
+        order[row + x] = 0.002 * (near / DRAGON_R);
+        continue;
+      }
       const d = Math.min(1, Math.hypot(x - cx, dy) / reach);
-      const raw = d * 0.8 + (BAYER8[bayerRow + (x & 7)] / 64) * 0.2;
+      const raw = d * (1 - DITHER) + (BAYER8[bayerRow + (x & 7)] / 64) * DITHER;
       order[row + x] = raw < 0 ? 0 : raw > 1 ? 1 : raw;
     }
   }

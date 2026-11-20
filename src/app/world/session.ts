@@ -504,7 +504,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       else if (held && phase.kind === "landed") doTakeOff();
       const stepped = advance(phase, flight, held ? HELD_INPUT : asked.input, dt, view, worldN, targets);
       phase = stepped.phase;
-      flight = holdStep(stepped.s, held);
+      flight = holdStep(stepped.s, held, dt);
       if (stepped.landed) {
         const l = byId.get(stepped.landed) ?? null;
         if (l) {

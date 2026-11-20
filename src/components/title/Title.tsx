@@ -25,14 +25,11 @@ import styles from "./title.module.css";
 
 type Mode = "title" | "leaving" | "flying" | "returning";
 
-/** The ways in come up while the world is still arriving, as in the approved mock: 1.9 s into its 2.8. */
-const WAYS_AT = 1900;
 /**
- * Where the held dragon's head is drawn, in CSS pixels from the window's bottom centre: just right of the Enter world
- * button, so its body trails off under the links and none of it hides behind the window.
+ * The held dragon's head is drawn this many CSS pixels left of the ways in, level with the Enter world button: it
+ * faces them, and its body trails off into the open, clear of the window, the button and the links.
  */
-const HEAD_RIGHT = 125;
-const HEAD_BELOW = 46;
+const HEAD_LEFT = 44;
 
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
@@ -93,6 +90,7 @@ export default function Title({ world, header, shell }: TitleProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
+  const waysEl = useRef<HTMLElement>(null);
   const growCancel = useRef<(() => void) | null>(null);
   const modeRef = useRef<Mode>("title");
   // True once the ways in are up: until then a key only skips the opening.
@@ -107,8 +105,9 @@ export default function Title({ world, header, shell }: TitleProps) {
   const [covering, setCovering] = useState(false);
   // A key pressed while the intro plays skips the opening: the world then cuts in as soon as it is ready.
   const [skipped, setSkipped] = useState(false);
+  // The ways in come up once the world has arrived, all of it.
   const [arrived, setArrived] = useState(false);
-  const [waysShown, setWaysShown] = useState(false);
+  const waysShown = arrived;
   const [holdAt, setHoldAt] = useState<HoldAt>(HOLD_AT);
   const fit = useFrameFit();
   const reduced = useSyncExternalStore(subscribeReduced, reducedNow, () => false);
@@ -176,13 +175,6 @@ export default function Title({ world, header, shell }: TitleProps) {
     waysRef.current = waysShown;
   }, [mode, waysShown]);
 
-  // The ways in come up part way through the arrival, or with the world at once when it cuts in.
-  useEffect(() => {
-    if (start === "wait") return;
-    const timer = window.setTimeout(() => setWaysShown(true), start === "play" ? WAYS_AT : 0);
-    return () => window.clearTimeout(timer);
-  }, [start]);
-
   // A key in the intro skips the opening. This listens in the capture phase on the window, which runs before the
   // layout's own listener on the root element takes the intro away.
   useEffect(() => {
@@ -193,20 +185,25 @@ export default function Title({ world, header, shell }: TitleProps) {
     return () => window.removeEventListener("keydown", onSkip, true);
   }, []);
 
-  // The held dragon's place follows the window: measured whenever the window's box changes (the observer reports once
-  // as it starts), as shares of the world's frame. Not while the window is leaving or growing: the dragon stays put.
+  // The held dragon's place follows the ways in, which keep their place in the layout while they wait (hidden, not
+  // gone): measured whenever the window or the ways change size (the observer reports once as it starts), as shares of
+  // the world's frame. Not while the window is leaving or growing: the dragon stays put.
   useLayoutEffect(() => {
     const el = desk ? frame() : null;
-    if (!el) return;
+    const ways = waysEl.current;
+    const button = enterRef.current;
+    if (!el || !ways || !button) return;
     const observer = new ResizeObserver(() => {
       if (modeRef.current !== "title" || grew.current) return;
-      const r = el.getBoundingClientRect();
       const w = fit.w * fit.css;
       const h = fit.h * fit.css;
       if (!w || !h) return;
-      setHoldAt({ x: (r.left + r.width / 2 + HEAD_RIGHT) / w, y: Math.min(0.92, (r.bottom + HEAD_BELOW) / h) });
+      const r = ways.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min(0.94, (b.top + b.height / 2) / h) });
     });
     observer.observe(el);
+    observer.observe(ways);
     return () => observer.disconnect();
   }, [desk, fit.w, fit.h, fit.css]);
 
@@ -306,9 +303,9 @@ export default function Title({ world, header, shell }: TitleProps) {
         <main aria-label="The world">
           <Flight
             {...world}
-            // Let go as the window starts to go, so the dragon sets off while it tucks away. The Enter that started it
-            // is taken (preventDefault), and the flight leaves a taken key alone.
-            held={mode === "title" || mode === "returning"}
+            // Let go once the window has gone: the dragon's take-off, and the world's own prompts, come after the
+            // genie rather than under it. (The Enter that started it is taken, and the flight leaves a taken key alone.)
+            held={mode !== "flying"}
             holdAt={holdAt}
             onLeave={leave}
             onReady={() => setWorldReady(true)}
@@ -320,7 +317,7 @@ export default function Title({ world, header, shell }: TitleProps) {
       </div>
       <div className={styles.front} hidden={mode === "flying"}>
         <NeofetchHeader projects={header} world onMinimize={() => enter(true, shiftRef.current)} onZoom={grow} />
-        <nav className={styles.ways} aria-label="Ways in" hidden={!waysShown || mode !== "title" || covering}>
+        <nav ref={waysEl} className={styles.ways} aria-label="Ways in" hidden={!waysShown || mode !== "title" || covering}>
           <button ref={enterRef} type="button" className={styles.enter} onClick={(e) => enter(true, e.shiftKey)}>
             Enter world <ReturnKey decorative />
           </button>

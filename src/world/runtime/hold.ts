@@ -23,22 +23,35 @@ export const HOLD_AT: HoldAt = { x: 0.5, y: 0.5 + HOLD_LOW };
 /** Cells a second. Held, slower than this is stopped outright: the speed's ease never reaches 0 by itself. */
 export const HOLD_STOP = 0.5;
 
-/** The camera's share moves at this rate per second: 1.25 s from one end to the other. */
+/** Let go, the camera's share moves back at this rate per second: 1.25 s, as the dragon gathers speed. */
 export const HOLD_RATE = 0.8;
 
-/** Held and slower than HOLD_STOP, the dragon is stopped outright. Otherwise the state itself, unchanged. */
-export function holdStep(s: FlightState, held: boolean): FlightState {
-  if (held && s.speed < HOLD_STOP) return { ...s, speed: 0 };
-  return s;
+/**
+ * Held again (Back), the camera's share comes down at this rate per second: about as long as the window takes to come
+ * back, so the dragon is in its place beside the button when it is.
+ */
+export const HOLD_IN_RATE = 1.6;
+
+/** Held, the dragon reins in at this rate per second on top of its own easing: stopped within about a second. */
+export const HOLD_BRAKE = 2;
+
+/**
+ * Held, the dragon reins in over `dt` seconds, and slower than HOLD_STOP it is stopped outright. Not held, the state
+ * itself, unchanged.
+ */
+export function holdStep(s: FlightState, held: boolean, dt = 0): FlightState {
+  if (!held) return s;
+  const speed = s.speed * Math.exp(-HOLD_BRAKE * Math.max(0, dt));
+  return speed < HOLD_STOP ? { ...s, speed: 0 } : speed === s.speed ? s : { ...s, speed };
 }
 
 /**
  * The camera's held share, in [0, 1]. Reduced motion cuts to held or to flying; otherwise the share moves toward
- * 1 (held) or 0 at HOLD_RATE per second.
+ * 1 (held) at HOLD_IN_RATE per second, or toward 0 at HOLD_RATE.
  */
 export function easeHold(share: number, held: boolean, dt: number, reduced: boolean): number {
   if (reduced) return held ? 1 : 0;
-  const step = Math.max(0, dt) * HOLD_RATE;
+  const step = Math.max(0, dt) * (held ? HOLD_IN_RATE : HOLD_RATE);
   return Math.min(1, Math.max(0, share + (held ? step : -step)));
 }
 

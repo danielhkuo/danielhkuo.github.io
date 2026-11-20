@@ -21,7 +21,7 @@ function state(speed: number): FlightState {
 /** Runs the flight for `seconds` as the session does: the model's step, then the hold's. */
 function run(s: FlightState, held: boolean, seconds: number, each?: (s: FlightState, t: number) => void): FlightState {
   for (let t = DT; t <= seconds + 1e-9; t += DT) {
-    s = holdStep(stepFlight(s, held ? HELD_INPUT : FLY, DT, FLAT, N), held);
+    s = holdStep(stepFlight(s, held ? HELD_INPUT : FLY, DT, FLAT, N), held, DT);
     each?.(s, t);
   }
   return s;
@@ -40,15 +40,15 @@ test("held from the start, it does not move at all", () => {
   assert.equal(s.heading, s0.heading);
 });
 
-test("held in flight, it glides to a stop: slowing every frame, and stopped outright within three seconds", () => {
+test("held in flight, it reins in to a stop: slowing every frame, and stopped outright within a second and a half", () => {
   let last = CRUISE;
   let at05 = -1;
-  const s = run(state(CRUISE), true, 3, (f, t) => {
+  const s = run(state(CRUISE), true, 1.5, (f, t) => {
     assert.ok(f.speed <= last + 1e-9, `t=${t.toFixed(3)} it never speeds up`);
     last = f.speed;
     if (at05 < 0 && t >= 0.5) at05 = f.speed;
   });
-  assert.ok(at05 > 0.25 * CRUISE, `a glide, not a halt: ${at05.toFixed(1)} cells/s after half a second`);
+  assert.ok(at05 > 0.1 * CRUISE, `a glide, not a halt: ${at05.toFixed(1)} cells/s after half a second`);
   assert.equal(s.speed, 0, "stopped outright");
   const x = s.x, y = s.y;
   const still = run(s, true, 2);
@@ -63,10 +63,10 @@ test("let go, it sets off at once: over half its cruising speed within 0.6 s", (
 });
 
 test("in flight the hold changes nothing", () => {
-  for (const speed of [0, 0.2, 30, CRUISE]) assert.deepEqual(holdStep(state(speed), false), state(speed));
+  for (const speed of [0, 0.2, 30, CRUISE]) assert.deepEqual(holdStep(state(speed), false, DT), state(speed));
 });
 
-test("the camera's share eases in and out over about a second, and cuts under reduced motion", () => {
+test("the camera's share comes down as fast as the window comes back, eases out over a second, and cuts under reduced motion", () => {
   let share = 0;
   let t = 0;
   while (share < 1 && t < 3) {
@@ -75,7 +75,7 @@ test("the camera's share eases in and out over about a second, and cuts under re
     share = next;
     t += DT;
   }
-  assert.ok(t >= 0.8 && t <= 1.5, `held, it eases down in ${t.toFixed(2)} s`);
+  assert.ok(t >= 0.5 && t <= 0.8, `held, it eases down in ${t.toFixed(2)} s`);
   assert.ok(easeHold(0, true, 0.25, false) > 0.1 && easeHold(0, true, 0.25, false) < 0.5, "a quarter second is part of the way");
   t = 0;
   while (share > 0 && t < 3) {

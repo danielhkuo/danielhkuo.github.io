@@ -85,7 +85,10 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
 
   el.style.visibility = "hidden";
   paint(opts.reverse ? 1 : 0);
-  document.body.appendChild(layer);
+  // Next to the window, not at the end of the body: the copies keep every style that reaches the window through its
+  // ancestors (the header's padding and corners, the title's sizes for a short screen). Fixed, the layer still covers
+  // the viewport, since nothing between here and the page transforms.
+  (el.parentElement ?? document.body).appendChild(layer);
 
   const ms = GENIE_MS * (opts.slow ? GENIE_SLOW : 1);
   let start = 0;
