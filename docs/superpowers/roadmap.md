@@ -15,6 +15,7 @@ Last updated 2026-11-19.
 | Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
 | The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
 | Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
+| Climates and biomes, and one landmark of each kind | `docs/superpowers/specs/2026-11-18-biomes-and-climate-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -93,7 +94,9 @@ Last updated 2026-11-19.
   the dragon slows, circles and coils down round the landmark's own building, and the Codex opens: the project's name,
   description, language, stars, forks, date and links. At the abbey it holds About Me, a register of where each project
   is kept, and the terminal. Any landmark can be landed at; an empty one shows the register. Each landing is logged as a
-  discovery, by repository. Preview a site with `/world?at=<site id>`.
+  discovery, by repository. Preview a site with `/world?at=<site id>`. On 2026-11-19, after the owner found the dragon
+  coarse beside the land, it was made half its first size (45 px long, a body about 5 px thick), with the head and feet
+  redrawn; round a building too big to ring (abbey, cathedral, yew, bridge) it now curls up in a small coil beside it.
 - **Teaching the controls** (2026-11-18, `claude/unruffled-jones-c0c8ed`). Guides drawn into the world beside the
   dragon's head, in the slot its body leaves clearest: a first-flight lesson (steer, then speed, then leave and
   options) whose pixel key-caps light as they are pressed and fade once learned (`world:lesson`), and prompts to land,
@@ -105,7 +108,9 @@ Last updated 2026-11-19.
   (no boost streaks, a camera cut), rebinding the five letter keys, the lesson again, and leaving. The flight page was
   first split into a session and hooks (React Doctor 81 → 100). The guides cost 0.1 ms p95 at 4× (`world-fly.mjs`
   reports `guideMs`); a Fable critic judged two rounds of renders. Design:
-  `specs/2026-11-18-teaching-the-controls-design.md`.
+  `specs/2026-11-18-teaching-the-controls-design.md`. On 2026-11-19 the guides stopped jittering in flight: the anchor
+  is measured from the camera in whole pixels, and a guide keeps its slot until the body has covered it for a second
+  (`steady.test.ts`).
 - **Flying on a phone** (2026-11-19, `claude/mobile-research-9125c0`). Research
   (`research/2026-11-18-mobile-web-game-controls.md`, with iOS 26.5 Simulator measurements) and an approved design
   (`specs/2026-11-18-mobile-design.md`; the owner took every recommended option). A touch screen opens on a "before you
@@ -128,6 +133,33 @@ Last updated 2026-11-19.
   it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
   `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
   live prompt (sections 1–12 there); the abbey's terminal in `/world` still reads that page's files (`site.pages`).
+- **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round, and its two routes differ
+  (the owner's decisions of 2026-11-19). Temperature is a band by latitude from an equator line to a pole line and
+  back, cooler with height. The route through home is the wet side: taiga, the temperate belt (unchanged to the
+  byte, and held round the home island), warm forest, jungle. The other is the dry side: stony tundra, steppe, the
+  Mediterranean, desert with sand seas and wadis, savanna. So a lap meets each of ten climates once. Landforms by
+  climate reshape the grown land outside the temperate belt: desert benches, mesas and dune ridges, an ice sheet,
+  karst towers in the jungle, rock domes on the savanna (`gen/landforms.ts`); rivers, coasts and the home island
+  are untouched. Palms, acacias, umbrella pines and cactus are small pictures drawn over the painted land. Seven
+  landmarks, one of each kind, each in a climate that suits it: the lighthouse by the pack ice, the yew in temperate
+  country off the home island, the ruined cathedral in the jungle, the windmill in the Mediterranean, the bridge on
+  the steppe. Every island outside home is grown again for its climate (`gen/native.ts`): plains for the steppe and
+  savanna, low mesa plateaus and ergs for the desert, fjords and glaciated hills for the taiga, an ice sheet at the
+  pole, rugged limestone for the Mediterranean, rias for the warm forest, karst plains for the jungle. Two grown lands
+  are joined island by island through open sea, so home's start and abbey frames are the same to the byte. Hamlets
+  and houses by climate. Temperature and the dry side's share ship as two more sections a region;
+  the haze and the manifest know the climate. Design, measurements and follow-ups:
+  `specs/2026-11-18-biomes-and-climate-design.md`. Every climate, landmark and wonder was then scored side by side
+  against the climates on the old land, and where the new land scored lower the old was kept (the steppe's, the
+  Mediterranean's and the warm forest's islands, fens, cold tables) or the look fixed (look ledger, round 9). Shipped
+  2026-11-19 as world `3a2f194713e2` (`npm run world:build -- --seed 3 --n 10240 --cache`), replacing
+  `ae1d17a8da49`. It is 8.5 MB in all and 1.33 MB before first flight, against 9.0 and 1.45 before. The start and
+  abbey views are the same as before. Browser check, one run at the load of the day (load average 7–13): ready
+  1.7–2.0 s and frame p95 1.7–2.6 ms at 120 fps; at 4× CPU throttle, ready 4.1 s and p95 4.9 ms, against 2.6 s and
+  4.0 ms when the last world shipped on a quieter machine. A load-matched A/B of the two worlds (frame budget, five and
+  six pairs at load 2–6) found it drew as fast as the old world but reached its first full view 0.5 s later at 1×: a
+  worker's first bake dropped out of optimised code once a tree. With that fixed (01c7f48), it is ready in 1.55 s at
+  1× and 2.69 s at 4×, against 1.49 and 2.58 s for the old world, with p95 3.8 ms at 4×.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 - **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
@@ -363,11 +395,31 @@ From the lingering sights (2026-11-18), for the frame-edge work:
   up to 119 px from it, the ship 112, the fox 70 and the heron about 255: moving the view can drop one mid-frame. The
   ship and the fox are culled by their anchor at the frame's edge; the monk shows only while the abbey's whole road
   box is in frame. In its window the ship still vanishes where its course meets water shallower than tone 5.
+From the climates (2026-11-19):
+- Winds in bands for the rain (trades in the tropics, westerlies beyond), so deserts lie on the right coasts.
+- A cold sea colour and a silty river: each needs the same line in five live-layer tables (`live/water.ts` CLASS, and
+  `isSea` in life, sights, rare and moments).
+- Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
+  pasture; no animal belongs to the new climates yet.
+- Native land, next (look ledger, round 8): the steppe and Mediterranean as land of their own (an island takes the
+  recipe of its mean climate, so one that reaches into the steppe band is still ridged; a recipe by latitude within
+  the island, or plains cut by braided rivers); the warm forest drawn in the temperate hand, apart from the jungle;
+  the jungle's coastal plains and mangroves (its rain cuts them into hills); the pack as floes along the coasts, not a
+  band; repeated stamps (sea-stack rows, horseshoe amphitheatres, acacia carpets, tower cones) and roads ruled along
+  the grid; a seed search for islands that fall more evenly into the climates. From round 9: stray ink dashes on
+  the ice sheet's ridges (leave the sheet's snow un-inked: tried, 0.45 % of two frames), the pack's square-edged floes
+  at its margin, the two savanna ovals alike, the windmill too small to read.
+- The climates' bake: tiles outside the temperate plateau cost 34 to 37 % more than as a temperate world (the design's
+  limit is 15 %; `scripts/world-climate-cost.ts`). The frame is unchanged.
+- The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
+  are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.
+- Black sand on tropical volcanic islands; tidewater glaciers; burn scars on the savanna.
 
 From landing (2026-11-18):
 - Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
-  (the chain forgot its path), the tail hanging in the air, stiff whiskers and a rolled body at rest; and the dragon is
-  now about 78 % of its first size. See the landing design.
+  (the chain forgot its path), the tail hanging in the air, stiff whiskers and a rolled body at rest; and the dragon
+  was made about 78 % of its first size (half, since 2026-11-19). See the landing design.
+- The yew's coil reads as a loose S rather than a tight coil.
 - A lighthouse stands on a cliff's edge, so its coil is draped from the sea up over the rock behind the tower. A coil
   wound up the tower itself, held by it, would be the better picture there.
 - Take-off, from the render critic: where the coil is a closed ring (the harbour, a lighthouse) the head crosses its
@@ -400,6 +452,14 @@ From the first-flight review:
 - Small code cleanups: the worker message types are defined twice; the codec branches on the same node kinds in
   three places.
 
+## Decisions waiting: climates (2026-11-19)
+
+The owner decided the large ones on 2026-11-19 (a simple story that asks nothing of the generator; two sides, each
+climate once a lap; seven landmarks; size left to the design, which keeps 10240). Still open in
+`specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise: north
+colder at home; the home island kept temperate with the belt swelling round it; no new water colours yet. Native
+land was decided (grow it) and is built (spec 6.7).
+
 ## Decisions waiting (2026-11-18 morning)
 
 - ~~**The dragon.**~~ Decided 2026-11-18: A, the river-dragon. It is now the flier (`specs/2026-11-18-dragon-options.md`).
@@ -421,6 +481,9 @@ From the first-flight review:
 
 ## Open checks
 
+- Frame budget: once the code is warm, the non-temperate tiles still bake 34% slower than temperate ones, over the 15%
+  the biome design allowed. Of the extra 14 ms a tile, about 6 is smooth noise, 4 the climate cover rules and the rest
+  the climate fields in `buildCells`. There is no exact cheap cut, and it does not show in ready time or frame time.
 - Owner: open `/world` in Safari and on an iPhone. WebKit now runs in `npm run e2e`; what automation cannot see
   (toolbars and `vh`, touch gestures, keyboard taps, phone performance) is listed in
   `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.

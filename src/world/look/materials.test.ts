@@ -36,6 +36,9 @@ test("flag tables are indexed by id and say what they should", () => {
   assert.deepEqual(on(isLine), [M.road, M.path, M.hedge, M.wall]);
   assert.deepEqual(on(isCanopy), [
     M.broadleafCool, M.broadleafMid, M.broadleafWarm, M.coniferCool, M.coniferMid, M.coniferWarm, M.alder, M.shrub,
+    // The climates' crowns, added at the end.
+    M.spruceCool, M.spruceMid, M.spruceWarm, M.birch, M.dwarfBirch,
+    M.thorn, M.cypress, M.pine, M.olive, M.maquis, M.acacia, M.jungleCool, M.jungleMid, M.jungleWarm, M.jungleBright, M.jungleBloom, M.palm, M.mangrove, M.cactus,
   ]);
   assert.deepEqual(on(isCrop), [
     M.wheat, M.barley, M.ley, M.hay, M.plough, M.vine,

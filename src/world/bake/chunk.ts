@@ -15,6 +15,7 @@ import { SPAN_CAP, CANOPY_MIN_DROP, evenLines, evenSnowEdge, hatch, inkCliffs, i
 import { BASE_TONE } from "./light.ts";
 import { imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint } from "./lines.ts";
+import { drawSprites } from "./sprites.ts";
 import { layWashes, pools } from "./wash.ts";
 import type { RiverIndex } from "./world.ts";
 
@@ -72,6 +73,8 @@ export function depthBase(r0: number): number {
 export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: number, w: number, h: number): Painted {
   const n = world.n;
   const p = newPainted(x0, r0, w, h);
+  // The tiles read, for the pictures rooted in them (sprites.ts); kept only where a tile has any.
+  let used: Map<number, Cells> | null = null;
   const yFirst = Math.ceil((5 * r0) / 4);
   const yLast = Math.ceil((5 * (r0 + h + HMAX)) / 4) - 1;
   for (let c = 0; c < w; c++) {
@@ -84,7 +87,14 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
     for (let y = yLast; y >= yFirst && top > 0; y--) {
       const wy = wrap(y, n);
       const ty = wy >> 8;
-      if (ty !== tyNow) { tile = tiles(tx, ty); tyNow = ty; }
+      if (ty !== tyNow) {
+        tile = tiles(tx, ty);
+        tyNow = ty;
+        if (tile.sprites) {
+          if (!used) used = new Map();
+          used.set((Math.floor(y / TILE) + 32768) * 65536 + Math.floor((x0 + c) / TILE) + 32768, tile);
+        }
+      }
       const ti = ((wy & 255) << 8) | lx;
       const H = (tile as Cells).surf[ti];
       const f = 0.8 * y - H;
@@ -136,6 +146,7 @@ export function paint(world: BakeWorld, tiles: TileSource, x0: number, r0: numbe
       low = Infinity;
     }
   }
+  if (used) p.tiles = used;
   return p;
 }
 
@@ -368,8 +379,9 @@ export function bareFlags(look: Look): Uint8Array {
 /** The finished bake pixels of the window [x0, x0 + w) × [r0, r0 + h) of bake space. */
 export function bakeWindow(world: BakeWorld, look: Look, mask: Uint8Array, tiles: TileSource, x0: number, r0: number, w: number, h: number): Uint32Array {
   const p = paint(world, tiles, x0 - MX, r0 - MT, w + 2 * MX, h + MT + MB);
-  drawRivers(world, tiles, p, look.isWater);
+  drawRivers(world, tiles, p, look.isChannel ?? look.isWater);
   drawRoads(world, tiles, p);
+  drawSprites(p);
   drawMarks(world, p);
   drawFalls(p, look, mask);
   if (look.isSnow !== undefined) evenSnowEdge(p, look.isSnow);

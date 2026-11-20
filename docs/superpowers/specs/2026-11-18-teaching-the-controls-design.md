@@ -105,11 +105,20 @@ pixel-art touch controls can use either.
 - **Landed:** the dragon offers to take off only on a wide screen with keys or a pad. On a touch screen the Codex's own
   button is the thing to tap, and over the narrow Codex (a bottom sheet) the prompt would be hidden. The Codex shows
   its own `Space` hint only where the dragon's prompt does not.
-- **Placement.** A guide (prompt or lesson) stands 12 px from the dragon's head, in one of four slots: below, right,
-  above or left. The first slot in that order wins unless the body covers it. The body's joints are projected to the
-  screen and counted under each slot, and leaving the frame costs heavily. A slot is kept while at most one joint
-  crosses it, and a move between slots glides (a cut under reduced motion). The head is the frame's centre while
-  flying, so a guide holds still in flight and follows the dragon as it comes down.
+- **Placement.** A guide (prompt or lesson) stands 14 px from the dragon's head, in one of four slots: below, right,
+  above or left. When it appears, the first slot in that order that the body leaves clear wins. The body's joints are
+  counted under each slot, and leaving the frame costs heavily.
+- **Holding still.** The head's place on screen is measured from the camera in whole pixels: the frame's centre plus
+  the head's offset from the camera, rounded (`guideAnchor`). While flying the camera sits on the head, so a guide
+  holds exactly the same pixels frame after frame. Coming down, the camera eases onto the landmark and the guide steps
+  a whole pixel at a time.
+- **The jitter this fixed.** The guide used to round the head's position against the view's floored origin. That
+  flipped it a pixel whenever the head crossed half a cell: on 37–43 of every 47 frames at 60 and 120 Hz, whatever
+  the window size (owner's report, 2026-11-19).
+- **Changing slot.** A guide keeps its slot until the body has covered it for a second (`DWELL`), so a sway or a short
+  turn passes under it, or at once if its slot would leave the frame. Then it glides to the new slot a whole pixel at
+  a time, never back, and cuts there under reduced motion. Circling one way and then the other, it changed slot five
+  times in eleven seconds of flight, and only that way.
 - Over the narrow Codex (a bottom sheet) the order is above, right, left, below.
 - A click or tap on a prompt's rectangle acts on it: the canvas hit-tests the rectangles the guides report each
   frame.

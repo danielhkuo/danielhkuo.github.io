@@ -3,15 +3,17 @@
 // material, light and cast shadows. Every output is a pure function of the
 // wrapped cell position, so any window equals the same crop of any other.
 
+import { DESERT_RAIN, DUNE_HEIGHT, duneAt, ergAt, HEAT_LAPSE, heatOf, HOT_EDGE, softNoise, TEMPERATE } from "../biome.ts";
 import { hash2 } from "../core/hash.ts";
 import { gradNoise } from "../core/noise.ts";
 import { wrap } from "../core/torus.ts";
-import type { CoverInput, Palette, Stamp } from "../look/contract.ts";
+import { SHAPE_PICTURE, type CoverInput, type Palette, type Stamp } from "../look/contract.ts";
 import { applyStampsTo, stampReach, type Stamp as CoastStamp } from "../gen/stamps.ts";
 import { COVER_FIELDS_MARGIN, coverFields } from "./coverFields.ts";
 import { boxBlur, shade, shadeSnow, shadowDepth, SHADOW_DROP, SHADOW_REACH, sweepShadow } from "./light.ts";
 import { conformed, conformReach, conformsIn, conformWeight, imageOffset, structuresIn } from "../gen/built.ts";
 import { forEachLinePoint, forEachRiverPoint } from "./lines.ts";
+import { spriteShadow } from "./sprites.ts";
 import { HMAX, type BakeWorld, type GridWindow, type Patch } from "./world.ts";
 
 export const TILE = 256;
@@ -40,11 +42,15 @@ export interface Look {
   barSand?: number;
   /** Per material id: 1 for bare rock, whose walls are drawn as strata. Optional: none when absent. */
   isRock?: Uint8Array;
+  /** The material of a picture's stem (a palm's trunk). Optional: the crown's own when absent. */
+  stem?: number;
   /** The shingle and the boulders of the apron at a sea cliff's foot. Optional: cliffs stand in the water when absent. */
   apron?: number;
   apronRock?: number;
   /** Per material id: 1 for built things, which keep their own tones: no wash is laid on them. Optional: none when absent. */
   isBuilt?: Uint8Array;
+  /** Per material id: 1 for what a river's line is drawn in: water, and the ice and dry beds a climate makes of it. Optional: isWater when absent. */
+  isChannel?: Uint8Array;
 }
 
 /**
@@ -84,6 +90,12 @@ export interface Cells {
   flags: Uint8Array;
   /** Water cells: depth tone 0–15 (sea, lakes) or flow phase 0–15 (rivers). Land: the AUX_ bits. */
   aux: Uint8Array;
+  /**
+   * The pictures rooted on this window's own cells (bake/sprites.ts), SPRITE_STRIDE values each: the root cell in
+   * the window, the ground there, the shape, crown half-width, stem height, crown material, stem material. Absent
+   * when there are none.
+   */
+  sprites?: Float32Array;
 }
 
 // Margins round the core, in cells.
@@ -407,6 +419,57 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
     for (let i = 0; i < count; i++) if (cut[i] > 0) ground[i] = Math.floor((ground[i] - cut[i]) * 64 + 0.5) / 64;
   }
+  // The climate of the window. Where every C node the window can read is on the temperate plateau, the window is
+  // built as a world with no climates is: the same cells to the bit (that is what the plateau means), at no cost.
+  let climate = world.temp;
+  if (climate !== undefined) {
+    const cx0 = Math.floor(wx0 / 8) - 1, cy0 = Math.floor(wy0 / 8) - 1, cx1 = Math.floor((wx0 + W) / 8) + 1, cy1 = Math.floor((wy0 + H) / 8) + 1;
+    let foreign = false;
+    for (let cy = cy0; cy <= cy1 && !foreign; cy++) {
+      const row = wrap(cy - cY0, cN) * cStride;
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const k = row + wrap(cx - cX0, cN);
+        if (climate[k] !== TEMPERATE || (world.arid !== undefined && world.arid[k] > 0)) { foreign = true; break; }
+      }
+    }
+    if (!foreign) climate = undefined;
+  }
+  // The dry side's share, read only where the window has a climate at all.
+  const aridC = climate !== undefined ? world.arid : undefined;
+  // Dunes: a desert's sand seas stand in real relief, so they are lit, shade and cast shadow like any hill. A pure
+  // function of the cell, the smooth ground and the climate at the C node nearest it; nothing where no sand lies.
+  if (climate !== undefined) {
+    let rise: Float32Array | null = null;
+    for (let y = 1; y < H - 1; y++) {
+      const Y = wrap(wy0 + y, n);
+      const cRow = wrap((Y >> 3) - cY0, cN) * cStride, gRow = wrap((Y >> 2) - gY0, gN) * gStride;
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x, e = ground[i];
+        if (e <= 1.2) continue;
+        const X = wrap(wx0 + x, n);
+        const ci = cRow + wrap((X >> 3) - cX0, cN);
+        const t = climate[ci];
+        if (!(t > TEMPERATE)) continue;
+        const hl = heatOf(t) - e / HEAT_LAPSE - (HOT_EDGE - 0.02);
+        if (hl <= 0) continue;
+        const dry = DESERT_RAIN + 0.03 - world.moisture[ci];
+        if (dry <= 0) continue;
+        const sand = ergAt(X, Y, n);
+        if (sand <= 0) continue;
+        const dx = (ground[i + 1] - ground[i - 1]) * 0.5, dy = (ground[i + W] - ground[i - W]) * 0.5;
+        const s2 = dx * dx + dy * dy;
+        if (s2 >= 0.09) continue;
+        // Not on a river's or a lake's own level: the water keeps its bed.
+        const hd = world.hand[gRow + wrap((X >> 2) - gX0, gN)];
+        if (hd <= 0.5) continue;
+        const s = Math.sqrt(s2);
+        const k = sand * (s < 0.15 ? 1 : (0.3 - s) / 0.15) * (dry > 0.06 ? 1 : dry / 0.06) * (hl > 0.06 ? 1 : hl / 0.06) * (e < 3 ? (e - 1.2) / 1.8 : 1) * (hd > 2 ? 1 : (hd - 0.5) / 1.5);
+        if (!rise) rise = new Float32Array(count);
+        rise[i] = DUNE_HEIGHT * k * duneAt(X, Y, n);
+      }
+    }
+    if (rise) for (let i = 0; i < count; i++) if (rise[i] > 0) ground[i] = Math.floor((ground[i] + rise[i]) * 64 + 0.5) / 64;
+  }
 
   // Pads, street terraces and the harbour, cut at cell size.
   const bi = world.built;
@@ -552,6 +615,14 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const k = cy * W + cx;
       const sx = (ground[k + 1] - ground[k - 1]) * 0.5, sy = (ground[k + W] - ground[k - W]) * 0.5;
       if (sx * sx + sy * sy > STREAM_MAX_SLOPE * STREAM_MAX_SLOPE) return;
+      // The land's channels were cut by a temperate rain. In true desert most streams are not there at all (the rest
+      // are dry beds, the cover's wadis), by stretches of country a hundred cells across, or the sand would be a net of lines.
+      if (climate !== undefined) {
+        const X = wrap(wx0 + cx, n), Y = wrap(wy0 + cy, n);
+        const ci = wrap((Y >> 3) - cY0, cN) * cStride + wrap((X >> 3) - cX0, cN);
+        const t = climate[ci];
+        if (t > TEMPERATE && heatOf(t) > 0.36 && world.moisture[ci] < DESERT_RAIN && softNoise(X, Y, n, 130, 0xd4a7) < 0.22) return;
+      }
     }
     // A wide river's bank is cut at sub-cell precision: a cell the bank passes through is water when the share of it
     // inside the bank beats the blue noise there, so a slanting bank is a soft, broken edge and not a staircase.
@@ -640,6 +711,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
   const sight = { north: Infinity, south: Infinity };
+  /** Pictures rooted in the cover region: window cell x, y, shape, crown half-width, stem height, crown material. */
+  const pictures: number[] = [];
   // Distance to the nearest river in any direction, for the cover's field boundaries. River cells stay 0.
   if (rivers) chamfer(riv, W, H, PAD_N - COVER_N - RIVER_OFFSET - 1);
 
@@ -653,8 +726,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   const terr = new Uint8Array(count);
   const rockAt = new Uint8Array(count);
   const shoreAt = new Uint8Array(count);
+  /** 1 where the cell's climate is not the temperate one. */
+  const foreign = new Uint8Array(count);
   const region = new Float32Array(6);
-  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0 };
+  const c: CoverInput = { x: 0, y: 0, e: 0, slope: 0, northness: 0, hand: 0, moisture: 0, wind: 0, exposure: 0, debris: 0, rock: 0, region, water: 0, shore: 0, westness: 0, riverDx: 0, riverDy: 0, riverWide: 0, cliffAbove: 0, relief: 0, steep: 0, form: 0, curve: 0, formNorth: 0, temp: undefined, stream: 0 };
   const fields = coverFields(ground, W, H, cOff, cOff, cw, ch);
   const cc = cStride * (cWin ? cWin.h : cN);
   const rockW = new Float64Array(3);
@@ -672,6 +747,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     cI0[x] = wrap(cj - cX0, cN); cI1[x] = wrap(cj + 1 - cX0, cN); cF[x] = cu - cj;
   }
   const { hand, shore, moisture, wind, exposure, debris, rock, regions } = world;
+  const temp = climate;
   // Shore classes live on the one ring of nodes at the water. Spread two nodes inland and voted by the corners'
   // weights, they bound beaches by the coast's own curve and not by 4-cell blocks.
   let shoreD: Uint8Array | null = null;
@@ -771,6 +847,17 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.wind = w00 * wind[c00] + w10 * wind[c10] + w01 * wind[c01] + w11 * wind[c11];
       c.exposure = w00 * exposure[c00] + w10 * exposure[c10] + w01 * exposure[c01] + w11 * exposure[c11];
       c.debris = w00 * debris[c00] + w10 * debris[c10] + w01 * debris[c01] + w11 * debris[c11];
+      if (temp !== undefined) {
+        // Four equal corners give their own value, not a sum of weights: the temperate plateau stays the plateau to the bit.
+        const t00 = temp[c00], t10 = temp[c10], t01 = temp[c01], t11 = temp[c11];
+        c.temp = t00 === t10 && t00 === t01 && t00 === t11 ? t00 : w00 * t00 + w10 * t10 + w01 * t01 + w11 * t11;
+        if (c.temp !== TEMPERATE) foreign[i] = 1;
+        if (aridC !== undefined) {
+          const a00 = aridC[c00], a10 = aridC[c10], a01 = aridC[c01], a11 = aridC[c11];
+          c.arid = a00 === a10 && a00 === a01 && a00 === a11 ? a00 : w00 * a00 + w10 * a10 + w01 * a01 + w11 * a11;
+          if (c.arid > 0) foreign[i] = 1;
+        }
+      }
       // The cover blends rock kinds where they meet; the flags keep the voted class.
       c.rock = rockW[1] + 2 * rockW[2];
       c.cliffAbove = fields.cliffAbove[i];
@@ -779,12 +866,10 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.form = fields.form[i];
       c.curve = fields.curve[i];
       c.formNorth = fields.north[i];
-      for (let a = 0; a < 6; a++) {
-        const o = a * cc;
-        region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];
-      }
+      /*#__NOINLINE__*/ blendRegions(region, regions, cc, c00, c10, c01, c11, w00, w10, w01, w11);
       c.shore = sh;
       c.water = water[i] ? water[i] : riv[i] === 0 ? 3 : 0;
+      c.stream = c.water === 3 && phase[i] === 8 ? 1 : 0;
       const m = look.cover(c, mask);
       gmat[i] = m;
       if (c.water !== 0) continue;
@@ -799,7 +884,8 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       }
       if (pad !== null && pad[i] > 40) {
         // A pad is a clearing: grass, speckled out over its skirt, and nothing planted.
-        if (bi && pad[i] > mask[((c.y + 37) & 255) * 256 + ((c.x + 101) & 255)]) gmat[i] = bi.built.mats.yard;
+        // In another climate the clearing keeps that climate's own ground: no pasture round a house on the sand.
+        if (bi && foreign[i] === 0 && pad[i] > mask[((c.y + 37) & 255) * 256 + ((c.x + 101) & 255)]) gmat[i] = bi.built.mats.yard;
         continue;
       }
 
@@ -810,6 +896,11 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       if (st.h <= 0) {
         // A flat stamp (flowers) only recolours the ground it is rooted on.
         gmat[i] = st.mat;
+        continue;
+      }
+      if (st.shape >= SHAPE_PICTURE) {
+        // A picture is not stamped into the ground: it is kept for the painter, and only its shadow is laid here.
+        pictures.push(x + cOff, y + cOff, st.shape, st.r, st.h, st.mat);
         continue;
       }
       // The stamp's centre in window cells, and the ground it stands on.
@@ -824,21 +915,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const r2 = r * r;
       const lx = Math.max(sLo, Math.ceil(scx - r - 0.5)), hx = Math.min(sHiX - 1, Math.floor(scx + r - 0.5));
       const ly = Math.max(sLo, Math.ceil(scy - r - 0.5)), hy = Math.min(sHiY - 1, Math.floor(scy + r - 0.5));
-      for (let yy = ly; yy <= hy; yy++) {
-        for (let xx = lx; xx <= hx; xx++) {
-          const ddx = xx + 0.5 - scx, ddy = yy + 0.5 - scy;
-          const d2 = ddx * ddx + ddy * ddy;
-          if (d2 > r2) continue;
-          const k = yy * W + xx;
-          if (water[k] || riv[k] === 0) continue;
-          const f = st.shape === 1 ? 1 - (0.85 * Math.sqrt(d2)) / r : 0.35 + 0.65 * Math.sqrt(1 - d2 / r2);
-          const top = base + st.h * f;
-          if (top > crown[k] && top > ground[k]) {
-            crown[k] = top;
-            crownMat[k] = st.mat;
-          }
-        }
-      }
+      /*#__NOINLINE__*/ stampCrown(crown, crownMat, ground, water, riv, W, lx, hx, ly, hy, scx, scy, r, r2, st.shape, st.h, st.mat, base);
     }
   }
 
@@ -846,14 +923,16 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
   if (stackTop !== null && look.turf !== undefined) {
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
       const i = (y + cOff) * W + x + cOff;
-      if (stackTop[i] === 1 && water[i] === 0 && slope[i] < 1) gmat[i] = look.turf;
+      // In another climate the cover has already dressed the top: snow in the cold, scrub in the heat.
+      if (stackTop[i] === 1 && water[i] === 0 && slope[i] < 1 && foreign[i] === 0) gmat[i] = look.turf;
     }
   }
   if (world.bars && look.barSand !== undefined) {
     const sand = look.barSand;
     for (const p of world.bars) {
       forEachPatchCell(p, n, wx0, wy0, W, H, (i) => {
-        if (water[i] !== 0 || riv[i] === 0 || road[i] !== 0) return;
+        // A point bar is pale sand in the temperate land; elsewhere it is whatever the climate lays on that ground.
+        if (water[i] !== 0 || riv[i] === 0 || road[i] !== 0 || foreign[i] !== 0) return;
         gmat[i] = sand;
         crown[i] = -Infinity;
       });
@@ -890,6 +969,26 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
         }
       }
     }
+  }
+
+  // Pictures: the shadow each crown lays on the ground, and the list of the ones rooted on the core's own cells.
+  let sprites: Float32Array | undefined;
+  if (pictures.length > 0) {
+    const own: number[] = [];
+    for (let k = 0; k < pictures.length; k += 6) {
+      const px = pictures[k], py = pictures[k + 1];
+      spriteShadow(pictures[k + 2], pictures[k + 3], pictures[k + 4], (dx, dy) => {
+        const xx = px + dx, yy = py + dy;
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) return;
+        if (pictShadow[yy * W + xx] === 0) pictShadow[yy * W + xx] = 1;
+      });
+      if (px >= PAD_N && py >= PAD_N && px < PAD_N + w && py < PAD_N + h) {
+        // Its own draw comes from its place in the world, so a picture is the same in every window.
+        own.push(px - PAD_N, py - PAD_N, ground[py * W + px], pictures[k + 2], pictures[k + 3], pictures[k + 4], pictures[k + 5], look.stem ?? pictures[k + 5],
+          hash2(wrap(wx0 + px, n), wrap(wy0 + py, n), 0x5b17e) & 0xffff);
+      }
+    }
+    if (own.length > 0) sprites = Float32Array.from(own);
   }
 
   // 7. The drawn surface over the crown region.
@@ -932,6 +1031,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
 
   // 8. Light, shadow and flags for the core.
   const out: Cells = { w, h, surf: new Float32Array(w * h), mat: new Uint8Array(w * h), light: new Uint8Array(w * h), flags: new Uint8Array(w * h), aux: new Uint8Array(w * h) };
+  if (sprites) out.sprites = sprites;
   const noInk = look.noInk;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -948,10 +1048,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       // Shadow: terrain by the exact sweep, crowns and rocks by a short march.
       let over = ray[i];
       const deep = over - top >= 9;
-      for (let k = 1; k <= TREE_REACH; k++) {
-        const v = surf[i - k * (W + 1)] - k * SHADOW_DROP;
-        if (v > over) over = v;
-      }
+      over = /*#__NOINLINE__*/ marchShadow(surf, i, W, over);
       flags |= shadowDepth(over, top);
       // A picture's shadow, on land and on water: at least the depth the builder stored.
       const cast = pictShadow[i];
@@ -1065,6 +1162,55 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
   return out;
+}
+
+// The loops nested in buildCells' per-cell loops live out here. buildCells runs a few times a tile, so V8 optimises it by
+// entering at whichever loop grows hot first; entered at a nested loop, it was thrown back to the interpreter on every
+// exit from it (once a tree: some 20 000 times over the start view's first bakes, which it doubled).
+// Their calls carry /*#__NOINLINE__*/: the minifier would otherwise inline each of these once-called functions back
+// into the loop (as a function made and called per cell or per tree), and the browser would deoptimise there again.
+
+/** The six region weights at one cell, blended from its four C nodes. */
+function blendRegions(
+  region: Float32Array, regions: Float32Array, cc: number, c00: number, c10: number, c01: number, c11: number,
+  w00: number, w10: number, w01: number, w11: number,
+): void {
+  for (let a = 0; a < 6; a++) {
+    const o = a * cc;
+    region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];
+  }
+}
+
+/** One tree's crown, stamped into the crown layer over the window cells lx…hx, ly…hy. */
+function stampCrown(
+  crown: Float32Array, crownMat: Uint8Array, ground: Float32Array, water: Uint8Array, riv: Int16Array, W: number,
+  lx: number, hx: number, ly: number, hy: number, scx: number, scy: number, r: number, r2: number,
+  shape: number, h: number, mat: number, base: number,
+): void {
+  for (let yy = ly; yy <= hy; yy++) {
+    for (let xx = lx; xx <= hx; xx++) {
+      const ddx = xx + 0.5 - scx, ddy = yy + 0.5 - scy;
+      const d2 = ddx * ddx + ddy * ddy;
+      if (d2 > r2) continue;
+      const k = yy * W + xx;
+      if (water[k] || riv[k] === 0) continue;
+      const f = shape === 1 ? 1 - (0.85 * Math.sqrt(d2)) / r : 0.35 + 0.65 * Math.sqrt(1 - d2 / r2);
+      const top = base + h * f;
+      if (top > crown[k] && top > ground[k]) {
+        crown[k] = top;
+        crownMat[k] = mat;
+      }
+    }
+  }
+}
+
+/** The highest a crown or rock up the sun's diagonal from cell i casts over it, or `over` if none is higher. */
+function marchShadow(surf: Float32Array, i: number, W: number, over: number): number {
+  for (let k = 1; k <= TREE_REACH; k++) {
+    const v = surf[i - k * (W + 1)] - k * SHADOW_DROP;
+    if (v > over) over = v;
+  }
+  return over;
 }
 
 /** The 256² cell tile (tx, ty). */

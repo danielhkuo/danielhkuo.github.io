@@ -2,6 +2,8 @@
 // scaled by paramsFor(n); heights are absolute units and never scale.
 // These values set the land's character and are tuned on renders.
 
+import type { ClimateParams } from "./climate.ts";
+
 export const ARCHETYPE = { home: 0, highland: 1, slate: 2, lakes: 3, karst: 4, skerry: 5 } as const;
 export type Archetype = (typeof ARCHETYPE)[keyof typeof ARCHETYPE];
 export const ARCHETYPE_COUNT = 6;
@@ -41,6 +43,15 @@ export interface ArchetypeSpec {
   ridges: readonly [number, number];
   /** Width of a rock stripe across strike, in cells. */
   stripeWidth: readonly [number, number];
+  /**
+   * Overrides for the islands grown for their climate (gen/native.ts): the share of the half-width that is flat top
+   * (a plateau); a lowland share added everywhere (a plain); the scale of the outline's bays and coves; the scale of
+   * the uplift's grain. Absent: the form's own.
+   */
+  plateau?: number;
+  lowland?: number;
+  bite?: number;
+  grain?: number;
 }
 
 export interface WorldParams {
@@ -59,7 +70,12 @@ export interface WorldParams {
   /** S5 talus: repose per rock class (height per cell) and sweeps; land is scaled down uniformly if it rises above `cap`. */
   talus: { repose: readonly [number, number, number]; sweeps: number; cap: number; scree: { shed: number; rate: number; repose: number; wash: number; passes: number; sweeps: number } };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
-  climate: { moistureRadius: number; windReach: number; windDropPerNode: number; windScale: number };
+  climate: ClimateParams;
+  /**
+   * Native land (gen/native.ts): every island outside home grown again for its climate, joined to the land the
+   * generator grows for home. Off for the small worlds the tests grow.
+   */
+  native: boolean;
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
   /** S7 rivers (see gen/rivers.ts RiverParams). Pixel-scale lengths are in cells and never scale. */
   rivers: {
@@ -303,7 +319,35 @@ export function paramsFor(n: number): WorldParams {
     // Rockfall: ground steeper than 0.72 sheds, and the debris lies at 0.55 where the slope eases, unless a stream carries it off.
     talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128, scree: { shed: 0.72 / s, rate: 5 * s, repose: 0.55 / s, wash: 2400 * s * s, passes: 4, sweeps: 24 } },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
-    climate: { moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30 },
+    // The zones (gen/climate.ts): latitude is a share of the world, so they fit a world of any size. The home island
+    // lies at 56° north on the wet side, the route from the pole to the equator that is forest all the way: taiga,
+    // the temperate belt (flat at 0.5 across φ 0.52–0.66), warm forest, jungle. The other route, the dry side, has no
+    // plateau: tundra, steppe, the Mediterranean (it passes 0.5 at φ 0.62), desert, savanna, jungle. So a lap of the
+    // world meets each climate once. Conifers take the woods by 0.42, the tree line reaches the sea at 0.27 and the
+    // snowline at 0.14 (cover.ts climateShift). The two sides' curves meet at the pole and at the equator.
+    native: n >= 6400,
+    climate: {
+      moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30,
+      zones: {
+        homeLat: 0.62,
+        temp: [[0, 1], [0.1, 0.97], [0.22, 0.88], [0.34, 0.74], [0.46, 0.58], [0.52, 0.5], [0.66, 0.5], [0.73, 0.415], [0.85, 0.27], [0.92, 0.142], [1, 0.02]],
+        rain: [[0, 1.7], [0.3, 1.6], [0.46, 1.25], [0.52, 1], [0.66, 1], [0.73, 0.98], [0.85, 0.85], [0.92, 0.65], [1, 0.5]],
+        dry: {
+          temp: [[0, 1], [0.08, 0.97], [0.2, 0.93], [0.3, 0.91], [0.42, 0.87], [0.5, 0.77], [0.56, 0.62], [0.62, 0.5], [0.72, 0.4], [0.84, 0.28], [0.94, 0.142], [1, 0.02]],
+          rain: [[0, 1.7], [0.05, 1.45], [0.1, 1], [0.2, 0.7], [0.27, 0.38], [0.31, 0.19], [0.46, 0.19], [0.52, 0.42], [0.58, 0.55], [0.64, 0.55], [0.74, 0.5], [0.84, 0.55], [0.94, 0.55], [1, 0.5]],
+        },
+        aridRamp: 0.1,
+        warp: [[2, 0.07], [5, 0.05], [13, 0.02]],
+        inlandRadius: Math.max(2, Math.round(40 * s)),
+        inlandFrom: 0.45,
+        inlandTemp: 0.06,
+        inlandDry: 0.35,
+        // Wide enough that the sea the opening flight crosses is the plateau's too: its tiles are then built as a
+        // temperate world's are, at no cost for the climates.
+        homeNear: 240 * s,
+        homeFar: 1100 * s,
+      },
+    },
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
     // Tuned 2026-11-17 on the 6400 world, where the largest river carries
     // ~14 000 node-rains: 420 makes it 6 px and leaves 92 % of channel nodes

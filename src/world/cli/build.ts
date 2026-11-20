@@ -104,6 +104,8 @@ export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
     wonders: manifestWonders(world.settlement.wonders, n),
     start: startOf(world.settlement.sites, n),
   };
+  const equatorY = world.climate.equatorY;
+  if (equatorY !== undefined) manifest.climate = { equatorY: Math.round(equatorY), poleY: Math.round((equatorY + n / 2) % n) };
   // A wonder the land could not host is named here and left out; it is never forced.
   for (const line of world.settlement.wonderSkips) console.log(`wonder skipped: ${line}`);
 

@@ -20,8 +20,10 @@ follow, for the record.
   on take-off (`specs/2026-11-18-landing-and-codex-design.md`);
 - the bench, `npm run world:dragon`, which also draws a landing.
 
-**Size.** The owner found the first build a little too big (2026-11-18). It is now about 78 % of it: 66 px long
-against 84, a chest of 2.4 against 3.1, with the head redrawn for the size and everything else in proportion.
+**Size.** The owner found the first build a little too big (2026-11-18), then still coarse beside the land (2026-11-19): its
+2–3 pixel bands and inked outline read chunky against land whose detail is 1–2 pixels. It is now about half the first
+build: 45 px long against 84, a chest of 1.65 against 3.1, the head redrawn for the size. Everything sized to the body
+(rest height, the wind, the coil's clearances, the guides) follows.
 
 ## What is already settled
 

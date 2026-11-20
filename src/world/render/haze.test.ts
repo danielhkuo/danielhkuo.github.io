@@ -43,3 +43,24 @@ test("haze wraps with the world", () => {
     assert.equal(h(bx, by + 0.8 * 512), h(bx, by));
   }
 });
+
+test("the climates' washes stand in for the height's, and every wash a climate gives has a kind of its own", async () => {
+  const { hazeFromSamples, HAZE_CELLS, WASH_KIND } = await import("./haze.ts");
+  const { hazeWashAt } = await import("../look/haze-wash.ts");
+  const { MATERIAL: M } = await import("../look/materials.ts");
+  const n = 512, oN = n / HAZE_CELLS;
+  const samples = new Float64Array(oN * oN).fill(10);
+  const over = new Uint8Array(oN * oN);
+  // The east half is desert by the climate; the west half is left to its height (pasture).
+  for (let y = 0; y < oN; y++) for (let x = oN / 2; x < oN; x++) over[y * oN + x] = M.desertSand;
+  const plain = hazeFromSamples(samples, n, palette), dressed = hazeFromSamples(samples, n, palette, undefined, over);
+  assert.equal(dressed(60, 200), plain(60, 200), "a sample with no climate wash keeps its height's");
+  assert.notEqual(dressed(400, 200), plain(400, 200), "a desert sample takes the desert's wash");
+  // Every material the climate rules can return is one of the haze's washes.
+  const seen = new Set<number>();
+  for (let h = -10; h <= 140; h += 3) for (let t = 0; t <= 1.0001; t += 0.01) for (const r of [0.05, 0.25, 0.45, 0.7, 1]) for (const a of [0, 1]) {
+    const m = hazeWashAt(h, t, r, a);
+    if (m !== 0) seen.add(m);
+  }
+  for (const m of seen) assert.ok(WASH_KIND[m] >= 0, `material ${m} has no wash kind`);
+});

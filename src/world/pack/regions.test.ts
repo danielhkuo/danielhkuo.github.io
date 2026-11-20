@@ -13,7 +13,7 @@ import { decodeFlightData, decodeWorld, encodeWorld } from "./world.ts";
 
 const mask = loadMask();
 const G_GRIDS = ["ground", "base", "conform", "waterLevel", "waterKind", "hand", "shore"] as const;
-const C_GRIDS = ["moisture", "wind", "exposure", "debris", "rock", "regions"] as const;
+const C_GRIDS = ["moisture", "wind", "exposure", "debris", "rock", "regions", "temp"] as const;
 
 /** Cliff cuts 76 cells across: on the torus's corner, astride the corner of four 320-cell regions, and on the seam. */
 const SEAM_CUTS: Stamp[] = [[0.5, 0.5], [320.25, 639.75], [1279.5, 960.5]].map(([x, y]) => ({

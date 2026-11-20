@@ -816,11 +816,11 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, drawn: numbe
     look,
     rugged: spec.rugged ?? p.uplift.rugged[spec.id],
     d,
-    plateau: form === FORM.table ? TABLE_PLATEAU : form === FORM.fen ? FEN_PLATEAU : form === FORM.cone || form === FORM.caldera ? 0.1 : -1,
+    plateau: spec.plateau ?? (form === FORM.table ? TABLE_PLATEAU : form === FORM.fen ? FEN_PLATEAU : form === FORM.cone || form === FORM.caldera ? 0.1 : -1),
     lowlandScale: form === FORM.table || form === FORM.cone || form === FORM.caldera ? 0 : 1,
     power: form === FORM.cone ? CONE_POWER : 1,
-    biteAmp: form === FORM.fen ? FEN_BITE : form === FORM.caldera ? 0.5 : form === FORM.cone || form === FORM.table ? 0.6 : 1,
-    grainAmp: form === FORM.cone ? 0.25 : form === FORM.table || form === FORM.fen ? 0.5 : 1,
+    biteAmp: spec.bite ?? (form === FORM.fen ? FEN_BITE : form === FORM.caldera ? 0.5 : form === FORM.cone || form === FORM.table ? 0.6 : 1),
+    grainAmp: spec.grain ?? (form === FORM.cone ? 0.25 : form === FORM.table || form === FORM.fen ? 0.5 : 1),
     spineX: built.spineX,
     spineY: built.spineY,
     grain: null,
@@ -840,7 +840,7 @@ function buildIsland(p: WorldParams, rng: Rng, spec: ArchetypeSpec, drawn: numbe
     bayX,
     bayY,
     bayR,
-    lowland: spec.id === ARCHETYPE.home && form === FORM.belts ? HOME_LOWLAND : form === FORM.fen ? FEN_LOWLAND : 0,
+    lowland: (spec.id === ARCHETYPE.home && form === FORM.belts ? HOME_LOWLAND : form === FORM.fen ? FEN_LOWLAND : 0) + (spec.lowland ?? 0),
     blend: rng.range(p.regions.blend[0], p.regions.blend[1]),
     stripeWidth,
     stripePhase: rng.float(),
@@ -1001,7 +1001,41 @@ function placeIslands(p: WorldParams, rng: Rng, slope: number): Island[] {
   return islands;
 }
 
-export function planWorld(p: WorldParams, seed: number): Plan {
+/**
+ * Builds island c again from `spec`, as big as it was and where it was: the same drawn length, shrunk until its
+ * outline's extents along and across the world's strike are no larger than the old one's, and centred on the old
+ * outline's middle, so the open water the placement kept between islands still holds. Its draws come from a stream
+ * of its own, so no other island moves.
+ */
+function rebuildIsland(p: WorldParams, seed: number, c: number, old: Island, spec: ArchetypeSpec, slope: number): Island {
+  const norm = Math.sqrt(1 + slope * slope);
+  const ux = 1 / norm, uy = slope / norm;
+  const midX = old.core.x + old.midAlong * ux - old.midAcross * uy, midY = old.core.y + old.midAlong * uy + old.midAcross * ux;
+  let drawn = old.length;
+  let isl = buildIsland(p, rngFor(seed, `native ${c}`), spec, drawn, slope);
+  for (let k = 0; k < 6; k++) {
+    const f = Math.max(isl.extAlong / old.extAlong, isl.extAcross / old.extAcross);
+    if (f <= 1) break;
+    drawn *= 0.98 / f;
+    isl = buildIsland(p, rngFor(seed, `native ${c}`), spec, drawn, slope);
+  }
+  const x = midX - (isl.midAlong * ux - isl.midAcross * uy), y = midY - (isl.midAlong * uy + isl.midAcross * ux);
+  isl.core.x = ((x % p.n) + p.n) % p.n;
+  isl.core.y = ((y % p.n) + p.n) % p.n;
+  for (let i = 0; i < isl.spineX.length; i++) {
+    isl.core.spine[2 * i] = isl.core.x + isl.spineX[i];
+    isl.core.spine[2 * i + 1] = isl.core.y + isl.spineY[i];
+  }
+  return isl;
+}
+
+/**
+ * Islands to build again, once every core has its place: one spec per core, in the plan's order, or null to keep
+ * the island as drawn. gen/native.ts uses it to give each island the land of its climate.
+ */
+export type Reform = (cores: readonly Core[]) => readonly (ArchetypeSpec | null)[];
+
+export function planWorld(p: WorldParams, seed: number, reform?: Reform): Plan {
   const rng = rngFor(seed, "plan");
   const n = p.n, cN = p.cN, cell = n / cN, nodes = cN * cN;
 
@@ -1009,6 +1043,13 @@ export function planWorld(p: WorldParams, seed: number): Plan {
   const slope = rng.range(-p.strike.maxSlope, p.strike.maxSlope);
   const upliftSeed = rng.next(), baySeed = rng.next(), coveSeed = rng.next(), lowSeed = rng.next(), summitSeed = rng.next(), warpSeed = rng.next(), fibreSeed = rng.next();
   const islands = placeIslands(p, rng, slope);
+  if (reform) {
+    const specs = reform(islands.map((isl) => isl.core));
+    for (let c = 0; c < islands.length; c++) {
+      const spec = specs[c];
+      if (spec) islands[c] = rebuildIsland(p, seed, c, islands[c], spec, slope);
+    }
+  }
   // Drawn from a stream of their own, so the islands stand where they did before the massifs were added.
   const massifRng = rngFor(seed, "massif");
   const massifSeed = massifRng.next(), massifWarpSeed = massifRng.next(), axisSeed = massifRng.next();
