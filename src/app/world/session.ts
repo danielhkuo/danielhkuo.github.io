@@ -526,6 +526,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const rect = view.rect();
       const skyStart = performance.now();
       // The rain falls under the clouds and the flier: they hide it, never it them.
+      // Landing, the clouds part over the place, as far as the camera has settled on it, so what is there is seen.
+      const landingAt = phase.kind === "landing" ? phase.approach.id : phase.kind === "landed" ? phase.id : null;
+      const spot = landingAt && groundHeight ? targets.find((x) => x.id === landingAt) : undefined;
+      sky.clear(spot && groundHeight ? { ...guideAnchor({ x: spot.x, y: spot.y, alt: groundHeight(spot.x, spot.y) }, camera, fw, fh, worldN), r: 70, amount: clock.focus } : null);
       rain(frame, rect, t / 1000, air);
       sky.draw(frame, rect, t / 1000, "below");
       const skyBelow = performance.now() - skyStart;
