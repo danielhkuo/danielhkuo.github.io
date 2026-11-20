@@ -370,10 +370,12 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     // The stops, read into byId with the other landmarks. The live layer is fixed with the view below, so this is
     // before that; the landing places are filled once the world size is known.
     const stops: StopPlace[] = [];
+    let liveHall: { x: number; y: number } | undefined;
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
       for (const l of landmarks.landmarks) {
         byId.set(l.id, l);
         if (l.holds.kind === "stop") stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+        if (l.holds.kind === "hall" && l.live) liveHall = { x: l.x, y: l.y };
       }
     }
     const layerContext: LayerContext = {
@@ -388,7 +390,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // ?sights=all shows every rare sight at once, to look them over without waiting for them.
       forceSights: params.get("sights") === "all",
       structures: loaded.core.world.built?.built.structures,
-      ...(stops.length > 0 ? { story: { stops, found: () => getQuest().found } } : {}),
+      ...(stops.length > 0 || liveHall ? { story: { stops, hall: liveHall, found: () => getQuest().found } } : {}),
     };
     const sound = setup.sound?.() ?? null;
     if (probe) probe.soundLog = sound?.log() ?? null;

@@ -87,6 +87,18 @@ test("a world with a hall site and curio sites uses them over the town and the p
   assert.deepEqual(desk.holds, { kind: "stop", stop: "desk" });
 });
 
+test("a places file with a hall puts the hall there, live, over the town", () => {
+  const { set } = landmarksFor(MANIFEST, NINE, { ...PLACES, hall: { x: 1400, y: 1750 } });
+  assert.deepEqual(set.landmarks.map((l) => l.id), ["abbey-0", "hall-0", "curio-pine", "curio-desk"]);
+  const hall = byId(set.landmarks, "hall-0")!;
+  assert.deepEqual([hall.type, hall.x, hall.y, hall.live], ["hall", 1400, 1750, true]);
+  assert.equal(hall.holds.kind, "hall");
+  // A baked hall site still wins over the file's.
+  const baked = landmarksFor({ ...MANIFEST, sites: [...SITES, { id: "hall-0", type: "hall", x: 1, y: 2 }] }, NINE, { ...PLACES, hall: { x: 1400, y: 1750 } }).set;
+  const h = byId(baked.landmarks, "hall-0")!;
+  assert.deepEqual([h.x, h.y, h.live], [1, 2, undefined]);
+});
+
 test("a curio site whose id names no stop is left out", () => {
   const sites = [...SITES, { id: "curio-harp", type: "curio", x: 5000, y: 100 }];
   const { set } = landmarksFor({ ...MANIFEST, sites }, NINE, null);

@@ -47,7 +47,7 @@ export interface ConformLike {
 const SEARCH: Record<PlaceType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24, hall: 48, curio: 12 };
 
 /** The coil's radius when nothing is known of the building, by kind (the sprite boxes of design 5.9). */
-const FALLBACK: Record<PlaceType, number> = { abbey: 21, town: 6, lighthouse: 6, windmill: 8.4, bridge: 18, cathedral: 21, yew: 20, hall: 12, curio: 22 };
+const FALLBACK: Record<PlaceType, number> = { abbey: 21, town: 6, lighthouse: 6, windmill: 8.4, bridge: 18, cathedral: 21, yew: 20, hall: 25, curio: 22 };
 
 /** The coil's radius: the body's own width clear of the walls. */
 const CLEAR = 2;
@@ -113,7 +113,7 @@ export function restRadius(anchor: Anchor | null, type: PlaceType): number {
  * built world has nothing there, and the site's own point stands in). A town rests in its harbour when it has one.
  */
 export function restingPlaces(
-  landmarks: readonly { id: string; type: PlaceType; x: number; y: number }[],
+  landmarks: readonly { id: string; type: PlaceType; x: number; y: number; live?: boolean }[],
   built: { structures: readonly StructureLike[]; conforms: readonly ConformLike[] } | undefined,
   n: number,
 ): { targets: Target[]; anchors: Map<string, Anchor | null> } {
@@ -121,8 +121,9 @@ export function restingPlaces(
   const anchors = new Map<string, Anchor | null>();
   for (const l of landmarks) {
     const harbour = built && l.type === "town" ? harbourOf(l, built.conforms, n) : null;
-    // A curio is a thing on open ground, not a building: the coil rings round it, wide enough to leave it in view.
-    const a = l.type === "curio" ? null : (harbour ?? (built ? anchorOf(l, built.structures, n) : null));
+    // A curio, or a hall drawn live, is not in the baked world: the coil rings round it by its kind's radius, wide
+    // enough to leave it in view, and never takes a baked neighbour for its building.
+    const a = l.type === "curio" || l.live ? null : (harbour ?? (built ? anchorOf(l, built.structures, n) : null));
     anchors.set(l.id, a);
     targets.push({ id: l.id, x: a?.x ?? l.x, y: a?.y ?? l.y, radius: restRadius(a, l.type) });
   }

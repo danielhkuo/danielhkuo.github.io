@@ -11,12 +11,14 @@ export type HallProject = Project;
 export type Holding = { kind: "about" } | { kind: "hall"; projects: HallProject[] } | { kind: "stop"; stop: StopKey };
 
 export interface Landmark {
-  /** The site's id in the manifest, or `curio-<key>` when the stop comes from the places file. */
+  /** The site's id in the manifest; `curio-<key>` or `hall-0` when it comes from the places file. */
   id: string;
   type: PlaceType;
   /** World cells. */
   x: number;
   y: number;
+  /** Drawn by the story layer from places.json, not baked: it has no building to coil round. */
+  live?: boolean;
   holds: Holding;
 }
 
@@ -92,6 +94,16 @@ function curioKey(id: string): StopKey | null {
   return isStopKey(key) ? key : null;
 }
 
+/** The hall from a places file for this world: a live building, drawn by the story layer, with no baked anchor. */
+function placedHall(places: unknown, worldId: string): { id: string; type: PlaceType; x: number; y: number; live: true } | null {
+  if (typeof places !== "object" || places === null) return null;
+  const file = places as { worldId?: unknown; hall?: unknown };
+  if (file.worldId !== worldId || typeof file.hall !== "object" || file.hall === null) return null;
+  const p = file.hall as { x?: unknown; y?: unknown };
+  if (typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+  return { id: "hall-0", type: "hall", x: p.x, y: p.y, live: true };
+}
+
 /**
  * Stops from a places file for this world. Unknown input, a file for another world, unknown keys and
  * coordinates that are not finite numbers yield nothing, and never throw.
@@ -128,7 +140,7 @@ export function landmarksFor(
   const landmarks: Landmark[] = [];
   const abbey = located(firstOf(sites, "abbey"));
   if (abbey) landmarks.push({ ...abbey, holds: { kind: "about" } });
-  const hall = located(firstOf(sites, "hall")) ?? located(siteNamed(sites, "town-0")) ?? located(firstOf(sites, "town"));
+  const hall = located(firstOf(sites, "hall")) ?? placedHall(places, manifest.worldId) ?? located(siteNamed(sites, "town-0")) ?? located(firstOf(sites, "town"));
   if (hall) landmarks.push({ ...hall, holds: { kind: "hall", projects: ordered(projects) } });
 
   const curios = new Map<StopKey, ManifestSite>();
@@ -149,7 +161,7 @@ export function landmarksFor(
     for (const stop of STOPS) {
       const point = points.get(stop.key);
       if (!point) continue;
-      landmarks.push({ id: `curio-${stop.key}`, type: "curio", x: point.x, y: point.y, holds: { kind: "stop", stop: stop.key } });
+      landmarks.push({ id: `curio-${stop.key}`, type: "curio", x: point.x, y: point.y, live: true, holds: { kind: "stop", stop: stop.key } });
     }
   }
 
