@@ -6,6 +6,7 @@ import { REMAPPABLE, type KeyFamily, type Keys } from "./bindings.ts";
 import { padNames, type PadFamily } from "./gamepad.ts";
 import { column, keyCap, label, padFace, padStick, padTrigger, plate, row, slip, touchButton, touchStick, touchTap, type Sprite } from "./glyphs.ts";
 import { lessonAlpha, type Lesson } from "./lesson.ts";
+import { torusDelta } from "../core/torus.ts";
 
 export type Device = "keyboard" | "gamepad" | "touch";
 
@@ -252,6 +253,92 @@ export function chooseSlot(
     }
   }
   return best;
+}
+
+/**
+ * Where the dragon's head stands in an fw × fh frame, in whole frame pixels, for the guides to stand by: the frame's
+ * centre plus the head's offset from the camera, rounded. While flying the camera sits on the head, so this is the
+ * centre itself, the same every frame. The head's own sub-pixel place never reaches the guides: rounding it against the
+ * view's floored origin would flip it between two pixels as it crossed each half cell, nearly every frame at 120 Hz.
+ * Coming down, the camera eases off the head and the anchor moves in whole steps. `s` and `camera` are the flight state
+ * and view.setCamera's point (cameraAt); `n` is the world's size.
+ */
+export function guideAnchor(
+  s: { x: number; y: number; alt: number }, camera: { x: number; y: number }, fw: number, fh: number, n: number,
+): { x: number; y: number } {
+  const dx = torusDelta(camera.x, s.x, n);
+  const dy = torusDelta(0.8 * camera.y, 0.8 * s.y - s.alt, 0.8 * n);
+  return { x: (fw >> 1) + Math.round(dx), y: (fh >> 1) + Math.round(dy) };
+}
+
+/** Joints of the body on screen, placed from the head's `anchor` by their whole-pixel offsets from the head. */
+export function bodyOnScreen(
+  anchor: { x: number; y: number }, s: { x: number; y: number; alt: number },
+  joints: readonly { x: number; y: number; alt: number }[], n: number,
+): { x: number; y: number }[] {
+  const head = 0.8 * s.y - s.alt;
+  return joints.map((j) => ({
+    x: anchor.x + Math.round(torusDelta(s.x, j.x, n)),
+    y: anchor.y + Math.round(torusDelta(head, 0.8 * j.y - j.alt, 0.8 * n)),
+  }));
+}
+
+/** Where a guide stands now: its slot, where it was drawn (whole pixels), a glide's remainder, how long it was covered. */
+export interface Placement {
+  slot: Slot | null;
+  x: number;
+  y: number;
+  carryX: number;
+  carryY: number;
+  covered: number;
+}
+
+/** No guide standing. */
+export const NO_PLACEMENT: Placement = { slot: null, x: 0, y: 0, carryX: 0, carryY: 0, covered: 0 };
+
+/** A guide's slot must stay covered by the body this long, seconds, before the guide moves: a sway passes under it. */
+export const DWELL = 1;
+/** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
+export const GLIDE = 10;
+
+/**
+ * The guide's next placement, `dt` seconds on: a w × h guide by the head at `anchor` (guideAnchor), clear of `body`
+ * (bodyOnScreen) in an fw × fh frame. It holds its slot, and so its pixel, while the head holds still on screen; it
+ * moves only when its slot leaves the frame, or when the body has covered it for DWELL. Then it glides to the new
+ * slot a whole pixel at a time (at once under `reduced` motion).
+ */
+export function placeGuide(
+  p: Placement, anchor: { x: number; y: number }, w: number, h: number, fw: number, fh: number,
+  body: readonly { x: number; y: number }[], order: readonly Slot[], dt: number, reduced: boolean,
+): Placement {
+  let slot = p.slot;
+  let covered = p.covered;
+  if (slot === null || !order.includes(slot)) {
+    slot = chooseSlot(null, anchor, w, h, fw, fh, body, order);
+    covered = 0;
+  } else {
+    const c = cost(slot, anchor, w, h, fw, fh, body);
+    covered = c > 1 ? covered + Math.max(0, dt) : 0;
+    if (c >= 100 || covered >= DWELL) {
+      slot = chooseSlot(null, anchor, w, h, fw, fh, body, order);
+      covered = 0;
+    }
+  }
+  const target = slotAt(slot, anchor, w, h);
+  let carryX = p.carryX;
+  let carryY = p.carryY;
+  if (p.slot === null || reduced) {
+    carryX = 0;
+    carryY = 0;
+  } else if (slot !== p.slot) {
+    carryX = p.x - target.x;
+    carryY = p.y - target.y;
+  }
+  const keep = Math.exp(-GLIDE * Math.max(0, dt));
+  carryX = Math.abs(carryX * keep) < 0.5 ? 0 : carryX * keep;
+  carryY = Math.abs(carryY * keep) < 0.5 ? 0 : carryY * keep;
+  const at = clampInto({ x: target.x + Math.round(carryX), y: target.y + Math.round(carryY) }, w, h, fw, fh);
+  return { slot, x: at.x, y: at.y, carryX, carryY, covered };
 }
 
 /** Keeps a guide of w × h inside the fw × fh frame, `margin` px from its edges. */

@@ -11,7 +11,6 @@ import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createRegionLand } from "../../world/runtime/regionLand";
 import { createDragon } from "../../world/dragon/index";
-import { imageOn } from "../../world/dragon/parts";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
@@ -24,7 +23,7 @@ import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, kindName, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { blit } from "../../world/controls/blit";
-import { chooseSlot, clampInto, guideFor, slotAt, SLOTS, SLOTS_HIGH, type Device, type Slot } from "../../world/controls/guides";
+import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
 import { LESSON_KEY, newLesson, stepLesson } from "../../world/controls/lesson";
 import type { Options } from "../../world/controls/options";
 import { createPacer, phoneWorkers } from "../../world/mobile/perf";
@@ -44,8 +43,6 @@ const NARROW = 760;
 /** The body's joints a guide keeps clear of: this many, this many cells apart (about the dragon's length). */
 const BODY_JOINTS = 16;
 const BODY_SPACING = 5.5;
-/** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
-const GLIDE = 10;
 /** A gap this long between frames, while flying on a touch screen, is a stall: the page was frozen, s. */
 const STALL = 0.25;
 /** Where a touch flight was, kept every so often so a reload after the phone reclaims the tab starts there. */
@@ -135,6 +132,8 @@ interface FlightProbe {
   skyMs: number[];
   /** Main-thread ms the controls, the lesson and the guide took, per frame. */
   guideMs: number[];
+  /** Where the guide was drawn, frame by frame: x, y, and its slot's number (−1 with no guide). */
+  guideAt: number[];
   /** Main-thread ms the sound took, per frame (0 while it is off), and the kit's share of it. */
   soundMs: number[];
   soundKit: number[];
@@ -195,7 +194,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   // With ?stats the page reports to scripts/world-fly.mjs through window.__flight.
   const probe: FlightProbe | null = statsOn
     ? {
-      air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], soundMs: [], soundKit: [], soundWork: [], soundSettled: false, soundState: "off", soundLog: null, hazeFrames: 0, frames: 0,
+      air: null, paletteMs: [], navStart: 0, readyAt: null, frameMs: [], skyMs: [], guideMs: [], guideAt: [], soundMs: [], soundKit: [], soundWork: [], soundSettled: false, soundState: "off", soundLog: null, hazeFrames: 0, frames: 0,
       baked: () => pool?.stats().baked ?? 0, error: null, workerErrors: [],
     }
     : null;
@@ -423,7 +422,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const pacer = isPhone ? createPacer() : null;
     if (pacer) pacerRate = () => pacer.rate();
     // Where the guide stands: its slot round the head, where it was drawn, and what is left of a glide between slots.
-    const place = { slot: null as Slot | null, x: 0, y: 0, carryX: 0, carryY: 0 };
+    let place = NO_PLACEMENT;
 
     const tick = (t: number) => {
       if (!alive || !flight) return;
@@ -535,37 +534,21 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         landedPrompt: phase.kind !== "landed" || (asked.device !== "touch" && window.innerWidth >= NARROW),
       });
       if (guide) {
-        const onScreen = (x: number, y: number, alt: number) => ({
-          x: imageOn(Math.round(x), rect.x, worldN, fw, 1),
-          y: imageOn(Math.round(y * 0.8 - alt), rect.y, worldN * 0.8, fh, 1),
-        });
-        const head = onScreen(flight.x, flight.y, flight.alt);
-        const body = dragon.pose.chain.joints(BODY_JOINTS, BODY_SPACING).slice(1).map((j) => onScreen(j.x, j.y, j.alt));
+        // The head in whole pixels from the camera, which sits on it in flight: the guide holds its pixel while the
+        // dragon flies, and steps a whole pixel at a time as the camera eases onto a landmark.
+        const anchor = guideAnchor(flight, camera, fw, fh, worldN);
+        const body = bodyOnScreen(anchor, flight, dragon.pose.chain.joints(BODY_JOINTS, BODY_SPACING).slice(1), worldN);
         const { w, h } = guide.sprite;
         // Over a bottom sheet the Codex covers the foot of the frame: the take-off prompt goes above the dragon.
         const order = phase.kind === "landed" && window.innerWidth < NARROW ? SLOTS_HIGH : SLOTS;
-        const slot = chooseSlot(place.slot, head, w, h, fw, fh, body, order);
-        const target = slotAt(slot, head, w, h);
-        // A guide that moves to another slot glides there from where it stood; one that has just appeared does not.
-        if (place.slot === null || reduced) {
-          place.carryX = 0;
-          place.carryY = 0;
-        } else if (slot !== place.slot) {
-          place.carryX = place.x - target.x;
-          place.carryY = place.y - target.y;
-        }
-        const keep = Math.exp(-GLIDE * dt);
-        place.carryX *= keep;
-        place.carryY *= keep;
-        place.slot = slot;
-        const at = clampInto({ x: Math.round(target.x + place.carryX), y: Math.round(target.y + place.carryY) }, w, h, fw, fh);
-        place.x = at.x;
-        place.y = at.y;
-        blit(frame, fw, fh, guide.sprite, at.x, at.y, guide.alpha);
-        controls.target({ x: at.x, y: at.y, w, h, tap: guide.tap });
+        place = placeGuide(place, anchor, w, h, fw, fh, body, order, dt, reduced);
+        blit(frame, fw, fh, guide.sprite, place.x, place.y, guide.alpha);
+        controls.target({ x: place.x, y: place.y, w, h, tap: guide.tap });
+        if (probe) probe.guideAt.push(place.x, place.y, place.slot === null ? -1 : SLOTS.indexOf(place.slot));
       } else {
-        place.slot = null;
+        place = NO_PLACEMENT;
         controls.target(null);
+        if (probe) probe.guideAt.push(0, 0, -1);
       }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";
