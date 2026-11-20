@@ -1,7 +1,8 @@
 # The minimal version and the terminal, as one page: design
 
-Status: **built 2026-11-19** on branch `claude/minimal-terminal-302562`, to the picks below. The owner's decisions
-(section 11) are open; each has a recommended option, and that option is what is built.
+Status: **rebuilt 2026-11-19 as nano** (section 13), on the owner's decision. Sections 1 to 12 record the terminal
+page it replaced, built the same day. What they found about Safari still holds and is what section 13 builds on; the
+shell prompt, the command row and the programs are gone from this page.
 
 - **Evidence:** `docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md` ("the research doc"), which includes
   measurements taken in real mobile Safari in the iOS 26.5 Simulator, on a probe page and on the built page.
@@ -360,3 +361,130 @@ new output is simply below the fold.
   the title session and the coordinator.
 - **Project descriptions.** Some are rough on GitHub itself ("Main Repo I guess"). They come straight from GitHub;
   fix them there.
+
+## 13. Nano (2026-11-19, the owner's decision)
+
+The owner: the minimal version "should look like, should act like you're in... Nano... an actual text editor. Plain
+and simple." The interactive shell now lives only in the title's terminal; this page drops its prompt, its command row
+and its programs. The look reference is the title session's round-7 mock (`title-menu-round7/nano.png` and
+`round7-terminal-over-world.html` in the shared notes). The title will grow its terminal window to fill the screen and
+land here, so the page takes that window's font and colours.
+
+### 13.1 What it is
+
+- **daniel.txt, open in nano.** An inverse title bar (`GNU nano 8.2`, the file name centred); the text; a status line
+  (`[ Read N lines ]`); two rows of shortcuts. Plain text, underlined live links, plain bold caps for section heads.
+- **The text** is built from content.ts and the pinned repos (`src/components/minimal/daniel.ts`), never copied:
+  - the name (the page's one `h1`) and the title line;
+  - the profile facts, label and value in two columns;
+  - `PROJECTS`: each repo's name (a link to it), its language, its description indented under it, and its homepage
+    if it has one. A build without a token has no repos; the section then points at GitHub.
+  - `CONTACT`: email, GitHub, LinkedIn and the résumé, labelled, as `contactLinks()` lists them.
+  - `ELSEWHERE`: the site's other pages (`otherPages`), each a link with its summary.
+  Each section head is an `h2`. The same model lays the text out as the plain file it pretends to be (80 columns,
+  descriptions wrapped under their indent): `N` in `[ Read N lines ]` and the line numbers in Go To Line count that
+  file's lines, as nano's do. With today's six pinned repos the file is 53 lines; without a token, 36.
+- **Gone from this page:** the prompt, the command row, the jump button, the programs, the start animation (the title
+  owns the opening now), the photo (a text file has none), and the stars, forks and dates of each repo (the agent
+  files still carry them).
+
+### 13.2 Layout [Call]
+
+- **The document scrolls**, as in section 3's pick A. The title bar sticks to the top; the status line and the
+  shortcut rows stick to the bottom. When the text is shorter than the screen the rows still sit at the bottom.
+- **Font and colours are the title window's:** `--font-mono-family`, `--panel-ink` ground, `--panel-on` text; the
+  inverse bars swap the two. The mock's cream (#e6e1d6) is not used: the window it grows from is white on #1e1e1e.
+- **Size:** 15 px on a desktop with a mouse (the mock's), 16 px on phones and anything with a coarse pointer
+  (section 4.5's rule, and no zoom on the search field). One size throughout: nano has no other.
+- **Width:** the text keeps to 100 columns, left-aligned, as a terminal does.
+- **Phones:** the decoration shortcuts are hidden and the four that work sit two to a row, each at least 44 px tall.
+  The search field opens at the top of the screen, over the title bar, and the bottom rows hide while it has focus,
+  so nothing is pinned at the bottom with the keyboard up (section 4.5). The field takes focus with `preventScroll`:
+  without it Safari scrolled the page by about 170 pt as the keyboard opened (research doc). On a phone's 38 columns
+  the label column keeps one space after the longest label, not the file's three, so the LinkedIn address fits.
+- **The screens:** Help covers the whole screen, as nano's does, with its own title bar and a `^X Close` key, and
+  scrolls as a whole. Go To Line rises from the foot over the shortcut rows, as nano's prompt takes their place. Both
+  are HTML popovers in the top layer, so they cover the sticky bars.
+
+### 13.3 Shortcuts
+
+Every shortcut shown either works or is decoration hidden from screen readers. No button is dead, with or without
+JavaScript.
+
+| Key | Does | Without JavaScript |
+|---|---|---|
+| `^G` Help | Opens a help screen listing the keys; `^X` or Esc closes it | Works: a `popover` button |
+| `^F` Where Is | Opens a `Search:` prompt. Enter finds the next match after the last one (case-insensitive), selects it and scrolls to it; an empty Enter repeats the last search, as nano's does. Messages are nano's: `[ "x" not found ]`, `[ Search Wrapped ]`, `[ This is the only occurrence ]` | Decoration: the browser's own find is there |
+| `^/` Go To Line | Lists the sections with their line numbers; choosing one jumps to it | Works: a `popover` of links (it stays open until dismissed) |
+| `^X` Exit | Back to the title at `/` | Works: a link |
+| Esc | Closes whatever is open; with nothing open, the same as `^X` | — |
+
+- The other eight (`^O Write Out`, `^K Cut`, `^T Execute`, `^C Location`, `^R Read File`, `^\ Replace`, `^U Paste`,
+  `^J Justify`) are decoration: `aria-hidden`, not focusable, shown only where the rows have room.
+- Keys are taken only with Control alone: Command and Alt shortcuts stay the browser's. `^F` replaces the browser's
+  find where Control+F is find (Windows, Linux); Command+F on a Mac is untouched. Typing in the search field keeps
+  the field's own keys, except Esc and Enter.
+- A button's accessible name is its word ("Help"); the `^G` before it is hidden from screen readers and given as
+  `aria-keyshortcuts` instead. Search results are announced through the status line.
+- Focus: nothing takes focus on load. Closing the search prompt returns focus to whatever had it before.
+
+### 13.4 Kept, and checked before and after
+
+One source; complete with JavaScript off; one `h1` and a heading per section; real links (every contact, every repo,
+every other page); the Person JSON-LD and the canonical link; axe clean at phone and desktop, light and dark; 16 px or
+more on phones; no sideways scroll at 320, 375 and 390 px; no layout shift; `/recruiter` forwarding. The before and
+after screenshots and numbers are in the session notes (`minimal-terminal-shots/nano/`).
+
+### 13.5 Tests
+
+- **Unit:** the model (what each section holds, the empty-projects pointer, link targets) and the plain file (its
+  lines, padding, wrapping, the section line numbers).
+- **Unit (`npm test`), 18:** the model (what each section holds, the pointer when there are no repos, the link
+  targets) and the plain file (padding, wrapping, blank lines, Go To Line's numbers); search (case, the next match,
+  wrapping, text not pattern) and what nano says and a screen reader hears after it.
+- **WebKit (`npm run test:minimal`, `e2e/minimal/`), 43:** with JavaScript off, the headings, facts, links and
+  JSON-LD, Help and Go To Line working and nothing dead; at 320, 375 and 390 px no sideways scroll, text of 16 px or
+  more, and the four keys two to a row at 44 px; the document as the only scroller, the bars stuck while reading, the
+  last line clear of the keys at the end; nothing focused on load; Where Is the same box before and after the script;
+  every key by keyboard at a desk and by tap on a phone (search found, repeated, wrapped, not found, cancelled, and
+  cancelled by putting the keyboard away; Help; Go To Line; Exit and Esc); the browser's own keys left alone; axe with
+  each screen open; the forward from `/recruiter`. All pass on a build without a token. With JavaScript on, each
+  test waits until the page has hydrated (Where Is turns into a button) before it presses a key: under load, once, a
+  quiet network came first and Control+/ reached a page that was not yet listening.
+- **By hand in the iOS 26.5 Simulator (iPhone 17e, Safari):** the rows against Safari's bar, full size and minimised;
+  the search field with the keyboard up, Return, and the keyboard put away; Go To Line and Help by tap.
+
+### 13.6 Before and after
+
+Measured on the built page with the real repos (Playwright WebKit for the page, Chromium for layout shift).
+Screenshots: `minimal-terminal-shots/nano/` in the session notes (`sheet-phone.png`, `sheet-desktop.png`,
+`sheet-phone-keys.png`, and every view on its own).
+
+| | Before (the Terminal page) | After (nano) |
+|---|---|---|
+| `h1` | Daniel Kuo | Daniel Kuo |
+| `h2` | Projects, Contact, Elsewhere on this site | PROJECTS, CONTACT, ELSEWHERE |
+| Links | 15 | 14: every contact, repo and page; only the skip link to the old prompt is gone |
+| Smallest text, phone | 12 px (the login line) | 16 px |
+| Smallest text, desktop | 10 px | 15 px |
+| Sideways scroll, 320 to 390 px | none | none |
+| Layout shift, phone and desktop | 0 | 0 |
+| Controls with JavaScript off | none | Help and Go To Line, which work; Exit is a link |
+| axe, phone and desktop, light and dark | clean | clean, and clean with each screen open |
+| JSON-LD, canonical, `/recruiter` | yes | yes |
+
+### 13.7 Code
+
+- `src/app/minimal/page.tsx` and `minimal.css`: the page and nano's dress.
+- `src/components/minimal/`: `daniel.ts` (the model and the plain file), `Text.tsx` (the text as HTML), `Footer.tsx`
+  (the status line, the search prompt, the keys; the only client code), `Panels.tsx` (Help and Go To Line),
+  `find.ts` (search), `ids.ts`.
+- Gone: `Session`, `Doc`, `Lines`, `Banner`, `transcript.ts` and `reveal.ts`, which only this page used. The shared
+  terminal in `src/components/terminal/` is unchanged; the title and the abbey's terminal use it.
+
+### 13.8 Not done
+
+- A real iPhone, iOS 27 and VoiceOver.
+- The title's window growing into this page: the title session's.
+- On a phone the abbey's "Open the terminal" lands here, where there is no shell now (`Flight.tsx`; the mobile
+  suite's test of it checks only the address). Point it elsewhere or rename it: the coordinator's call.
