@@ -141,6 +141,16 @@ Before the new world exists, the quest can run on the present world at five spar
 
 ## 12. Left to the builder
 
+**Who builds what** (owner's routing, 2026-11-19)
+
+- **Cursor builds** what tests or a precise brief can pin: the hall's project list, the Codex changes, the quest log
+  and the count, the curio sites, and the logic of each stop (found, keepsake, line). It runs in this worktree as
+  `cursor-agent -p --force --model grok-4.7-xhigh "<brief>"`.
+- **Claude (Opus) keeps** the briefs, the tests written first, the review of each Cursor change, and judging the
+  sprites, animations and text on renders.
+
+**Still open for the build**
+
 - The sprites and animations, judged on renders.
 - How the camera frames a small thing when the dragon lands.
 - The size of the pennant and the look of the edge marker.
