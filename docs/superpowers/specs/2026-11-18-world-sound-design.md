@@ -1648,3 +1648,26 @@ rattle (4.855 s and the like), the open sea's wash.
   before). The real fix is fresh noise on every pass (a noise source in an audio worklet, or the kit's worker handing
   over fresh loops), at a cost to the audio thread or the page: on the roadmap. The rain's wander (§14.2) was judged
   by waveform correlation only, and may share the limit: its loops are 7.3 s (drops) and 11.3 s (plinks).
+
+### 14.6 The lanes and the scheduler in the ear's worker (2026-11-19)
+
+Where the ear listens in a worker, a Brain (`engine/brain.ts`) steps the lanes and the scheduler there at each pass,
+ten times a second, and its answer rides home with the Hearing: no message is added (a message to a worker costs the
+frame about 0.08 ms at 4×, as much as a mix). It looks a pass further ahead than the page did, so everything is found
+as early. The mix stays on the page: its arithmetic is about 9 µs a frame at 4×, and worked elsewhere the wind would
+answer the dragon a tenth of a second late. Offline renders are untouched (seven scenes identical to 39a6303 to one
+float LSB).
+
+It moved little. In one run at load 5 to 7, sound's mean a frame at 4× was 104 µs with the brain in the worker and
+109 µs with it on the page; a low-load trace gave 105 µs and about +0.13 ms on the frame's 95th percentile. The 100 µs
+mean bar is not yet met, and the load-gated off/on pairs have not been run on this build. What is left on the page
+(µs a frame at 4×, profiled): the ear's row copy and pass post 23, the mix's first half 22, its voices 15, the
+emitters 11, cue plays 10. Next cuts, not done: one copy a block of rows, one buffer a pass, the stats probe's
+per-frame reads of the context's state.
+
+### 14.7 The owner's first listen (2026-11-19)
+
+"When it defaults to full volume, it's really loud. The wind is very, very loud." The gulls were fine; nothing else was
+noticed. So: the default volume is Half (0.5, −12 dB; it was 0.7), and every wind layer is down 4 dB (`K_WIND`). The
+recorded flights now read −24.4 and −25.4 LUFS (flight-replay was −22.1). flight-replay's true peak is −4.1 dBTP
+against §9.1's −4.5; it was −4.0 before the change, so the wind is not its cause. Not yet looked into.

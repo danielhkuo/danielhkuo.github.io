@@ -101,21 +101,21 @@ function Action({ children, onClick, px }: { children: ReactNode; onClick(): voi
   );
 }
 
-/** The volume's steps (0–1, the slider's value before it is squared): "mute" is silence, "loud" the default. */
+/** The volume's steps (0–1, the slider's value before it is squared): "mute" is silence, "half" the default. */
 const VOLUMES = [["mute", 0], ["soft", 0.3], ["half", 0.5], ["loud", 0.7], ["full", 1]] as const;
 type VolumeStep = (typeof VOLUMES)[number][0];
 const VOLUME_SAY: Record<VolumeStep, string> = {
   mute: "Volume off: no sound at all",
   soft: "Soft",
-  half: "Half",
-  loud: "Loud (the usual)",
+  half: "Half (the usual)",
+  loud: "Loud",
   full: "Full",
 };
 
 const offOnServer = (): "off" => "off";
 
 function nearestStep(v: number): VolumeStep {
-  let best: VolumeStep = "loud", d = Infinity;
+  let best: VolumeStep = "half", d = Infinity;
   for (const [name, at] of VOLUMES) if (Math.abs(at - v) < d) [best, d] = [name, Math.abs(at - v)];
   return best;
 }

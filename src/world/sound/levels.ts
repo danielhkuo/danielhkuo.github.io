@@ -44,20 +44,21 @@ export const LIMITER_IDLE_DB = -0.5;
 
 // ── Wind (§3.3, §4.1) ────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Layer gains at cruise (linear). Calibrated: wind alone reads −34 / −27 / −21 LUFS at brake / cruise / boost. */
+/** Layer gains at cruise (linear). Calibrated at −34 / −27 / −21 LUFS (wind alone, at brake / cruise / boost), then
+ * all taken down 4 dB on the owner's ear (2026-11-19: "the wind is very, very loud"; nothing else was noticed under it). */
 export const K_WIND = {
   /** A, the ear buffet (per ear). */
-  a: 0.36,
+  a: 0.227,
   /** B, the rush. */
-  b: 0.32,
+  b: 0.202,
   /** C, the hiss. */
-  c: 0.117,
+  c: 0.074,
   /** D, the whistles (their sum, at full squall). */
-  d: 0.6,
+  d: 0.379,
   /** E, the ground breeze. */
-  e: 0.038,
+  e: 0.024,
   /** The turn whoosh at its fullest. */
-  w: 0.25,
+  w: 0.158,
 };
 
 /**

@@ -269,6 +269,9 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 - **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
+- flight-replay's true peak is −4.1 dBTP against the −4.5 bar (it was −4.0 before the wind came down): find which voice.
+- Sound's 4× mean is 105 µs against 100: block row copy, one buffer a pass (spec §14.6). Gated off/on pairs still to run.
+- Owner's first listen (2026-11-19): default volume now Half, wind down 4 dB. The other voices went unnoticed: listen again with the wind down.
   the way: the noise beds' loops are heard to come round (the open sea's wash every 4.855 s, the surf bed's, the
   wind's): a pitch wander, tried, removes only exact repetition (a blind critic, spec §14.5), so each pass needs fresh
   noise (an audio-worklet noise source, or fresh loops from the kit's worker); the same test for the rain's drops and
