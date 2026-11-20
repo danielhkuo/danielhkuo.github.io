@@ -147,9 +147,12 @@ Last updated 2026-11-19.
   the haze and the manifest know the climate. Design, measurements and follow-ups:
   `specs/2026-11-18-biomes-and-climate-design.md`. Every climate, landmark and wonder was then scored side by side
   against the climates on the old land, and where the new land scored lower the old was kept (the steppe's, the
-  Mediterranean's and the warm forest's islands, fens, cold tables) or the look fixed (look ledger, round 9). The
-  world on disk has not been re-shipped: `npm run world:build -- --seed 3 --n 10240 --cache` makes world
-  `3a2f194713e2`, and `src/world/sites/assignments.json` is pinned to it.
+  Mediterranean's and the warm forest's islands, fens, cold tables) or the look fixed (look ledger, round 9). Shipped
+  2026-11-19 as world `3a2f194713e2` (`npm run world:build -- --seed 3 --n 10240 --cache`), replacing
+  `ae1d17a8da49`. It is 8.5 MB in all and 1.33 MB before first flight, against 9.0 and 1.45 before. The start and
+  abbey views are the same as before. Browser check, one run at the load of the day (load average 7–13): ready
+  1.7–2.0 s and frame p95 1.7–2.6 ms at 120 fps; at 4× CPU throttle, ready 4.1 s and p95 4.9 ms, against 2.6 s and
+  4.0 ms when the last world shipped on a quieter machine. A load-matched A/B of the two worlds is open below.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 - **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
@@ -470,6 +473,9 @@ land was decided (grow it) and is built (spec 6.7).
 
 ## Open checks
 
+- Coordinator: a load-matched A/B of world `3a2f194713e2` against `ae1d17a8da49` at 4× CPU throttle, alternating runs.
+  One run at load 7–13 read ready 4.1 s and p95 4.9 ms, against 2.6 s and 4.0 ms on a quieter day. The non-temperate
+  tiles bake 34–37% slower, over the 15% the biome design allowed.
 - Owner: open `/world` in Safari and on an iPhone. WebKit now runs in `npm run e2e`; what automation cannot see
   (toolbars and `vh`, touch gestures, keyboard taps, phone performance) is listed in
   `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.
