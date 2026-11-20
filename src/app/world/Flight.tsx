@@ -2,7 +2,7 @@
 
 import { useRef, type CSSProperties } from "react";
 import Terminal from "../../components/terminal/Terminal";
-import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
+import type { LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
 import FlightCard from "./FlightCard";
 import styles from "./flight.module.css";
@@ -80,13 +80,7 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
       <GuideLine say={flight.say} />
       <DiscoveryCaption caption={flight.caption} />
       {at ? (
-        <Codex
-          landmark={at}
-          register={landmarks ? registerFrom(at, landmarks) : []}
-          onTakeOff={flight.takeOff}
-          onOpenTerminal={about.open}
-          openLabel={about.label}
-        />
+        <Codex landmark={at} onTakeOff={flight.takeOff} onOpenTerminal={about.open} openLabel={about.label} />
       ) : null}
       {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
       <OptionsPanel

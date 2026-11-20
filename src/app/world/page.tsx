@@ -1,11 +1,10 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { Metadata } from "next";
-import { fetchPinnedRepos } from "@/lib/github";
+import { fetchPinnedRepos, type PinnedRepo } from "@/lib/github";
 import { otherPages } from "@/lib/site-content";
-import { LANDMARK_CONFIG } from "@/world/landmarks.config";
-import sticky from "@/world/sites/assignments.json";
-import { entryOf, landmarksFor, stickyText, type LandmarkSet } from "@/world/sites/landmarks";
+import { landmarksFor, type HallProject } from "@/world/sites/landmarks";
+import places from "@/world/story/places.json";
 import Flight from "./Flight";
 import { startBytes } from "./startBytes";
 
@@ -26,19 +25,43 @@ function shippedManifest(): { worldId: string; n: number; sites: { id: string; t
   }
 }
 
+/** "owner/name" from a github.com repository URL. */
+function repoOf(url: string): string | null {
+  const at = url.indexOf("github.com/");
+  if (at < 0) return null;
+  const [owner, name] = url.slice(at + "github.com/".length).split("/");
+  if (!owner || !name) return null;
+  const clean = name.split(/[?#]/)[0]?.replace(/\.git$/, "");
+  return clean ? `${owner}/${clean}` : null;
+}
+
+/** The pinned repos as the hall's projects. Replaced by loadProjects() when world/projects lands. */
+function hallProjects(repos: PinnedRepo[]): HallProject[] {
+  return repos.map((r, order) => ({
+    slug: r.name,
+    name: r.name,
+    summary: r.description,
+    body: "",
+    order,
+    repo: repoOf(r.url),
+    repoUrl: r.url,
+    link: r.homepageUrl || null,
+    image: null,
+    github: {
+      stars: r.stargazerCount,
+      forks: r.forkCount,
+      language: r.primaryLanguage,
+      languages: r.languages,
+      updatedAt: r.updatedAt,
+    },
+  }));
+}
+
 export default async function WorldPage() {
-  // The pinned repos, fetched at build time (as the home page does), stand at the world's landmarks.
+  // The pinned repos, fetched at build time, fill the hall until loadProjects() lands.
   const repos = await fetchPinnedRepos();
   const manifest = shippedManifest();
-  let landmarks: LandmarkSet | null = null;
-  if (manifest) {
-    const placed = landmarksFor(manifest, repos.map(entryOf), LANDMARK_CONFIG, sticky);
-    landmarks = placed.set;
-    // Without a token the repos are stand-ins, and their places mean nothing.
-    if (placed.changed && process.env.GITHUB_TOKEN) {
-      console.warn(`world: the pinned repos' sites have changed. Commit this as src/world/sites/assignments.json:\n${stickyText(manifest.worldId, placed.bySite)}`);
-    }
-  }
+  const landmarks = manifest ? landmarksFor(manifest, hallProjects(repos), places).set : null;
 
   // The terminal at the abbey gets a slim slice of each repo, and what only the build knows. The site's other pages are
   // among that: given them, its files are the minimal version's (a contact card that stands by itself, where the old

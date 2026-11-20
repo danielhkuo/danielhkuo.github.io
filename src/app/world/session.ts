@@ -22,7 +22,8 @@ import { styleFrom } from "../../world/sky/styles";
 import { parseWeather, weatherAt } from "../../world/sky/weather";
 import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
-import { discoveryOf, kindName, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
+import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
+import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
 import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
 import { LESSON_KEY, newLesson, stepLesson } from "../../world/controls/lesson";
@@ -168,12 +169,13 @@ function codexShift(w: number): { x: number; y: number } {
   return window.innerWidth >= NARROW ? { x: 0.16 * w, y: 0 } : { x: 0, y: 50 };
 }
 
-/** What the land prompt names: the project kept there, About me at the abbey, or the landmark itself. */
+/** What the land prompt names: about me, the projects, or the stop's own name. */
 function offerName(l: Landmark | undefined): string {
   if (!l) return "";
-  if (l.holds.kind === "project") return l.holds.project.name;
   if (l.holds.kind === "about") return "about me";
-  return `the ${kindName(l.type)}`;
+  if (l.holds.kind === "hall") return "the projects";
+  for (const stop of STOPS) if (stop.key === l.holds.stop) return stop.name;
+  return "";
 }
 
 async function fetchMask(): Promise<Uint8Array> {
@@ -214,7 +216,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     probe.landmarks = (landmarks?.landmarks ?? []).map((l) => ({
       id: l.id,
       holds: l.holds.kind,
-      name: l.holds.kind === "project" ? l.holds.project.name : null,
+      name: l.holds.kind === "stop" ? l.holds.stop : null,
     }));
   }
 

@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import { PROFILE } from "../../src/components/terminal/content.ts";
 import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "../support";
 
-/** The first landmark that holds `holds` ("project" or "about"), read from the world's probe. */
+/** The first landmark that holds `holds` ("hall" or "about"), read from the world's probe. */
 async function landmark(page: Page, holds: string): Promise<{ id: string; name: string | null }> {
   await skipLesson(page);
   await openWorld(page);
@@ -27,18 +27,14 @@ async function landAt(page: Page, id: string, offer: string): Promise<void> {
 }
 
 test.describe("landing", () => {
-  test("lands at a project's landmark, opens its Codex, and takes off", async ({ page }) => {
-    const site = await landmark(page, "project");
-    if (!site.name) throw new Error("the project has no name");
-    await landAt(page, site.id, site.name);
+  test("lands at the hall, opens its Codex, and takes off", async ({ page }) => {
+    const site = await landmark(page, "hall");
+    await landAt(page, site.id, "the projects");
 
-    // Named by the project, whole: the illuminated initial once split it ("E mpty-state-repo").
-    const codex = page.getByRole("dialog", { name: site.name, exact: true });
+    const codex = page.getByRole("dialog", { name: "Projects", exact: true });
     await expect(codex).toBeVisible({ timeout: 20_000 });
-    await expect(codex.getByRole("heading", { level: 2, name: site.name, exact: true })).toBeVisible();
+    await expect(codex.getByRole("heading", { level: 2, name: "Projects", exact: true })).toBeVisible();
     expect((await flier(page)).phase).toBe("landed");
-    await expect(codex.getByText(/Kept at the /)).toBeVisible();
-    await expect(codex.getByRole("link", { name: "Read the source" })).toHaveAttribute("href", /^https:\/\/github\.com\//);
     // The Codex is set in IM Fell English, served with the page.
     const fell = await page.evaluate(async () => {
       await document.fonts.ready;

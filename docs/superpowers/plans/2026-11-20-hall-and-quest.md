@@ -44,21 +44,12 @@ hall's list, a stop's card and the quest section.
 
 ---
 
-### Task 1 (Cursor): the projects source
+### Task 1: the projects source (replaced)
 
-**Files:** Create `src/lib/projects.ts`, `src/lib/projects.test.ts`.
-
-**Interfaces:** Produces `loadProjects(fetchRepos?: () => Promise<RepoLike[]>): Promise<ProjectEntry[]>`
-(`RepoLike`, `ProjectEntry`, `entryOf` from `src/world/sites/landmarks.ts`; default `fetchRepos` is
-`fetchPinnedRepos` from `src/lib/github.ts`).
-
-- [ ] Test `loadProjects returns every repo, in order, whatever the count`: a fake fetcher giving 9 repos → 9
-  entries, names in the same order; 0 repos → `[]`.
-- [ ] Test `loadProjects maps fields through entryOf`: `homepageUrl: ""` → `null`; `primaryLanguage: null` →
-  `language: null`.
-- [ ] Implement. `src/app/world/page.tsx` calls `loadProjects()` instead of `fetchPinnedRepos()` for the hall (the
-  terminal's slice keeps its own fetch).
-- [ ] `npm test` passes; commit.
+The coordinator's `world/projects` branch adds `src/lib/projects.ts` (`Project`, `loadProjects()`: one Markdown file
+per project in `projects/`). This plan does not write a loader. Until that branch is merged, `landmarks.ts` declares
+`HallProject` with the same shape, and `page.tsx` adapts the pinned repos to it; at the merge, `HallProject` becomes
+`import type { Project }` and `page.tsx` calls `loadProjects()`.
 
 ### Task 2 (Cursor): stops and the quest state
 

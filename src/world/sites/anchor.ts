@@ -3,7 +3,7 @@
 // harbour: round its bell tower the coil would lie among the houses, which hide all but scraps of it.
 
 import { torusDelta, wrap } from "../core/torus.ts";
-import type { LandmarkType } from "./assign.ts";
+import type { PlaceType } from "./assign.ts";
 import type { Target } from "./landing.ts";
 
 /** The parts of a structure (gen/built.ts) the anchor reads. */
@@ -44,10 +44,10 @@ export interface ConformLike {
 }
 
 /** How far from the site's point its building may stand, cells. The town's point is its pad, not its bell tower. */
-const SEARCH: Record<LandmarkType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24 };
+const SEARCH: Record<PlaceType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24, hall: 48, curio: 12 };
 
 /** The coil's radius when nothing is known of the building, by kind (the sprite boxes of design 5.9). */
-const FALLBACK: Record<LandmarkType, number> = { abbey: 21, town: 6, lighthouse: 6, windmill: 8.4, bridge: 18, cathedral: 21, yew: 20 };
+const FALLBACK: Record<PlaceType, number> = { abbey: 21, town: 6, lighthouse: 6, windmill: 8.4, bridge: 18, cathedral: 21, yew: 20, hall: 12, curio: 10 };
 
 /** The coil's radius: the body's own width clear of the walls. */
 const CLEAR = 2;
@@ -61,7 +61,7 @@ const HARBOUR_MAX = 7;
  * The tallest standing structure (its tallest cell over its own base) whose footprint centre lies within the site's
  * search square, on the torus; of two as tall, the nearer. Null when nothing stands there.
  */
-export function anchorOf(site: { x: number; y: number; type: LandmarkType }, structures: readonly StructureLike[], n: number): Anchor | null {
+export function anchorOf(site: { x: number; y: number; type: PlaceType }, structures: readonly StructureLike[], n: number): Anchor | null {
   const reach = SEARCH[site.type];
   let best: Anchor | null = null;
   let bestD = Infinity;
@@ -102,7 +102,7 @@ export function harbourOf(site: { x: number; y: number }, conforms: readonly Con
  * Where the coil comes to rest. Round a building: its half-diagonal plus the body's width, within [REST_MIN,
  * REST_MAX]. Inside a harbour: the body's width clear of its quays, within [REST_MIN, HARBOUR_MAX].
  */
-export function restRadius(anchor: Anchor | null, type: LandmarkType): number {
+export function restRadius(anchor: Anchor | null, type: PlaceType): number {
   if (anchor?.inside) return Math.min(HARBOUR_MAX, Math.max(REST_MIN, Math.min(anchor.halfW, anchor.halfD) - CLEAR));
   const r = anchor ? Math.sqrt(anchor.halfW * anchor.halfW + anchor.halfD * anchor.halfD) + CLEAR : FALLBACK[type];
   return Math.min(REST_MAX, Math.max(REST_MIN, r));
@@ -113,7 +113,7 @@ export function restRadius(anchor: Anchor | null, type: LandmarkType): number {
  * built world has nothing there, and the site's own point stands in). A town rests in its harbour when it has one.
  */
 export function restingPlaces(
-  landmarks: readonly { id: string; type: LandmarkType; x: number; y: number }[],
+  landmarks: readonly { id: string; type: PlaceType; x: number; y: number }[],
   built: { structures: readonly StructureLike[]; conforms: readonly ConformLike[] } | undefined,
   n: number,
 ): { targets: Target[]; anchors: Map<string, Anchor | null> } {
@@ -121,7 +121,8 @@ export function restingPlaces(
   const anchors = new Map<string, Anchor | null>();
   for (const l of landmarks) {
     const harbour = built && l.type === "town" ? harbourOf(l, built.conforms, n) : null;
-    const a = harbour ?? (built ? anchorOf(l, built.structures, n) : null);
+    // A curio is a thing on open ground, not a building, so the coil uses the fallback radius.
+    const a = l.type === "curio" ? null : (harbour ?? (built ? anchorOf(l, built.structures, n) : null));
     anchors.set(l.id, a);
     targets.push({ id: l.id, x: a?.x ?? l.x, y: a?.y ?? l.y, radius: restRadius(a, l.type) });
   }

@@ -5,33 +5,10 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { LINKS, PROFILE } from "../../components/terminal/content";
-import type { LandmarkType } from "../../world/sites/assign";
-import { kindName, type Landmark, type RegisterLine } from "../../world/sites/landmarks";
+import { kindName, type Landmark } from "../../world/sites/landmarks";
+import { STOPS } from "../../world/story/stops";
 import styles from "./codex.module.css";
 import { fell } from "./fonts";
-
-/** One line for a landmark that keeps no work yet: what stands there. */
-const STANDS: Record<LandmarkType, string> = {
-  abbey: "An abbey on its spur above the river.",
-  town: "A harbour town under its bell tower.",
-  lighthouse: "A lamp on the headland, lit for passing ships.",
-  windmill: "A mill on the rise, its sails turning over the corn.",
-  bridge: "An old stone bridge, carrying the road over the river.",
-  cathedral: "A roofless nave, open to the sky.",
-  yew: "An old yew in a walled churchyard.",
-};
-
-const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-
-function dateOf(iso: string): string | null {
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? null : DATE.format(t);
-}
-
-/** A count, in words when there are none: the face's old-style zero reads as a letter o. */
-function count(n: number): string {
-  return n === 0 ? "none yet" : n.toLocaleString("en-GB");
-}
 
 /** Four overlapping circles: the quatrefoil, inked, filled with `fill`. */
 function Quatrefoil({ className }: { className?: string }) {
@@ -117,30 +94,8 @@ function Links({ links }: { links: { href: string; label: string; external: bool
   );
 }
 
-/** Where the abbey and every project lie from here. */
-function Register({ lines }: { lines: RegisterLine[] }) {
-  if (lines.length === 0) return null;
-  return (
-    <section className={styles.register} aria-labelledby="codex-register">
-      <h3 id="codex-register">Where the work is kept</h3>
-      <ul>
-        {lines.map((l) => (
-          <li key={l.id}>
-            <span className={styles.registerName}>{l.title}</span>
-            <span className={styles.registerWhere}>
-              {" "}
-              · the {kindName(l.type)}, {l.compass}, {l.seconds} s
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export interface CodexProps {
   landmark: Landmark;
-  register: RegisterLine[];
   onTakeOff: () => void;
   /**
    * The abbey's button: opens the terminal, which gives focus back to `trigger` when it closes; on a phone, which has
@@ -152,7 +107,7 @@ export interface CodexProps {
 }
 
 /** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
-export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
+export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
   useEffect(() => {
     leaf.current?.focus({ preventScroll: true });
@@ -160,24 +115,18 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, o
 
   const kind = kindName(landmark.type);
   let body: ReactNode;
-  if (landmark.holds.kind === "project") {
-    const p = landmark.holds.project;
-    const updated = dateOf(p.updatedAt);
-    const rows: [string, ReactNode][] = [];
-    if (p.language) rows.push(["Written in", p.language]);
-    rows.push(["Stars", count(p.stars)], ["Forks", count(p.forks)]);
-    if (updated) rows.push(["Last worked on", updated]);
-    const links = [{ href: p.url, label: "Read the source", external: true }];
-    if (p.homepageUrl) links.push({ href: p.homepageUrl, label: "Visit it", external: true });
+  if (landmark.holds.kind === "hall") {
     body = (
       <>
         <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>Kept at the {kind}
+          <span aria-hidden="true">¶ </span>The hall
         </p>
-        <Illuminated text={p.name} />
-        <p className={styles.lede}>{p.description || "No description is written."}</p>
-        <Ledger rows={rows} />
-        <Links links={links} />
+        <Illuminated text="Projects" />
+        <ul>
+          {landmark.holds.projects.map((p) => (
+            <li key={p.slug}>{p.name}</li>
+          ))}
+        </ul>
       </>
     );
   } else if (landmark.holds.kind === "about") {
@@ -204,19 +153,17 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, o
             { href: LINKS.resume, label: "Résumé", external: true },
           ]}
         />
-        <Register lines={register} />
       </>
     );
   } else {
+    const key = landmark.holds.stop;
+    const stop = STOPS.find((s) => s.key === key);
     body = (
       <>
         <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>Unclaimed
+          <span aria-hidden="true">¶ </span>Found
         </p>
-        <Illuminated text={`The ${kind}`} />
-        <p className={styles.lede}>{STANDS[landmark.type]}</p>
-        <p className={styles.note}>No work is kept here yet.</p>
-        <Register lines={register} />
+        <Illuminated text={stop ? stop.name : key} />
       </>
     );
   }
