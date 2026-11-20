@@ -119,13 +119,16 @@ Last updated 2026-11-19.
   thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (15 flows, real multi-touch in
   phone emulation). The phone's own title screen (a rose-window contents page, the minimal version first) is built at the
   noindex bench `/phone-title`, to be mounted on `/` together with the desktop title.
-- **The minimal version and the terminal, as one page** (2026-11-19, Fable). `/minimal` is a Terminal window whose
-  scrollback is the whole site as static HTML (profile, projects, contact, the other pages), with a live prompt as
-  its last line. Every command can be typed or tapped. On a phone the document itself scrolls and nothing is pinned,
-  which is what keeps the prompt on Safari's keyboard bar; measured in the iOS Simulator. `/recruiter` forwards to
-  it. Checks: `npm run test:minimal` (its two WebKit projects in the end-to-end suite, `e2e/minimal/`) and
-  `npm run a11y`. The abbey's terminal in `/world` reads the same files (`site.pages`). Design:
-  `specs/2026-11-19-minimal-terminal-design.md`.
+- **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
+  the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
+  pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
+  ^G Help, ^F Where Is (search), ^/ Go To Line and ^X Exit work by key and by tap (Esc closes, or exits); the rest are
+  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. The interactive shell left this
+  page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
+  search field opens at the top with the keyboard up and nothing pinned above the keyboard. `/recruiter` forwards to
+  it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
+  `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
+  live prompt (sections 1–12 there); the abbey's terminal in `/world` still reads that page's files (`site.pages`).
 - **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round, and its two routes differ
   (the owner's decisions of 2026-11-19). Temperature is a band by latitude from an equator line to a pole line and
   back, cooler with height. The route through home is the wet side: taiga, the temperate belt (unchanged to the
@@ -173,11 +176,13 @@ Last updated 2026-11-19.
   gulls at the town and the lighthouses (tuned to a published sonogram), startled gulls on a low pass; the clock's
   figures and an original tune; the train, seaplane, ferry and baths, and the church flock, each in step with its
   picture through shared position functions in `live/moments.ts`. Mist muffles the world (not the wind); gulls roost
-  at night. Reduced motion (the options' or the system's) softens the motion-linked sound. The tab hidden or the sound
-  off: faded, then suspended. Listen at `/world-sound` (every scene, live, and offline renders with
-  `node scripts/world-sound.mjs`, checked by `scripts/world-sound-check.mjs` for loudness, clipping, clicks and
-  spectrograms). Frame budget (merged tree, five pairs): +0.10 ms on the 4× p95 with sound on, sound's own work
-  0.1 ms p95 a frame at 1× (design §13).
+  at night; showers bring rain: drops on land, plinks on water, a sheet of hiss in a heavy one, no loop heard twice
+  (design §14.2, four blind A/Bs). Reduced motion (the options' or the system's) softens the motion-linked sound. The
+  tab hidden or the sound off: faded, then suspended. Listen at `/world-sound` (every scene, live, two recorded
+  flights, and offline renders with `node scripts/world-sound.mjs`, checked by `scripts/world-sound-check.mjs` for
+  loudness, clipping, clicks and spectrograms). The whole mix on a recorded flight: −22.9 LUFS, range 6.9 LU, true peak
+  −5.0 dBTP. The live ear went deaf after two seconds until 2026-11-19 (§14.1, fixed); with it working, sound costs a
+  mean of 31 µs a frame at 1× (p95 0.1 ms) and 118 µs at 4×, where it adds about 0.2–0.4 ms to the frame p95 (§14.4).
 - **End-to-end suite and a WebKit pass** (2026-11-19, `claude/e2e-webkit-3824c0`). `npm run e2e` builds the export
   and runs Playwright in Chromium and WebKit, at desktop and phone sizes. It covers opening the world (no haze, the
   frame filling the window), keyboard flight, the lesson, the options, landing and the Codex, the abbey's terminal, a
@@ -273,19 +278,27 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   upkeep. It touches `src/lib/github.ts` and every page that reads it, so it is its own task.
 - **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
   scriptorium" and "a record of things made by hand" read oddly.
-- **Minimal version: what's left.** The desktop title menu's link to it (the phone title, the flight card's short
-  version and the abbey's terminal on a phone open it already); removing the old pop-up terminal and home page once
-  the title menu takes `/`; a pass on a real iPhone and on iOS 27.
+- **Minimal version: what's left.** The desktop title menu's link to it, and its window growing into the page (the
+  title session's); the phone title and the flight card's short version open it already. On a phone the abbey's
+  "Open the terminal" also lands here, where there is no shell now: point it elsewhere or rename it (`Flight.tsx`,
+  and the name of the mobile suite's test). Removing the old pop-up terminal and home page once the title menu takes
+  `/`. A pass on a real iPhone and on iOS 27.
 - **Seasons**: not from the clock (settled 2026-11-18), and the lore that laid the months out as places is set aside.
   If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
-- **Sound, what is left.** A rain bed for the showers (drops on land, bubbles on water) and the final re-pin of every
-  level against the whole mix: both wait for Fable (its usage limit, 2026-11-19). Later moments (the airship, the
-  marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12). Headphones (HRTF) as an
-  option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the small hours. Tall
-  falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills, and sounds for the
-  rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
+- **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
+  the way: the noise beds' loops are heard to come round (the open sea's wash every 4.855 s, the surf bed's, the
+  wind's): a pitch wander, tried, removes only exact repetition (a blind critic, spec §14.5), so each pass needs fresh
+  noise (an audio-worklet noise source, or fresh loops from the kit's worker); the same test for the rain's drops and
+  plinks, and for the river's brook loop (9.7 s). Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  shower; spec §14.2).
+  The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
+  rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
+  moments (the airship, the marsh and bridge carts, the observatory dome, the oak's gust; designed in spec §4.12).
+  Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
+  small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
+  and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
 
@@ -456,17 +469,13 @@ land was decided (grow it) and is built (spec 6.7).
 - Owner: open `/world` in Safari and on an iPhone. WebKit now runs in `npm run e2e`; what automation cannot see
   (toolbars and `vh`, touch gestures, keyboard taps, phone performance) is listed in
   `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.
-- Owner: open `/minimal` on a real iPhone and type at its prompt. The keyboard behaviour is measured in the iOS 26.5
-  Simulator only, with synthesised touches, and not on iOS 27.
-- Owner: in desktop Safari, on `/minimal`, click `cat`, then `projects/`, then `README.md`. The page should rest at
-  the top of the projects, with the prompt below the fold and still holding the keys. WebKit scrolls to a focused
-  field whose value a script changes; the fix is checked in Playwright's WebKit only.
+- Owner: open `/minimal` on a real iPhone: scroll it, tap the four keys, search for a word. The search field and the
+  rows against Safari's bar are checked in the iOS 26.5 Simulator only, with synthesised touches, and not on iOS 27.
 - Owner, sound: on an iPhone, the first enable, a sliding tap, lock and unlock, background and back, silent mode
   ("ambient" session); in desktop Safari, a sound panned hard left (WebKit 257447; the engine pans by gain pairs, not
   StereoPannerNode); with Bluetooth headphones, whether the abbey's bells meet the clock's figures. Listening set:
   `side-session-notes/…/sound-listening/index.html`.
-- Owner: the clock's tune in two public melody indexes (Musipedia's contour search, FolkTuneFinder): both need one
-  "Verify you are human" tick in the app's browser. The corpus check (13,367 tunes) found nothing close; see
-  `research/2026-11-19-clock-tune-originality.md`.
+- ~~The clock's tune in a public melody index~~ Done 2026-11-19: Musipedia's contour search (run by the owner) and the
+  corpus check (13,367 tunes) find nothing that tracks it; see `research/2026-11-19-clock-tune-originality.md`.
 - ~~`npm run a11y`~~ restored (axe). It gates `/minimal`, which `/recruiter` now forwards to; add a page to its
   `PAGES` list once it passes.

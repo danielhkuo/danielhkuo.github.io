@@ -120,8 +120,8 @@ export function agentsMd(projects: readonly Project[]): string {
     "",
     "## Notes for agents",
     "",
-    `- Read the [text version](${absoluteUrl(TEXT_PAGE)}) or this file. The title menu and the flight are interactive ways through the same content and add no facts of their own. So is the command prompt at the foot of the text version: everything its commands print is already on that page.`,
-    "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight and that command prompt need JavaScript.",
+    `- Read the [text version](${absoluteUrl(TEXT_PAGE)}) or this file. The title menu and the flight are interactive ways through the same content and add no facts of their own. The text version is dressed as a file open in nano; its shortcuts only search and move around that page.`,
+    "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight needs JavaScript.",
     "- GitHub is the source of truth for the projects. This file is as current as the site's last build.",
     `- To reach ${PROFILE.name}, email [${EMAIL}](${LINKS.email}).`,
   ];

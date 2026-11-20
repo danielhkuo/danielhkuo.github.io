@@ -28,6 +28,6 @@ test("the minimal version leads the phone's ways in and opens preselected; flyin
   assert.match(e[1].meta ?? "", /about 1\.5 MB/);
   assert.equal(phoneEntries(0)[1].meta, "turn sideways");
   assert.equal(e[2].href, "/agents.md");
-  // The terminal is folded into the minimal version: no way in of its own.
+  // A phone has no terminal: no way in offers one.
   assert.ok(e.every((x) => !/terminal|artificer/i.test(`${x.label} ${x.href}`)));
 });

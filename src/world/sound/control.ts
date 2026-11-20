@@ -215,12 +215,19 @@ export function createSoundControl(env: ControlEnv): SoundControl {
 
   const record: SoundLog | null = env.log ? { v: 1, worldId: "", places: null, prefs: { ...prefs }, frames: [], hearings: [] } : null;
   let logFrom = NaN;
-  let lastHearing: Hearing | null = null;
+  /** The time of the last Hearing logged: the ear hands back one pooled object, so a new Hearing is told by its time. */
+  let lastHearingT = NaN;
 
   const measuring = env.arm ?? "";
   /** The "frozen" arm: the context has been suspended on purpose, and the frame loop carries on as if it ran. */
   let frozen = false;
   const running = () => ctx !== null && (ctx.state === "running" || frozen);
+  /**
+   * running(), as the frame loop sees it: read ten times a second there (the context's state is a native read that cost
+   * more than the rest of the frame's own work), and afresh after every change check() handles.
+   */
+  let runningNow = false;
+  let runningAt = -Infinity;
 
   const state = (): SoundState => {
     if (!wanted) return "off";
@@ -294,6 +301,7 @@ export function createSoundControl(env: ControlEnv): SoundControl {
   /** Brings what is running into line with what is wanted. Called on every state change, gesture and load. */
   function check(): void {
     if (disposed) return;
+    runningAt = -Infinity;
     if (wanted && !hidden) {
       if (running()) {
         // Only a running context ends the wait: until then every later gesture calls resume() again.
@@ -460,7 +468,11 @@ export function createSoundControl(env: ControlEnv): SoundControl {
       }
     },
     frame(t, flight, rest, air) {
-      const live = rt !== null && wanted && !hidden && running();
+      if (!(t - runningAt < 0.1) || t < runningAt) {
+        runningAt = t;
+        runningNow = running();
+      }
+      const live = rt !== null && wanted && !hidden && runningNow;
       if (!live && !record) return 0;
       const a = env.now();
       pose.dt = lastT === lastT ? t - lastT : 0;
@@ -493,9 +505,9 @@ export function createSoundControl(env: ControlEnv): SoundControl {
         if (logFrom !== logFrom) logFrom = t;
         if (t - logFrom <= LOG_SECONDS) {
           const h = live && rt ? rt.hearing() : null;
-          if (h && h !== lastHearing) {
-            // The log copies: the ear reuses its Hearings.
-            lastHearing = h;
+          if (h && h.t !== lastHearingT) {
+            // The log copies: the ear reuses its Hearing object.
+            lastHearingT = h.t;
             record.hearings.push(copyHearing(h));
           }
           const r = (v: number, k: number) => Math.round(v * k) / k;

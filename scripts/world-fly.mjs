@@ -18,7 +18,10 @@
 //                                           prints the medians. Arms: off (no sound), on, and the page's measuring arms
 //                                           (?soundarm=): noctx (wanted, no context ever), frozen (everything runs, the
 //                                           context suspended once built: no audio thread), earoff (no ear), earlocal (the
-//                                           ear in the frame loop), nosurf (no waves or beds), muted (on, volume 0).
+//                                           ear in the frame loop), nosurf (no waves or beds), muted (on, volume 0),
+//                                           and, each leaving one part of the frame's work out: nosched (the
+//                                           scheduler), nosends (the mix's sends), nowaves (the lanes and the
+//                                           emitters), novoices (the placed voices), nocensus (the census).
 //   --rates 4          which CPU rates to fly at (default 1,<rate>)
 //   --warm 8           seconds to fly before the timed window starts (the kit and the graphs are built by then)
 //   --gc               traces V8's garbage collections on the main thread and counts them (adds overhead: its own runs)
@@ -284,7 +287,9 @@ async function fly(browser, origin, opts, label, rate) {
     gc = { minor: sum("MinorGC"), major: sum("MajorGC"), perSecond: Number((sum("MinorGC").n / secs).toFixed(2)) };
   }
   if (opts.soundlog && rate === 1) {
-    const log = await page.evaluate(() => JSON.stringify(window.__flight.soundLog ?? null));
+    // Four decimals are plenty for a replay (the Hearings are logged as the ear made them, to the last bit): a sixth
+    // off the size. (Most of it is the shore points' keys; the two minutes' log is 2 MB, a few hundred kB gzipped.)
+    const log = await page.evaluate(() => JSON.stringify(window.__flight.soundLog ?? null, (_, v) => (typeof v === "number" && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v)));
     mkdirSync(path.dirname(path.resolve(opts.soundlog)), { recursive: true });
     writeFileSync(opts.soundlog, log);
   }
@@ -292,7 +297,8 @@ async function fly(browser, origin, opts, label, rate) {
   // The sound's ms with the kit's share taken out, frame by frame.
   const soundNoKit = res.soundMs.map((ms, i) => Math.max(0, ms - (res.soundKit[i] ?? 0)));
   // The unlock frame is the first in which the sound did anything; the longest frames after it, with what they did
-  // (bits: 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample).
+  // (bits: 1 a build step, 2 kit, 4 the mix, 8 a wave started, 16 a lap, 32 enabling, 64 a clock sample, 128 the lanes,
+  // 256 the scheduler, 512 the census, 1024 the mix's second half, 2048 the waves' second half).
   const unlock = res.soundMs.findIndex((ms, i) => ms > 0 || (res.soundWork[i] ?? 0) !== 0);
   const after = res.soundMs.map((ms, i) => ({ ms, frame: i - unlock, work: res.soundWork[i] ?? 0, kit: res.soundKit[i] ?? 0 })).filter((f) => f.frame > 0);
   const longest = [...after].sort((a, b) => b.ms - a.ms).slice(0, 6).map((f) => ({ ms: Number(f.ms.toFixed(2)), frame: f.frame, work: f.work, kitMs: Number(f.kit.toFixed(2)) }));

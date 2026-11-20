@@ -5,7 +5,7 @@
 
 import { hash2 } from "../../core/hash.ts";
 import { CLOCK_LASTS, CLOCK_LEAD, figureOut, WORLD_HOUR } from "../../live/moments.ts";
-import { hourNumber } from "./bells.ts";
+import { firstAtOrAfter, hourNumber } from "./bells.ts";
 import { tuneNotes } from "./tune.ts";
 import type { Cue } from "../types.ts";
 
@@ -30,18 +30,22 @@ export function procession(t: number, forced: boolean): { start: number; hour: n
   return { start: H * WORLD_HOUR, hour: H };
 }
 
-/** Every cue of the clock that starts in [t0, t1), in time order. */
-export function clockCues(seed: number, forced: boolean, t0: number, t1: number, out: Cue[]): void {
-  const first = out.length;
-  const every = forced ? CLOCK_LASTS : WORLD_HOUR;
-  for (let p = procession(Math.max(0, t0), forced); p.start < t1; p = { start: p.start + every, hour: p.hour + 1 }) {
-    const S = p.start;
-    if (S + CLOCK_LASTS <= t0) continue;
-    const push = (at: number, variant: number, k: number, db: number, lasts: number, tag: string, soft = false) => {
-      const t = S + at;
-      if (t < t0 || t >= t1 || t < 0) return;
-      out.push({ t, kind: "clock", key: `${p.hour}:${tag}`, variant, k, db, lasts, soft });
-    };
+/** The procession's cues, made once each hour and kept for the hour and the one after (frames ask for thin windows). */
+const made = new Map<string, Cue[]>();
+
+/** Every cue of procession `p`, in time order (none before world time 0). Pure: the same for a seed, forced and hour. */
+function processionCues(seed: number, forced: boolean, p: { start: number; hour: number }): Cue[] {
+  const id = `${seed}:${forced ? 1 : 0}:${p.hour}`;
+  const kept = made.get(id);
+  if (kept) return kept;
+  const list: Cue[] = [];
+  const S = p.start;
+  const push = (at: number, variant: number, k: number, db: number, lasts: number, tag: string, soft = false) => {
+    const t = S + at;
+    if (t < 0) return;
+    list.push({ t, kind: "clock", key: `${p.hour}:${tag}`, variant, k, db, lasts, soft });
+  };
+  {
     push(0, WHIRR, 0, 0, WHIRR_END, "whirr", true);
     // The doors: two clacks 60 ms apart and a thud; the same to close.
     for (const [at, tag] of [[DOORS_OPEN, "open"], [DOORS_CLOSE, "close"]] as const) {
@@ -63,6 +67,22 @@ export function clockCues(seed: number, forced: boolean, t0: number, t1: number,
     for (let j = 0; j < count; j++) push(COUNT_AT + COUNT_GAP * j, CHIME, LOW_E, 1, 4.5, `count:${j}`);
     const after = COUNT_AT + COUNT_GAP * (count - 1) + 0.6;
     if (after < WHIRR_DOWN - 0.2) push(after, RATCHET, 0, 0, WHIRR_DOWN - after, "ratchet:b", true);
+  }
+  // A stable sort: cues at the same moment keep the order they were made in, as a window's own sort would.
+  list.sort((a, b) => a.t - b.t);
+  if (made.size >= 4) made.delete(made.keys().next().value as string);
+  made.set(id, list);
+  return list;
+}
+
+/** Every cue of the clock that starts in [t0, t1), in time order. */
+export function clockCues(seed: number, forced: boolean, t0: number, t1: number, out: Cue[]): void {
+  const first = out.length;
+  const every = forced ? CLOCK_LASTS : WORLD_HOUR;
+  for (let p = procession(Math.max(0, t0), forced); p.start < t1; p = { start: p.start + every, hour: p.hour + 1 }) {
+    if (p.start + CLOCK_LASTS <= t0) continue;
+    const list = processionCues(seed, forced, p);
+    for (let i = firstAtOrAfter(list, t0); i < list.length && list[i].t < t1; i++) out.push(list[i]);
   }
   if (out.length - first > 1) {
     const added = out.splice(first);

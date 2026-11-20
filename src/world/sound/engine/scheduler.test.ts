@@ -139,3 +139,43 @@ test("a source that joins late (its buffers arrived) joins what is sounding, onc
   assert.deepEqual(due.map((d) => d.cue.key), ["4", "5", "6", "7", "8", "9", "10"]);
   assert.ok(due.slice(3).every((d) => !d.rejoin));
 });
+
+test("asked a few sources a pass, round the list, it finds what asking them all every pass finds, each in time", () => {
+  // Five sources (pips in three seeded streams and the tails twice over): a busy list, as on the page.
+  const sources: CueSource[] = [
+    { kind: "pip", cues: (a, b, out) => pipCues(3, a, b, out), lookBack: 0 },
+    { kind: "pip2", cues: (a, b, out) => pipCues(5, a, b, out), lookBack: 0 },
+    { kind: "tail", cues: tailCues, lookBack: TAIL_S },
+    { kind: "pip3", cues: (a, b, out) => pipCues(7, a, b, out), lookBack: 0 },
+    { kind: "tail2", cues: tailCues, lookBack: TAIL_S },
+  ];
+  const run = (each: number | null) => {
+    const s = createScheduler(sources);
+    const found: { key: string; at: number; t: number; rejoin: boolean }[] = [];
+    const due: Due[] = [];
+    let k = 0;
+    // 120 frames a second for 40 s, with a stall at 20 s and a clear (a hide) at 30 s.
+    for (let f = 0, t = 100; t < 140; f++) {
+      const dt = f === 2400 ? 0.4 : 1 / 120;
+      t += dt;
+      if (f === 3600) s.clear();
+      due.length = 0;
+      if (each === null) s.pass(t, dt, 0.25, due);
+      else {
+        s.pass(t, dt, 0.25, due, k, each);
+        k = (k + each) % s.size;
+      }
+      for (const d of due) found.push({ key: `${d.cue.kind}:${d.cue.key}:${d.rejoin}`, at: t, t: d.cue.t, rejoin: d.rejoin });
+    }
+    return found;
+  };
+  const whole = run(null), round = run(2);
+  assert.deepEqual(round.map((d) => d.key).sort(), whole.map((d) => d.key).sort(), "the same cues, each once");
+  assert.ok(whole.length > 100);
+  // Each found ahead of its time by more than a fifth of a second (asked every three frames, 1/40 s): away from the
+  // start, the stall (t 120) and the hide (t 130.4), where any window begins now, as it does asking them all.
+  const calm = (t: number) => t > 100.3 && !(t > 119.9 && t < 120.7) && !(t > 130.3 && t < 131);
+  for (const d of round) if (!d.rejoin && d.t > d.at + 0.3) assert.fail("found too early");
+  const lead = round.filter((d) => !d.rejoin && calm(d.at)).map((d) => d.t - d.at);
+  assert.ok(lead.length > 100 && Math.min(...lead) > 0.2, `least lead ${Math.min(...lead).toFixed(3)} s`);
+});

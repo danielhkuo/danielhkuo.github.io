@@ -14,11 +14,20 @@ export interface BedOptions {
   rMax: number;
   /** Seconds each bubble takes to come up to its level (half a millisecond when absent). */
   rise?: number;
+  /** How much louder a bigger bubble is: its level goes as (r / rMax) to this power (1.5 when absent). */
+  loudPow?: number;
 }
 
 export const PLUNGE: BedOptions = { seconds: 7.9, rate: 1500, rMin: 0.001, rMax: 0.008 };
 /** The brook: few bubbles, each heard on its own (discrete, playful). */
 export const BROOK: BedOptions = { seconds: 9.7, rate: 60, rMin: 0.0008, rMax: 0.005, rise: 0.006 };
+/**
+ * Rain on water: the bubbles a drop leaves, 0.8–2.7 mm (Minnaert 1.2–4 kHz), each heard on its own. The small ones
+ * start a little louder, as they ring out sooner: so the plinks that carry are spread over most of an octave (the most
+ * energetic fifth from 1.4 to 2.5 kHz), not all at the low end. Long, so a read at its own speed comes round only every
+ * 11 s (the brook read fast came round in 3.4 s, and a blind critic heard plinks recur).
+ */
+export const RAIN_PLINKS: BedOptions = { seconds: 11.3, rate: 30, rMin: 0.0008, rMax: 0.0027, rise: 0.003, loudPow: -0.3 };
 /** The river's purl: many small bubbles, a continuous sound. */
 export const FLOW: BedOptions = { seconds: 13.3, rate: 400, rMin: 0.0006, rMax: 0.003, rise: 0.003 };
 
@@ -58,7 +67,7 @@ export function bubbleBed(o: BedOptions, sampleRate: number, rng: Rng, each?: (r
   const a = Math.pow(o.rMin, -0.5), b = Math.pow(o.rMax, -0.5);
   for (let i = 0; i < count; i++) {
     const r = Math.pow(a + (b - a) * rng.float(), -2);
-    const amp = Math.pow(r / o.rMax, 1.5) * (0.5 + rng.float());
+    const amp = Math.pow(r / o.rMax, o.loudPow ?? 1.5) * (0.5 + rng.float());
     bubble(out, sampleRate, rng.int(n), r, amp, true, o.rise);
     each?.(r, amp);
   }

@@ -1,101 +1,61 @@
-// Commands by tap. Every command can be run without a keyboard: from the row above the prompt, and from the command
-// and file names in the terminal's own output. A tap gives the prompt no focus, so a phone's keyboard stays shut.
+// nano's keys under a finger: each of the four that work is a tap, and the search field opens at the top of the
+// screen, where a phone's keyboard cannot cover it.
 
-import { expect, test } from "../support";
-import { enter, focused, lastCommand, offer, openMinimal, prompt, restingTop, status } from "./minimal";
+import { PROFILE } from "../../src/components/terminal/content.ts";
+import { expect, offline, test } from "../support";
+import { goTo, help, isOpen, key, openMinimal, searchField, selected, status } from "./minimal";
 
-test.describe("commands by tap", () => {
-  test("the jump button brings the prompt on screen without focusing it, then goes away", async ({ page }) => {
+test.describe("the keys by tap", () => {
+  test("Help opens on a tap and closes on its own ^X Close", async ({ page }) => {
     await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await page.waitForFunction(() => (document.querySelector(".mt-form")?.getBoundingClientRect().bottom ?? Infinity) <= innerHeight + 1);
-    expect(await focused(page)).toBe("BODY");
-    await expect(page.locator(".mt-jump")).toBeHidden();
+    await key(page, "Help").tap();
+    expect(await isOpen(help(page))).toBe(true);
+    await help(page).getByRole("button", { name: "Close" }).tap();
+    expect(await isOpen(help(page))).toBe(false);
   });
 
-  test("a tapped command prints above the prompt, says so in one line, and leaves the prompt unfocused", async ({ page }) => {
+  test("Go To Line on a tap: a tap on a section goes there", async ({ page }) => {
     await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "help").tap();
-    await expect(lastCommand(page)).toHaveText("help");
-    // On a phone the prompt is the short one: user@host is not shown.
-    expect((await page.locator(".mt-log .mt-cmd .mt-ps").last().innerText()).trim()).toBe("~ %");
-    expect(await page.locator(".mt-log .mt-help dt").count()).toBeGreaterThanOrEqual(12);
-    await expect(status(page)).toHaveText(/^help: printed \d+ lines above the prompt\.$/);
-    // Focus is not on the prompt: on a phone the keyboard stays shut and the screen is left to the output.
-    expect(await focused(page)).not.toBe("prompt");
+    await key(page, "Go To Line").tap();
+    await goTo(page).getByRole("link", { name: /ELSEWHERE/ }).tap();
+    expect(await isOpen(goTo(page))).toBe(false);
+    expect(new URL(page.url()).hash).toBe("#elsewhere");
+    const top = await page.locator("#elsewhere").evaluate((el) => el.getBoundingClientRect().top);
+    const bar = await page.locator(".nano > .nano-bar").evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(top).toBeGreaterThanOrEqual(bar);
   });
 
-  test("output taller than the screen starts at the top, under the title bar", async ({ page }) => {
+  test("Where Is on a tap: the field opens at the top, focused, with the shortcuts hidden until it is done", async ({ page }) => {
     await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "help").tap();
-    await expect(lastCommand(page)).toHaveText("help");
-    // Under the title bar (32px), with nothing of it cut off.
-    const top = await restingTop(page);
-    expect(top).toBeGreaterThanOrEqual(32);
-    expect(top).toBeLessThan(60);
+    await key(page, "Where Is").tap();
+    await expect(searchField(page)).toBeFocused();
+    const top = await page.locator(".nano-find").evaluate((el) => el.getBoundingClientRect().top);
+    expect(top).toBe(0);
+    await expect(page.locator(".nano-keys")).toHaveCSS("visibility", "hidden");
+    // 16px: Safari does not zoom to it.
+    await expect(searchField(page)).toHaveCSS("font-size", "16px");
+    await page.keyboard.type(PROFILE.school.split(" ")[0]);
+    await page.keyboard.press("Enter");
+    await expect(searchField(page)).toHaveCount(0);
+    expect(await selected(page)).toBe(PROFILE.school.split(" ")[0]);
+    await expect(page.locator(".nano-keys")).toHaveCSS("visibility", "visible");
+    // A finger is not handed the keyboard again: focus is back on the key, not in a field.
+    expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("INPUT");
   });
 
-  test("a command that needs a file goes on the prompt, and the row becomes the files", async ({ page }) => {
+  test("putting the keyboard away cancels the search quietly", async ({ page }) => {
     await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "cat").tap();
-    await expect(prompt(page)).toHaveValue("cat ");
-    const files = await page.locator(".mt-offers button").allTextContents();
-    expect(files).toEqual(expect.arrayContaining(["about.md", "projects/"]));
-    // Still no focus, so still no keyboard: the next word can be tapped too.
-    expect(await focused(page)).not.toBe("prompt");
-
-    await offer(page, "projects/").tap();
-    await expect(prompt(page)).toHaveValue("cat projects/");
-    await offer(page, "README.md").tap();
-    await expect(prompt(page)).toHaveValue("");
-    await expect(page.locator(".mt-log h2").last()).toHaveText("Projects");
+    await key(page, "Where Is").tap();
+    await expect(searchField(page)).toBeFocused();
+    await searchField(page).blur();
+    await expect(searchField(page)).toHaveCount(0);
+    await expect(status(page).locator(".nano-message")).toHaveCount(0);
   });
 
-  test("a name that ls printed can be tapped: a file is read, a directory listed", async ({ page }) => {
+  test("Exit on a tap goes back to the title", async ({ page }) => {
+    await offline(page);
     await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "ls").tap();
-    await page.locator(".mt-log button", { hasText: "contact.md" }).tap();
-    await expect(page.locator(".mt-log h2").last()).toHaveText("Contact");
-    await page.locator(".mt-log button", { hasText: "projects/" }).tap();
-    await expect(lastCommand(page)).toHaveText("ls projects");
-  });
-
-  test("every command help lists is a button", async ({ page }) => {
-    await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "help").tap();
-    await expect(page.locator(".mt-log .mt-help dt")).not.toHaveCount(0);
-    const rows = await page.locator(".mt-log .mt-help dt").count();
-    await expect(page.locator(".mt-log .mt-help dt button")).toHaveCount(rows);
-    await page.locator(".mt-log .mt-help dt button", { hasText: "pwd" }).tap();
-    await expect(status(page)).toHaveText("/Users/daniel");
-  });
-
-  test("a command help lists with its usage runs as the command alone, or goes on the prompt for its file", async ({ page }) => {
-    await openMinimal(page);
-    await page.locator(".mt-jump").tap();
-    await offer(page, "help").tap();
-    // `ls [-la] [path]` is `ls`: the placeholders are not something to run.
-    await page.locator(".mt-log .mt-help dt button", { hasText: "ls [-la] [path]" }).tap();
-    await expect(lastCommand(page)).toHaveText("ls");
-    await expect(status(page)).toHaveText(/^ls: printed \d+ lines? above the prompt\.$/);
-    // `cat <file>` needs its file: it goes on the prompt and the row offers the files.
-    await page.locator(".mt-log .mt-help dt button", { hasText: "cat <file>" }).tap();
-    await expect(prompt(page)).toHaveValue("cat ");
-    expect(await page.locator(".mt-offers button").allTextContents()).toContain("about.md");
-  });
-
-  test("clear clears what the session printed and leaves the page's own sections", async ({ page }) => {
-    await openMinimal(page);
-    await enter(page, "help");
-    await expect(page.locator(".mt-log > *")).not.toHaveCount(0);
-    await enter(page, "clear");
-    await expect(page.locator(".mt-log > *")).toHaveCount(0);
-    await expect(page.locator("h2")).toHaveText(["Projects", "Contact", "Elsewhere on this site"]);
-    await expect(status(page)).toHaveText("clear: done.");
+    await key(page, "Exit").tap();
+    await page.waitForURL((url) => url.pathname === "/");
   });
 });

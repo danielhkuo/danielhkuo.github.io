@@ -20,7 +20,7 @@ import { TAIL_S } from "../synth/probe.ts";
 import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
 import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
-import { createEar, gatherRows, latticeOf, PASS, type Seen } from "../ear.ts";
+import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
 import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
@@ -32,6 +32,7 @@ import { buildFalls, type Falls } from "./falls.ts";
 import { buildGulls, type Gulls } from "./gulls.ts";
 import { buildHub, type Hub } from "./hub.ts";
 import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
+import { buildRain } from "./rain.ts";
 import { buildRiverBed } from "./river.ts";
 import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
 
@@ -49,6 +50,12 @@ export interface EngineOptions {
   n?: number;
   /** No waves, laps or beds (a measuring arm). */
   noSurf?: boolean;
+  /**
+   * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
+   * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
+   * placed voices). Never set otherwise.
+   */
+  skip?: string;
   /** Only the waves' hiss path sounds (no wind, no beds, no other part of a wave): the repetition check's render. */
   hissOnly?: boolean;
   /** A calibration tone into the master chain: dBFS peak and Hz. */
@@ -156,9 +163,13 @@ const FADE_STEPS = 12;
 const FADE_FOOT = 0.02;
 
 const MIX_EVERY = 1 / 30;
+/** The scheduler looks at most this often on the page, seconds (a hair under a sixtieth, so a 60 Hz display looks every frame). */
+/** Sources the scheduler asks a frame on the page (offline renders ask them all every step). */
+const SCHED_EACH = 2;
+const HALF_VOICES = 1, HALF_EMITTERS = 2;
 
 /** What a frame did, as bits. */
-export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128 } as const;
+export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048 } as const;
 /** Level of the bench's pips and tails, dB. */
 const PIP_DB = -18, TAIL_DB = -22;
 /** The pad of digital silence at the head of every one-shot buffer, seconds. */
@@ -291,6 +302,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     demand("bed", [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], buildSurfBed, master.bus.water, BED_ON, BED_OFF, true),
     demand("open", [T.OPEN], buildOpenSea, master.bus.water, BED_ON, BED_OFF, true),
     demand("river", [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE], buildRiverBed, master.bus.water, BED_ON, BED_OFF, true, true),
+    // Rain: only while a shower is heard (its noises and the brook's bubbles come with the surf's and the river's kits).
+    demand("rain", [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ], buildRain, master.bus.water, BED_ON, BED_OFF, true, true),
     // The whistles: only when the dragon is going fast enough for them to be heard (they are 26 dB under the rush at
     // cruise). On above 30 % of their fullest (s > 1.1), off after two seconds under 25 %.
     // The whoosh: only round a turn.
@@ -312,6 +325,14 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let lookahead = LOOKAHEAD;
   const reading: ClockReading = { currentTime: 0, outputLatency: 0, stamp: null, now: 0 };
   let lastMix = NaN;
+  /** The first of the sources the scheduler asks next (on the page). */
+  let schedNext = 0;
+  /** A second half waiting for this frame: HALF_VOICES (the mix's) or HALF_EMITTERS (the waves'), or 0. */
+  let half = 0;
+  /** Where the mix's second half takes up its sends (−1: none waiting). */
+  let sendsFrom = -1;
+  /** Cues found on the page and not yet played (see playQueued). */
+  const queued: Due[] = [];
   let lastWaves = NaN;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
@@ -384,6 +405,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     return v.steps.length === 0;
   };
 
+  /** World time before which build() is not asked again (it had nothing to do). */
+  let buildIdleUntil = -Infinity;
   /** At most one build step a frame on the page, so no frame pays for a whole graph. */
   const build = (now: number) => {
     if (opts.tone) return;
@@ -521,6 +544,8 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
           b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
           b.built = false;
           b.quietSince = NaN;
+          // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
+          buildIdleUntil = -Infinity;
         }
         continue;
       }
@@ -577,12 +602,17 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   };
 
   /** Sends the targets that moved. `outright` sets every parameter to its target at once: only ever under a mute gain at 0. */
-  const apply = (now: number, calm: boolean, outright: boolean) => {
+  /**
+   * Sends the targets of bindings [from, to) that have moved. `fresh`: the first call of a mix (it turns which half of
+   * the slow targets is looked at).
+   */
+  const apply = (now: number, calm: boolean, outright: boolean, from = 0, to = Infinity, fresh = true) => {
     const silent = outright || fadeAt(fade, now) < 1e-3;
     // Slow targets (time constants of 150 ms or more) are looked at on alternate mixes, half of them each time, so a
     // mix sends about half as much; the quick ones (the whoosh, pans, the volume) every time.
-    turn ^= 1;
-    for (let k = 0; k < bindings.length; k++) {
+    if (fresh) turn ^= 1;
+    const end = Math.min(to, bindings.length);
+    for (let k = from; k < end; k++) {
       const b = bindings[k];
       if (!outright && !offline && (k & 1) === turn && SEND[b.i].down >= 0.15 && SEND[b.i].up >= 0.15 && b.sent === b.sent) continue;
       const v = targets[b.i];
@@ -664,6 +694,114 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     }
   };
 
+  /** The scheduler's look: the cues falling due in its window, each played. */
+  const runScheduler = (pose: Pose, dt: number, look: number, now: number, calm: boolean, first = 0, count = Infinity) => {
+    work |= WORK.sched;
+    due.length = 0;
+    last.night = pose.night ?? 0;
+    scheduler.pass(pose.t, dt, look, due, first, count);
+    last.x = pose.x;
+    last.y = pose.y;
+    // Offline every cue is played as it is found; on the page they wait in a queue, played a few a frame.
+    if (offline) for (const d of due) play(d, pose, now, look, calm);
+    else for (const d of due) queued.push(d);
+    shots.prune(now);
+    bells?.prune(now);
+  };
+  /**
+   * The mix's first half: the targets, the beds they call for, and the sends; with `split`, only the first half of
+   * the sends, the rest going with the second half.
+   */
+  const mixHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, split: boolean) => {
+    lastTurn = 0;
+    work |= WORK.mix;
+    nearestAbbey(pose);
+    mix(pose, hearing, census, prefs, memory, targets);
+    lastMix = pose.t;
+    tendBeds(pose.t, now);
+    if (opts.skip === "nosends") return;
+    if (split) {
+      sendsFrom = (bindings.length + 1) >> 1;
+      apply(now, prefs.calm, false, 0, sendsFrom);
+    } else apply(now, prefs.calm, false);
+  };
+  /** Its second half: the rest of the sends, and the voices placed by where they are (the moments, the gulls, the falls). */
+  const voicesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number) => {
+    work |= WORK.voices;
+    if (opts.skip === "novoices") return;
+    if (sendsFrom >= 0) {
+      apply(now, prefs.calm, false, sendsFrom, Infinity, false);
+      sendsFrom = -1;
+    }
+    if (moments.size) {
+      const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
+      lastMoments = pose.t;
+      for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+    }
+    if (gulls) {
+      if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+      sends += gulls.update(pose, now, prefs.calm);
+    }
+    if (falls) {
+      const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
+      lastFalls = pose.t;
+      fallNow = now;
+      sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
+    }
+  };
+  /** The waves' first half: the lanes choose them, and each starts. */
+  const lanesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, look: number) => {
+    lastTurn = 1;
+    work |= WORK.lanes;
+    if (opts.skip === "nowaves") {
+      lastWaves = pose.t;
+      return;
+    }
+    const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
+    lastWaves = pose.t;
+    waveStarts.length = 0;
+    lapStarts.length = 0;
+    lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
+    if (waveStarts.length) work |= WORK.wave;
+    if (lapStarts.length) work |= WORK.lap;
+    for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
+    if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
+  };
+  /** Its second half: the emitters' sends, and what has finished let go. */
+  const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
+    if (!surf || opts.skip === "nowaves") return;
+    work |= WORK.emitters;
+    sends += surf.update(pose, lanes.emitters, now, prefs.calm);
+    surf.prune(now);
+    shots.prune(now);
+  };
+  /**
+   * Whether the next frame (a frame's time on) will have neither the mix nor the waves due, the mix last run at
+   * `mixAt` and the waves at `wavesAt`: room for a second half.
+   */
+  const roomNext = (t: number, dt: number, mixAt: number, wavesAt: number): boolean => {
+    const next = t + (dt > 0 && dt < STALL ? dt : 1 / 60);
+    if (!(next - mixAt < MIX_EVERY - 1e-4)) return false;
+    return !(surfBuilt && surf !== null && !opts.beds && !(next - wavesAt < MIX_EVERY - 1e-4));
+  };
+  /**
+   * Plays cues the scheduler has found (on the page): any due within a tenth of a second, and two more at most, so a
+   * look that finds many (a peal) spreads their starting over frames; each was found a sixth of a second or more ahead.
+   */
+  const playQueued = (pose: Pose, now: number, look: number, calm: boolean) => {
+    let spare = 2;
+    for (let i = 0; i < queued.length; ) {
+      const d = queued[i];
+      if (d.rejoin || cueAt(d.cue) - now < 0.1 || spare > 0) {
+        if (!(d.rejoin || cueAt(d.cue) - now < 0.1)) spare--;
+        queued.splice(i, 1);
+        play(d, pose, now, look, calm);
+      } else i++;
+    }
+  };
+  /** A cue's audio time. */
+  const cueAt = (cue: Cue) => cue.t + o;
+
   const readLimiter = (now: number) => {
     // By the context's own clock: a timeline scheduled ahead of its render has nothing to read yet.
     if (now < limiterNext || ctx.currentTime < LIMITER_METER_SETTLE_S) return;
@@ -700,7 +838,13 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
         look = lookahead;
       }
-      build(now);
+      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second. A bed
+      // made by tendBeds asks at once (it would otherwise come in up to half a second late), and every other voice is
+      // built once, while the kit comes in. Offline renders build every frame.
+      if (offline || !(pose.t < buildIdleUntil) || pose.t < buildIdleUntil - 1) {
+        build(now);
+        if (!offline && (work & WORK.build) === 0 && kit.done()) buildIdleUntil = pose.t + 0.5;
+      }
       readLimiter(now);
       if (!live && pending === null) return;
 
@@ -739,64 +883,51 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         for (const tap of IR_TAPS) onsets.push(at + tap[0] + LIMITER_DELAY_S);
       }
 
-      // The scheduler, every frame.
-      if (sources.length) {
-        due.length = 0;
-        last.night = pose.night ?? 0;
-        scheduler.pass(pose.t, dt, look, due);
-        last.x = pose.x;
-        last.y = pose.y;
-        for (const d of due) play(d, pose, now, look, prefs.calm);
-        shots.prune(now);
-        bells?.prune(now);
-      }
-
-      // Thirty times a second each, on alternate turns so no frame carries both: the mix and its sends; and the
-      // waves (lanes choose them, each takes an emitter where it breaks) with the emitters' own sends. Cues are
-      // found a quarter of a second ahead, so a thirtieth of a second between looks loses nothing.
+      // Thirty times a second each: the mix and its sends; and the waves (lanes choose them, each takes an emitter
+      // where it breaks) with the emitters' own sends. Cues are found a quarter of a second ahead, so a thirtieth of a
+      // second between looks loses nothing.
       const mixDue = !(pose.t - lastMix < MIX_EVERY - 1e-4) || dt < 0;
       const wavesDue = surfBuilt && surf !== null && !opts.beds && (!(pose.t - lastWaves < MIX_EVERY - 1e-4) || dt < 0 || dt > STALL);
-      if (mixDue && (offline || !wavesDue || lastTurn !== 0)) {
-        lastTurn = 0;
-        work |= WORK.mix;
-        nearestAbbey(pose);
-        mix(pose, hearing, census, prefs, memory, targets);
-        lastMix = pose.t;
-        tendBeds(pose.t, now);
-        apply(now, prefs.calm, false);
-        if (moments.size) {
-          const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
-          lastMoments = pose.t;
-          for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+      if (offline) {
+        // Offline: the scheduler every step, then whatever falls due, whole. (Renders do not depend on how the page
+        // spreads its work.)
+        if (sources.length) runScheduler(pose, dt, look, now, prefs.calm);
+        if (mixDue) {
+          mixHalf(pose, hearing, prefs, now, false);
+          voicesHalf(pose, hearing, prefs, now);
         }
-        if (gulls) {
-          if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
-          sends += gulls.update(pose, now, prefs.calm);
+        if (wavesDue && surf) {
+          lanesHalf(pose, hearing, prefs, now, look);
+          emittersHalf(pose, prefs, now);
         }
-        if (falls) {
-          const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
-          lastFalls = pose.t;
-          fallNow = now;
-          sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
-        }
-        if (!wavesDue || !offline) return;
+        return;
       }
-      if (wavesDue && surf) {
-        lastTurn = 1;
-        work |= WORK.lanes;
-        const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
-        lastWaves = pose.t;
-        waveStarts.length = 0;
-        lapStarts.length = 0;
-        lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
-        if (waveStarts.length) work |= WORK.wave;
-        if (lapStarts.length) work |= WORK.lap;
-        for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
-        if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
-        sends += surf.update(pose, lanes.emitters, now, prefs.calm);
-        surf.prune(now);
-        shots.prune(now);
+      // On the page each comes in two halves, the second a frame after the first when that frame has nothing else
+      // due: on a 120 Hz display every frame then carries a quarter of the work, where every other frame carried half
+      // of it (and the frames' 95th percentile is set by the heaviest). At 60 Hz a frame never has room, so each runs
+      // whole, as it always did. The mix and the waves still take turns.
+      if (half === HALF_VOICES) voicesHalf(pose, hearing, prefs, now);
+      else if (half === HALF_EMITTERS) emittersHalf(pose, prefs, now);
+      half = 0;
+      if (mixDue && (!wavesDue || lastTurn !== 0)) {
+        const room = roomNext(pose.t, dt, pose.t, lastWaves);
+        mixHalf(pose, hearing, prefs, now, room);
+        if (room) half = HALF_VOICES;
+        else voicesHalf(pose, hearing, prefs, now);
+      } else if (wavesDue && surf) {
+        const room = roomNext(pose.t, dt, lastMix, pose.t);
+        lanesHalf(pose, hearing, prefs, now, look);
+        if (room) half = HALF_EMITTERS;
+        else emittersHalf(pose, prefs, now);
       }
+      // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
+      // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
+      // frame as much as a first half. What it finds is played a few a frame.
+      if (sources.length && opts.skip !== "nosched") {
+        runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
+        schedNext = (schedNext + SCHED_EACH) % scheduler.size;
+      }
+      if (queued.length) playQueued(pose, now, look, prefs.calm);
     },
     enable(first) {
       if (live) return;
@@ -819,6 +950,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + 0.25);
       lastMoments = NaN;
       lastFalls = NaN;
+      half = 0;
+      sendsFrom = -1;
+      queued.length = 0;
       lanes.clear();
       scheduler.clear();
       lastT = NaN;
@@ -954,7 +1088,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf" });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;
@@ -962,6 +1096,8 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
   const census = createCensus(opts.n);
   const startlePool: Startle[] = [];
   let censusAt = NaN;
+  /** Whether this frame ran the census (a work bit). */
+  let censused = false;
   return {
     frame(pose, prefs, seen) {
       if (!warped && kit.ready("surf")) {
@@ -970,17 +1106,22 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
         warped = true;
       }
       const hearing = listener.step(pose, seen, engine.laneMask());
-      // The census: which gulls the flier has just put up, fifteen times a second.
-      if (gullList.length > 0 || seen.bake) {
-        if (!(pose.t - censusAt < 1 / 15)) {
+      censused = false;
+      engine.frame(pose, hearing, prefs);
+      // The census: which gulls the flier has just put up, fifteen times a second, after the engine's frame and on a
+      // frame that carried neither the mix's nor the waves' first half, where it can wait a frame for one. (The birds
+      // it finds are voiced by the mix's second half, a frame or two on.)
+      if ((gullList.length > 0 || seen.bake) && opts.arm !== "nocensus") {
+        const since = pose.t - censusAt;
+        if (!(since < 1 / 15) && ((engine.work() & (WORK.mix | WORK.lanes)) === 0 || !(since < 1 / 15 + 1 / 30) || since < 0)) {
           censusAt = pose.t;
           // The beaches' lattice is walked only where the ear has found beach or shingle in the frame.
           let beach = hearing.surf[0].e > 0 || hearing.surf[1].e > 0;
           for (let i = 0; !beach && i < hearing.shores.length; i++) beach = hearing.shores[i].kind === 1 || hearing.shores[i].kind === 2;
           census.run(beach ? seen : NO_FRAME, pose, opts.seed, gullList, hearing.startled, startlePool);
+          censused = true;
         }
       }
-      engine.frame(pose, hearing, prefs);
       if (kit.done()) {
         kitMs = 0;
       } else {
@@ -996,7 +1137,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
       }
     },
     kitMs: () => kitMs,
-    work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0),
+    work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0) | (censused ? WORK.census : 0),
     settled: () => kit.done() && engine.built(),
     hearing: () => listener.hearing(),
     enable: (first) => engine.enable(first),
@@ -1037,11 +1178,12 @@ function localEar(n: number, land: Land): Listener {
 }
 
 /**
- * The ear in its worker. Each frame the page gathers the share of the frame's lattice that the time since the last
- * frame calls for (about four thousand pixel reads at 60 Hz) into a buffer; ten times a second the buffer is handed
- * over, and the Hearing comes back a moment later. Two buffers take turns.
+ * The ear in its worker. Each frame the page copies the share of the frame's rows that the time since the last frame
+ * calls for (a native copy a row; it used to gather the lattice itself, a read a sample, the sound's largest cost on
+ * the page) into a frame laid out as the pass's first; ten times a second the buffer is handed over, the worker
+ * gathers its lattice from it, and the Hearing comes back a moment later. Two buffers take turns.
  */
-function remoteEar(n: number, land: Land): Listener | null {
+export function remoteEar(n: number, land: Land): Listener | null {
   let worker: Worker;
   try {
     worker = new Worker(new URL("../ear.worker.ts", import.meta.url), { type: "module" });
@@ -1054,7 +1196,7 @@ function remoteEar(n: number, land: Land): Listener | null {
   const spare: Uint32Array[] = [];
   const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
   /** The message and its transfer list, reused for every pass. */
-  const message = { kind: "pass" as const, bake: null as Uint32Array | null, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
   const transfer: ArrayBuffer[] = [];
   /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
   let into: Uint32Array | null = null;
@@ -1092,11 +1234,13 @@ function remoteEar(n: number, land: Land): Listener | null {
       if (dead || !bake || !rect || !(dt > 0)) return hearing;
       if (!into) {
         // A new pass, when a buffer is free: it begins with this frame's rect and this frame's dragon.
-        const lat = latticeOf(rect);
-        const size = lat.cols * lat.rows;
+        const size = rect.w * rect.h;
         if (heardSpare.length === 0) return hearing;
         let buffer = spare.pop();
-        if (buffer && buffer.length !== size) buffer = undefined;
+        // A buffer too small for this frame (the window has grown) is let go and a bigger one takes its place, so two
+        // always take turns. (Buffers once had to match the lattice exactly, and its size changes with the parity of
+        // the frame's first row: two crossings into flight both were thrown away and the ear stopped for good.)
+        if (buffer && buffer.length < size) buffer = new Uint32Array(size);
         if (!buffer && made < 2) {
           buffer = new Uint32Array(size);
           made++;
@@ -1116,7 +1260,7 @@ function remoteEar(n: number, land: Land): Listener | null {
       }
       const rows = latticeOf(home).rows;
       const to = Math.min(1, progress + dt / PASS);
-      gatherRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
+      copyRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
       progress = to;
       if (to >= 1) {
         const heard = heardSpare.pop() as Float64Array;

@@ -5,7 +5,7 @@
 
 import {
   A_CUT_HZ, A_CUT_RANGE, A_EXP, A_TILT_DB, B_HZ, B_RANGE, BELL_DUCK_EDGES_DB, BELL_FAR, BELL_NEAR, BELL_SPREAD, C_FROM, C_LOW, C_PUSH, D_FROM, E_REST, BED_SPREAD, K_BELL, K_RIVER, K_SURF, K_WIND, RIVER_STREAM_PURL, W_BLOOM_FULL, W_BLOOM_TAU, W_FLOOR, W_GATE, W_HOLD, W_HZ, W_PAN, W_RISE, WIND_FLOOR, WIND_SLEW,
-  MIST_LOWPASS_HZ, MIST_WORLD_DB, WORLD_BOOST_DB, WORLD_LOWPASS_HZ, WORLD_REST_DB,
+  K_RAIN, MIST_LOWPASS_HZ, MIST_WORLD_DB, RAIN, WORLD_BOOST_DB, WORLD_LOWPASS_HZ, WORLD_REST_DB,
 } from "./levels.ts";
 import { volumeGain } from "./prefs.ts";
 import { torusDelta } from "../core/torus.ts";
@@ -64,7 +64,11 @@ export const T = {
   RIVER_PAN_B: 35,
   /** The world low-pass's cutoff (Hz): mist closes it. */
   WORLD_HZ: 36,
-  COUNT: 37,
+  /** Rain: drops on the land, a heavy shower's sheet, drops on the water. */
+  RAIN_PATTER: 37,
+  RAIN_SHEET: 38,
+  RAIN_FIZZ: 39,
+  COUNT: 40,
 } as const;
 
 /** How a target is sent: its unit decides how "moved" is measured (§3.5). */
@@ -115,6 +119,8 @@ export const SEND: readonly SendRule[] = (() => {
   r[T.BELL_FAR] = { unit: "pan", by: 0.02, up: 0.25, down: 0.25 };
   // Mist comes and goes over minutes: the muffle follows it gently (about 0.6 s to settle on a step).
   r[T.WORLD_HZ] = { unit: "hz", by: 50, up: 0.2, down: 0.2 };
+  // A shower comes in over tens of seconds: rain follows the air gently, and the land/water balance as the beds do.
+  for (const i of [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ]) r[i] = gain(0.5, 0.25);
   return r;
 })();
 
@@ -226,6 +232,13 @@ export function mix(
   const mist = clamp(pose.mist ?? 0, 0, 1);
   targets[T.WORLD] = dbToGain(WORLD_BOOST_DB * clamp((speed - 1) / 0.8, 0, 1)) * dbToGain(WORLD_REST_DB * rest) * dbToGain(MIST_WORLD_DB * mist);
   targets[T.WORLD_HZ] = WORLD_LOWPASS_HZ * Math.pow(MIST_LOWPASS_HZ / WORLD_LOWPASS_HZ, mist);
+  // Rain (§13): the patter on land (some always, for the drops on the dragon), the sheet only in a heavy shower, the
+  // fizz over open water.
+  const rain = clamp(pose.rain ?? 0, 0, 1);
+  const water = clamp(hearing.sea, 0, 1);
+  targets[T.RAIN_PATTER] = K_RAIN.patter * rain * (RAIN.landFloor + (1 - RAIN.landFloor) * (1 - water));
+  targets[T.RAIN_SHEET] = K_RAIN.sheet * rain * rain;
+  targets[T.RAIN_FIZZ] = K_RAIN.fizz * rain * water;
 
   // The abbey (§3.1, §3.4): heard from the dragon; its bells hang about as high as the dragon flies, so only the
   // ground between counts. Wind and water yield while it rings, and only when it is near.

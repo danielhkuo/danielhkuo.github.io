@@ -219,6 +219,36 @@ test("a frame gathered to its lattice a few rows at a time, the camera moving me
   assert.ok(Math.abs(fromLattice.sea - whole.sea) < 0.02);
 });
 
+test("rows copied a few at a time as the camera moves, then gathered, give the lattice the gather gives", async () => {
+  const { copyRows, gatherRows, latticeOf } = await import("./ear.ts");
+  // A shore with a stream running into it, so the look east and below (thin water) is exercised.
+  const world = overlay(cove(5010, 4990, 120, M.shingle), riverNS(4987, 1, 10));
+  for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const home = frameOf(world, 5000 + ox, 5000 - ALT / 0.8 + oy);
+    const lat = latticeOf(home.rect);
+    const gathered = new Uint32Array(lat.cols * lat.rows);
+    const copy = new Uint32Array(home.rect.w * home.rect.h).fill(0xdeadbeef);
+    // Seven slices; the camera slides east and south (then back) by a pixel or three between them.
+    for (let k = 0; k < 7; k++) {
+      const now = frameOf(world, 5000 + ox + 1.4 * k - (k > 4 ? 6 : 0), 5000 - ALT / 0.8 + oy + 1.9 * k);
+      const r0 = Math.floor((k * lat.rows) / 7), r1 = Math.floor(((k + 1) * lat.rows) / 7);
+      gatherRows(gathered, home.rect, now.bake, now.rect, r0, r1);
+      copyRows(copy, home.rect, now.bake, now.rect, r0, r1);
+    }
+    const fromCopy = new Uint32Array(lat.cols * lat.rows);
+    gatherRows(fromCopy, home.rect, copy, home.rect, 0, lat.rows);
+    let differ = 0, rivers = 0;
+    for (let r = 0; r < lat.rows - 1; r++) {
+      for (let c = 0; c < lat.cols - 1; c++) {
+        if (fromCopy[r * lat.cols + c] !== gathered[r * lat.cols + c]) differ++;
+        if ((gathered[r * lat.cols + c] & 255) === M.river) rivers++;
+      }
+    }
+    assert.equal(differ, 0, `offset ${ox},${oy}: ${differ} samples differ`);
+    assert.ok(rivers > 0, "the stream was in the lattice");
+  }
+});
+
 test("the ear's river constants are the picture's own", () => {
   assert.equal(EAR_FALL_TONE, FALL_TONE);
   assert.equal(EAR_STEEP, STEEP);
