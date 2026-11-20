@@ -140,7 +140,7 @@ test("round a coil that crosses a cliff it rises and falls no steeper than its b
 });
 
 test("it lands across the world's edge", () => {
-  const edge: Target = { id: "windmill-0", x: 10, y: 10, radius: 10.4 };
+  const edge: Target = { id: "windmill-0", x: 10, y: 10, radius: 8.4 };
   const { s, phase } = comeDown(flier(N - 50, 10, 0), edge, FLAT);
   assert.equal(phase.kind, "landed");
   assert.ok(Math.abs(delta(edge.x, s.x)) < 3 && Math.abs(delta(edge.y + edge.radius, s.y)) < 3, `(${s.x}, ${s.y})`);

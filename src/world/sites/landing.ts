@@ -2,9 +2,10 @@
 // down (design: specs/2026-11-18-landing-and-codex-design.md). Each frame the head steers for the tangent of an orbit
 // round the landmark whose radius shrinks with the angle swept, slowing and sinking as it goes; the body follows the
 // head's path, so it is left lying in a coil. The sweep ends at the landmark's south point, so the head rests in
-// front of the building, facing across the camera. Round the coil it follows the ground, bridging what its body could
-// not bend down, and rests at that height: at a cliff's foot, level with the coil and not on the beach below. Pure:
-// nothing passed in is changed.
+// front of the building, facing across the camera. A building too big to ring stays clear: the dragon curls up in a
+// small coil just beside it, to the south where the ground there shows. Round the coil it follows the ground, bridging
+// what its body could not bend down, and rests at that height: at a cliff's foot, level with the coil and not on the
+// beach below. Pure: nothing passed in is changed.
 
 import { patan2, pcos, PI, psin } from "../core/psin.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
@@ -21,6 +22,10 @@ export const MAX_TURN = 3.2;
 export const ORBIT_RATE = 2.2;
 /** The orbit starts no wider than this, cells. */
 export const START_RADIUS = 40;
+/** A rest radius above this is too big to ring: the body would cover too much of the circle. */
+export const COIL_MAX = 10;
+/** The radius of the small coil the dragon curls up in beside such a building, cells. */
+export const COIL_RADIUS = 7;
 /** The orbit has shrunk to the rest radius by this share of the sweep, and holds it after. */
 export const SHRINK_END = 0.55;
 /** It has sunk onto the coil's ring by this share of the sweep. */
@@ -148,27 +153,40 @@ export function offered(phase: Phase, x: number, y: number, targets: readonly Ta
 }
 
 /**
- * The plan for coming down at `target` from `s`: round the way the flier is already going, the orbit starting at its
- * distance (no wider than START_RADIUS), the sweep ending at the south point after at least SWEEP_MIN turns.
+ * The orbit round (x, y) from where the flier is. The centre comes back unwrapped near the flier, the dragon goes the
+ * way it is already headed, and the orbit starts at its distance, no wider than START_RADIUS.
  */
-export function beginLanding(s: FlightState, target: Target, n: number): Approach {
-  const dx = torusDelta(target.x, s.x, n), dy = torusDelta(target.y, s.y, n);
+function orbitRound(
+  s: FlightState, x: number, y: number, radius: number, n: number,
+): Pick<Approach, "cx" | "cy" | "radius" | "r0" | "phi" | "dir"> {
+  const dx = torusDelta(x, s.x, n), dy = torusDelta(y, s.y, n);
   const r = Math.sqrt(dx * dx + dy * dy);
   const phi = r > 1e-9 ? patan2(dy, dx) : s.heading - PI / 2;
   // Going round clockwise on screen, the way ahead at angle φ is (−sin φ, cos φ).
   const dir: 1 | -1 = -pcos(s.heading) * psin(phi) + psin(s.heading) * pcos(phi) >= 0 ? 1 : -1;
-  let sweep = (((dir * (PI / 2 - phi)) % TAU) + TAU) % TAU;
+  return { cx: s.x - dx, cy: s.y - dy, radius, r0: clamp(r, radius, Math.max(radius, START_RADIUS)), phi, dir };
+}
+
+/**
+ * The plan for coming down at `target` from `s`: round the way the flier is already going, the orbit starting at its
+ * distance (no wider than START_RADIUS), the sweep ending at the south point after at least SWEEP_MIN turns. The
+ * building's centre and radius stay on the approach: a building too big to ring keeps them until the first step, which
+ * moves the coil out beside the walls.
+ */
+export function beginLanding(s: FlightState, target: Target, n: number): Approach {
+  const o = orbitRound(s, target.x, target.y, target.radius, n);
+  let sweep = (((o.dir * (PI / 2 - o.phi)) % TAU) + TAU) % TAU;
   if (sweep < SWEEP_MIN * TAU) sweep += TAU;
   return {
     id: target.id,
-    cx: s.x - dx,
-    cy: s.y - dy,
-    radius: target.radius,
-    r0: clamp(r, target.radius, Math.max(target.radius, START_RADIUS)),
-    dir,
+    cx: o.cx,
+    cy: o.cy,
+    radius: o.radius,
+    r0: o.r0,
+    dir: o.dir,
     sweep,
     swept: 0,
-    phi,
+    phi: o.phi,
     v0: Math.max(s.speed, 2 * CRAWL),
     alt0: s.alt,
     ring: null,
@@ -210,6 +228,12 @@ function ringAt(ring: readonly number[], phi: number): number {
 const REST_AT = [0, 1, -1, 2, -2, 3, -3, 4, -4];
 
 /**
+ * Angles round a big building at which a small coil may sit, tried in this order: south, then south-east and
+ * south-west, east and west, north-east and north-west, and north. An angle is atan2(dy, dx), with y growing south.
+ */
+const BESIDE = [PI / 2, PI / 4, (3 * PI) / 4, 0, PI, -PI / 4, (-3 * PI) / 4, -PI / 2];
+
+/**
  * True when the view draws no nearer land over the point (x, y) `alt` up, nor over its crown 3 higher: the whole head
  * shows there. A point outside the frame, or a terrain that is not a view, hides nothing.
  */
@@ -230,22 +254,62 @@ function shows(terrain: Terrain & Partial<Sight>, x: number, y: number, alt: num
   return true;
 }
 
+/** How many of the RING_POINTS round the coil the view leaves clear, each at the ring's own height plus the resting lift. */
+function ringShown(terrain: Terrain & Partial<Sight>, a: Approach, ring: readonly number[], n: number): number {
+  let shown = 0;
+  for (let k = 0; k < RING_POINTS; k++) {
+    const at = (k * TAU) / RING_POINTS;
+    const x = wrap(a.cx + a.radius * pcos(at), n), y = wrap(a.cy + a.radius * psin(at), n);
+    if (shows(terrain, x, y, ringAt(ring, at) + REST_LIFT, n)) shown++;
+  }
+  return shown;
+}
+
+/**
+ * The approach aimed at a small coil beside a building too big to ring. The building's centre and radius are the ones
+ * beginLanding left on the approach. The coil's centre lies that radius plus COIL_RADIUS out from the building, at the
+ * first place in BESIDE where at least three-quarters of the coil's ring shows. If none reaches three-quarters, it is
+ * the place where the most points show, and an earlier place wins a tie. With no view every point shows, so the coil
+ * sits due south. The orbit round the chosen centre is worked out from the flier, as beginLanding works one out.
+ */
+function coilBeside(a: Approach, s: FlightState, terrain: Terrain & Partial<Sight>, n: number): Approach {
+  const reach = a.radius + COIL_RADIUS;
+  let best: Approach | null = null;
+  let most = -1;
+  for (const angle of BESIDE) {
+    const o = orbitRound(s, a.cx + reach * pcos(angle), a.cy + reach * psin(angle), COIL_RADIUS, n);
+    const aimed: Approach = { ...a, cx: o.cx, cy: o.cy, radius: o.radius, r0: o.r0, dir: o.dir, phi: o.phi };
+    const shown = ringShown(terrain, aimed, ringHeights(aimed, terrain, n), n);
+    // Three-quarters of the ring is enough, so the first such place is taken.
+    if (shown * 4 >= RING_POINTS * 3) return aimed;
+    // Otherwise keep the place where the most points show. An earlier place wins a tie.
+    if (shown > most) {
+      most = shown;
+      best = aimed;
+    }
+  }
+  return best ?? a;
+}
+
 /**
  * The approach with its ring measured, its sweep ending where the head will show: the south point if the land does
- * not hide it there, else the nearest point round the front of the ring that shows (south again if none does).
+ * not hide it there, else the nearest point round the front of the ring that shows (south again if none does). When
+ * the building is too big to ring, the coil is a small one beside the walls, and the orbit, the ring and the sweep
+ * are worked out again for its centre.
  */
-function surveyed(a: Approach, terrain: Terrain & Partial<Sight>, n: number): Approach {
-  const ring = ringHeights(a, terrain, n);
+function surveyed(a: Approach, s: FlightState, terrain: Terrain & Partial<Sight>, n: number): Approach {
+  const aimed = a.radius > COIL_MAX ? coilBeside(a, s, terrain, n) : a;
+  const ring = ringHeights(aimed, terrain, n);
   let end = PI / 2;
   for (const k of REST_AT) {
     const at = PI / 2 + (k * TAU) / 16;
-    if (!shows(terrain, wrap(a.cx + a.radius * pcos(at), n), wrap(a.cy + a.radius * psin(at), n), ringAt(ring, at) + REST_LIFT, n)) continue;
+    if (!shows(terrain, wrap(aimed.cx + aimed.radius * pcos(at), n), wrap(aimed.cy + aimed.radius * psin(at), n), ringAt(ring, at) + REST_LIFT, n)) continue;
     end = at;
     break;
   }
-  let sweep = (((a.dir * (end - a.phi)) % TAU) + TAU) % TAU;
+  let sweep = (((aimed.dir * (end - aimed.phi)) % TAU) + TAU) % TAU;
   if (sweep < SWEEP_MIN * TAU) sweep += TAU;
-  return { ...a, ring, sweep };
+  return { ...aimed, ring, sweep };
 }
 
 /**
@@ -256,8 +320,9 @@ function surveyed(a: Approach, terrain: Terrain & Partial<Sight>, n: number): Ap
  * cliff's edge is a ramp, not a jump. Done when the sweep is, or at LANDING_CAP: then it stops.
  */
 function stepApproach(s: FlightState, from: Approach, dt: number, terrain: Terrain & Partial<Sight>, n: number): { s: FlightState; a: Approach; done: boolean } {
-  // The first step measures the ring, and ends the sweep where the head will show.
-  const a = from.ring ? from : surveyed(from, terrain, n);
+  // The first step sets a small coil beside a building too big to ring, measures the ring, and ends the sweep where the
+  // head will show.
+  const a = from.ring ? from : surveyed(from, s, terrain, n);
   const step = clamp(dt, 0, DT_MAX);
   const dx = torusDelta(a.cx, s.x, n), dy = torusDelta(a.cy, s.y, n);
   const r = Math.sqrt(dx * dx + dy * dy);
