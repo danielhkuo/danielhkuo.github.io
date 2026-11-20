@@ -146,7 +146,7 @@ export default function NeofetchHeader({ projects, world = false, onMinimize, on
                   <dd>{PROFILE.location}</dd>
                   {projects.length > 0 && (
                     <>
-                      <dt>Pinned</dt>
+                      <dt>Projects</dt>
                       <dd>
                         <ul className="nf-pins">
                           {projects.map((p) => (

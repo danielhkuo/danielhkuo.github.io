@@ -1,8 +1,8 @@
 # danielhkuo.github.io
 
-My personal site. I didn't want to hand-edit a projects page every time I shipped
-something, so it pulls my pinned repositories from GitHub at build time and
-rebuilds whenever I push. Built with Next.js and hosted on GitHub Pages.
+My personal site. Each project is a small Markdown file in `projects/` that I
+can edit in the browser, and the site rebuilds whenever I push. Built with
+Next.js and hosted on GitHub Pages.
 
 ## Features
 
@@ -10,8 +10,8 @@ rebuilds whenever I push. Built with Next.js and hosted on GitHub Pages.
   the window opens out of it, types `neofetch` and prints the bio. Scrolling
   docks it — the window climbs to the top at half speed while the projects
   rise to meet it.
-- Pinned GitHub repos, pulled at build time and shown with their language
-  breakdown, stars, and forks.
+- Projects from `projects/`, one Markdown file each, shown with their language
+  breakdown, stars and forks from GitHub, fetched at build time.
 - An interactive terminal that holds the site as a small filesystem: `ls`,
   `cd`, `cat` and `open` behave as they do in zsh, markdown files are laid out
   the way glow renders them, and commands and paths tab-complete. Open it by
@@ -29,8 +29,9 @@ npm install
 npm run dev
 ```
 
-To fetch real repositories, set `GITHUB_USERNAME` (and optionally `GITHUB_TOKEN`)
-in `.env.local`. Without a token the site uses mock data.
+The projects are the Markdown files in `projects/`; `projects/README.md` gives
+the format. To show their stars, forks and languages, set `GITHUB_TOKEN` in
+`.env.local`. Without a token the site builds without them.
 
 ## Deployment
 
@@ -46,7 +47,7 @@ To build locally, run `npm run build`; the output goes to `out/`.
 src/
 ├── app/          layout, home page, global styles
 ├── components/   masthead, project cards, terminal, contact form, etc.
-└── lib/          GitHub fetching and theme helpers
+└── lib/          the projects loader and theme helpers
 ```
 
 ## License

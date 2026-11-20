@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { fetchPinnedRepos } from "@/lib/github";
+import { loadProjects } from "@/lib/projects";
 import Flight from "./Flight";
 import { worldProps } from "./worldProps";
 
@@ -9,6 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function WorldPage() {
-  // The pinned repos, fetched at build time (as the home page does), stand at the world's landmarks.
-  return <Flight {...worldProps(await fetchPinnedRepos())} />;
+  // The projects, read at build time, stand at the world's landmarks.
+  return <Flight {...worldProps(await loadProjects())} />;
 }

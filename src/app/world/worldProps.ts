@@ -3,16 +3,13 @@
 
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import type { PinnedRepo } from "@/lib/github";
+import type { Project } from "@/lib/projects";
 import { otherPages } from "@/lib/site-content";
 import { LANDMARK_CONFIG } from "@/world/landmarks.config";
 import sticky from "@/world/sites/assignments.json";
 import { entryOf, landmarksFor, stickyText, type LandmarkSet } from "@/world/sites/landmarks";
 import type { TerminalProps } from "./useTerminalDrawer";
 import { startBytes } from "./startBytes";
-
-/** A pinned repo, as `fetchPinnedRepos` returns it. */
-type Repo = PinnedRepo;
 
 /** The shipped world's manifest, read from public/world at build time; null when the world files are absent. */
 function shippedManifest(): { worldId: string; n: number; sites: { id: string; type: string; x: number; y: number }[] } | null {
@@ -30,33 +27,25 @@ function shippedManifest(): { worldId: string; n: number; sites: { id: string; t
  * Landmarks from the shipped world, the terminal at the abbey, and how many bytes the flight fetches before its first
  * view. The abbey's `pages` are the site's other pages, so its files are the minimal version's.
  */
-export function worldProps(repos: Repo[]): { landmarks: LandmarkSet | null; terminal: TerminalProps; startBytes: number } {
+export function worldProps(projects: Project[]): { landmarks: LandmarkSet | null; terminal: TerminalProps; startBytes: number } {
   const manifest = shippedManifest();
   let landmarks: LandmarkSet | null = null;
   if (manifest) {
-    const placed = landmarksFor(manifest, repos.map(entryOf), LANDMARK_CONFIG, sticky);
+    const placed = landmarksFor(manifest, projects.map(entryOf), LANDMARK_CONFIG, sticky);
     landmarks = placed.set;
-    // Without a token the repos are stand-ins, and their places mean nothing.
-    if (placed.changed && process.env.GITHUB_TOKEN) {
-      console.warn(`world: the pinned repos' sites have changed. Commit this as src/world/sites/assignments.json:\n${stickyText(manifest.worldId, placed.bySite)}`);
+    // A build from other project files, such as the e2e fixtures, has no place in the committed file.
+    if (placed.changed && !process.env.PROJECTS_DIR) {
+      console.warn(
+        `world: the projects at the landmarks have changed. Commit this as src/world/sites/assignments.json:\n${stickyText(manifest.worldId, placed.bySite)}`,
+      );
     }
   }
 
-  // The terminal at the abbey gets a slim slice of each repo, and what only the build knows. The site's other pages are
-  // among that: given them, its files are the minimal version's (a contact card that stands by itself, where the old
-  // home page's pointed at a form this page does not have; ~/sitemap.md; projects/README.md).
+  // The terminal at the abbey gets the projects, and what only the build knows. The site's other pages are among
+  // that: given them, its files are the minimal version's (a contact card that stands by itself, where the old home
+  // page's pointed at a form this page does not have; ~/sitemap.md; projects/README.md).
   const terminal = {
-    projects: repos.map((p) => ({
-      name: p.name,
-      description: p.description,
-      url: p.url,
-      homepageUrl: p.homepageUrl,
-      primaryLanguage: p.primaryLanguage,
-      languages: p.languages.map((l) => ({ name: l.name, percentage: l.percentage })),
-      stargazerCount: p.stargazerCount,
-      forkCount: p.forkCount,
-      updatedAt: p.updatedAt,
-    })),
+    projects,
     site: {
       builtAt: new Date().toISOString(),
       resumeBytes: statSync(path.join(process.cwd(), "public", "Daniel-Kuo-Resume.pdf")).size,

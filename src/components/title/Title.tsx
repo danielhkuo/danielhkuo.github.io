@@ -10,7 +10,8 @@ import Flight, { type FlightProps } from "../../app/world/Flight";
 import { fell } from "../../app/world/fonts";
 import NeofetchHeader, { type HeaderProject } from "../NeofetchHeader";
 import TerminalLauncher from "../terminal/TerminalLauncher";
-import type { SiteInfo, SlimProject } from "../terminal/types";
+import type { SiteInfo } from "../terminal/types";
+import type { Project } from "../../lib/projects";
 import { useFrameFit } from "../../app/world/useFrameScale";
 import { HOLD_AT, type HoldAt } from "../../world/runtime/hold";
 import ArrivalPaper, { type ArrivalStart } from "./ArrivalPaper";
@@ -35,7 +36,7 @@ const HEAD_BELOW = 46;
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
   header: HeaderProject[];
-  shell: { projects: SlimProject[]; site: SiteInfo };
+  shell: { projects: Project[]; site: SiteInfo };
 }
 
 function subscribePhone(onChange: () => void): () => void {

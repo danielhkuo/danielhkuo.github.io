@@ -1077,7 +1077,7 @@ iframe[src*="hcaptcha"] {
 }
 .nf-link:hover { color: var(--term-ansi-7); }
 
-/* Pinned repos: language · name · stars/forks, as three aligned columns. */
+/* Projects: language · name · stars/forks, as three aligned columns. */
 .nf-pins {
   display: grid;
   grid-template-columns: max-content max-content max-content;

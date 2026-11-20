@@ -1,0 +1,65 @@
+# Pages CMS (https://pagescms.org/docs/configuration/): the site's projects as a form in the browser. Each project is a
+# Markdown file in projects/, and projects/README.md gives the format. The build checks every file as
+# src/lib/projects.ts reads it, so a field changed here must change there too.
+
+media:
+  input: public/projects
+  output: /projects
+  categories: [image]
+  rename: safe
+
+content:
+  - name: projects
+    label: Projects
+    type: collection
+    path: projects
+    format: yaml-frontmatter
+    exclude: [README.md]
+    filename:
+      template: "{fields.name}.md"
+      field: create
+    view:
+      fields: [name, summary, order]
+      primary: name
+      sort: [order, name]
+      default:
+        sort: order
+        order: asc
+    fields:
+      - name: name
+        label: Name
+        type: string
+        required: true
+      - name: summary
+        label: Summary
+        type: string
+        required: true
+        description: One line on what it is.
+      - name: repo
+        label: GitHub repository
+        type: string
+        description: Written owner/name, like danielhkuo/leaf. Its stars, forks and languages are fetched at each build.
+        pattern:
+          regex: "^([A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?$"
+          message: Write it owner/name, like danielhkuo/leaf.
+      - name: link
+        label: Link
+        type: string
+        description: The live site or a write-up.
+        pattern:
+          regex: "^(https?://\\S+)?$"
+          message: A whole address, starting https://
+      - name: image
+        label: Image
+        type: image
+      - name: order
+        label: Order
+        type: number
+        description: Lower comes first. A project without one comes last.
+      - name: body
+        label: Description
+        type: rich-text
+        description: A few sentences on what it is and what you did.
+        options:
+          format: markdown
+          media: false
