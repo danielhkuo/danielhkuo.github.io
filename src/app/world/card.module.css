@@ -112,12 +112,12 @@
   clip-path: inset(50%);
 }
 
-/* The quest offer: low and centred, under the dragon and between a phone's two thumbs. It does not cover the flight. */
+/* The quest offer: at the foot of the frame, centred, clear of the dragon and between a phone's two thumbs. */
 .card.quest {
   position: absolute;
   z-index: 16;
   left: 50%;
-  bottom: max(env(safe-area-inset-bottom, 0px), 12%);
+  bottom: max(env(safe-area-inset-bottom, 0px), 16px);
   transform: translateX(-50%);
   max-height: none;
 }
