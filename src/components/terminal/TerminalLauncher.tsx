@@ -11,15 +11,32 @@ import { getTheme, setTheme } from "@/lib/theme";
  * and build facts as serializable props from the server page. Other parts of
  * the UI (the neofetch header) request opening via a `terminal:open`
  * CustomEvent, optionally passing the trigger element for focus return.
+ *
+ * `button` draws the corner launcher. The title has none, so it passes false.
+ * `enabled` gates ⌘K, backtick and `terminal:open`. While it is false (the
+ * title, once it has left the window up) those are ignored and an open
+ * terminal closes, and stays closed when shortcuts work again.
  */
 export default function TerminalLauncher({
   projects,
   site,
+  button = true,
+  enabled = true,
 }: {
   projects: SlimProject[];
   site: SiteInfo;
+  /** False: no corner .term-launch button. */
+  button?: boolean;
+  /** False: shortcuts and terminal:open are ignored, and an open terminal closes. */
+  enabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Close in this render when shortcuts are taken away, so coming back does not reopen it.
+  const [enabledSeen, setEnabledSeen] = useState(enabled);
+  if (enabled !== enabledSeen) {
+    setEnabledSeen(enabled);
+    if (!enabled) setOpen(false);
+  }
   const triggerRef = useRef<HTMLElement | null>(null);
   const launchBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -74,6 +91,7 @@ export default function TerminalLauncher({
   // Global shortcuts + external open requests. Effect Events, so the
   // listeners are attached once and still see the current `open`.
   const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (!enabled) return;
     // Esc closes the terminal from anywhere while it's open, regardless of
     // which element currently has focus.
     if (e.key === "Escape" && open) {
@@ -97,6 +115,7 @@ export default function TerminalLauncher({
     }
   });
   const onOpenRequest = useEffectEvent((e: Event) => {
+    if (!enabled) return;
     const detail = (e as CustomEvent<{ trigger?: HTMLElement }>).detail;
     openTerminal(detail?.trigger ?? null);
   });
@@ -127,24 +146,26 @@ export default function TerminalLauncher({
 
   return (
     <>
-      <button
-        ref={launchBtnRef}
-        type="button"
-        className="term-launch"
-        data-terminal-trigger=""
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title="Open terminal (⌘K)"
-        onClick={() => openTerminal(launchBtnRef.current)}
-      >
-        <span className="glyph" aria-hidden>
-          &gt;_
-        </span>
-        <span className="label">terminal</span>
-        <span className="kbd" aria-hidden>
-          ⌘K
-        </span>
-      </button>
+      {button ? (
+        <button
+          ref={launchBtnRef}
+          type="button"
+          className="term-launch"
+          data-terminal-trigger=""
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          title="Open terminal (⌘K)"
+          onClick={() => openTerminal(launchBtnRef.current)}
+        >
+          <span className="glyph" aria-hidden>
+            &gt;_
+          </span>
+          <span className="label">terminal</span>
+          <span className="kbd" aria-hidden>
+            ⌘K
+          </span>
+        </button>
+      ) : null}
       <Terminal open={open} onClose={closeTerminal} api={api} />
     </>
   );

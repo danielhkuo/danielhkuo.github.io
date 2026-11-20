@@ -1,10 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import type { MouseEvent } from "react";
-import { EMAIL, LINKS, PROFILE } from "@/components/terminal/content";
+import { Fragment, type MouseEvent, type ReactNode } from "react";
+import { EMAIL, LINKS, PROFILE, WORLD_COMMAND, WORLD_LINES } from "@/components/terminal/content";
 import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
+import ReturnKey from "@/components/title/ReturnKey";
+
+/** A ⏎ in a printed line becomes the pixel key cap; the rest of the line is text. */
+function withReturns(line: string): ReactNode {
+  const parts = line.split("⏎");
+  if (parts.length === 1) return line;
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 ? <ReturnKey className="nf-key" /> : null}
+    </Fragment>
+  ));
+}
 
 /** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
 export interface HeaderProject {
@@ -13,6 +26,16 @@ export interface HeaderProject {
   language: { name: string; color: string } | null;
   stars: number;
   forks: number;
+}
+
+export interface NeofetchHeaderProps {
+  projects: HeaderProject[];
+  /** After the colour blocks, the terminal runs `./world` and prints how to enter. */
+  world?: boolean;
+  /** The window's yellow light. */
+  onMinimize?: () => void;
+  /** The window's green light. */
+  onZoom?: () => void;
 }
 
 /** Ask the TerminalLauncher to open the live shell, returning focus to `trigger` on close. */
@@ -30,9 +53,13 @@ function Prompt() {
   return <span className="nf-ps1">{promptFor("~")}</span>;
 }
 
-/** `intro`: the one that follows the typing, and exists only while the intro plays. */
-function Cursor({ intro = false }: { intro?: boolean }) {
-  return <span className={intro ? "nf-cursor nf-cursor-intro" : "nf-cursor"} aria-hidden />;
+/**
+ * `intro`: the one that follows the typing, and exists only while the intro plays. `world`: the same for the title's
+ * `./world`, typed later.
+ */
+function Cursor({ intro = false, world = false }: { intro?: boolean; world?: boolean }) {
+  const extra = intro ? " nf-cursor-intro" : world ? " nf-cursor-world" : "";
+  return <span className={`nf-cursor${extra}`} aria-hidden />;
 }
 
 /**
@@ -53,8 +80,10 @@ function Cursor({ intro = false }: { intro?: boolean }) {
  * row becomes three 44pt prompt lines at the bottom so they are tappable.
  *
  * Any click on the body that is not on a link opens the live shell over it.
+ * On the title, `world` adds the `./world` lines and the yellow and green
+ * lights are the ways in; the page's own CSS takes the full-screen height off.
  */
-export default function NeofetchHeader({ projects }: { projects: HeaderProject[] }) {
+export default function NeofetchHeader({ projects, world = false, onMinimize, onZoom }: NeofetchHeaderProps) {
   const onBodyClick = (e: MouseEvent<HTMLDivElement>) => {
     const target = e.target as Element;
     if (target.closest("a, button")) return;
@@ -69,7 +98,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
       <div className="nf-dock">
         <div className="nf-frame">
           <div className="term-bar static">
-            <Lights />
+            <Lights onMinimize={onMinimize} onZoom={onZoom} />
             <ProxyIcon />
             <div className="title">
               daniel — -zsh<span className="nf-title-dims"> — 132×38</span>
@@ -177,6 +206,21 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
                 </div>
               </div>
             </div>
+
+            {world ? (
+              <>
+                <p className="nf-cmd nf-world">
+                  <Prompt />
+                  <span className="nf-typed nf-typed-world">{WORLD_COMMAND}</span>
+                  <Cursor world />
+                </p>
+                {WORLD_LINES.map((line) => (
+                  <p className="nf-out" key={line}>
+                    {withReturns(line)}
+                  </p>
+                ))}
+              </>
+            ) : null}
 
             <p className="nf-cmd nf-idle">
               <Prompt />

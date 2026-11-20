@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import Terminal from "../../components/terminal/Terminal";
 import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
@@ -11,7 +11,8 @@ import OptionsPanel, { Corner } from "./OptionsPanel";
 import { setOptions, useOptions } from "./optionsStore";
 import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
 import SoundToggle from "./SoundToggle";
-import { useFlight } from "./useFlight";
+import { HOLD_AT, type HoldAt } from "../../world/runtime/hold";
+import { useFlight, type TitleLink } from "./useFlight";
 import { useSound } from "./useSound";
 import { useFrameFit } from "./useFrameScale";
 import { usePanel, useReveal } from "./usePanel";
@@ -40,9 +41,17 @@ export interface FlightProps {
   terminal: TerminalProps;
   /** Bytes fetched before the first view (the core and the start's regions), from the build; 0 when unknown. */
   startBytes: number;
+  /** The world waits behind the title. */
+  held?: boolean;
+  /** Where the held head is drawn, as shares of the frame from its top-left corner (beside the title's button). */
+  holdAt?: HoldAt;
+  /** Esc and Leave go back to the title instead of to "/". */
+  onLeave?: () => void;
+  /** The first full view is drawn. */
+  onReady?: () => void;
 }
 
-export default function Flight({ landmarks, terminal, startBytes }: FlightProps) {
+export default function Flight({ landmarks, terminal, startBytes, held, holdAt, onLeave, onReady }: FlightProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const windowFit = useFrameFit();
@@ -51,7 +60,33 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
   const { shell, touch } = usePhoneFlight(rootRef, panel.open);
   // The sound's control is made first, so the flight finds it when the world has loaded.
   const sound = useSound();
-  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref);
+  // The latest values, so the flight's link can be built once and still see this render's.
+  const heldRef = useRef(held);
+  const holdAtRef = useRef(holdAt);
+  const leaveRef = useRef(onLeave);
+  const readyRef = useRef(onReady);
+  heldRef.current = held;
+  holdAtRef.current = holdAt;
+  leaveRef.current = onLeave;
+  readyRef.current = onReady;
+  const title = useMemo<TitleLink | undefined>(() => {
+    // Built once from the first values. /world passes none, so it gets no link and the flight is unchanged.
+    if (heldRef.current === undefined && leaveRef.current === undefined && readyRef.current === undefined) return undefined;
+    return {
+      held: () => heldRef.current ?? false,
+      holdAt: () => holdAtRef.current ?? HOLD_AT,
+      leave: () => leaveRef.current?.(),
+      ready: () => readyRef.current?.(),
+    };
+  }, []);
+  // The title's Settings opens the world's options. show is stable, so the listener is added once.
+  const openOptions = panel.show;
+  useEffect(() => {
+    const open = () => openOptions();
+    window.addEventListener("world:options", open);
+    return () => window.removeEventListener("world:options", open);
+  }, [openOptions]);
+  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref, title);
   const options = useOptions();
   const revealed = useReveal(REVEAL_MS);
   // What the abbey's button opens, and says it opens.
@@ -72,13 +107,13 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
   const page = paper || touchPage ? { ...paper, ...touchPage } : undefined;
   return (
     <div ref={rootRef} className={`${styles.page} ${touchPage ? mobile.touchPage : ""}`} style={page} data-motion={options.motion}>
-      <SoundToggle control={sound.control} />
+      {held ? null : <SoundToggle control={sound.control} />}
       <div className={styles.stage} style={stage}>
         <canvas ref={canvasRef} className={styles.canvas} />
-        {panel.open ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} />}
+        {panel.open || held ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} onLeave={onLeave} />}
       </div>
       <GuideLine say={flight.say} />
-      <DiscoveryCaption caption={flight.caption} />
+      {held ? null : <DiscoveryCaption caption={flight.caption} />}
       {at ? (
         <Codex
           landmark={at}
@@ -102,6 +137,7 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
           panel.link.toggle();
         }}
         onClose={panel.closed}
+        onLeave={onLeave}
       />
       <FlightCard
         card={shell.card}

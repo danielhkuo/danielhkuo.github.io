@@ -1006,6 +1006,18 @@ iframe[src*="hcaptcha"] {
 .nf-body p { text-wrap: initial; }
 .nf-cmd { color: var(--panel-on); }
 .nf-cmd.nf-idle { margin-top: 26px; }
+/* The title runs ./world after the colour blocks, as a shell would: the command, then its lines. */
+.nf-cmd.nf-world { margin: 18px 0 0; }
+.nf-out { margin: 0; color: var(--panel-on); }
+/* --nf-key is a colour. This class is the return key in a printed line: the
+   world's own pixel key cap (title/ReturnKey.tsx), set on the line's middle. */
+.nf-out .nf-key {
+  display: inline-block;
+  margin: 0 0.4em;
+  line-height: 0;
+  vertical-align: -7px;
+}
+.nf-out .nf-key svg { display: block; }
 .nf-cursor {
   display: inline-block;
   width: 8px;
@@ -1119,7 +1131,8 @@ iframe[src*="hcaptcha"] {
    display:none starts its animation afresh, and would sit through its delay
    a second time. Screen only for the same reason — a print in the middle of
    it would lose rows. */
-.nf-cursor-intro { display: none; }
+.nf-cursor-intro,
+.nf-cursor-world { display: none; }
 
 @media screen and (prefers-reduced-motion: no-preference) {
   html[data-intro="play"] .nf {
@@ -1155,10 +1168,11 @@ iframe[src*="hcaptcha"] {
   /* The real window, flat and clear over it. */
   html[data-intro="play"] .nf-frame { box-shadow: none; }
   html[data-intro="play"] .nf-body { background-color: transparent; }
-  /* The lights and title, and the prompt, come up as it lands. */
+  /* The lights and title, and the prompt, come up as it lands: in one step,
+     since nothing on the title fades. */
   html[data-intro="play"] .nf-frame .term-bar,
-  html[data-intro="play"] .nf-cmd:not(.nf-idle) .nf-ps1 {
-    animation: reveal-fade 0.16s linear calc(var(--nf-open) - 0.1s) backwards;
+  html[data-intro="play"] .nf-cmd:not(.nf-idle, .nf-world) .nf-ps1 {
+    animation: nf-held 1ms linear calc(var(--nf-open) - 0.1s) backwards;
   }
   /* `neofetch` is eight cells of a monospace face. The word is its full
      width from the first frame, so the line breaks where the finished header
@@ -1169,6 +1183,35 @@ iframe[src*="hcaptcha"] {
   html[data-intro="play"] .nf-typed {
     display: inline-block;
     animation: nf-type calc(8 * var(--nf-stroke)) steps(8, end) var(--nf-type-at) backwards;
+  }
+  /* The title's `./world`. After the colour blocks the prompt comes back with
+     its cursor, waits a beat as a person would, and the seven keys are typed
+     as `neofetch` was, the cursor stepping along; at the return its two lines
+     print, then the idle prompt, whose print ends the intro. */
+  html[data-intro="play"] .nf {
+    --nf-world-row: calc(var(--nf-return) + 11 * var(--nf-row));
+    --nf-world-at: calc(var(--nf-world-row) + 0.45s);
+    --nf-world-return: calc(var(--nf-world-at) + 7 * var(--nf-stroke) + 0.2s);
+  }
+  html[data-intro="play"] .nf-world {
+    animation: nf-held 1ms linear var(--nf-world-row) backwards;
+  }
+  html[data-intro="play"] .nf-typed-world {
+    animation: nf-type calc(7 * var(--nf-stroke)) steps(7, end) var(--nf-world-at) backwards;
+  }
+  html[data-intro="play"] .nf-cursor-world {
+    display: inline-block;
+    margin-right: -8px;
+    animation:
+      nf-caret-world calc(7 * var(--nf-stroke)) steps(7, end) var(--nf-world-at) backwards,
+      nf-gone 1ms linear var(--nf-world-return) forwards;
+  }
+  html[data-intro="play"] .nf-out {
+    animation: nf-held 1ms linear calc(var(--nf-world-return) + var(--nf-j, 0) * var(--nf-row)) backwards;
+  }
+  .nf-world + .nf-out + .nf-out { --nf-j: 1; }
+  html[data-intro="play"] .nf-world ~ :is(.nf-idle, .nf-actions) {
+    animation-delay: calc(var(--nf-world-return) + 3 * var(--nf-row));
   }
   /* The cursor. Alone at first, on a chip of the window's ink so that it
      shows on the light page as well, with one blink; the chip goes once the
@@ -1220,6 +1263,9 @@ iframe[src*="hcaptcha"] {
 }
 @keyframes nf-caret {
   from { translate: -8ch 0; }
+}
+@keyframes nf-caret-world {
+  from { translate: -7ch 0; }
 }
 @keyframes nf-held {
   from { visibility: hidden; }
