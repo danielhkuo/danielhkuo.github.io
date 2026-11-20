@@ -6,9 +6,9 @@ import { TEXT_PAGE } from "../../../lib/site-content.ts";
 import type { PhoneEntry } from "./PhoneTitle";
 
 /**
- * The minimal version: the whole site as readable text on one terminal-style page, with the terminal folded in. Its
- * address is the site's `TEXT_PAGE` (lib/site-content.ts), the one place it is set: the phone title, the world's
- * "short version" link and the abbey's terminal on a phone follow it, as the page list and the agent files do.
+ * The minimal version: the whole site as one plain text file, open in nano. Its address is the site's `TEXT_PAGE`
+ * (lib/site-content.ts), the one place it is set: the phone title, the world's "short version" link and the abbey's
+ * button on a phone follow it, as the page list and the agent files do.
  */
 export const MINIMAL_PAGE = TEXT_PAGE;
 

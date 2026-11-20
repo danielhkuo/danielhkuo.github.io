@@ -142,12 +142,17 @@ export interface CodexProps {
   landmark: Landmark;
   register: RegisterLine[];
   onTakeOff: () => void;
-  /** Opens the terminal (the abbey only); `trigger` gets focus back when it closes. */
+  /**
+   * The abbey's button: opens the terminal, which gives focus back to `trigger` when it closes; on a phone, which has
+   * no terminal, the minimal version.
+   */
   onOpenTerminal: (trigger: HTMLElement) => void;
+  /** What that button says: "Open the terminal", or on a phone "Read the minimal version". */
+  openLabel: string;
 }
 
 /** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
-export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }: CodexProps) {
+export default function Codex({ landmark, register, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
   useEffect(() => {
     leaf.current?.focus({ preventScroll: true });
@@ -229,7 +234,7 @@ export default function Codex({ landmark, register, onTakeOff, onOpenTerminal }:
         <p className={styles.actions}>
           {landmark.holds.kind === "about" ? (
             <button type="button" className={styles.button} data-terminal-trigger="" onClick={(e) => onOpenTerminal(e.currentTarget)}>
-              Open the terminal
+              {openLabel}
             </button>
           ) : null}
           <button type="button" className={styles.button} onClick={onTakeOff} aria-keyshortcuts="Space">
