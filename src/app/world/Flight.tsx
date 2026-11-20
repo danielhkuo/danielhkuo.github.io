@@ -5,6 +5,7 @@ import Terminal from "../../components/terminal/Terminal";
 import type { LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
 import FlightCard from "./FlightCard";
+import QuestCard from "./QuestCard";
 import styles from "./flight.module.css";
 import mobile from "./mobile.module.css";
 import OptionsPanel, { Corner } from "./OptionsPanel";
@@ -96,6 +97,11 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
           panel.link.toggle();
         }}
         onClose={panel.closed}
+      />
+      <QuestCard
+        px={px}
+        lessonDone={flight.lessonDone}
+        covered={panel.open || shell.card !== null || drawer.open || at !== null}
       />
       <FlightCard
         card={shell.card}

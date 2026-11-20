@@ -7,6 +7,7 @@ import type { Device, Lit, Tap } from "../../world/controls/guides";
 import { paceOf, type Options } from "../../world/controls/options";
 import type { FlightInput } from "../../world/runtime/flight";
 import { pointTurn } from "../../world/controls/steer";
+import { questCardUp } from "./questStore";
 import type { PhaseKind } from "./session";
 import type { TouchFrame } from "./touchLayer";
 
@@ -112,6 +113,11 @@ export function createControls(canvas: HTMLCanvasElement, hooks: ControlsHooks):
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // The quest card takes Q and Esc while it shows. Every other key still flies.
+    if (questCardUp() && (e.key === "Escape" || normalKey(e.key) === "q")) {
+      e.preventDefault();
+      return;
+    }
     const busy = hooks.busy();
     if (busy === "options") return;
     // The terminal takes every key while it is open; Esc closes it.

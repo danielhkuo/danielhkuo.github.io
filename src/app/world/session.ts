@@ -23,6 +23,9 @@ import { parseWeather, weatherAt } from "../../world/sky/weather";
 import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
+import { arrowAt } from "../../world/story/arrow";
+import { drawQuest } from "../../world/story/overlay";
+import { find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
 import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
@@ -31,6 +34,7 @@ import type { Options } from "../../world/controls/options";
 import { createPacer, phoneWorkers } from "../../world/mobile/perf";
 import { createControls } from "./controls";
 import { storage } from "./optionsStore";
+import { getQuest, setQuest } from "./questStore";
 import type { TouchLayer } from "./touchLayer";
 
 /** The frame before the window is measured (and on the server): the window's own is in runtime/fit.ts. */
@@ -85,6 +89,8 @@ export interface FlightEvents {
   stall?(): void;
   /** Something worth a light tick on a phone: a landing touched down, or a discovery. */
   buzz?(what: "landed" | "discovery"): void;
+  /** The lesson is done this visit, once: it just finished, or it was already learned when the world loaded. */
+  lessonDone?(): void;
 }
 
 export interface FlightSetup {
@@ -236,6 +242,13 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   // The first-flight lesson, until it has been learned once.
   let lesson = newLesson(store?.getItem(LESSON_KEY) === "learned");
   let lessonStored = lesson.stage === "done";
+  // Told to the page once this visit.
+  let lessonNoted = false;
+  const noteLesson = () => {
+    if (lessonNoted) return;
+    lessonNoted = true;
+    events.lessonDone?.();
+  };
 
   // Touch flight: the controls, whether they take touches this frame, and the frame's dt for them.
   const isPaused = setup.paused ?? (() => false);
@@ -354,6 +367,15 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const wanted = setup.frame();
     fw = wanted.w;
     fh = wanted.h;
+    // The stops, read into byId with the other landmarks. The live layer is fixed with the view below, so this is
+    // before that; the landing places are filled once the world size is known.
+    const stops: StopPlace[] = [];
+    if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
+      for (const l of landmarks.landmarks) {
+        byId.set(l.id, l);
+        if (l.holds.kind === "stop") stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+      }
+    }
     const layerContext: LayerContext = {
       seed: loaded.manifest.seed,
       n: regions.n,
@@ -366,6 +388,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // ?sights=all shows every rare sight at once, to look them over without waiting for them.
       forceSights: params.get("sights") === "all",
       structures: loaded.core.world.built?.built.structures,
+      ...(stops.length > 0 ? { story: { stops, found: () => getQuest().found } } : {}),
     };
     const sound = setup.sound?.() ?? null;
     if (probe) probe.soundLog = sound?.log() ?? null;
@@ -386,7 +409,6 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     // in its harbour (sites/anchor.ts).
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
       const places = restingPlaces(landmarks.landmarks, loaded.core.world.built?.built, worldN);
-      for (const l of landmarks.landmarks) byId.set(l.id, l);
       for (const t of places.targets) targets.push(t);
       for (const [id, a] of places.anchors) anchors.set(id, a);
     }
@@ -481,6 +503,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         if (l) {
           const d = discoveryOf(l);
           discoveries.discover(d.id, d.label);
+          if (l.holds.kind === "stop") setQuest(find(getQuest(), l.holds.stop));
         }
         events.phase("landed", l);
         events.buzz?.("landed");
@@ -523,6 +546,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         } catch {
           // storage refused: the lesson shows again next visit
         }
+        noteLesson();
       }
       const guide = paused ? null : guideFor({
         device: asked.device,
@@ -553,6 +577,16 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         controls.target(null);
         if (probe) probe.guideAt.push(0, 0, -1);
       }
+      // The quest's marks and its arrow, over the guide and under the touch controls.
+      if (!paused) {
+        const quest = getQuest();
+        const ground = groundHeight;
+        const next = phase.kind === "flying" && ground ? nextStop(quest, flight, stops, worldN) : null;
+        const arrow = next && ground
+          ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12)
+          : null;
+        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced);
+      }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";
       if (say !== clock.say) {
@@ -577,6 +611,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       }
       pacer?.worked(performance.now() - work);
       const ready = view.ready();
+      // Already learned before this visit: the page hears it once the land is up.
+      if (ready && !readyFrame && lesson.stage === "done") noteLesson();
       if (ready) readyFrame = true;
       if (probe) {
         probe.frameMs.push(performance.now() - work);
