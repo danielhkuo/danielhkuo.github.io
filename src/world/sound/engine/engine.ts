@@ -4,11 +4,11 @@
 // rendered in one go (the bench's unstepped mode, and how Firefox renders).
 
 import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
-import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, NIGHT_GULLS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
-import { gullCues, nightKeeps, type Colony } from "../schedule/gulls.ts";
+import type { Colony } from "../schedule/gulls.ts";
 import { ferryCues, flockCues, planeCues, trainCues } from "../schedule/moments.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
@@ -23,7 +23,8 @@ import { createCensus } from "../census.ts";
 import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
-import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
+import { BRAIN_AHEAD, coloniesOf, gullCuesNear, REACH, unpackEmitters, type BrainAsk, type BrainInit, type BrainReply, type RemoteBrain } from "./brain.ts";
+import { createLanes, type EmitterState, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
 import { buildOpenSea, buildSurfBed } from "./sea.ts";
 import { createOneShots, createPool, type OneShots, type Pool } from "./slots.ts";
 import { buildSurf, type Surf } from "./waves.ts";
@@ -50,6 +51,12 @@ export interface EngineOptions {
   n?: number;
   /** No waves, laps or beds (a measuring arm). */
   noSurf?: boolean;
+  /**
+   * The lanes and the scheduler worked elsewhere (the ear's worker, on the page): the waves and the cues to start then
+   * come back from it with each Hearing, and the engine only starts them. Offline, and without one, it works them
+   * out itself.
+   */
+  brain?: RemoteBrain | null;
   /**
    * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
    * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
@@ -214,13 +221,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const census: Census = { n, sources: abbeys.length ? [{ kind: "abbey", key: 0, x: abbeys[0].x, y: abbeys[0].y, h: 0 }] : [] };
   const wheelers = opts.gulls ?? [];
   /** The colonies: each site's wheelers, with the middle of where they wheel. */
-  const colonies: (Colony & { x: number; y: number })[] = [];
-  for (const w of wheelers) {
-    let c = colonies.find((k) => k.id === w.site);
-    if (!c) colonies.push((c = { id: w.site, birds: 0, town: w.town, x: 0, y: 0 }));
-    c.x += (w.x - c.x) / ++c.birds;
-    c.y += (w.y - c.y) / c.birds;
-  }
+  const colonies = coloniesOf(wheelers);
   const near: Colony[] = [];
   let gulls: Gulls | null = null;
   let lifePool: Pool | null = null;
@@ -234,24 +235,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         for (const c of opts.gullScript) if (c.t >= a && c.t < b) out.push(c);
         return;
       }
-      near.length = 0;
-      for (const c of colonies) {
-        const dx = torusDelta(last.x, c.x, n), dy = torusDelta(last.y, c.y, n);
-        if (dx * dx + dy * dy <= 350 * 350) near.push(c);
-      }
-      if (!near.length) return;
-      const from = out.length;
-      gullCues(opts.seed, near, a, b, out);
-      // At night the colonies roost: only a seeded share of the day's calls is made (the same ones each time).
-      const keep = 1 - (1 - NIGHT_GULLS) * last.night;
-      if (keep < 1) {
-        let w = from;
-        for (let r = from; r < out.length; r++) {
-          const c = out[r];
-          if (nightKeeps(opts.seed, c.colony ?? 0, c.k ?? 0, keep)) out[w++] = c;
-        }
-        out.length = w;
-      }
+      gullCuesNear(opts.seed, n, colonies, last.x, last.y, last.night, a, b, out, near);
     },
   };
   /** The clock and the moments, by the kind of their cues; built once their buffers are in. */
@@ -333,6 +317,15 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let sendsFrom = -1;
   /** Cues found on the page and not yet played (see playQueued). */
   const queued: Due[] = [];
+  // With the lanes and the scheduler worked elsewhere (opts.brain): how many of the cue sources it has been told of;
+  // the waves and laps it has found, waiting for the waves' next turn; and the lanes as it left them.
+  let told = 0;
+  const waveWait: WaveStart[] = [];
+  const lapWait: LapStart[] = [];
+  const remoteEmitters: EmitterState[] = [];
+  let remoteMask = 0;
+  /** True in a frame whose lanes and scheduler are worked elsewhere. */
+  let elsewhere = false;
   let lastWaves = NaN;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
@@ -718,6 +711,15 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     nearestAbbey(pose);
     mix(pose, hearing, census, prefs, memory, targets);
     lastMix = pose.t;
+    if (elsewhere && opts.brain) {
+      // What the scheduler elsewhere needs of the page: which moments are in reach (it stands where they do).
+      last.x = pose.x;
+      last.y = pose.y;
+      last.night = pose.night ?? 0;
+      let reach = 0;
+      for (const [kind, m] of moments) if (inReach(m)) reach |= REACH[kind] ?? 0;
+      opts.brain.ask.reach = reach;
+    }
     tendBeds(pose.t, now);
     if (opts.skip === "nosends") return;
     if (split) {
@@ -759,19 +761,25 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     }
     const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
     lastWaves = pose.t;
-    waveStarts.length = 0;
-    lapStarts.length = 0;
-    lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
-    if (waveStarts.length) work |= WORK.wave;
-    if (lapStarts.length) work |= WORK.lap;
-    for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
-    if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
+    // Worked elsewhere, the lanes' finds are waiting; here, the lanes are stepped now.
+    const waves = elsewhere ? waveWait : waveStarts, laps = elsewhere ? lapWait : lapStarts;
+    if (!elsewhere) {
+      waveStarts.length = 0;
+      lapStarts.length = 0;
+      lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
+    }
+    if (waves.length) work |= WORK.wave;
+    if (laps.length) work |= WORK.lap;
+    for (let i = 0; i < waves.length; i++) startWave(waves[i], pose, prefs.calm, now, look);
+    if (!opts.hissOnly) for (let i = 0; i < laps.length; i++) playLap(laps[i], pose, prefs.calm, now, look);
+    waves.length = 0;
+    laps.length = 0;
   };
   /** Its second half: the emitters' sends, and what has finished let go. */
   const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
     if (!surf || opts.skip === "nowaves") return;
     work |= WORK.emitters;
-    sends += surf.update(pose, lanes.emitters, now, prefs.calm);
+    sends += surf.update(pose, elsewhere ? remoteEmitters : lanes.emitters, now, prefs.calm);
     surf.prune(now);
     shots.prune(now);
   };
@@ -801,6 +809,18 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   };
   /** A cue's audio time. */
   const cueAt = (cue: Cue) => cue.t + o;
+
+  /** After a mute, a hide or a cut: nothing of the brain's is left waiting, and it forgets what it started. */
+  const forget = () => {
+    lanes.clear();
+    scheduler.clear();
+    opts.brain?.clear();
+    waveWait.length = 0;
+    lapWait.length = 0;
+    queued.length = 0;
+    sendsFrom = -1;
+    half = 0;
+  };
 
   const readLimiter = (now: number) => {
     // By the context's own clock: a timeline scheduled ahead of its render has nothing to read yet.
@@ -902,6 +922,27 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         }
         return;
       }
+      // Where the lanes and the scheduler are worked elsewhere, what they found comes in here: the waves and laps wait
+      // for the waves' turn, the cues join the queue, and the page's own lanes and scheduler rest.
+      const brain = opts.brain && opts.brain.alive() ? opts.brain : null;
+      elsewhere = brain !== null;
+      if (brain) {
+        while (told < sources.length) brain.source(sources[told++].kind);
+        brain.ask.look = look;
+        brain.ask.surf = surfBuilt && surf !== null && !opts.beds;
+        for (let r = brain.take(); r !== null; r = brain.take()) {
+          if (r.waves) for (const w of r.waves) waveWait.push(w);
+          if (r.laps) for (const l of r.laps) lapWait.push(l);
+          if (r.due) {
+            work |= WORK.sched;
+            for (const d of r.due) queued.push(d);
+          }
+          unpackEmitters(r.emitters, remoteEmitters);
+          remoteMask = r.mask;
+        }
+        // It finds things a pass's length further ahead than the page would: a start may be that much further off.
+        look += BRAIN_AHEAD;
+      }
       // On the page each comes in two halves, the second a frame after the first when that frame has nothing else
       // due: on a 120 Hz display every frame then carries a quarter of the work, where every other frame carried half
       // of it (and the frames' 95th percentile is set by the heaviest). At 60 Hz a frame never has room, so each runs
@@ -923,7 +964,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
       // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
       // frame as much as a first half. What it finds is played a few a frame.
-      if (sources.length && opts.skip !== "nosched") {
+      if (sources.length && !elsewhere && opts.skip !== "nosched") {
         runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
         schedNext = (schedNext + SCHED_EACH) % scheduler.size;
       }
@@ -950,11 +991,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + 0.25);
       lastMoments = NaN;
       lastFalls = NaN;
-      half = 0;
-      sendsFrom = -1;
-      queued.length = 0;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
@@ -976,8 +1013,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + TAU.hideRamp + 0.01);
       lastMoments = NaN;
       lastFalls = NaN;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
@@ -998,13 +1034,12 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now);
       lastMoments = NaN;
       lastFalls = NaN;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
     },
-    laneMask: () => lanes.mask(),
+    laneMask: () => (elsewhere ? remoteMask : lanes.mask()),
     work: () => work,
     built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && (abbeys.length === 0 || opts.beds === true || bellsBuilt) && beds.every((b) => !b.voice || b.built),
     setBus(bus, on) {
@@ -1088,8 +1123,15 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
+  // Where the ear is in its worker, the lanes and the scheduler are worked there too (the measuring arm "brainlocal"
+  // keeps them here).
+  const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
+  const brain = opts.arm === "brainlocal" || !listener.brain ? null : listener.brain({
+    seed: opts.seed, n: opts.n, touch: opts.touch, forced: opts.forced === true, colonies: coloniesOf(opts.gulls ?? []),
+    railway: railway ? { shore: [railway.anchors.shore[0], railway.anchors.shore[1]], halt: [railway.anchors.halt[0], railway.anchors.halt[1]] } : null,
+  });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm, brain });
   let warped = false;
   let kitMs = 0;
   const gullList = opts.gulls ?? [];
@@ -1160,6 +1202,8 @@ interface Listener {
   setWarp(warp: Uint8Array): void;
   step(pose: Pose, seen: Seen, lanes: number): Hearing;
   hearing(): Hearing;
+  /** The engine's thinking, done where the ear is (its worker): asked once, before the engine is made. */
+  brain?(init: BrainInit): RemoteBrain;
   dispose(): void;
 }
 
@@ -1196,7 +1240,7 @@ export function remoteEar(n: number, land: Land): Listener | null {
   const spare: Uint32Array[] = [];
   const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
   /** The message and its transfer list, reused for every pass. */
-  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0, brain: null as BrainAsk | null };
   const transfer: ArrayBuffer[] = [];
   /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
   let into: Uint32Array | null = null;
@@ -1206,11 +1250,19 @@ export function remoteEar(n: number, land: Land): Listener | null {
   let lastT = NaN;
   let made = 0;
   let dead = false;
+  /**
+   * The brain, once the engine has asked for one: what the page wants of it (sent with each pass), its answers not yet
+   * taken (oldest first), and the epoch its asks carry (counted up at every clear).
+   */
+  let ask: BrainAsk | null = null;
+  const answers: BrainReply[] = [];
   worker.onmessage = (e: MessageEvent) => {
-    const reply = e.data as { heard: Float64Array; bake: Uint32Array };
+    const reply = e.data as { heard: Float64Array; bake: Uint32Array; brain?: BrainReply };
     unpackHearing(reply.heard, held);
     heardSpare.push(reply.heard);
     spare.push(reply.bake);
+    // An answer to an ask from before a clear is to something already stopped.
+    if (reply.brain && ask && reply.brain.epoch === ask.epoch) answers.push(reply.brain);
   };
   worker.onerror = () => {
     dead = true;
@@ -1275,6 +1327,14 @@ export function remoteEar(n: number, land: Land): Listener | null {
         message.alt = at.alt;
         message.t = at.t;
         message.lanes = at.lanes;
+        // The brain works at the dragon's place as the pass is sent, not as it began.
+        if (ask) {
+          ask.t = pose.t;
+          ask.x = pose.x;
+          ask.y = pose.y;
+          ask.night = pose.night ?? 0;
+        }
+        message.brain = ask;
         transfer[0] = into.buffer as ArrayBuffer;
         transfer[1] = heard.buffer as ArrayBuffer;
         worker.postMessage(message, transfer);
@@ -1283,6 +1343,23 @@ export function remoteEar(n: number, land: Land): Listener | null {
       return hearing;
     },
     hearing: () => hearing,
+    brain(init) {
+      worker.postMessage({ kind: "brain", init });
+      const mine: BrainAsk = (ask = { t: 0, x: 0, y: 0, night: 0, look: 0.25, reach: 0, surf: false, epoch: 0 });
+      return {
+        alive: () => !dead,
+        ask: mine,
+        take: () => answers.shift() ?? null,
+        source(kind) {
+          worker.postMessage({ kind: "source", source: kind });
+        },
+        clear() {
+          mine.epoch++;
+          answers.length = 0;
+          worker.postMessage({ kind: "clear" });
+        },
+      };
+    },
     dispose() {
       worker.terminate();
     },

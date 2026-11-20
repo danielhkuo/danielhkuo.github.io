@@ -55,3 +55,82 @@ test("the ear in its worker keeps listening while the camera crosses rows of an 
     (globalThis as { Worker?: unknown }).Worker = saved;
   }
 });
+
+test("the brain in the ear's worker: its answer rides home with the Hearing; answers from before a mute are dropped", async () => {
+  // The worker's own code, run here: `self` stands in for its scope, and a stand-in Worker carries the messages each
+  // way; the worker's replies wait until the test delivers them.
+  const inbox: { onmessage: ((e: { data: unknown }) => void) | null; postMessage(m: unknown): void } = { onmessage: null, postMessage() {} };
+  const savedSelf = (globalThis as { self?: unknown }).self, savedWorker = (globalThis as { Worker?: unknown }).Worker;
+  (globalThis as { self?: unknown }).self = inbox;
+  const toPage: unknown[] = [];
+  const asked: { brain?: { t: number; epoch: number; surf: boolean; look: number } | null }[] = [];
+  class Wire {
+    onmessage: ((e: { data: unknown }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    postMessage(m: { kind?: string; brain?: { t: number; epoch: number; surf: boolean; look: number } | null }) {
+      // (The pass's ask is cloned as a message would clone it: the page goes on writing to its own.)
+      if (m.kind === "pass") {
+        m = { ...m, brain: m.brain ? { ...m.brain } : m.brain };
+        asked.push(m);
+      }
+      inbox.onmessage?.({ data: m });
+    }
+    terminate() {}
+  }
+  let wire: Wire | null = null;
+  (globalThis as { Worker?: unknown }).Worker = class extends Wire {
+    constructor() {
+      super();
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      wire = this;
+    }
+  };
+  inbox.postMessage = (m) => toPage.push(m);
+  const deliver = () => {
+    for (const m of toPage.splice(0)) wire?.onmessage?.({ data: m });
+  };
+  try {
+    await import("../ear.worker.ts");
+    const ear = remoteEar(512, null);
+    assert.ok(ear?.brain);
+    const brain = ear.brain({ seed: 3, n: 512, touch: false, forced: false, colonies: [], railway: null });
+    assert.ok(brain.alive());
+    brain.source("bell");
+    brain.ask.look = 0.25;
+    brain.ask.surf = true;
+    const w = 400, h = 225;
+    const bake = new Uint32Array(w * h);
+    const pose: Pose = { t: 12, dt: 0, x: 0, y: 0, alt: 40, heading: 0, speed: 20, bank: 0, rest: 0 };
+    // Frames at 60 Hz until a pass has gone out: the ask goes with it, at the dragon's place and time as it is sent.
+    const frames = (seconds: number) => {
+      for (let f = 0; f < seconds * 60; f++) {
+        pose.t += 1 / 60;
+        ear.step(pose, { bake, rect: { x: 0, y: 0, w, h }, t: pose.t }, 0);
+      }
+    };
+    assert.equal(brain.take(), null);
+    frames(0.2);
+    assert.ok(asked.length >= 1 && asked[0].brain, "the pass carries the ask");
+    assert.ok(Math.abs((asked[0].brain?.t ?? 0) - 12.1167) < 0.02 && asked[0].brain?.surf === true);
+    assert.equal(brain.take(), null, "not before the answer arrives");
+    deliver();
+    const first = brain.take();
+    assert.ok(first, "an answer");
+    // Into the peal the bells' source, just joined, finds the rings already sounding.
+    assert.ok((first.due ?? []).some((d) => d.rejoin));
+    // An ask whose answer is still on its way when the sound is muted: the answer is to something already stopped.
+    while (brain.take());
+    frames(0.15);
+    brain.clear();
+    deliver();
+    assert.equal(brain.take(), null, "dropped");
+    frames(0.25);
+    deliver();
+    let rejoined = false;
+    for (let r = brain.take(); r; r = brain.take()) rejoined ||= (r.due ?? []).some((d) => d.rejoin);
+    assert.ok(rejoined, "after the clear, what is sounding is joined again");
+  } finally {
+    (globalThis as { self?: unknown }).self = savedSelf;
+    (globalThis as { Worker?: unknown }).Worker = savedWorker;
+  }
+});
