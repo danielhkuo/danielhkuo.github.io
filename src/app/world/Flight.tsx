@@ -22,10 +22,16 @@ import { MINIMAL_PAGE } from "../../components/title/phone/copy";
 /** The corner shows this long after the page opens and after the pointer last moved, ms. */
 const REVEAL_MS = 4000;
 
-/** On a phone the abbey's terminal is the minimal version's: the terminal is folded into that page. */
-function openTerminalPage(): void {
+/**
+ * On a phone the abbey has no terminal (the shell lives in the desktop title's): its button opens the minimal version
+ * instead, the whole site as one text file, and says so.
+ */
+function openMinimalVersion(): void {
   window.location.href = MINIMAL_PAGE;
 }
+
+/** What the abbey's button says: what it opens. */
+const OPEN_LABEL = { desktop: "Open the terminal", phone: "Read the minimal version" } as const;
 
 export interface FlightProps {
   /** The landmarks and what each holds, worked out at build time; null when the build had no world. */
@@ -76,7 +82,8 @@ export default function Flight({ landmarks, terminal, startBytes }: FlightProps)
           landmark={at}
           register={landmarks ? registerFrom(at, landmarks) : []}
           onTakeOff={flight.takeOff}
-          onOpenTerminal={shell.phone ? openTerminalPage : drawer.show}
+          onOpenTerminal={shell.phone ? openMinimalVersion : drawer.show}
+          openLabel={shell.phone ? OPEN_LABEL.phone : OPEN_LABEL.desktop}
         />
       ) : null}
       {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}

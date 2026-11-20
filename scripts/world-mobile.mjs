@@ -336,11 +336,12 @@ test("near a landmark Land joins the cluster, and a tap on it lands; Take off fl
   await page.close();
 });
 
-test("on a phone the abbey's terminal opens the minimal version, where the terminal now lives", async () => {
+test("on a phone the abbey's button reads the minimal version, and opens it: a phone has no terminal", async () => {
   const { page } = await phone(IPHONE, "&at=abbey-0");
   await landAtAbbey(page, IPHONE);
   const trigger = "dialog[open] [data-terminal-trigger]";
   await page.waitForSelector(trigger, { timeout: 5000 });
+  assert.equal(await page.$eval(trigger, (el) => el.textContent.trim()), "Read the minimal version");
   await Promise.all([page.waitForNavigation({ timeout: 10000 }), page.tap(trigger)]);
   assert.equal(new URL(page.url()).pathname, MINIMAL_PAGE);
   await page.close();
