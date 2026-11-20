@@ -79,7 +79,7 @@ function fft(re: Float64Array, im: Float64Array): void {
   }
 }
 
-/** Octave band energies from 31.25 Hz, dB, averaged over 4096-point Hann windows through the signal. */
+/** Octave band energies from 62.5 Hz, dB, averaged over 4096-point Hann windows (an octave under that is three bins). */
 function bands(x: Float32Array): number[] {
   const n = 4096, sum: number[] = [];
   const re = new Float64Array(n), im = new Float64Array(n);
@@ -90,7 +90,7 @@ function bands(x: Float32Array): number[] {
     }
     fft(re, im);
     let band = 0;
-    for (let lo = 31.25; lo < RATE / 2; lo *= 2, band++) {
+    for (let lo = 62.5; lo < RATE / 2; lo *= 2, band++) {
       let e = 0;
       for (let f = 1; f < n / 2; f++) {
         const hz = (f * RATE) / n;
@@ -142,8 +142,9 @@ test("each noise is its kit buffer as a sound: the same channels, level, colour 
 test("a seed gives the same noise every time, and another seed a noise of its own", () => {
   const a = play("rush", 5, 1), b = play("rush", 5, 1), c = play("rush", 6, 1);
   assert.deepEqual(a[0], b[0]);
-  assert.ok(Math.abs(correlation(a[0], c[0])) < 0.05);
-  assert.ok(Math.abs(correlation(a[1], c[1])) < 0.05);
+  // (Over one second of pink noise, two independent draws correlate up to about ±0.1 by chance.)
+  assert.ok(Math.abs(correlation(a[0], c[0])) < 0.15);
+  assert.ok(Math.abs(correlation(a[1], c[1])) < 0.15);
 });
 
 test("nothing comes round: over twenty seconds no 80 ms window of the noise is found again", () => {

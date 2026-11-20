@@ -4,6 +4,7 @@
 
 import { hashString, mix32 } from "../../core/hash.ts";
 import { gain, loop, type Ctx } from "./graph.ts";
+import { endNoise, isNoiseName, noiseNode } from "./noise-worklet.ts";
 import { remake } from "../synth/make.ts";
 import type { Kit } from "./kit.ts";
 
@@ -107,9 +108,34 @@ function current(read: Read): Playing {
   return read.sources[read.sources.length - 1];
 }
 
-export function createFresh(ctx: Ctx, kit: FreshKit, opts: { offline: boolean; seed: number; on?: (name: string, bed?: string) => boolean }): Fresh {
+/** A u32 for one worklet read. The same engine seed, name and index always rebuild the same noise. */
+function noiseSeed(engineSeed: number, name: string, index: number): number {
+  return mix32((hashString(name) ^ Math.imul(index + 1, 0x85ebca6b) ^ mix32(engineSeed >>> 0)) >>> 0);
+}
+
+export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
+  offline: boolean;
+  seed: number;
+  on?: (name: string, bed?: string) => boolean;
+  /**
+   * True when this read should be worklet noise. The bed is passed because one buffer is shared by several beds
+   * and LOOPS is per bed: a bed held at 0 stays on its plain loop. Only the continuous names take the worklet;
+   * drops and bubbles stay loops even when this returns true.
+   */
+  worklet?: (name: string, bed?: string) => boolean;
+}): Fresh {
   const names: NameState[] = [];
   let swaps = 0;
+  // Worklet reads are not in `names`: they never move and are never asked of the kit, so they must not share the
+  // loop index either. Their own index only climbs, so a bed built again does not replay an earlier read's noise.
+  const spunName: string[] = [];
+  const spunCount: number[] = [];
+  const nextIndex = (name: string): number => {
+    for (let i = 0; i < spunName.length; i++) if (spunName[i] === name) return spunCount[i]++;
+    spunName.push(name);
+    spunCount.push(1);
+    return 0;
+  };
 
   const stateFor = (name: string): NameState => {
     for (let i = 0; i < names.length; i++) if (names[i].name === name) return names[i];
@@ -272,6 +298,19 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: { offline: boolean; s
   };
 
   const read = (name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string }) => {
+    // Made as it plays: there is no loop, so the wander (wire) and the playback rate do not apply, and the kit is
+    // not asked for a generation. The node starts as it is connected; beds read at the frame's now.
+    if (isNoiseName(name) && opts.worklet?.(name, o.bed) === true) {
+      const node = noiseNode(ctx, name, noiseSeed(opts.seed, name, nextIndex(name)));
+      const out = gain(ctx, 1);
+      node.connect(out);
+      return {
+        out,
+        stop(when?: number) {
+          endNoise(node, when ?? 0);
+        },
+      };
+    }
     const ns = stateFor(name);
     const g = kit.generation(name);
     const buffer = kit.buffer(name, g);

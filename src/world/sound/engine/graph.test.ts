@@ -183,7 +183,8 @@ test("no parameter gets setValueAtTime while it is sounding: values are set outr
   assert.deepEqual(outright.map((c) => `${c.param.owner.kind}.${c.param.name}`), []);
   // Three whistles; and the whoosh, built once for the two turns: its band and its two pan gains.
   assert.equal(during.filter((c) => c.method === "setValueAtTime" && whistle(c)).length, 3 + 3);
-  assert.ok(during.every((c) => c.method === "setTargetAtTime" || whistle(c)));
+  // (A fresh loop's crossfade is a curve from where its gain stands, not a jump: design §14.8.)
+  assert.ok(during.every((c) => c.method === "setTargetAtTime" || c.method === "setValueCurveAtTime" || whistle(c)));
 });
 
 test("a still scene sends nothing after its first frame", () => {

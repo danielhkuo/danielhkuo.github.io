@@ -22,6 +22,7 @@ import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type
 import { createCensus } from "../census.ts";
 import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
 import { createFresh, ownGenerations, type Fresh } from "./fresh.ts";
+import { loadNoise } from "./noise-worklet.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
 import { BRAIN_AHEAD, coloniesOf, gullCuesNear, REACH, unpackEmitters, type BrainAsk, type BrainInit, type BrainReply, type RemoteBrain } from "./brain.ts";
@@ -42,6 +43,11 @@ export interface EngineOptions {
   touch: boolean;
   /** The world's seed: where each noise loop is read from. */
   seed: number;
+  /**
+   * True once the fresh-noise worklet is loaded. Continuous noises built after that are made as they play. Absent,
+   * or false, those beds keep reading fresh loops (and a bed built before the module loads does too).
+   */
+  noise?: () => boolean;
   /** Rendering offline: build everything at once, world time maps to audio time exactly. */
   offline?: boolean;
   /** Plays the bench's stand-in pips and tails (the toggle, hide-show and stall scenes). */
@@ -187,11 +193,14 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const offline = opts.offline === true;
   // One reader for the whole engine: a buffer's generations are shared by every bed that reads it.
   // (Offline, its own generations: a render does not depend on what was rendered on the kit before it.)
+  // A bed held here stays on the loop it was given: the measuring arm "nofresh", and LOOPS at 0 (the plain loops from
+  // before generations). The worklet only replaces a read that would have moved, so those renders stay sample for sample.
+  const moves = (bed?: string) => opts.skip !== "nofresh" && (bed === undefined || LOOPS[bed as keyof typeof LOOPS] !== 0);
   const fresh: Fresh = createFresh(ctx, offline ? ownGenerations(ctx, kit, opts.seed) : kit, {
     offline,
     seed: opts.seed,
-    // (The measuring arm "nofresh" holds every bed on its first loop.)
-    on: (_name, bed) => opts.skip !== "nofresh" && (bed === undefined || LOOPS[bed as keyof typeof LOOPS] !== 0),
+    on: (_name, bed) => moves(bed),
+    worklet: (_name, bed) => opts.noise?.() === true && moves(bed),
   });
   const master: Master = buildMaster(ctx);
   const busOn: Record<Bus, boolean> = { wind: true, water: true, life: true, moments: true, bells: true };
@@ -1151,7 +1160,12 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     seed: opts.seed, n: opts.n, touch: opts.touch, forced: opts.forced === true, colonies: coloniesOf(opts.gulls ?? []),
     railway: railway ? { shore: [railway.anchors.shore[0], railway.anchors.shore[1]], halt: [railway.anchors.halt[0], railway.anchors.halt[1]] } : null,
   });
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm, brain });
+  // The module arrives while the first beds may still be built on loops. Later beds see the flag and use the worklet.
+  let noiseReady = false;
+  void loadNoise(ctx).then((ok) => {
+    noiseReady = ok;
+  });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm, brain, noise: () => noiseReady });
   let warped = false;
   let kitMs = 0;
   const gullList = opts.gulls ?? [];

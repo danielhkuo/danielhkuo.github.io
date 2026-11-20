@@ -49,10 +49,37 @@ function draw(seed: number, base: string, generation: number) {
   return rngFor(seed, stream(base, generation));
 }
 
-const BUFFET: FilterSpec[] = [{ type: "highpass", hz: A_HIGHPASS_HZ, q: Q_FLAT_DB }, { type: "peaking", hz: A_PEAK.hz, q: A_PEAK.q, db: A_PEAK.db }];
-const RUSH: FilterSpec[] = [{ type: "highshelf", hz: B_SHELF.hz, db: B_SHELF.db }];
-const HISS: FilterSpec[] = [{ type: "highpass", hz: C_HIGHPASS_HZ, q: Q_FLAT_DB }];
-const BREEZE: FilterSpec[] = [{ type: "bandpass", hz: E_BAND.hz, q: E_BAND.q }, { type: "lowpass", hz: E_LOWPASS_HZ, q: Q_FLAT_DB }];
+/** Fixed filters of the wind's layers. The buffers have them baked in; the fresh-noise worklet runs these same ones. */
+export const BUFFET_FILTERS: readonly FilterSpec[] = [{ type: "highpass", hz: A_HIGHPASS_HZ, q: Q_FLAT_DB }, { type: "peaking", hz: A_PEAK.hz, q: A_PEAK.q, db: A_PEAK.db }];
+export const RUSH_FILTERS: readonly FilterSpec[] = [{ type: "highshelf", hz: B_SHELF.hz, db: B_SHELF.db }];
+export const HISS_FILTERS: readonly FilterSpec[] = [{ type: "highpass", hz: C_HIGHPASS_HZ, q: Q_FLAT_DB }];
+export const BREEZE_FILTERS: readonly FilterSpec[] = [{ type: "bandpass", hz: E_BAND.hz, q: E_BAND.q }, { type: "lowpass", hz: E_LOWPASS_HZ, q: Q_FLAT_DB }];
+
+/** Colour, width and fixed filters of one continuous noise. Velvet is a grain, not a levelled noise, so its filters are none. */
+export interface NoiseLayer {
+  channels: 1 | 2;
+  colour: "white" | "pink" | "brown" | "velvet";
+  /** Correlation of the two channels, as stereoNoise's rho. Velvet is left unmixed. */
+  rho: number;
+  filters: readonly FilterSpec[];
+}
+
+const NO_FILTERS: readonly FilterSpec[] = [];
+
+/**
+ * The continuous noises (design §14.8). The buffers and the worklet both read this, so a noise made as it plays is
+ * the same sound as the loop it replaces.
+ */
+export const NOISE_LAYERS = {
+  buffet: { channels: 2, colour: "brown", rho: 0, filters: BUFFET_FILTERS },
+  rush: { channels: 2, colour: "pink", rho: 0.7, filters: RUSH_FILTERS },
+  hiss: { channels: 2, colour: "white", rho: 0.7, filters: HISS_FILTERS },
+  breeze: { channels: 2, colour: "pink", rho: 0.7, filters: BREEZE_FILTERS },
+  brown0: { channels: 2, colour: "brown", rho: 0, filters: NO_FILTERS },
+  pink0: { channels: 2, colour: "pink", rho: 0, filters: NO_FILTERS },
+  white0: { channels: 2, colour: "white", rho: 0, filters: NO_FILTERS },
+  velvet: { channels: 2, colour: "velvet", rho: 0, filters: NO_FILTERS },
+} as const satisfies Record<string, NoiseLayer>;
 
 function shape(channels: Float32Array[], filters: readonly FilterSpec[], sampleRate: number): Float32Array[] {
   return channels.map((c) => filtered(c, filters, sampleRate));
@@ -60,12 +87,12 @@ function shape(channels: Float32Array[], filters: readonly FilterSpec[], sampleR
 
 /** Brown, the two channels independent: the surf bed's rumble, and the buffet's source. */
 function brown(seed: number, generation: number, sampleRate: number): Float32Array[] {
-  return stereoNoise("brown", LEN.brown0, sampleRate, 0, draw(seed, "sound/brown0", generation));
+  return stereoNoise("brown", LEN.brown0, sampleRate, NOISE_LAYERS.brown0.rho, draw(seed, "sound/brown0", generation));
 }
 
-/** Pink at correlation 0.7. The rush and the breeze are this one draw, filtered two ways. */
+/** Pink at the rush's correlation. The rush and the breeze are this one draw, filtered two ways. */
 function pinkWide(seed: number, generation: number, sampleRate: number): Float32Array[] {
-  return stereoNoise("pink", LEN.pink7, sampleRate, 0.7, draw(seed, "sound/pink7", generation));
+  return stereoNoise("pink", LEN.pink7, sampleRate, NOISE_LAYERS.rush.rho, draw(seed, "sound/pink7", generation));
 }
 
 function raw(sampleRate: number, channels: Float32Array[]): Raw {
@@ -82,19 +109,19 @@ function drawFresh(name: string, generation: number, seed: number, sampleRate: n
     case "brown0":
       return raw(sampleRate, brown(seed, generation, sampleRate));
     case "buffet":
-      return raw(sampleRate, shape(brown(seed, generation, sampleRate), BUFFET, sampleRate));
+      return raw(sampleRate, shape(brown(seed, generation, sampleRate), NOISE_LAYERS.buffet.filters, sampleRate));
     case "rush":
-      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), RUSH, sampleRate));
+      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), NOISE_LAYERS.rush.filters, sampleRate));
     case "breeze":
-      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), BREEZE, sampleRate));
+      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), NOISE_LAYERS.breeze.filters, sampleRate));
     case "hiss": {
-      const white = stereoNoise("white", LEN.white7, sampleRate, 0.7, draw(seed, "sound/white7", generation));
-      return raw(sampleRate, shape(white, HISS, sampleRate));
+      const white = stereoNoise("white", LEN.white7, sampleRate, NOISE_LAYERS.hiss.rho, draw(seed, "sound/white7", generation));
+      return raw(sampleRate, shape(white, NOISE_LAYERS.hiss.filters, sampleRate));
     }
     case "pink0":
-      return raw(sampleRate, stereoNoise("pink", LEN.pink0, sampleRate, 0, draw(seed, "sound/pink0", generation)));
+      return raw(sampleRate, stereoNoise("pink", LEN.pink0, sampleRate, NOISE_LAYERS.pink0.rho, draw(seed, "sound/pink0", generation)));
     case "white0":
-      return raw(sampleRate, stereoNoise("white", LEN.white0, sampleRate, 0, draw(seed, "sound/white0", generation)));
+      return raw(sampleRate, stereoNoise("white", LEN.white0, sampleRate, NOISE_LAYERS.white0.rho, draw(seed, "sound/white0", generation)));
     case "velvet":
       return raw(sampleRate, [0, 1].map((c) => velvet(sampleRate, draw(seed, `sound/velvet/${c}`, generation))));
     case "drops":
