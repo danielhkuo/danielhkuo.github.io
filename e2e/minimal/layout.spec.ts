@@ -1,26 +1,43 @@
-// The layout a phone's keyboard depends on. Safari itself rests the prompt above its keyboard bar, as long as the
-// document is the scroller, the prompt is its last line and nothing is pinned to the bottom of the screen.
+// nano's screen on a phone: the document scrolls in the browser's own scroller, the title bar sticks to the top and
+// the shortcuts to the bottom, the text is 16px, and nothing scrolls sideways or moves once the page has loaded.
 
 import { expect, test } from "../support";
-import { offer, openMinimal, prompt, enter, focused, sideways } from "./minimal";
+import { focused, key, openMinimal, sideways } from "./minimal";
 
 for (const width of [320, 375, 390]) {
   test.describe(`at ${width}px`, () => {
     test.use({ viewport: { width, height: 699 } });
 
-    test("nothing scrolls sideways, before or after commands print", async ({ page }) => {
+    test("nothing scrolls sideways, and every line of text is 16px or more", async ({ page }) => {
       await openMinimal(page);
       expect(await sideways(page), "as loaded").toBe(0);
-      for (const line of ["help", "ls -la", "neofetch", "cat projects/README.md", "cat about.md"]) {
-        await enter(page, line);
-        expect(await sideways(page), `after ${line}`).toBe(0);
-      }
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      expect(await sideways(page), "at the end").toBe(0);
+      const small = await page.evaluate(() =>
+        [...document.querySelectorAll(".nano *")]
+          .filter((el) => el.getClientRects().length && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim()))
+          .filter((el) => !el.closest(".nano-sr") && parseFloat(getComputedStyle(el).fontSize) < 16)
+          .map((el) => `${el.tagName.toLowerCase()}.${el.className}: ${getComputedStyle(el).fontSize}`),
+      );
+      expect(small).toEqual([]);
     });
 
-    test("the prompt's text is 16px, so Safari does not zoom to it", async ({ page }) => {
+    test("the four shortcuts that work sit two to a row, each a finger's height, and fit", async ({ page }) => {
       await openMinimal(page);
-      const size = await prompt(page).evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-      expect(size).toBeGreaterThanOrEqual(16);
+      const keys = await page.locator(".nano-keys > *").evaluateAll((els) =>
+        els
+          .filter((el) => el.getClientRects().length)
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return { text: el.textContent?.trim() ?? "", top: Math.round(r.top), height: r.height, right: r.right };
+          }),
+      );
+      expect(keys.map((k) => k.text)).toEqual(["^G Help", "^F Where Is", "^X Exit to the title menu", "^/ Go To Line"]);
+      expect(new Set(keys.map((k) => k.top)).size, "two rows").toBe(2);
+      for (const k of keys) {
+        expect(k.height, k.text).toBeGreaterThanOrEqual(44);
+        expect(k.right, k.text).toBeLessThanOrEqual(width);
+      }
     });
   });
 }
@@ -30,13 +47,18 @@ test.describe("the layout", () => {
     await openMinimal(page);
     const scrollers = await page.evaluate(() => {
       const found: string[] = [];
-      for (const el of document.querySelectorAll("body, body *")) {
+      for (const el of document.querySelectorAll("body *")) {
         const { overflowY } = getComputedStyle(el);
         if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1) found.push(el.className);
       }
-      const root = getComputedStyle(document.documentElement);
       const body = getComputedStyle(document.body);
-      return { found, root: root.overflowY, body: body.overflowY, position: body.position, tall: document.documentElement.scrollHeight > innerHeight };
+      return {
+        found,
+        root: getComputedStyle(document.documentElement).overflowY,
+        body: body.overflowY,
+        position: body.position,
+        tall: document.documentElement.scrollHeight > innerHeight,
+      };
     });
     expect(scrollers.found).toEqual([]);
     expect(scrollers.root).not.toBe("hidden");
@@ -45,19 +67,26 @@ test.describe("the layout", () => {
     expect(scrollers.tall).toBe(true);
   });
 
-  test("the prompt row is the last thing in the document", async ({ page }) => {
+  test("while reading, the title bar stays at the top and the shortcuts at the bottom", async ({ page }) => {
     await openMinimal(page);
-    const gap = () =>
-      page.evaluate(() => {
-        const form = document.querySelector(".mt-form");
-        if (!form) throw new Error("no prompt");
-        return document.documentElement.scrollHeight - (form.getBoundingClientRect().bottom + scrollY);
-      });
-    // Under it: the page's own bottom padding, and nothing else.
-    expect(await gap()).toBeLessThanOrEqual(16);
-    await offer(page, "help").tap();
-    await expect(page.locator(".mt-log .mt-help")).not.toHaveCount(0);
-    expect(await gap(), "after help").toBeLessThanOrEqual(16);
+    await page.evaluate(() => window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2));
+    const place = await page.evaluate(() => ({
+      bar: document.querySelector(".nano-bar")?.getBoundingClientRect().top,
+      foot: document.querySelector(".nano-foot")?.getBoundingClientRect().bottom,
+      height: innerHeight,
+    }));
+    expect(place.bar).toBe(0);
+    expect(Math.round(place.foot ?? 0)).toBe(place.height);
+  });
+
+  test("at the end of the page the last line is above the shortcuts, not under them", async ({ page }) => {
+    await openMinimal(page);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const { last, foot } = await page.evaluate(() => ({
+      last: [...document.querySelectorAll("main li, main p, main dd")].pop()?.getBoundingClientRect().bottom ?? Infinity,
+      foot: document.querySelector(".nano-foot")?.getBoundingClientRect().top ?? 0,
+    }));
+    expect(last).toBeLessThanOrEqual(foot);
   });
 
   test("the page does not turn zooming off", async ({ page }) => {
@@ -71,33 +100,15 @@ test.describe("the layout", () => {
     expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
   });
 
-  test("with the prompt focused, the only thing pinned is the title bar, at the top", async ({ page }) => {
+  test("nothing moves when the script arrives: Where Is is the same box before it works and after", async ({ page, browser }) => {
     await openMinimal(page);
-    const pinned = () =>
-      page.evaluate(() =>
-        [...document.querySelectorAll("body *")]
-          .filter((el) => ["fixed", "sticky"].includes(getComputedStyle(el).position) && el.getClientRects().length)
-          .map((el) => el.className.split(" ").pop()),
-      );
-    // Scrolled a little, without focus: the jump button floats in the corner.
-    await page.evaluate(() => window.scrollTo(0, 600));
-    expect(await pinned()).toEqual(["mt-bar", "mt-jump"]);
-    await prompt(page).focus();
-    expect(await pinned()).toEqual(["mt-bar"]);
-  });
-
-  test("the suggestions are finger-sized", async ({ page }) => {
-    await openMinimal(page);
-    const boxes = await page.locator(".mt-offers button").evaluateAll((buttons) =>
-      buttons.map((b) => {
-        const r = b.getBoundingClientRect();
-        return [Math.round(r.width), Math.round(r.height)];
-      }),
-    );
-    expect(boxes.length).toBeGreaterThanOrEqual(6);
-    for (const [w, h] of boxes) {
-      expect(w, `${w}x${h}`).toBeGreaterThanOrEqual(44);
-      expect(h, `${w}x${h}`).toBeGreaterThanOrEqual(44);
-    }
+    const live = await key(page, "Where Is").boundingBox();
+    const { viewport, deviceScaleFactor, isMobile, hasTouch, userAgent } = test.info().project.use;
+    const off = await browser.newContext({ viewport, deviceScaleFactor, isMobile, hasTouch, userAgent, javaScriptEnabled: false });
+    const still = await off.newPage();
+    await openMinimal(still, { live: false });
+    const before = await still.locator(".nano-keys > span", { hasText: "Where Is" }).boundingBox();
+    await off.close();
+    expect(before).toEqual(live);
   });
 });

@@ -7,8 +7,8 @@
 //   npm run test:minimal           the minimal version's projects alone, against the out/ already built
 //
 // Each suite is a folder under e2e/ with projects of its own. The site's (e2e/site/) runs in both engines at a desktop
-// size, and its tests tagged @phone also on emulated phones. The minimal version's (e2e/minimal/) runs in WebKit, as
-// a phone and as a desktop window. Another suite joins with its own projects and testDir; e2e/support.ts holds what
+// size, and its tests tagged @phone also on emulated phones. The minimal version's (e2e/minimal/) runs in WebKit, at
+// a phone's size and a desktop's. Another suite joins with its own projects and testDir; e2e/support.ts holds what
 // they share (a test that fails on console errors, the world's probe).
 
 import { defineConfig, devices, type Project } from "@playwright/test";
@@ -25,12 +25,12 @@ const site: Project[] = [
 ].map((p) => ({ ...p, testDir: "e2e/site" }));
 
 /**
- * The minimal version: the page that is both the text version and the terminal. WebKit only, the nearest thing to
- * Safari, whose keyboard and scrolling the page is built around. Its tests run on the phone unless tagged @desktop.
+ * The minimal version: the whole site as one text file, open in nano. WebKit only, the nearest thing to Safari, whose
+ * keyboard and scrolling the page is built around. Its tests run on the phone unless tagged @desktop.
  *
  * The phone's size is the area Safari showed on an iPhone 17e with its toolbar out, 390 × 699, measured in the iOS
- * Simulator (docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md). Less motion is asked for, so the page
- * opens finished: its start, and the jump button's fade, would otherwise have to be waited out by every test.
+ * Simulator (docs/superpowers/research/2026-11-19-minimal-terminal-mobile.md). Less motion is asked for, as a visitor
+ * may: nothing on the page moves now, and nothing that moves later should slow every test.
  */
 const minimal: Project[] = [
   { name: "minimal-phone", use: { ...devices["iPhone 17"], viewport: { width: 390, height: 699 } }, grepInvert: /@desktop/ },

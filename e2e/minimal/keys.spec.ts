@@ -1,138 +1,153 @@
-// Commands by typing: on a phone's keyboard, and with a real one and a mouse in the desktop window. Focus follows
-// what the visitor is using: keys and a mouse get the prompt, a finger does not.
+// nano's keys at a desk: ^G Help, ^/ Go To Line, ^F Where Is and ^X Exit, with Esc closing what is open. Only
+// Control alone is taken; the browser keeps its own.
 
-import { expect, test } from "../support";
-import { enter, focused, lastCommand, offer, openMinimal, outputHeight, prompt, restingTop, settled, status } from "./minimal";
+import { PROFILE } from "../../src/components/terminal/content.ts";
+import { TEXT_PAGE } from "../../src/lib/site-content.ts";
+import { expect, offline, test } from "../support";
+import { focused, goTo, help, isOpen, openMinimal, searchField, selected, selectionPlace, status } from "./minimal";
 
-test.describe("typing on a phone", () => {
-  test("a typed command runs on Enter and keeps focus in the prompt", async ({ page }) => {
+test.describe("the keys", { tag: "@desktop" }, () => {
+  test("^G opens Help and takes focus into it; ^X closes it and stays on the page", async ({ page }) => {
     await openMinimal(page);
-    await prompt(page).tap();
-    await page.keyboard.type("pwd");
-    await page.keyboard.press("Enter");
-    await expect(page.locator(".mt-log .mt-line").last()).toHaveText("/Users/daniel");
-    expect(await focused(page)).toBe("prompt");
-    await expect(prompt(page)).toHaveValue("");
+    await page.keyboard.press("Control+g");
+    expect(await isOpen(help(page))).toBe(true);
+    expect(await page.evaluate(() => document.activeElement?.closest("#nano-help") !== null)).toBe(true);
+    await page.keyboard.press("Control+x");
+    expect(await isOpen(help(page))).toBe(false);
+    expect(new URL(page.url()).pathname).toBe(TEXT_PAGE);
   });
 
-  test("after a typed command the prompt is still on screen, at the bottom", async ({ page }) => {
+  test("Esc closes Help; with nothing open, Esc leaves for the title", async ({ page }) => {
+    await offline(page);
     await openMinimal(page);
-    await prompt(page).tap();
-    await page.keyboard.type("help");
-    await page.keyboard.press("Enter");
-    await expect(lastCommand(page)).toHaveText("help");
-    await settled(page);
-    const { bottom, height } = await page.evaluate(() => ({
-      bottom: document.querySelector(".mt-form")?.getBoundingClientRect().bottom ?? Infinity,
-      height: window.visualViewport?.height ?? innerHeight,
+    await page.keyboard.press("Control+g");
+    await page.keyboard.press("Escape");
+    expect(await isOpen(help(page))).toBe(false);
+    expect(new URL(page.url()).pathname).toBe(TEXT_PAGE);
+    await page.keyboard.press("Escape");
+    await page.waitForURL((url) => url.pathname === "/");
+  });
+
+  test("^X with nothing open leaves for the title", async ({ page }) => {
+    await offline(page);
+    await openMinimal(page);
+    await page.keyboard.press("Control+x");
+    await page.waitForURL((url) => url.pathname === "/");
+  });
+
+  test("^/ lists the sections; choosing one goes there and takes focus to its heading", async ({ page }) => {
+    await openMinimal(page);
+    await page.keyboard.press("Control+/");
+    expect(await isOpen(goTo(page))).toBe(true);
+    await goTo(page).getByRole("link", { name: /CONTACT/ }).click();
+    expect(await isOpen(goTo(page))).toBe(false);
+    expect(new URL(page.url()).hash).toBe("#contact");
+    expect(await focused(page)).toBe("contact");
+    const { top, bar, end } = await page.evaluate(() => ({
+      top: document.getElementById("contact")?.getBoundingClientRect().top ?? NaN,
+      bar: document.querySelector(".nano > .nano-bar")?.getBoundingClientRect().bottom ?? NaN,
+      end: scrollY >= document.documentElement.scrollHeight - innerHeight - 1,
     }));
-    expect(bottom, "the prompt rests on the bottom of the visible area").toBeLessThanOrEqual(height);
-    expect(bottom).toBeGreaterThan(height - 40);
-  });
-});
-
-test.describe("typing at a desk", { tag: "@desktop" }, () => {
-  test("an unknown command is reported the way zsh reports it", async ({ page }) => {
-    await openMinimal(page);
-    await enter(page, "nope");
-    await expect(status(page)).toHaveText("zsh: command not found: nope");
+    // Clear of the title bar, and just under it, unless the page ran out first: a build without repos is short.
+    expect(top).toBeGreaterThanOrEqual(bar);
+    if (!end) expect(top).toBeLessThan(bar + 60);
   });
 
-  test("Tab completes when there is something to complete, and otherwise moves on", async ({ page }) => {
+  test("^F finds a word: it is selected, brought on screen, and announced", async ({ page }) => {
     await openMinimal(page);
-    await prompt(page).focus();
-    await page.keyboard.type("neo");
-    await page.keyboard.press("Tab");
-    await expect(prompt(page)).toHaveValue("neofetch");
-    expect(await focused(page)).toBe("prompt");
-    // Nothing left to complete: Tab leaves the prompt. It is not a keyboard trap.
-    await page.keyboard.press("Tab");
-    expect(await focused(page)).not.toBe("prompt");
-  });
-
-  test("Shift+Tab always leaves the prompt, back to the suggestions", async ({ page }) => {
-    await openMinimal(page);
-    await prompt(page).focus();
-    await page.keyboard.type("neo");
-    await page.keyboard.press("Shift+Tab");
-    expect(await page.evaluate(() => document.activeElement?.className)).toBe("mt-offer");
-  });
-
-  test("the suggestions are one Tab stop, and the arrow keys move inside them", async ({ page }) => {
-    await openMinimal(page);
-    await prompt(page).focus();
-    await page.keyboard.press("Shift+Tab");
-    expect(await page.evaluate(() => document.activeElement?.textContent)).toBe("help");
-    await page.keyboard.press("ArrowRight");
-    expect(await page.evaluate(() => document.activeElement?.textContent)).toBe("ls");
-    await page.keyboard.press("Tab");
-    expect(await focused(page)).toBe("prompt");
-  });
-
-  test("the arrow keys recall earlier lines, and the right arrow accepts the suggestion", async ({ page }) => {
-    await openMinimal(page);
-    await prompt(page).focus();
-    await page.keyboard.type("whoami");
+    await page.keyboard.press("Control+f");
+    await expect(searchField(page)).toBeFocused();
+    await expect(page.locator(".nano-find label")).toHaveText("Search:");
+    await page.keyboard.type(PROFILE.location);
     await page.keyboard.press("Enter");
-    await expect(lastCommand(page)).toHaveText("whoami");
-    await page.keyboard.press("ArrowUp");
-    await expect(prompt(page)).toHaveValue("whoami");
-    await page.keyboard.press("ArrowDown");
-    await expect(prompt(page)).toHaveValue("");
-    await page.keyboard.type("cbon");
-    await page.keyboard.press("ArrowRight");
-    await expect(prompt(page)).toHaveValue("cbonsai ");
+    await expect(searchField(page)).toHaveCount(0);
+    expect(await selected(page)).toBe(PROFILE.location);
+    await expect(status(page).locator(".nano-message")).toHaveText("[ This is the only occurrence ]");
+    await expect(status(page).locator(".nano-sr")).toHaveText(`Found “${PROFILE.location}”, 1 of 1.`);
+    const place = await selectionPlace(page);
+    expect(place.top).toBeGreaterThanOrEqual(place.barBottom);
+    expect(place.bottom).toBeLessThanOrEqual(place.footTop);
   });
 
-  test("a command pressed with the keyboard leaves focus on its button", async ({ page }) => {
+  test("an empty Enter repeats the last search, from the last match on, and wraps at the end", async ({ page }) => {
     await openMinimal(page);
-    await prompt(page).focus();
-    await page.keyboard.press("Shift+Tab");
+    // "site" is in the summaries of the site's other pages, more than once, whatever the repos say.
+    await page.keyboard.press("Control+f");
+    await page.keyboard.type("site");
     await page.keyboard.press("Enter");
-    await expect(status(page)).toHaveText(/^help: printed/);
-    expect(await page.evaluate(() => document.activeElement?.textContent)).toBe("help");
+    expect((await selected(page)).toLowerCase()).toBe("site");
+    const where = () => page.evaluate(() => window.getSelection()?.getRangeAt(0).getBoundingClientRect().top ?? NaN);
+    const starts: number[] = [await page.evaluate(() => scrollY + (window.getSelection()?.getRangeAt(0).getBoundingClientRect().top ?? 0))];
+    let wrapped = false;
+    for (let i = 0; i < 30 && !wrapped; i++) {
+      await page.keyboard.press("Control+f");
+      await expect(page.locator(".nano-find label")).toHaveText("Search [site]:");
+      await page.keyboard.press("Enter");
+      expect((await selected(page)).toLowerCase()).toBe("site");
+      wrapped = (await status(page).locator(".nano-message").count()) > 0 && (await status(page).innerText()).includes("Search Wrapped");
+      if (!wrapped) starts.push(await page.evaluate(() => scrollY + (window.getSelection()?.getRangeAt(0).getBoundingClientRect().top ?? 0)));
+    }
+    expect(wrapped, "the search wrapped").toBe(true);
+    expect(starts.length).toBeGreaterThanOrEqual(2);
+    // Each repeat went on down the page; the wrap went back to the first.
+    for (let i = 1; i < starts.length; i++) expect(starts[i]).toBeGreaterThanOrEqual(starts[i - 1]);
+    expect(Number.isFinite(await where())).toBe(true);
   });
 
-  test("⌘K goes to the prompt from anywhere on the page", async ({ page }) => {
+  test("a word that is not there is reported, and Esc cancels a search", async ({ page }) => {
     await openMinimal(page);
-    await page.keyboard.press("Meta+k");
-    await expect.poll(() => focused(page)).toBe("prompt");
-    const bottom = await page.locator(".mt-form").evaluate((el) => el.getBoundingClientRect().bottom);
-    expect(bottom).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
+    await page.keyboard.press("Control+f");
+    await page.keyboard.type("zzqqx");
+    await page.keyboard.press("Enter");
+    await expect(status(page).locator(".nano-message")).toHaveText('[ "zzqqx" not found ]');
+    await page.keyboard.press("Control+f");
+    await page.keyboard.press("Escape");
+    await expect(searchField(page)).toHaveCount(0);
+    await expect(status(page).locator(".nano-message")).toHaveText("[ Cancelled ]");
+    expect(new URL(page.url()).pathname).toBe(TEXT_PAGE);
   });
-});
 
-test.describe("a mouse in a short window", { tag: "@desktop" }, () => {
-  // Short, so that help's output is taller than the window. help is the longest output that depends on neither the
-  // pinned repos nor content.ts: 559px at this width. The projects file is one line long in a build without
-  // GITHUB_TOKEN, which has no repos, and the longest file from content.ts is 338px.
-  test.use({ viewport: { width: 1280, height: 440 } });
-
-  test("a clicked command leaves the keys with the prompt, and long output starts at the top", async ({ page }) => {
+  test("in the search field ^X is the field's own, and leaves nothing", async ({ page }) => {
     await openMinimal(page);
-    await page.locator(".mt-jump").click();
-    await expect.poll(() => focused(page)).toBe("prompt");
-    await offer(page, "help").click();
-    await expect.poll(() => focused(page)).toBe("prompt");
-    await page.locator(".mt-log button", { hasText: "cat <file>" }).click();
-    await expect(prompt(page)).toHaveValue("cat ");
-    expect(await focused(page)).toBe("prompt");
-    // A change of mind: help again, clicked in its own list while "cat " is on the prompt. Running it empties the
-    // prompt, and WebKit scrolls to a focused field whose value a script changes. The page must still be at the top
-    // of the output once it has settled, with the prompt below the fold, though the prompt has the keys.
-    await page.locator(".mt-log .mt-help dt button", { hasText: /^help$/ }).first().click();
-    await expect(page.locator(".mt-log .mt-typed-cmd")).toHaveText(["help", "help"]);
-    await expect(prompt(page)).toHaveValue("");
-    const height = page.viewportSize()?.height ?? 0;
-    expect(
-      await outputHeight(page),
-      `the premise: help prints more than the ${height}px window holds, or the page cannot bring its first line to the top. If this fails, help got shorter: make the window shorter.`,
-    ).toBeGreaterThan(height);
-    const top = await restingTop(page);
-    expect(top).toBeGreaterThanOrEqual(32);
-    expect(top).toBeLessThan(60);
-    const below = await page.locator(".mt-form").evaluate((el) => el.getBoundingClientRect().top - innerHeight);
-    expect(below, "the prompt is below the fold").toBeGreaterThan(0);
-    expect(await focused(page)).toBe("prompt");
+    await page.keyboard.press("Control+f");
+    await page.keyboard.type("abc");
+    await page.keyboard.press("Control+x");
+    await expect(searchField(page)).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe(TEXT_PAGE);
+  });
+
+  test("the browser's own Command keys are left alone", async ({ page }) => {
+    await openMinimal(page);
+    for (const k of ["Meta+g", "Meta+f", "Meta+x", "Alt+g"]) await page.keyboard.press(k);
+    expect(await isOpen(help(page))).toBe(false);
+    await expect(searchField(page)).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe(TEXT_PAGE);
+  });
+
+  test("a mouse on the keys: Help, Go To Line and Where Is open, Exit leaves", async ({ page }) => {
+    await offline(page);
+    await openMinimal(page);
+    const keys = page.locator(".nano-keys");
+    await keys.getByRole("button", { name: "Help", exact: true }).click();
+    expect(await isOpen(help(page))).toBe(true);
+    await help(page).getByRole("button", { name: "Close" }).click();
+    await keys.getByRole("button", { name: "Go To Line" }).click();
+    expect(await isOpen(goTo(page))).toBe(true);
+    await goTo(page).getByRole("button", { name: "Close" }).click();
+    await keys.getByRole("button", { name: "Where Is" }).click();
+    await expect(searchField(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    // Focus goes back to the key that opened the search.
+    expect(await page.evaluate(() => document.activeElement?.textContent?.trim())).toBe("^F Where Is");
+    await keys.getByRole("link", { name: /^Exit/ }).click();
+    await page.waitForURL((url) => url.pathname === "/");
+  });
+
+  test("on a desktop all twelve of nano's shortcuts are shown, in nano's two rows", async ({ page }) => {
+    await openMinimal(page);
+    const tops = await page.locator(".nano-keys > *").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(tops).toHaveLength(12);
+    expect(new Set(tops).size).toBe(2);
+    expect(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".nano") as Element).fontSize))).toBe(15);
   });
 });
