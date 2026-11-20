@@ -413,13 +413,14 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       for (const [id, a] of places.anchors) anchors.set(id, a);
     }
 
-    // ?at=<site id> starts just south of a site, heading for it: a preview, like ?sights=all.
+    // ?at=<id> starts just south of a site, heading for it: a preview, like ?sights=all. A stop's id is not a
+    // site in the manifest; the landmark of that id is started the same way.
     const at = params.get("at");
     const atSite = at ? loaded.manifest.sites.find((s) => s.id === at) : undefined;
-    const where = !atSite && setup.touch ? savedWhere(worldN) : null;
-    const start = atSite
-      ? { x: atSite.x, y: (atSite.y + AT_SOUTH) % worldN, dx: 0, dy: -1 }
-      : where ?? loaded.manifest.start;
+    const atMark = !atSite && at ? byId.get(at) : undefined;
+    const where = !atSite && !atMark && setup.touch ? savedWhere(worldN) : null;
+    const southOf = (x: number, y: number) => ({ x, y: (y + AT_SOUTH) % worldN, dx: 0, dy: -1 });
+    const start = atSite ? southOf(atSite.x, atSite.y) : atMark ? southOf(atMark.x, atMark.y) : where ?? loaded.manifest.start;
     flight = startState(start, view);
     const sky = createSky(loaded.manifest.seed, regions.n, styleFrom(params.get("clouds")), loaded.manifest.start);
     const dragon = createDragon(worldN);

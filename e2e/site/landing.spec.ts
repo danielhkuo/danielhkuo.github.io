@@ -4,6 +4,8 @@
 
 import type { Page } from "@playwright/test";
 import { PROFILE } from "../../src/components/terminal/content.ts";
+import { QUEST_KEY } from "../../src/world/story/quest.ts";
+import { STOPS } from "../../src/world/story/stops.ts";
 import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "../support";
 
 /** The first landmark that holds `holds` ("hall" or "about"), read from the world's probe. */
@@ -81,5 +83,44 @@ test.describe("landing", () => {
     await page.keyboard.press("Escape");
     await expect(codex).toBeHidden();
     expect((await flier(page)).phase).toBe("flying");
+  });
+
+  test("the hall opens a project and returns focus to its row", async ({ page }) => {
+    const site = await landmark(page, "hall");
+    await landAt(page, site.id, "the projects");
+
+    const codex = page.getByRole("dialog", { name: "Projects", exact: true });
+    await expect(codex).toBeVisible({ timeout: 20_000 });
+    await expect(codex.getByRole("heading", { level: 2, name: "Projects", exact: true })).toBeVisible();
+    const row = codex.getByRole("list").first().getByRole("button").first();
+    await row.click();
+    const back = page.getByRole("button", { name: "Back to the hall" });
+    await expect(back).toBeVisible();
+    await back.click();
+    await expect(codex.getByRole("heading", { level: 2, name: "Projects", exact: true })).toBeVisible();
+    await expect(row).toBeFocused();
+
+    // A phone's sheet: the row stays a finger's height, and neither the list nor a project spills sideways.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect.poll(() => row.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    const leaf = codex.locator("[tabindex='-1']");
+    await expect.poll(() => leaf.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    await row.click();
+    const openLeaf = page.getByRole("dialog").locator("[tabindex='-1']");
+    await expect(page.getByRole("button", { name: "Back to the hall" })).toBeVisible();
+    await expect.poll(() => openLeaf.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  });
+
+  test("landing at a stop fills one quatrefoil and stores the find", async ({ page }) => {
+    const site = await landmark(page, "stop");
+    const stop = STOPS.find((item) => item.key === site.name);
+    if (!stop) throw new Error(`landmark ${site.id} is not one of the five`);
+    await landAt(page, site.id, stop.name);
+
+    const codex = page.getByRole("dialog");
+    await expect(codex).toBeVisible({ timeout: 20_000 });
+    await expect(codex.getByText("¶ Found", { exact: true })).toBeVisible();
+    await expect(codex.getByRole("group", { name: "1 of 5 found" })).toBeVisible();
+    await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), QUEST_KEY)).toContain(`"${site.name}"`);
   });
 });

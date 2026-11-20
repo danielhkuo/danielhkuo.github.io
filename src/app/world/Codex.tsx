@@ -3,15 +3,49 @@
 // The Codex: what is kept at the landmark the dragon has landed on, on a leaf of Ink & Glyph paper. Game layer: hand
 // drawn in CSS and SVG, not Astryx. (The prompt that offers a landing is drawn into the world: controls/guides.ts.)
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { LINKS, PROFILE } from "../../components/terminal/content";
-import { kindName, type Landmark } from "../../world/sites/landmarks";
-import { STOPS } from "../../world/story/stops";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { INTERESTS, LINKS, PROFILE } from "../../components/terminal/content";
+import { kindName, type HallProject, type Landmark } from "../../world/sites/landmarks";
+import { choose, complete, type QuestState } from "../../world/story/quest";
+import { STOPS, type StopKey } from "../../world/story/stops";
 import styles from "./codex.module.css";
 import { fell } from "./fonts";
+import { Keepsake } from "./keepsakes";
+import { getQuest, setQuest, useQuest } from "./questStore";
 
-/** Four overlapping circles: the quatrefoil, inked, filled with `fill`. */
-function Quatrefoil({ className }: { className?: string }) {
+const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+function dateOf(iso: string): string | null {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : DATE.format(t);
+}
+
+/** A count, in words when there are none: the face's old-style zero reads as a letter o. */
+function count(n: number): string {
+  return n === 0 ? "none yet" : n.toLocaleString("en-GB");
+}
+
+function capitalised(s: string): string {
+  return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Blank lines divide the body. What is between them is text, never markup. */
+function paragraphs(body: string): string[] {
+  const out: string[] = [];
+  for (const part of body.split(/\n\s*\n/)) {
+    const text = part.replace(/[ \t]*\n[ \t]*/g, " ").trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+function interestLine(key: string): string {
+  for (const item of INTERESTS) if (item.key === key) return item.line;
+  return "";
+}
+
+/** Four overlapping circles: the quatrefoil, inked, filled with vermilion when `filled`. */
+function Quatrefoil({ className, filled = true }: { className?: string; filled?: boolean }) {
   const lobes = [
     [2.2, 0],
     [-2.2, 0],
@@ -23,7 +57,7 @@ function Quatrefoil({ className }: { className?: string }) {
       <g fill="none" stroke="currentColor" strokeWidth={1.5}>
         {lobes}
       </g>
-      <g className={styles.lobes}>{lobes}</g>
+      {filled ? <g className={styles.lobes}>{lobes}</g> : null}
     </svg>
   );
 }
@@ -94,6 +128,169 @@ function Links({ links }: { links: { href: string; label: string; external: bool
   );
 }
 
+function Rubric({ children }: { children: ReactNode }) {
+  return (
+    <p className={styles.rubric}>
+      <span aria-hidden="true">¶ </span>
+      {children}
+    </p>
+  );
+}
+
+function ledgerOf(project: HallProject): [string, ReactNode][] {
+  const github = project.github;
+  if (!github) return [];
+  const rows: [string, ReactNode][] = [];
+  if (github.language) rows.push(["Written in", github.language.name]);
+  rows.push(["Stars", count(github.stars)], ["Forks", count(github.forks)]);
+  const updated = dateOf(github.updatedAt);
+  if (updated) rows.push(["Last worked on", updated]);
+  return rows;
+}
+
+function HallList({
+  projects,
+  onOpen,
+  bindRow,
+}: {
+  projects: readonly HallProject[];
+  onOpen: (slug: string) => void;
+  bindRow: (el: HTMLButtonElement | null) => void;
+}) {
+  return (
+    <>
+      <Rubric>The hall</Rubric>
+      <Illuminated text="Projects" />
+      {projects.length === 0 ? (
+        <p className={styles.lede}>No projects are listed yet.</p>
+      ) : (
+        <ul className={styles.projects}>
+          {projects.map((project) => (
+            <li key={project.slug}>
+              <button type="button" className={styles.project} data-slug={project.slug} ref={bindRow} onClick={() => onOpen(project.slug)}>
+                <span className={styles.projectName}>{project.name}</span>
+                {project.summary ? <span className={styles.projectSummary}>{project.summary}</span> : null}
+                {project.github?.language ? <span className={styles.projectLang}>{project.github.language.name}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function ProjectLeaf({ project, onBack }: { project: HallProject; onBack: () => void }) {
+  const links: { href: string; label: string; external: boolean }[] = [];
+  if (project.repoUrl) links.push({ href: project.repoUrl, label: "Read the source", external: true });
+  if (project.link) links.push({ href: project.link, label: "Visit it", external: true });
+  const rows = ledgerOf(project);
+  return (
+    <>
+      <Rubric>Kept in the hall</Rubric>
+      <Illuminated text={project.name} />
+      {project.summary ? <p className={styles.lede}>{project.summary}</p> : null}
+      {project.image ? (
+        // The file's size is the project's own; the leaf only bounds it.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className={styles.figure} src={project.image} alt={project.name} />
+      ) : null}
+      {paragraphs(project.body).map((text, i) => (
+        <p key={`${i}:${text}`} className={styles.prose}>
+          {text}
+        </p>
+      ))}
+      {rows.length > 0 ? <Ledger rows={rows} /> : null}
+      <div className={styles.back}>
+        <button type="button" className={styles.button} onClick={onBack}>
+          Back to the hall
+        </button>
+      </div>
+      {links.length > 0 ? <Links links={links} /> : null}
+    </>
+  );
+}
+
+function StopLeaf({ stop }: { stop: StopKey }) {
+  const found = STOPS.find((item) => item.key === stop);
+  const line = found ? interestLine(found.interest) : "";
+  return (
+    <>
+      <Rubric>Found</Rubric>
+      <Illuminated text={capitalised(found ? found.name : stop)} />
+      <Keepsake stop={stop} className={styles.keepsakeLarge} />
+      {line ? <p className={styles.lede}>{line}</p> : null}
+      {stop === "pine" ? (
+        <p className={styles.note}>
+          Try <code>cbonsai</code> in the terminal at the abbey.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function AboutLeaf({ kind }: { kind: string }) {
+  return (
+    <>
+      <Rubric>The {kind}</Rubric>
+      <Illuminated text={PROFILE.name} />
+      <p className={styles.lede}>{PROFILE.title}</p>
+      <Ledger
+        rows={[
+          ["Previously", PROFILE.previously],
+          ["Studies", PROFILE.school],
+          ["Lives in", PROFILE.location],
+          ["Builds", PROFILE.building],
+        ]}
+      />
+      <Links
+        links={[
+          { href: LINKS.github, label: "GitHub", external: true },
+          { href: LINKS.linkedin, label: "LinkedIn", external: true },
+          { href: LINKS.email, label: "Email", external: false },
+          { href: LINKS.resume, label: "Résumé", external: true },
+        ]}
+      />
+    </>
+  );
+}
+
+/** The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. */
+function Five({ quest, onFollow }: { quest: QuestState; onFollow: () => void }) {
+  const found = STOPS.filter((stop) => quest.found.includes(stop.key));
+  const done = complete(quest);
+  return (
+    <section className={styles.register} aria-labelledby="codex-five">
+      <h3 id="codex-five">The five</h3>
+      <div className={styles.foils} role="group" aria-label={`${found.length} of 5 found`}>
+        {STOPS.map((stop) => (
+          <Quatrefoil key={stop.key} className={styles.foil} filled={quest.found.includes(stop.key)} />
+        ))}
+      </div>
+      {found.length > 0 ? (
+        <ul>
+          {found.map((stop) => (
+            <li key={stop.key} className={styles.found}>
+              <Keepsake stop={stop.key} className={styles.keepsake} />
+              <span>{interestLine(stop.interest)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {done ? (
+        <>
+          <p className={styles.allFive}>That is all five.</p>
+          <Links links={[{ href: LINKS.email, label: "Write to Daniel", external: false }]} />
+        </>
+      ) : quest.mode !== "on" ? (
+        <button type="button" className={styles.button} onClick={onFollow}>
+          Follow the quest
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 export interface CodexProps {
   landmark: Landmark;
   onTakeOff: () => void;
@@ -109,63 +306,67 @@ export interface CodexProps {
 /** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
 export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
+  const rows = useRef(new Map<string, HTMLButtonElement>());
+  const restore = useRef<string | null>(null);
+  const [pick, setPick] = useState<{ id: string; slug: string } | null>(null);
+  const quest = useQuest();
+  const slug = pick && pick.id === landmark.id ? pick.slug : null;
+  const project = landmark.holds.kind === "hall" && slug ? landmark.holds.projects.find((item) => item.slug === slug) ?? null : null;
+  const openSlug = project?.slug ?? null;
+
+  const bindRow = useCallback((el: HTMLButtonElement | null) => {
+    if (!el?.dataset.slug) return;
+    rows.current.set(el.dataset.slug, el);
+  }, []);
+
   useEffect(() => {
-    leaf.current?.focus({ preventScroll: true });
+    restore.current = null;
+    const node = leaf.current;
+    if (!node) return;
+    node.scrollTop = 0;
+    node.focus({ preventScroll: true });
   }, [landmark.id]);
+
+  useEffect(() => {
+    const node = leaf.current;
+    if (openSlug) {
+      if (!node) return;
+      node.scrollTop = 0;
+      node.focus({ preventScroll: true });
+      return;
+    }
+    const slugToRestore = restore.current;
+    if (!slugToRestore) return;
+    restore.current = null;
+    if (node) node.scrollTop = 0;
+    rows.current.get(slugToRestore)?.focus();
+  }, [openSlug, landmark.id]);
+
+  const openProject = (projectSlug: string) => {
+    restore.current = null;
+    setPick({ id: landmark.id, slug: projectSlug });
+  };
+  const backToHall = () => {
+    restore.current = openSlug;
+    setPick(null);
+  };
+  const follow = () => {
+    setQuest(choose(getQuest(), "on"));
+    leaf.current?.focus({ preventScroll: true });
+  };
 
   const kind = kindName(landmark.type);
   let body: ReactNode;
   if (landmark.holds.kind === "hall") {
-    body = (
-      <>
-        <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>The hall
-        </p>
-        <Illuminated text="Projects" />
-        <ul>
-          {landmark.holds.projects.map((p) => (
-            <li key={p.slug}>{p.name}</li>
-          ))}
-        </ul>
-      </>
+    body = project ? (
+      <ProjectLeaf project={project} onBack={backToHall} />
+    ) : (
+      <HallList projects={landmark.holds.projects} onOpen={openProject} bindRow={bindRow} />
     );
   } else if (landmark.holds.kind === "about") {
-    body = (
-      <>
-        <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>The {kind}
-        </p>
-        <Illuminated text={PROFILE.name} />
-        <p className={styles.lede}>{PROFILE.title}</p>
-        <Ledger
-          rows={[
-            ["Previously", PROFILE.previously],
-            ["Studies", PROFILE.school],
-            ["Lives in", PROFILE.location],
-            ["Builds", PROFILE.building],
-          ]}
-        />
-        <Links
-          links={[
-            { href: LINKS.github, label: "GitHub", external: true },
-            { href: LINKS.linkedin, label: "LinkedIn", external: true },
-            { href: LINKS.email, label: "Email", external: false },
-            { href: LINKS.resume, label: "Résumé", external: true },
-          ]}
-        />
-      </>
-    );
+    body = <AboutLeaf kind={kind} />;
   } else {
-    const key = landmark.holds.stop;
-    const stop = STOPS.find((s) => s.key === key);
-    body = (
-      <>
-        <p className={styles.rubric}>
-          <span aria-hidden="true">¶ </span>Found
-        </p>
-        <Illuminated text={stop ? stop.name : key} />
-      </>
-    );
+    body = <StopLeaf stop={landmark.holds.stop} />;
   }
 
   return (
@@ -178,6 +379,7 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
       {/* The leaf scrolls and takes focus, so arrow keys read down it. */}
       <div ref={leaf} className={styles.leaf} tabIndex={-1}>
         {body}
+        <Five quest={quest} onFollow={follow} />
         <p className={styles.actions}>
           {landmark.holds.kind === "about" ? (
             <button type="button" className={styles.button} data-terminal-trigger="" onClick={(e) => onOpenTerminal(e.currentTarget)}>

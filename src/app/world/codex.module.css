@@ -44,6 +44,7 @@
   outline-offset: -10px;
   box-shadow: 0 12px 30px rgb(46 42 36 / 0.3);
   animation: codex-in 320ms ease-out both;
+  min-width: 0;
 }
 
 @keyframes codex-in {
@@ -56,6 +57,7 @@
 .leaf {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1.7rem 1.9rem 1.3rem;
@@ -174,10 +176,12 @@
   color: var(--ink-soft);
   font-variant: small-caps;
   letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
 }
 
 .row dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .links {
@@ -208,6 +212,7 @@
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
 }
 
 .links a:hover {
@@ -215,7 +220,8 @@
 }
 
 .links a:focus-visible,
-.button:focus-visible {
+.button:focus-visible,
+.project:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
 }
@@ -249,6 +255,140 @@
 
 .registerWhere {
   color: var(--ink-soft);
+}
+
+/* The hall's rows, a project's page, a stop's keepsake, and the five. */
+
+.projects {
+  margin: 0.15rem 0 1.1rem;
+  padding: 0;
+  list-style: none;
+  border-top: 1px dotted var(--ink-soft);
+}
+
+.projects li {
+  min-width: 0;
+}
+
+.project {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.45rem 0.1rem 0.5rem;
+  overflow: hidden;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dotted var(--ink-soft);
+  cursor: pointer;
+}
+
+.project:hover .projectName {
+  color: var(--vermilion);
+}
+
+.projectName {
+  display: block;
+  font-size: 1.28rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.projectSummary {
+  display: block;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.98rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.projectLang {
+  display: block;
+  margin-top: 0.08rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+}
+
+.prose {
+  margin: 0 0 0.85rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 0 1rem;
+  border: 1px solid var(--ink);
+}
+
+.back {
+  margin: 0.15rem 0 0.9rem;
+}
+
+.codex code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.foils {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.7rem;
+  align-items: center;
+  margin: 0.2rem 0 0.55rem;
+}
+
+.foil {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  color: var(--ink);
+}
+
+.found {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+  margin: 0.2rem 0;
+}
+
+.keepsake {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  margin-top: 0.18rem;
+  color: var(--ink);
+}
+
+.keepsakeLarge {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0.1rem 0 0.75rem;
+  color: var(--ink);
+}
+
+.found span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.allFive {
+  margin: 0.55rem 0 0.35rem;
+}
+
+.register .button {
+  margin-top: 0.45rem;
 }
 
 /* The buttons stay in reach at the foot of the leaf however far it scrolls. */
