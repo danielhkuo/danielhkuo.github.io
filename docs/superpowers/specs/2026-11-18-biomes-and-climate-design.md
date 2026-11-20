@@ -435,8 +435,23 @@ other's, so a climate-aware generator run once would move home:
 
 **What is kept from L0.** Home; every island whose own climate is temperate (its land is the temperate generator's
 already); and every island whose land lies within 400 cells of the start or abbey view (one skerry group), since the
-moisture blur and the wind's horizon reach about 360 cells. Volcanic cones, calderas and skerry groups keep their
-forms everywhere, but are taken from L1, so they are eroded and drained under their own climate.
+moisture blur and the wind's horizon reach about 360 cells.
+
+**[Owner]** Nothing judged before may score lower. Each climate, landmark and wonder was scored side by side against
+the climates on the old land (Fable's last state, `269bb41`) by fresh critics (look ledger, round 9), and where the new
+land scored lower the old land was kept. So L0 also gives:
+
+- fens, in every climate: low lobes round meres are a tundra of pools, a delta of lagoons or a swamp as the climate
+  dresses them, and they hold the marshes and still water the marsh house and the bridge town need;
+- tables outside dry country and the jungle: a karst plateau of the cold is already its own land;
+- the warm forest's islands: its recipe (steep ridges, rias) is the generator's own land, and scored no better;
+- the steppe's and the Mediterranean's own islands (the windmill's headland is on one), and the volcanoes of dry
+  country (the Mediterranean's calanque is a caldera's wall): their recipes scored lower;
+- islands on the equator line, whose land is both sides' jungle (the cove hotel's cove is on one).
+
+On seed 3, 20 of 43 islands are grown again: six of the ice, three of the taiga, one of the dry side's tundra, three
+of the desert, two of the savanna and five of the jungle. Skerry groups, and cones and calderas outside dry country,
+keep their forms but are taken from L1, so they are eroded and drained under their own climate.
 
 **Which recipe.** Each island takes the climate of its own land (L0's climate, averaged over the island): its mean
 sea-level temperature, its side and its mean moisture.
@@ -445,8 +460,8 @@ sea-level temperature, its side and its mean moisture.
 |---|---|---|---|---|
 | Ice | under 0.2 | fjord belts | a high massif with a broad top (peak 150): the ice sheet of 6.6 fills it to a dome with nunataks | outlet fjords |
 | Tundra, wet side | 0.2–0.29 | fen | low (22), lobed, studded with lakes, glacial ribbon lakes | ragged, many islets |
-| Tundra, dry side | 0.2–0.29 | belts | a low stony plateau (24), under its snowline | plain, rocky |
-| Taiga | 0.29–0.44, wet | fjord belts | glaciated hills (48), troughs and lakes, mostly under its snowline | fjords |
+| Tundra, dry side | 0.2–0.29 | belts | a low stony upland (40), two to four ridges, under its snowline | plain, rocky |
+| Taiga | 0.29–0.44, wet | belts | low glaciated lake country (26): a shield of troughs and lakes under its snowline | lobed, lake-cut |
 | Steppe | 0.29–0.5, dry | broad belts | a plain: a low plateau (30, flat over three quarters of its half-width), smooth slopes, shallow valleys | smooth, low |
 | Mediterranean | 0.5–0.7, dry | belts | rugged limestone ridges (85) | peninsulas, cliffs and coves |
 | Desert | over 0.7, dry, moisture under 0.27 | belts | a low mesa plateau (34; high ground would cool out of hot country) over wide plains where the ergs lie; hard beds over soft, benched by 6.6 | straight, cliffed |
@@ -455,6 +470,8 @@ sea-level temperature, its side and its mean moisture.
 | Jungle | over 0.85 wet, or 0.93 dry and moist | belts | rugged limestone mountains (70) over wide coastal plains, where the tower karst of 6.6 stands | inlets, deltas, mangrove |
 
 A table island stays a table: a mesa in dry country, a tepui in the tropics; a table is too small to carry belts.
+The steppe's, the Mediterranean's and the warm forest's recipes stand in the code, but their islands are kept from L0
+(above), so on seed 3 those climates are the old land in their own dress.
 
 An island keeps its size: it is rebuilt from the same drawn length at the same place, and shrunk if its new outline
 would reach past the old one's extents, so the channels the placement kept between islands still hold.

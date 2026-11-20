@@ -976,17 +976,17 @@ const OBSERVATORY: Kind = {
   },
 };
 
-/**
- * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
- * score: the great oak in temperate country, the bridge town in temperate and warm country, the drowned church in
- * a lake that is not frozen, the marsh house off the tundra and the jungle; the baths lean to the cold and the hotel
- * to the warm.
- */
 /** Land that feeds a town: fields and meadows, and in dry country the sage and steppe that are grazed. */
 function worked(m: number): boolean {
   return isFarmable(m) || (m >= M.sageCool && m <= M.sageWarm) || (m >= M.steppeCool && m <= M.steppeWarm);
 }
 
+/**
+ * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
+ * score: the great oak in temperate country, the bridge town in temperate and warm country, the drowned church in
+ * a lake that is not frozen, the marsh house off the tundra and the jungle, the observatory off the ice and the
+ * tundra; the baths lean to the cold and the hotel to the warm.
+ */
 const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
   "great-oak": { lo: 0.44, hi: 0.62 },
   "bridge-town": { lo: 0.44, hi: 0.66 },
@@ -997,7 +997,8 @@ const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean
   // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
   railway: { lo: 0, hi: 1, lean: (t) => (t > 0.34 ? 2 : 0) },
   "airship-mast": { lo: 0, hi: 1 },
-  observatory: { lo: 0, hi: 1 },
+  // A dome on a snowfield was judged a poor setting side by side: the highest summit of the warmer country.
+  observatory: { lo: 0.38, hi: 1 },
 };
 
 const KINDS: Record<WonderType, Kind> = {

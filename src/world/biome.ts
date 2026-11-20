@@ -99,7 +99,7 @@ export function duneAt(x: number, y: number, n: number): number {
 /** A lattice of bumps (gen/landforms.ts): one to a square of `cells` cells with `chance`; radius in cells and height in units. */
 export interface Bump { cells: number; chance: number; r0: number; r1: number; h0: number; h1: number }
 /** Karst towers. */
-export const TOWER: Bump = { cells: 46, chance: 0.55, r0: 9, r1: 17, h0: 10, h1: 30 };
+export const TOWER: Bump = { cells: 34, chance: 0.6, r0: 7, r1: 11, h0: 14, h1: 25 };
 /** Rock domes of the savanna. */
 export const DOME: Bump = { cells: 240, chance: 0.42, r0: 20, r1: 36, h0: 12, h1: 24 };
 /** The seed the landforms raise the domes with, so the cover can find them: 0x1a4df0 + 31. */
@@ -125,8 +125,7 @@ export function bumpAt(x: number, y: number, n: number, k: Bump, seed: number, t
     const q2 = (ex * ex + ey * ey) / (r * r);
     if (q2 >= 1) continue;
     // A tower stands to nearly its full height across most of its width; a dome falls away from its crown.
-    // A tower is flat-topped (its forest stands on the top) and sheer-sided; a dome falls away from its crown.
-    const shape = tower ? 1 - q2 * q2 * q2 : (1 - q2) * Math.sqrt(1 - q2);
+    const shape = tower ? 1 - q2 * Math.sqrt(q2) : (1 - q2) * Math.sqrt(1 - q2);
     const v = shape * (k.h0 + (k.h1 - k.h0) * (1 - u)) / k.h1;
     if (v > best) best = v;
   }
