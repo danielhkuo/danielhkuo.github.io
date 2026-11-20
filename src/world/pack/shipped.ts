@@ -101,6 +101,8 @@ function plainWorld(cut: BakeWorld): BakeWorld {
   if (cut.bars) world.bars = cut.bars;
   if (cut.built) world.built = cut.built;
   if (cut.roads) world.roads = cut.roads;
+  if (cut.temp) world.temp = new Float32Array(cut.temp);
+  if (cut.arid) world.arid = new Float32Array(cut.arid);
   return world;
 }
 

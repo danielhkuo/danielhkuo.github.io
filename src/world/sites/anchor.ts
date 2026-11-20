@@ -47,15 +47,15 @@ export interface ConformLike {
 const SEARCH: Record<LandmarkType, number> = { abbey: 24, town: 48, lighthouse: 24, windmill: 24, bridge: 24, cathedral: 24, yew: 24 };
 
 /** The coil's radius when nothing is known of the building, by kind (the sprite boxes of design 5.9). */
-const FALLBACK: Record<LandmarkType, number> = { abbey: 22, town: 8, lighthouse: 8, windmill: 9.4, bridge: 19, cathedral: 22, yew: 21 };
+const FALLBACK: Record<LandmarkType, number> = { abbey: 21, town: 6, lighthouse: 6, windmill: 8.4, bridge: 18, cathedral: 21, yew: 20 };
 
 /** The coil's radius: the body's own width clear of the walls. */
-const CLEAR = 3;
-export const REST_MIN = 8;
+const CLEAR = 2;
+export const REST_MIN = 6;
 export const REST_MAX = 26;
 /** A town's harbour lies within this of its point, cells; and the widest a coil lies on its water. */
 const HARBOUR_REACH = 150;
-const HARBOUR_MAX = 10;
+const HARBOUR_MAX = 7;
 
 /**
  * The tallest standing structure (its tallest cell over its own base) whose footprint centre lies within the site's

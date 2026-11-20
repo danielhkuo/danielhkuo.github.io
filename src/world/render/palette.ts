@@ -357,6 +357,96 @@ function buildSpecs(): Spec[] {
   set(M.ivy, evergreen([0.5, 0.068, 148]), BUILT);
   set(M.moss, evergreen([0.64, 0.055, 128]), BUILT);
 
+  // ---- The climates (2026-11-18). Nothing above this line is changed by them. -------------------------------
+  // None of these turns with the season unless its plant does. Warm grounds sit inside the reserved hues, so their
+  // chroma keeps under the cap; none of the vegetation here is lighter in shade than the palest field above, so
+  // the river's lift is what it was.
+
+  // Tundra: lighter and rustier than moor, never a green.
+  set(M.tundraCool, all([0.675, 0.052, 112]), UPLAND);
+  set(M.tundraMid, all([0.71, 0.056, 94]), UPLAND);
+  set(M.tundraWarm, all([0.645, 0.062, 62]), UPLAND);
+  set(M.lichen, all([0.8, 0.03, 122]), LAND);
+  set(M.sedge, [[0.67, 0.064, 122], [0.675, 0.062, 118], [0.68, 0.064, 94], [0.68, 0.05, 88]], LAND);
+  set(M.bog, all([0.66, 0.068, 98]), LAND);
+  set(M.bogRed, all([0.58, 0.06, 28]), LAND);
+  // A pool is dark still water seen from above: one flat tone, a little lighter where the sky is in it.
+  set(M.pool, all([0.5, 0.045, 238]), LINE);
+  set(M.frostNet, all([0.66, 0.052, 108]), LINE);
+  // Taiga: dark spires on a pale floor.
+  set(M.floorLichen, all([0.82, 0.03, 112]), LAND);
+  set(M.spruceCool, evergreen([0.31, 0.04, 192]), CANOPY);
+  set(M.spruceMid, evergreen([0.34, 0.043, 184]), CANOPY);
+  set(M.spruceWarm, evergreen([0.365, 0.046, 174]), CANOPY);
+  set(M.birch, [[0.7, 0.09, 122], [0.68, 0.08, 118], [0.74, 0.085, 92], [0.62, 0.02, 60]], CANOPY);
+  set(M.dwarfBirch, [[0.58, 0.07, 126], [0.55, 0.06, 120], [0.56, 0.075, 52], [0.54, 0.03, 45]], CANOPY);
+  // Ice. Floes are a shade bluer than snow and flat; old ice and glacier ice are the blue of the picture.
+  const FLOE = { drop: 0.2, rise: 0.6, cool: 0.03, coolHue: 250, warm: 0, ramp: "land" } as const;
+  set(M.packIce, all([0.925, 0.016, 232]), FLOE);
+  set(M.packIceBlue, all([0.895, 0.026, 226]), FLOE);
+  set(M.lakeIce, all([0.91, 0.02, 230]), FLOE);
+  set(M.riverIce, all([0.915, 0.02, 232]), FLOE);
+  set(M.iceFoot, all([0.86, 0.04, 222]), SNOWY);
+  set(M.glacier, all([0.82, 0.055, 218]), SNOWY);
+  set(M.berg, all([0.93, 0.022, 226]), SNOWY);
+  set(M.firn, all([0.905, 0.03, 238]), SNOWY);
+  set(M.crevasse, all([0.74, 0.04, 232]), LINE);
+
+  // Steppe: khaki to straw, between the Mediterranean's sage and the savanna's gold.
+  // Dry grass greys a little in winter, and is never lighter in shade than the palest field of its season.
+  const dryGrass = (c: Lch): Seasons => [c, c, [c[0] > 0.78 ? 0.78 : c[0], c[1], c[2] - 2], [c[0] > 0.77 ? 0.77 : c[0] - 0.01, c[1] - 0.012, c[2] - 4]];
+  set(M.steppeCool, dryGrass([0.74, 0.052, 104]), LAND);
+  set(M.steppeMid, dryGrass([0.78, 0.058, 98]), LAND);
+  set(M.steppeWarm, dryGrass([0.805, 0.06, 93]), LAND);
+  set(M.garrigue, [[0.73, 0.024, 310], [0.735, 0.018, 300], [0.72, 0.03, 90], [0.71, 0.025, 95]], UPLAND);
+  // Sage: the Mediterranean's sward, greyer and paler than any temperate green and greener than the steppe's khaki.
+  set(M.sageCool, dryGrass([0.725, 0.036, 132]), LAND);
+  set(M.sageMid, dryGrass([0.76, 0.04, 124]), LAND);
+  set(M.sageWarm, dryGrass([0.79, 0.044, 114]), LAND);
+  // Bare earths. Sand, salt and gravel shade warm, as a dune does: a violet shade is stone's.
+  const DUNE = { drop: 0.27, rise: 0.4, cool: 0.014, coolHue: 340, warm: 0.045, ramp: "land" } as const;
+  set(M.earthPale, all([0.84, 0.036, 80]), DUNE);
+  set(M.earthRed, all([0.64, 0.068, 44]), DUNE);
+  set(M.desertSand, all([0.865, 0.064, 78]), DUNE);
+  set(M.desertSandDeep, all([0.83, 0.072, 70]), DUNE);
+  set(M.reg, all([0.77, 0.05, 68]), DUNE);
+  set(M.salt, all([0.95, 0.01, 100]), PALE);
+  set(M.wadi, all([0.8, 0.036, 76]), LINE);
+  // Sandstone shades warm too: a red-brown scarp in shadow, never the violet of the temperate crags.
+  const SANDSTONE = { drop: 0.4, rise: 0.5, cool: 0.02, coolHue: 330, warm: 0.05, ramp: "land" } as const;
+  set(M.rockDesert, all([0.7, 0.075, 58]), SANDSTONE);
+  set(M.cliffDesert, all([0.62, 0.084, 46]), SANDSTONE);
+  set(M.tigerBush, evergreen([0.44, 0.045, 118]), LAND);
+  // Savanna: gold, clear of the reserved gold by its chroma.
+  // Green-gold: grass that has had its rains, not straw. The desert is the tan country; the savanna is alive.
+  set(M.savannaCool, dryGrass([0.75, 0.088, 112]), LAND);
+  set(M.savannaMid, dryGrass([0.775, 0.086, 104]), LAND);
+  set(M.savannaWarm, dryGrass([0.785, 0.084, 95]), LAND);
+  set(M.floorJungle, evergreen([0.38, 0.06, 158]), LAND);
+  set(M.mud, all([0.6, 0.045, 75]), LINE);
+  // Plants of the warm climates: all evergreen.
+  set(M.thorn, evergreen([0.5, 0.042, 118]), CANOPY);
+  set(M.cypress, evergreen([0.3, 0.04, 165]), CANOPY);
+  set(M.pine, evergreen([0.42, 0.06, 148]), CANOPY);
+  set(M.olive, evergreen([0.62, 0.035, 135]), CANOPY);
+  set(M.maquis, evergreen([0.5, 0.05, 132]), CANOPY);
+  set(M.acacia, evergreen([0.5, 0.058, 122]), CANOPY);
+  // Jungle: deeper and more saturated than any temperate wood, in greens far enough apart that the canopy is lumpy.
+  set(M.jungleCool, evergreen([0.36, 0.072, 160]), CANOPY);
+  set(M.jungleMid, evergreen([0.44, 0.088, 150]), CANOPY);
+  set(M.jungleWarm, evergreen([0.5, 0.094, 142]), CANOPY);
+  set(M.jungleBright, evergreen([0.555, 0.086, 136]), CANOPY);
+  set(M.jungleBloom, all([0.78, 0.045, 355]), CANOPY);
+  set(M.palm, evergreen([0.52, 0.092, 138]), CANOPY);
+  set(M.mangrove, evergreen([0.43, 0.075, 146]), CANOPY);
+  set(M.cactus, evergreen([0.55, 0.06, 158]), CANOPY);
+  set(M.trunk, all([0.56, 0.04, 62]), LINE);
+  set(M.mound, all([0.62, 0.058, 58]), DUNE);
+  // Built things of the climates: mud plaster, thatch and turf. Lit colours, as the other walls and roofs are.
+  set(M.adobe, all([0.8, 0.052, 68]), BUILT);
+  set(M.thatch, all([0.72, 0.06, 86]), BUILT);
+  set(M.turf, evergreen([0.6, 0.07, 128]), BUILT);
+
   return s;
 }
 

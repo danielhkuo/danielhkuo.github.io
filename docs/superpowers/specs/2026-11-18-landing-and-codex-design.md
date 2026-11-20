@@ -90,6 +90,9 @@ on a wide screen it sits a little east, so the landmark shows clear of the Codex
   from the core's structures. Without structures, the site's point and a radius by type. **The town's anchor is its
   harbour** (the widest dredged basin near it), and the coil lies inside it, on the water: round the bell tower the
   houses hid all but scraps of the dragon.
+- **Too big to ring** (2026-11-19). The body is now about 40 cells long: round a building whose rest radius is over 10
+  it would cover a third of the ring. There the dragon curls up in a coil of radius 7 just clear of the walls, south of
+  the building, else the first side (SE, SW, E, W, …) where three-quarters of the coil shows.
 - **Rest radius** `R = clamp(half-diagonal of the anchor + 3, 8, 26)` cells: just clear of the walls. The body is
   about 58 cells long, so a lighthouse gets a full ring and the abbey less than half a ring.
 - **Sweep.** The head turns the way it is already going round the landmark. The sweep ends at the south point and

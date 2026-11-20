@@ -17,7 +17,7 @@ import { sortIndicesBy } from "../core/heap.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Conform, Structure } from "./built.ts";
-import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext } from "./sites.ts";
+import { aridAt, coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext, tempAt } from "./sites.ts";
 import { boat, put, sculpt } from "./structures.ts";
 import * as W from "./wonderworks.ts";
 
@@ -516,7 +516,8 @@ const HOTEL: Kind = {
       for (const rock of c.stacks) {
         const dx = torusDelta(cove.x, rock.x, n), dy = torusDelta(cove.y, rock.y, n);
         const d = Math.sqrt(dx * dx + dy * dy);
-        // Off the mouth or beside it, never up the cove.
+        // Off the mouth or beside it, never up the cove. The nearer the better (see the score): a rock far out on the
+        // deep water does not belong to the cove.
         if (d > r.hotel.rock || rock.top > r.hotel.top || dy < -8) continue;
         tally.pass(L2);
         // The hotel's own rock takes in whatever stands within its oval; outside it, nothing but water beside
@@ -531,7 +532,7 @@ const HOTEL: Kind = {
         const x = Math.floor(rock.x), y = Math.floor(rock.y);
         const px = x - W.HOTEL_ROCK[0] + W.HOTEL_PONTOON[0], py = y - W.HOTEL_ROCK[1] + W.HOTEL_PONTOON[1];
         out.push({
-          x, y, level: 0, height: 31, score: 2 - e - d / r.hotel.rock + cove.width / 40,
+          x, y, level: 0, height: 31, score: 2 - e - (2 * d) / r.hotel.rock + cove.width / 40,
           box: [x - W.HOTEL_ROCK[0] - 2, y - W.HOTEL_ROCK[1] - 2, x - W.HOTEL_ROCK[0] + W.HOTEL_W + 2, y - W.HOTEL_ROCK[1] + W.HOTEL_H + 2],
           anchors: { pontoon: [px, py], cove: [cove.x, cove.y] },
           probes: [[x, y + 2, 0, 25], [px, py, 0, 2]],
@@ -811,7 +812,7 @@ const BRIDGE_TOWN: Kind = {
         for (let q = 0; q < 16; q++) for (const d of [ring / 3, (2 * ring) / 3, ring]) {
           const nx = Math.floor(gx + 0.5 + RX[q] * d), ny = Math.floor(gy + 0.5 + RY[q] * d), j = at(c, nx, ny);
           looked++;
-          if (isDry(c, j) && c.slope[j] < 0.15 && isFarmable(coverAtNode(c, nx, ny))) farm++;
+          if (isDry(c, j) && c.slope[j] < 0.15 && worked(coverAtNode(c, nx, ny))) farm++;
         }
         if (farm / looked < r.bridgeTown.farm) continue;
         tally.pass(L4);
@@ -975,6 +976,32 @@ const OBSERVATORY: Kind = {
   },
 };
 
+/** Land that feeds a town: fields and meadows, and in dry country the sage and steppe that are grazed. */
+function worked(m: number): boolean {
+  return isFarmable(m) || (m >= M.sageCool && m <= M.sageWarm) || (m >= M.steppeCool && m <= M.steppeWarm);
+}
+
+/**
+ * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
+ * score: the great oak in temperate country, the bridge town in temperate and warm country, the drowned church in
+ * a lake that is not frozen, the marsh house off the tundra and the jungle, the observatory in the dry side's hot
+ * country; the baths lean to the cold and the hotel to the warm.
+ */
+const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; side?: "wet" | "dry"; lean?: (t: number) => number }>> = {
+  "great-oak": { lo: 0.44, hi: 0.62 },
+  "bridge-town": { lo: 0.44, hi: 0.66 },
+  "drowned-church": { lo: 0.32, hi: 1 },
+  "marsh-house": { lo: 0.3, hi: 0.75 },
+  baths: { lo: 0, hi: 1, lean: (t) => (t < 0.4 ? 1.5 : 0) },
+  "cove-hotel": { lo: 0.44, hi: 1, lean: (t) => (t > 0.56 ? 1 : 0) },
+  // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
+  railway: { lo: 0, hi: 1, lean: (t) => (t > 0.34 ? 2 : 0) },
+  "airship-mast": { lo: 0, hi: 1 },
+  // Under clear skies: the highest summit of the dry side's hot country, between the Mediterranean's woods and the
+  // equator's cloud forest. (A white dome on a snowfield read poorly side by side, and a jungle ridge suited it less.)
+  observatory: { lo: 0.72, hi: 0.9, side: "dry" },
+};
+
 const KINDS: Record<WonderType, Kind> = {
   baths: BATHS, railway: RAILWAY, "drowned-church": CHURCH, "cove-hotel": HOTEL,
   "marsh-house": MARSH, "airship-mast": MAST, "bridge-town": BRIDGE_TOWN, "great-oak": OAK, observatory: OBSERVATORY,
@@ -1006,15 +1033,31 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
   const wonders: PlacedWonder[] = [], skipped: string[] = [];
   for (const type of WONDER_ORDER) {
     if (opts.only && !opts.only.includes(type)) continue;
-    const kind = KINDS[type], names = kind.rules(rules);
+    const kind = KINDS[type], climate = WONDER_CLIMATE[type], bounded = climate.lo > 0 || climate.hi < 1 || climate.side !== undefined;
+    const inClimate = `in its climate (temperature ${climate.lo}–${climate.hi}${climate.side ? `, the ${climate.side} side` : ""})`;
+    const names = bounded ? [...kind.rules(rules), inClimate] : kind.rules(rules);
     const tally = new Tally(names);
-    const cands = kind.candidates(land, rules, tally);
+    const found = kind.candidates(land, rules, tally);
+    // Each keeps to its climate, and leans to the one it likes best. None stands on the home island: the opening
+    // flight is the abbey's and the town's, and stays as it is however the rest of the world is grown.
+    const cands: Cand[] = [];
+    for (const q of found) {
+      if (c.island[wrap(Math.floor(q.y / 4), c.gN) * c.gN + wrap(Math.floor(q.x / 4), c.gN)] === c.home) continue;
+      const t = tempAt(c, q.x, q.y);
+      if (t < climate.lo || t > climate.hi) continue;
+      if (climate.side !== undefined && (aridAt(c, q.x, q.y) > 0.5) !== (climate.side === "dry")) continue;
+      if (bounded) tally.pass(inClimate);
+      cands.push(climate.lean ? { ...q, score: q.score + climate.lean(t) } : q);
+    }
     // Best first; ties keep the order the land was scanned in, so the order is the same on every run.
     const order = sortIndicesBy(Float64Array.from(cands, (q) => -q.score));
     let why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     let placed = 0;
-    // A crowded world may leave a wonder no place at the full spacing; it then takes the best place at half of it.
-    for (const reach of [rules.spacing, rules.spacing / 2]) {
+    // A crowded world may leave a wonder no place at the full spacing; it then takes the best place at half of it,
+    // and at 250 cells (of the 10240 world) if it must: still out of a landmark's own view, some 200 cells to either
+    // side. Not the bridge town: so near, it would stand by the old bridge, two bridges in one view.
+    const reaches = type === "bridge-town" ? [rules.spacing, rules.spacing / 2] : [rules.spacing, rules.spacing / 2, rules.spacing / 2.4];
+    for (const reach of reaches) {
     if (placed >= rules.counts[type]) break;
     why = { spacing: 0, free: 0, seen: 0, cap: 0 };
     for (const k of order) {

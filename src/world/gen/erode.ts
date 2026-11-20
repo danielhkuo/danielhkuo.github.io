@@ -131,7 +131,11 @@ export interface ScheduleResult {
   steadinessG: number;
 }
 
-export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleResult {
+/**
+ * `rain`, on C, weights each node's share of the drainage area (the climate's rain, gen/native.ts): a dry island
+ * wears slowly and a wet one deep. Absent: rain is even.
+ */
+export function runSchedule(plan: Plan, p: WorldParams, seed: number, rain: Float64Array | null = null): ScheduleResult {
   const cN = plan.n;
   const cCount = cN * cN;
   const h = new Float64Array(cCount);
@@ -164,7 +168,7 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
     d: plan.d,
     isSea: isSeaC,
     jitter: makeJitter(cN, p.erode.jitter, seed),
-    rain: null,
+    rain,
     eps: p.erode.eps,
     diffusionSweeps: p.erode.diffusionSweeps,
     sc: scC,
@@ -228,6 +232,7 @@ export function runSchedule(plan: Plan, p: WorldParams, seed: number): ScheduleR
   }
 
   state.n = gN;
+  state.rain = rain ? upsampleBSpline(rain, cN, 2) : null;
   state.h = g;
   state.uplift = gUplift;
   state.k = gK;

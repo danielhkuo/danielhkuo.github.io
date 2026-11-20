@@ -11,14 +11,16 @@ import { castShadow, drawGroup, drawStrand, figure, pieceOf, place, type Land, t
 import { ball, filled, limb, put, vox } from "./vox.ts";
 import { drawWind, WIND_BACK, windAmount } from "./wind.ts";
 
-// Sizes are those the owner chose on 2026-11-18: about 78% of the first build (spacing 2.6, a chest of 3.1), which
-// stood too big against the landmarks. Every length below is in proportion.
+// Sizes: about half the first build (spacing 2.6, a chest of 3.1). The owner found that too big against the landmarks
+// (2026-11-18), then still coarse beside the land (2026-11-19): its 2–3 pixel bands and inked outline read chunky next
+// to land whose detail is one or two pixels. At a chest of 1.65 the body is about 5 pixels wide with its ink, close to
+// the land's own grain. Every length below is in proportion.
 
 /** Body rings behind the head, and the path between them, cells. */
 const RINGS = 22;
-const SPACING = 2;
+const SPACING = 1.4;
 /** No pixel of the dragon is drawn farther than this from the head's screen position. */
-export const RIVER_REACH = 72;
+export const RIVER_REACH = 50;
 
 /** The path is sampled at half the ring spacing: the whiskers, the mane and the fin use the points between. */
 const FINE = SPACING / 2;
@@ -31,12 +33,12 @@ const JOINTS = FIN_ROOT + 2 * FIN_PAIRS + 2;
 /** Cells of path the body lies along, snout to the end of the fin. */
 export const RIVER_LENGTH = JOINTS * FINE;
 /** The wave: its length along the body (cells) and its greatest swing to either side. */
-const WAVE_LENGTH = 31;
-const WAVE_SWING = 3.9;
+const WAVE_LENGTH = 22;
+const WAVE_SWING = 2.6;
 /** The swing grows in over this much of the body behind the head, cells; the fin whips wider over FIN_WHIP. */
-const WAVE_IN = 17;
-const FIN_WHIP = 8;
-const WHISKER_POINTS = 16;
+const WAVE_IN = 12;
+const FIN_WHIP = 6;
+const WHISKER_POINTS = 13;
 const MANE_RINGS = 7;
 const FRONT_FEET = 4;
 const HIND_FEET = 14;
@@ -52,16 +54,16 @@ const FULL_CURVE = TURN / CRUISE;
 /** Fine points either side over which the path's curvature is measured. */
 const CURVE_SPAN = 3;
 /** How far a full bank throws the whisker tips to the outside of the turn, cells; and the mane and fin, radians. */
-const WHISKER_THROW = 5.5;
+const WHISKER_THROW = 3.8;
 const MANE_THROW = 0.55;
 const FIN_THROW = 0.5;
 
 /** Radius of ring i: a slim neck, a fuller chest, a long taper to the tail. */
 function ringRadius(i: number): number {
   const u = i / (RINGS - 1);
-  if (u < 0.2) return 1.8 + (2.4 - 1.8) * smooth(u / 0.2);
+  if (u < 0.2) return 1.25 + (1.65 - 1.25) * smooth(u / 0.2);
   const v = (u - 0.2) / 0.8;
-  return 2.4 - (2.4 - 1) * v * Math.sqrt(v);
+  return 1.65 - (1.65 - 0.75) * v * Math.sqrt(v);
 }
 
 /**
@@ -87,7 +89,7 @@ function rolledRing(look: Look, r: number, band: boolean, spine: boolean, roll: 
         if (d2 > rr * rr + 0.3) continue;
         const rim = d2 > (rr - 1) * (rr - 1);
         let c: number;
-        if (up < -0.2) c = z === 0 && rim ? look.bellyDark : look.belly;
+        if (up < -0.1) c = z === 0 && rim ? look.bellyDark : look.belly;
         else if (band && x < 0 && d2 > (rr - 1.1) * (rr - 1.1)) c = look.scale;
         else if (z === layers - 1) c = d2 <= (rr - 0.9) * (rr - 0.9) ? look.bodyLight : look.body;
         else c = z < zc ? look.bodyDark : look.body;
@@ -105,31 +107,21 @@ function rolledRing(look: Look, r: number, band: boolean, spine: boolean, roll: 
 }
 
 function headPiece(look: Look): Piece {
-  const v = vox(7, 6, 7);
+  const v = vox(5, 4, 5);
   const skin = skinOf(look);
-  // Jaw and chin under, skull and snout over.
-  ball(v, 2.7, 0, 0.8, 3.6, 1.6, 0.8, () => look.belly);
-  ball(v, 0, 0, 2.2, 2.8, 2.6, 1.9, skin);
-  ball(v, 3.6, 0, 1.9, 3, 1.7, 1.2, skin);
-  put(v, 6, 0, 3, look.bodyLight);
-  put(v, 5, -1, 3, look.scale);
-  put(v, 5, 1, 3, look.scale);
+  // Jaw under, skull and snout over: at this size a few pixels each, so every one is placed with care.
+  ball(v, 1.8, 0, 0.5, 2.6, 1.1, 0.6, () => look.belly);
+  ball(v, 0, 0, 1.6, 2, 1.8, 1.3, skin);
+  ball(v, 2.5, 0, 1.4, 2.1, 1.2, 0.9, skin);
+  put(v, 4, 0, 2, look.bodyLight);
   for (const side of [-1, 1]) {
-    // Cheek fins, swept back.
-    limb(v, -1.5, side * 2.3, 1.5, -3.6, side * 4.3, 1.5, 0.6, 0.6, (x) => (x < -2.5 ? look.mane : look.maneDark));
-    // Horns: back and up, pale at the tips. (At this size a prong on each is only noise.)
-    limb(v, -1, side * 1.6, 4, -5.5, side * 2.7, 5.5, 0.6, 0.6, (x) => (x < -3 ? look.tip : look.mane));
-    // The face, on the crown where no slice above can hide it: a bright eye under an inked lid.
-    put(v, 1, side * 2, 4, look.tip);
-    put(v, 2, side * 2, 4, look.tip);
-    put(v, 0, side * 2, 4, look.ink);
-    put(v, 1, side, 4, look.ink);
-    put(v, 2, side, 4, look.ink);
+    // Horns: back and up, pale at the tips.
+    limb(v, -0.5, side * 1.2, 3, -3.8, side * 2, 4, 0.6, 0.6, (x) => (x < -2.5 ? look.tip : look.mane));
+    // The face, on the crown where no slice above can hide it: a bright eye beside an inked lid.
+    put(v, 1, side * 1.5, 3, look.tip);
+    put(v, 0, side * 1.5, 3, look.ink);
   }
-  put(v, 1, 0, 4, look.bodyLight);
-  put(v, 2, 0, 4, look.bodyLight);
-  // The mane begins on the crown.
-  limb(v, 0, 0, 4, -3, 0, 4, 0.6, 0.6, () => look.maneLight);
+  put(v, 1, 0, 3, look.bodyLight);
   return pieceOf(v, look.ink);
 }
 
@@ -141,15 +133,12 @@ function lockPiece(look: Look, length: number, r: number): Piece {
   return pieceOf(v, look.ink);
 }
 
-/** A pair of feet for a body of radius r: short legs trailing back, three claws each. */
+/** A pair of feet for a body of radius r: short legs trailing back, a claw each. */
 function feetPiece(look: Look, r: number): Piece {
-  const v = vox(5, Math.ceil(r) + 4, 2);
+  const v = vox(3, Math.ceil(r) + 3, 1);
   for (const side of [-1, 1]) {
-    limb(v, 0, side * (r - 0.5), 0, -2.3, side * (r + 1.6), 0, 0.8, 0.7, () => look.bodyDark);
-    limb(v, 0, side * (r - 0.5), 1, -1.5, side * (r + 1.1), 1, 0.7, 0.6, () => look.body);
-    put(v, -3, side * (r + 1), 0, look.mane);
-    put(v, -4, side * (r + 2), 0, look.tip);
-    put(v, -3, side * (r + 3), 0, look.mane);
+    limb(v, 0, side * (r - 0.4), 0, -1.6, side * (r + 1.1), 0, 0.6, 0.6, () => look.bodyDark);
+    put(v, -2, side * (r + 1.6), 0, look.mane);
   }
   return pieceOf(v, look.ink);
 }
@@ -206,11 +195,11 @@ function kitOf(look: Look): Kit {
     k = {
       head: headPiece(look),
       rings: new Map(),
-      locks: [lockPiece(look, 5, 0.8), lockPiece(look, 4, 0.7), lockPiece(look, 3, 0.6)],
+      locks: [lockPiece(look, 3, 0.6), lockPiece(look, 3, 0.5), lockPiece(look, 2, 0.5)],
       frontFeet: feetPiece(look, ringRadius(FRONT_FEET)),
       hindFeet: feetPiece(look, ringRadius(HIND_FEET)),
-      rays: [raysPiece(look, 2, 1.5), raysPiece(look, 4, 2.7), raysPiece(look, 5, 3.2), raysPiece(look, 4, 2.7), raysPiece(look, 3, 1.6)],
-      feather: featherPiece(look, 4),
+      rays: [raysPiece(look, 1, 1), raysPiece(look, 3, 1.9), raysPiece(look, 3, 2.2), raysPiece(look, 3, 1.9), raysPiece(look, 2, 1.1)],
+      feather: featherPiece(look, 3),
       strand,
     };
     kits.set(look, k);
@@ -300,10 +289,10 @@ export function drawRiver(
     const j = FIN_ROOT + 2 * m;
     const flutter = 0.1 * (m + 1) * Math.sin(pose.wave * 2.2 - m * 0.9) + FIN_THROW * turn[j];
     if (m === FIN_PAIRS) {
-      place(fig, kit.feather, px[j], py[j], pa[j] - 0.8, ph[j] + flutter);
+      place(fig, kit.feather, px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
       continue;
     }
-    place(fig, kit.rays[m], px[j], py[j], pa[j] - 0.8, ph[j] + flutter);
+    place(fig, kit.rays[m], px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
   }
   const fin = fig.count;
   for (let i = RINGS - 1; i >= 0; i--) {
@@ -321,11 +310,11 @@ export function drawRiver(
     const sway = 0.5 * stir * Math.sin(pose.wave * 2.3 - i * 1.1) + MANE_THROW * turn[j + 4];
     const lock = kit.locks[i < 2 ? 0 : i < 5 ? 1 : 2];
     // Alternate locks sit a little to either side of the spine, so the mane flickers like a flame.
-    const aside = i % 2 === 0 ? 0.6 : -0.6;
-    place(fig, lock, px[j] - Math.sin(ph[j]) * aside, py[j] + Math.cos(ph[j]) * aside, pa[j] + 1.2, ph[j] + sway);
+    const aside = i % 2 === 0 ? 0.4 : -0.4;
+    place(fig, lock, px[j] - Math.sin(ph[j]) * aside, py[j] + Math.cos(ph[j]) * aside, pa[j] + 0.8, ph[j] + sway);
   }
   const body = fig.count;
-  place(fig, kit.head, s.x, s.y, s.alt - 2.3, s.heading);
+  place(fig, kit.head, s.x, s.y, s.alt - 1.6, s.heading);
 
   castShadow(out, rect, view, fig, n, shadowKeep);
   // The wind of a boost lies under the body, so the streaks peel out from behind its outline.
@@ -340,12 +329,12 @@ export function drawRiver(
   // ago. At rest they hang where they grow: splayed to either side of the snout and curling back.
   const hs = Math.sin(s.heading), hc = Math.cos(s.heading), flown = pose.vigour;
   for (const side of [-1, 1]) {
-    whisker[0] = s.x + 4.7 * hc - side * 1.6 * hs;
-    whisker[1] = s.y + (4.7 * hs + side * 1.6 * hc) / 0.8;
+    whisker[0] = s.x + 3.3 * hc - side * 1.1 * hs;
+    whisker[1] = s.y + (3.3 * hs + side * 1.1 * hc) / 0.8;
     whisker[2] = s.alt;
     for (let i = 1; i < WHISKER_POINTS; i++) {
       const jt = joints[i - 1], u = i / (WHISKER_POINTS - 1);
-      const out2 = side * (2.8 + 0.43 * i) + 0.14 * i * Math.sin(pose.wave * 2.6 - i * 0.6 + side)
+      const out2 = side * (1.9 + 0.3 * i) + 0.1 * i * Math.sin(pose.wave * 2.6 - i * 0.6 + side)
         - WHISKER_THROW * turn[2 * i] * u * Math.sqrt(u);
       // Streaming: as offsets from the head, the short way round the world.
       let dx = jt.x - Math.sin(jt.heading) * out2 - s.x, dy = jt.y + Math.cos(jt.heading) * out2 - s.y;
@@ -354,7 +343,7 @@ export function drawRiver(
       if (dy > n / 2) dy -= n;
       else if (dy < -n / 2) dy += n;
       // Hanging: forward of the head and out to the side, in the head's own frame, stirring a little.
-      const fwd = 4.7 - 6 * u * u, lat = side * (1.6 + 4.5 * Math.sin(u * 1.5708)) + 0.4 * u * Math.sin(pose.wave * 1.3 + i * 0.5 + side);
+      const fwd = 3.3 - 4.2 * u * u, lat = side * (1.1 + 3.1 * Math.sin(u * 1.5708)) + 0.3 * u * Math.sin(pose.wave * 1.3 + i * 0.5 + side);
       const rx = fwd * hc - lat * hs, ry = (fwd * hs + lat * hc) / 0.8;
       whisker[i * 3] = s.x + rx + (dx - rx) * flown;
       whisker[i * 3 + 1] = s.y + ry + (dy - ry) * flown;

@@ -129,6 +129,11 @@ export interface Painted {
   ink: Uint8Array;
   /** The wash each land pixel's light belongs to (wash.ts): 0 shade, 1 mid, 2 light; 255 where none is laid. */
   step: Uint8Array;
+  /**
+   * The tiles the painter read, in the order it first read them, each under its unwrapped tile position
+   * (ty · 65536 + tx, offset so neither is negative). The pictures of the plants rooted in them are drawn from this.
+   */
+  tiles?: Map<number, unknown>;
 }
 
 export function newPainted(x0: number, r0: number, w: number, h: number): Painted {

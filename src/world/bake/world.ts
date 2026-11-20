@@ -109,6 +109,10 @@ export interface BakeWorld {
   rock: Uint8Array;
   /** Six planes of cN², archetype-major, summing to 1 per node. */
   regions: Float32Array;
+  /** Sea-level temperature, 0 at the pole … 1 at the equator, 0.5 on the temperate plateau. Absent: temperate everywhere. */
+  temp?: Float32Array;
+  /** The dry side's share on C, 0 on the wet side … 1 on the dry (gen/climate.ts). Absent: one side, the wet. */
+  arid?: Float32Array;
 
   /** What people built: structures, pads and terraces. Absent on a wild world. */
   built?: BuiltIndex;
@@ -283,6 +287,8 @@ export function buildBakeWorld(inp: BakeWorldInput): BakeWorld {
     ponds, bars,
     moisture: climate.moisture, wind: climate.wind, exposure, debris: debrisOnC(land.debris, gN),
     rock: land.plan.rock, regions: land.plan.regions,
+    temp: climate.temp,
+    arid: climate.arid,
     built: settlement ? indexBuilt(settlement.built, n) : undefined,
     roads: settlement ? riverIndex(settlement.built.roads.map((r) => ({ vertices: roadVertices(r.vertices, r.width), stride: 3 })), n) : undefined,
   };

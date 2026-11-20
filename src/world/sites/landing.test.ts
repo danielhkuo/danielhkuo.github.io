@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { SETTLE_SLOPE } from "../dragon/body.ts";
 import { CLEARANCE, CRUISE, MIN_GAP, type FlightInput, type FlightState, type Terrain } from "../runtime/flight.ts";
 import {
-  advance, beginLanding, cameraAt, easeFocus, FOCUS_RATE, LANDING_CAP, land, MAX_TURN, NEAR, nearest, offered,
+  advance, beginLanding, cameraAt, COIL_MAX, COIL_RADIUS, easeFocus, FOCUS_RATE, LANDING_CAP, land, MAX_TURN, NEAR, nearest, offered,
   pullUp, QUIET_FACTOR, REST_LIFT, restShare, RISE_SLOPE, SINK_END, takeOff, type Phase, type Target,
 } from "./landing.ts";
 
@@ -78,7 +78,7 @@ test("from any heading and distance, the dragon coils down to rest at the landma
         const label = `d ${d} bearing ${bearing.toFixed(2)} heading ${heading.toFixed(2)}`;
         const { s, phase, t } = comeDown(start, TOWER, FLAT, LANDING_CAP + 1, (prev, next) => {
           assert.ok(Math.abs(turned(next.heading, prev.heading)) <= MAX_TURN * DT + 1e-9, `${label}: heading jumped`);
-          assert.ok(next.alt >= 5 + MIN_GAP - 1e-9, `${label}: below the ground`);
+          assert.ok(next.alt >= 5 + Math.min(MIN_GAP, REST_LIFT) - 1e-9, `${label}: below the ground`);
         });
         assert.equal(phase.kind, "landed", label);
         assert.ok(t < LANDING_CAP - 1, `${label}: took ${t.toFixed(1)} s`);
@@ -131,7 +131,7 @@ test("round a coil that crosses a cliff it rises and falls no steeper than its b
     while (phase.kind === "landing") {
       const a = phase.approach, before = s;
       ({ phase, s } = advance(phase, s, STILL, DT, cliff, N, TARGETS));
-      assert.ok(s.alt >= cliff.groundHeight(s.x, s.y) + MIN_GAP - 1e-9, `under the ground at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
+      assert.ok(s.alt >= cliff.groundHeight(s.x, s.y) + Math.min(MIN_GAP, REST_LIFT) - 1e-9, `under the ground at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
       if (a.swept / a.sweep <= SINK_END + 0.05) continue;
       const run = Math.hypot(delta(before.x, s.x), delta(before.y, s.y));
       assert.ok(Math.abs(s.alt - before.alt) <= SETTLE_SLOPE * run + 0.02, `stepped ${(s.alt - before.alt).toFixed(3)} over ${run.toFixed(3)} cells`);
@@ -140,7 +140,7 @@ test("round a coil that crosses a cliff it rises and falls no steeper than its b
 });
 
 test("it lands across the world's edge", () => {
-  const edge: Target = { id: "windmill-0", x: 10, y: 10, radius: 10.4 };
+  const edge: Target = { id: "windmill-0", x: 10, y: 10, radius: 8.4 };
   const { s, phase } = comeDown(flier(N - 50, 10, 0), edge, FLAT);
   assert.equal(phase.kind, "landed");
   assert.ok(Math.abs(delta(edge.x, s.x)) < 3 && Math.abs(delta(edge.y + edge.radius, s.y)) < 3, `(${s.x}, ${s.y})`);
@@ -242,4 +242,34 @@ test("where the land would hide its head at the south point, it comes to rest at
   const at = (3 * Math.PI) / 4;
   const x = TOWER.x + TOWER.radius * Math.cos(at), y = TOWER.y + TOWER.radius * Math.sin(at);
   assert.ok(Math.hypot(delta(x, s.x), delta(y, s.y)) < 3, `rests at (${s.x.toFixed(1)}, ${s.y.toFixed(1)}), wanted (${x.toFixed(1)}, ${y.toFixed(1)})`);
+});
+
+test("a building too big to ring: the dragon curls up in a small coil beside it, to the south on open ground", () => {
+  // The abbey's ring is 23 cells round its middle; a body of 40 cells would cover a third of it, which is no coil.
+  const { s, phase } = comeDown(flier(ABBEY.x + 60, ABBEY.y, Math.PI / 2), ABBEY, FLAT);
+  assert.equal(phase.kind, "landed");
+  // A coil of COIL_RADIUS just clear of the walls, due south: its middle ABBEY.radius + COIL_RADIUS south of the abbey's.
+  const cx = ABBEY.x, cy = ABBEY.y + ABBEY.radius + COIL_RADIUS;
+  assert.ok(Math.hypot(delta(cx, s.x), delta(cy + COIL_RADIUS, s.y)) < 3, `rests at (${s.x.toFixed(1)}, ${s.y.toFixed(1)}), wanted (${cx}, ${cy + COIL_RADIUS})`);
+});
+
+test("where the land hides the ground south of a big building, it curls up on the first side that shows", () => {
+  // A view that draws nearer land over anything low south of row 5010: a wooded bank across the abbey's front.
+  const rect = { x: 5800, y: Math.round(0.8 * 5000) - 112, w: 400, h: 225 };
+  const bank: Terrain & { depthAt(px: number, py: number): number; rect(): typeof rect } = {
+    ...FLAT,
+    rect: () => rect,
+    depthAt: (_px, py) => (rect.y + py > 0.8 * 5010 - 3 ? Infinity : -Infinity),
+  };
+  const { s, phase } = comeDown(flier(ABBEY.x + 60, ABBEY.y, Math.PI / 2), ABBEY, bank);
+  assert.equal(phase.kind, "landed");
+  // South, south-east and south-west are all hidden; east of the abbey shows, and the head rests at that coil's south point.
+  const cx = ABBEY.x + ABBEY.radius + COIL_RADIUS, cy = ABBEY.y;
+  assert.ok(Math.hypot(delta(cx, s.x), delta(cy + COIL_RADIUS, s.y)) < 3, `rests at (${s.x.toFixed(1)}, ${s.y.toFixed(1)}), wanted (${cx}, ${cy + COIL_RADIUS})`);
+});
+
+test("a landmark small enough to ring keeps its coil round it", () => {
+  assert.ok(TOWER.radius <= COIL_MAX && ABBEY.radius > COIL_MAX);
+  const { s } = comeDown(flier(TOWER.x + 60, TOWER.y, Math.PI / 2), TOWER, FLAT);
+  assert.ok(Math.hypot(delta(TOWER.x, s.x), delta(TOWER.y + TOWER.radius, s.y)) < 3, `rests at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
 });
