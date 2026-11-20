@@ -1,7 +1,9 @@
 # The hall and the quest of five
 
-Status: draft 4, for the owner (Fable, 2026-11-19). Not built. The owner chose "across the world" for the five. Draft 2 had dialogue and choices; the owner asked for
-none. Draft 2 is in git at `2334b58`.
+Status: approved by the owner, 2026-11-20 (draft 5). His answers: the quest is opt-in, offered at the end of the
+first-flight lesson; floating arrows point the way; the hall is approved; the five stand as drafted, and he may still
+swap any. The projects will later come from a curated list, not the pinned repos. Earlier drafts are in git (draft 2,
+with dialogue, at `2334b58`).
 
 Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
 
@@ -10,33 +12,42 @@ Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
 - All projects move to one hall next to the home town.
 - The story is a quest. The visitor finds five odd things on the map.
 - Each thing shows one fact about Daniel.
-- There is no dialogue and there are no choices. The visitor lands. The thing moves. One line appears.
+- There is no dialogue. The visitor lands. The thing moves. One line appears.
+- The quest is opt-in. A visitor can explore freely instead, and join or leave the quest at any time.
 
 ## 2. How it works on a large map
 
 The map is large. The five things are small. These rules make them easy to find and easy to use.
 
-1. **The first is near home. The others are across the world.** The first is 15 seconds from the start, so every
-   visitor finds one. Each of the other four is in a different climate, about 60 to 90 seconds of flight from the one
-   before. The world loops, so the route is a circle that ends at home. The full quest takes about 8 minutes.
-2. **They are easy to see.** Each has a tall red pennant. Red is used for nothing else on the land.
-3. **The screen shows the way.** Five quatrefoils are in a corner of the screen. A small marker at the screen edge
-   points to the nearest thing not yet found. The things are far apart, so the marker is necessary.
-4. **Landing is the interaction.** Near a thing, the usual prompt appears. The visitor presses Space or taps. The
-   dragon lands, as it does now.
-5. **The thing responds.** It plays a short animation, 3 to 5 seconds long.
-6. **The visitor gets a keepsake.** One quatrefoil fills with a small icon. The pennant comes down.
-7. **One line appears.** A small card shows one fact about Daniel. This is the only text.
-8. **The visitor takes off.** Space or tap, as now.
+1. **The quest is offered after the lesson.** The first-flight lesson ends (steer, speed, leave). Then a small card
+   asks one thing, with two buttons: **explore** or **follow the quest**. The card does not stop the flight. A visitor
+   who has done the lesson on an earlier visit, but never answered, sees the card once, a few seconds into the flight.
+2. **Join or leave later.** The options panel has one line: "follow the quest" or "leave the quest". The quest
+   section of the Codex has a "follow the quest" button while the visitor is not on it.
+3. **The first is near home. The others are across the world.** The first is 15 seconds from the start. Each of the
+   other four is in a different climate, about 60 to 90 seconds of flight from the one before. The world loops, so
+   the route is a circle that ends at home. The full quest takes about 8 minutes.
+4. **They are easy to see.** Each has a tall red pennant until it is found.
+5. **A floating arrow points the way, only on the quest.** It points to the nearest thing not yet found. While the
+   thing is off the screen, the arrow sits at the screen's edge, on the line from the dragon to the thing. Once the
+   thing is on the screen, the arrow floats over it and bobs. It goes when the thing is found.
+6. **Landing is the interaction.** Near a thing, the usual prompt appears. The visitor presses Space or taps.
+7. **The thing responds.** It plays a short animation, 3 to 5 seconds long.
+8. **The visitor gets a keepsake.** One of five quatrefoils fills with a small icon. The pennant comes down.
+9. **One line appears.** A small card shows one fact about Daniel.
+10. **The visitor takes off.** Space or tap, as now.
 
-The visitor uses one button. There is nothing to read first, nothing to choose, and nothing to fail.
+Finds count whether or not the visitor is on the quest: an explorer who lands at one has found it. The five
+quatrefoils show in the corner of the screen only on the quest; the Codex always shows them.
 
 ## 3. The hall
 
 - One building next to the home town. It is in the first frame of a flight.
 - Landing there opens the Codex with all projects in a list. A row opens that project's page (the page that exists
   now).
-- The projects come from the pinned repos (`src/lib/github.ts`), as now.
+- The list takes any number of projects. It reads them through one function, `loadProjects()` in
+  `src/lib/projects.ts`, which today returns the pinned repos from `src/lib/github.ts`. When the curated list exists,
+  only that function changes. Nothing assumes six.
 - First step: the town opens the list. The new building comes with the next world build.
 - Look: sketch A, a long hall with a lantern on the roof.
 
@@ -78,14 +89,16 @@ Any of these can replace one of the five, or make a second quest later.
 | The abbey | About me, links and the terminal button, as now. |
 | One of the five | A small card: the keepsake icon and the one line. |
 
-- Every page ends with the five quatrefoils. A found one shows its icon and its line.
+- Every page ends with the five quatrefoils. A found one shows its icon and its line. While the visitor is not on the
+  quest, the section has a "follow the quest" button.
 - The other six landmarks no longer offer a landing. They are scenery.
 
 ## 7. Phones
 
 - The same steps. Tap to land. Tap to take off.
 - The card is a small sheet at the bottom of the screen.
-- The quatrefoils and the edge marker do not overlap the touch controls.
+- The quest card's two buttons are at least 44 pt tall.
+- The quatrefoils and the arrow do not overlap the touch controls.
 - A found thing gives the short buzz that exists now.
 - With reduced motion, the animation is one still frame.
 
@@ -102,12 +115,15 @@ Any of these can replace one of the five, or make a second quest later.
 
 - `content.ts`: `INTERESTS`, a list of `{ key, line }`.
 - `src/world/story/stops.ts`: the five stops as data: sprite, animation, icon, key of its line.
-- `src/world/story/progress.ts`: pure functions: which stops are found, the count, the nearest stop not found. Tested.
+- `src/world/story/quest.ts`: pure functions: the saved state (`world:quest`: on, off or not yet asked, and the stops
+  found), when to offer the quest, the nearest stop not found, and where the arrow goes on the screen. Tested.
+- `src/lib/projects.ts`: `loadProjects()`, the one way the hall gets its projects.
 - `src/world/live/`: the sprites, animations and pennants. They use time and the seed only. No `Math.random`.
 - `Codex.tsx`: the project list, the small card, the five quatrefoils.
-- `Overlays.tsx`: the five quatrefoils and the edge marker in the flight view.
-- `session.ts`: storage key `world:story` (the list of found stops). Each find is also a discovery, so the caption and
-  the buzz work as now.
+- The quest card (beside `FlightCard.tsx`), and one line in `OptionsPanel.tsx`.
+- `src/world/story/overlay.ts`: the five quatrefoils and the arrow, drawn into the frame after the dragon.
+- `session.ts`: kept small, since the title session is changing it. It reads and saves the quest state, reports a
+  find, and calls the overlay. Each find is also a discovery, so the caption and the buzz work as now.
 - Sound: one bell note for stop 3. The sound session makes it.
 
 ## 9. What the biomes session must supply
@@ -132,12 +148,13 @@ Before the new world exists, the quest can run on the present world at five spar
   with a cart at the gate; the mill-shed is low with one flue; the dead oak is grey and at the edge of a field.
 - The animations and the one-line facts are new in draft 3 and no critic has read them yet.
 
-## 11. Open questions for the owner
+## 11. Answered by the owner (2026-11-20)
 
-1. **Answered: across the world.** The first is near home; the other four are in four other climates.
-2. **The edge marker.** It points to the nearest thing not found. Recommended: yes. At these distances the pennants
-   alone are not enough.
-3. **The five.** The table in section 4 is the recommendation. Swap any row with a row from section 5.
+1. Across the world: the first near home, the other four in four other climates.
+2. The arrow: yes, as a floating arrow at the screen's edge, only on the quest.
+3. The five: as in section 4. He can still swap any.
+4. The quest is opt-in, offered at the end of the lesson.
+5. The hall: approved.
 
 ## 12. Left to the builder
 
