@@ -259,6 +259,11 @@ test("an unknown field fails, naming the fields there are", async () => {
   assert.match(message, /name, summary, repo, link, image and order/);
 });
 
+test("a file name with a space or a symbol fails: it is the project's key", async () => {
+  const message = await failure(fixture({ "My Project.md": md("name: X\nsummary: s") }));
+  assert.match(message, /My Project\.md: the file name "My Project\.md" may use only letters, numbers, dots, dashes and underscores/);
+});
+
 test("a file that does not start with front matter fails", async () => {
   assert.match(
     await failure(fixture({ "x.md": "name: X\nsummary: s\n" })),

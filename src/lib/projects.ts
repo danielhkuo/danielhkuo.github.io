@@ -113,6 +113,13 @@ function readProject(filePath: string, publicDir: string, problems: string[]): P
       );
     }
   }
+  // The file's name is the project's key: in discoveries, the terminal's paths and the fish, so keep it plain.
+  const slug = path.basename(filePath).replace(/\.md$/i, "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(slug)) {
+    note(
+      `the file name "${path.basename(filePath)}" may use only letters, numbers, dots, dashes and underscores, like my-project.md. It is the project's key.`,
+    );
+  }
   const name = textField("name", opened.fields.name, note);
   const summary = textField("summary", opened.fields.summary, note);
   const repo = repoField(opened.fields.repo, note);
@@ -132,7 +139,7 @@ function readProject(filePath: string, publicDir: string, problems: string[]): P
   }
 
   return {
-    slug: path.basename(filePath).replace(/\.md$/i, ""),
+    slug,
     name,
     summary,
     body: opened.body,

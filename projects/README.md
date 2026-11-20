@@ -27,7 +27,8 @@ A few sentences on what it is and what you did. Markdown works here.
 - If a value has a colon in it, or starts with a quote or a symbol, put it in quotes: `summary: "Leaf: a bot"`.
 
 The file's name is the project's key: `leaf.md` is `leaf`. The world remembers which projects a visitor has found by
-it, so keep a project's file name once it is live.
+it, so keep a project's file name once it is live. A file name may use only letters, numbers, dots, dashes and
+underscores: `my-project.md`, not `My Project.md`.
 
 ## In the browser, on github.com
 
