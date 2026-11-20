@@ -1604,6 +1604,19 @@ page's own work. Changes, all on the page only (offline renders keep the old pat
 - **Measuring arms** that each leave one part out on the page (`nosched`, `nosends`, `nowaves`, `novoices`,
   `nocensus`; world-fly `--arms`), and work bits for the scheduler, the census and the second halves.
 
+**After** (the final build: these changes and the wind's wander of §14.5; five pairs, each started when the load over
+the last minute was under 4: 2.5–4.0 at each start, 3.7–8.5 over five minutes):
+
+| | No sound (median) | Sound (median) | Difference of medians | Median of the pairs' differences | Sound's own mean |
+| --- | --- | --- | --- | --- | --- |
+| 4×, frame p95 | 3.80 ms | 4.00 ms | +0.20 | +0.20 (each +0.2, +0.3, −0.2, +0.7, −0.5) | 119 µs (84–129) |
+| 1×, frame p95 | 0.90 ms | 1.10 ms | +0.20 | +0.10 | 34 µs, p95 0.1 ms |
+
+From +0.5–0.6 ms to about +0.2: nearer the bar of +0.15, not under it with any certainty (single pairs swing ±0.5 ms
+on this machine). The mean is not under 100 µs (the baseline's 91 was a quieter run: the means drift by ±30 µs with
+the machine). Further, with the work this evenly spread, would take moving work off the page (the mix and the lanes
+into the ear's worker, the sends coming back as schedules).
+
 What the arms showed (two rounds at 4×, load 3.7–5.9): no single part sets the 95th percentile. The frame p95 moves
 by ±0.3–0.5 ms from one flight to the next on this machine, more than any one part's effect. Sound's mean is steadier:
 117–119 µs with everything, 82–99 without the scheduler (which there also means without every one-shot it starts:
