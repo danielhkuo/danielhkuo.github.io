@@ -866,10 +866,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       c.form = fields.form[i];
       c.curve = fields.curve[i];
       c.formNorth = fields.north[i];
-      for (let a = 0; a < 6; a++) {
-        const o = a * cc;
-        region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];
-      }
+      /*#__NOINLINE__*/ blendRegions(region, regions, cc, c00, c10, c01, c11, w00, w10, w01, w11);
       c.shore = sh;
       c.water = water[i] ? water[i] : riv[i] === 0 ? 3 : 0;
       c.stream = c.water === 3 && phase[i] === 8 ? 1 : 0;
@@ -918,21 +915,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       const r2 = r * r;
       const lx = Math.max(sLo, Math.ceil(scx - r - 0.5)), hx = Math.min(sHiX - 1, Math.floor(scx + r - 0.5));
       const ly = Math.max(sLo, Math.ceil(scy - r - 0.5)), hy = Math.min(sHiY - 1, Math.floor(scy + r - 0.5));
-      for (let yy = ly; yy <= hy; yy++) {
-        for (let xx = lx; xx <= hx; xx++) {
-          const ddx = xx + 0.5 - scx, ddy = yy + 0.5 - scy;
-          const d2 = ddx * ddx + ddy * ddy;
-          if (d2 > r2) continue;
-          const k = yy * W + xx;
-          if (water[k] || riv[k] === 0) continue;
-          const f = st.shape === 1 ? 1 - (0.85 * Math.sqrt(d2)) / r : 0.35 + 0.65 * Math.sqrt(1 - d2 / r2);
-          const top = base + st.h * f;
-          if (top > crown[k] && top > ground[k]) {
-            crown[k] = top;
-            crownMat[k] = st.mat;
-          }
-        }
-      }
+      /*#__NOINLINE__*/ stampCrown(crown, crownMat, ground, water, riv, W, lx, hx, ly, hy, scx, scy, r, r2, st.shape, st.h, st.mat, base);
     }
   }
 
@@ -1065,10 +1048,7 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
       // Shadow: terrain by the exact sweep, crowns and rocks by a short march.
       let over = ray[i];
       const deep = over - top >= 9;
-      for (let k = 1; k <= TREE_REACH; k++) {
-        const v = surf[i - k * (W + 1)] - k * SHADOW_DROP;
-        if (v > over) over = v;
-      }
+      over = /*#__NOINLINE__*/ marchShadow(surf, i, W, over);
       flags |= shadowDepth(over, top);
       // A picture's shadow, on land and on water: at least the depth the builder stored.
       const cast = pictShadow[i];
@@ -1182,6 +1162,55 @@ export function buildCells(world: BakeWorld, look: Look, mask: Uint8Array, x0: n
     }
   }
   return out;
+}
+
+// The loops nested in buildCells' per-cell loops live out here. buildCells runs a few times a tile, so V8 optimises it by
+// entering at whichever loop grows hot first; entered at a nested loop, it was thrown back to the interpreter on every
+// exit from it (once a tree: some 20 000 times over the start view's first bakes, which it doubled).
+// Their calls carry /*#__NOINLINE__*/: the minifier would otherwise inline each of these once-called functions back
+// into the loop (as a function made and called per cell or per tree), and the browser would deoptimise there again.
+
+/** The six region weights at one cell, blended from its four C nodes. */
+function blendRegions(
+  region: Float32Array, regions: Float32Array, cc: number, c00: number, c10: number, c01: number, c11: number,
+  w00: number, w10: number, w01: number, w11: number,
+): void {
+  for (let a = 0; a < 6; a++) {
+    const o = a * cc;
+    region[a] = w00 * regions[o + c00] + w10 * regions[o + c10] + w01 * regions[o + c01] + w11 * regions[o + c11];
+  }
+}
+
+/** One tree's crown, stamped into the crown layer over the window cells lx…hx, ly…hy. */
+function stampCrown(
+  crown: Float32Array, crownMat: Uint8Array, ground: Float32Array, water: Uint8Array, riv: Int16Array, W: number,
+  lx: number, hx: number, ly: number, hy: number, scx: number, scy: number, r: number, r2: number,
+  shape: number, h: number, mat: number, base: number,
+): void {
+  for (let yy = ly; yy <= hy; yy++) {
+    for (let xx = lx; xx <= hx; xx++) {
+      const ddx = xx + 0.5 - scx, ddy = yy + 0.5 - scy;
+      const d2 = ddx * ddx + ddy * ddy;
+      if (d2 > r2) continue;
+      const k = yy * W + xx;
+      if (water[k] || riv[k] === 0) continue;
+      const f = shape === 1 ? 1 - (0.85 * Math.sqrt(d2)) / r : 0.35 + 0.65 * Math.sqrt(1 - d2 / r2);
+      const top = base + h * f;
+      if (top > crown[k] && top > ground[k]) {
+        crown[k] = top;
+        crownMat[k] = mat;
+      }
+    }
+  }
+}
+
+/** The highest a crown or rock up the sun's diagonal from cell i casts over it, or `over` if none is higher. */
+function marchShadow(surf: Float32Array, i: number, W: number, over: number): number {
+  for (let k = 1; k <= TREE_REACH; k++) {
+    const v = surf[i - k * (W + 1)] - k * SHADOW_DROP;
+    if (v > over) over = v;
+  }
+  return over;
 }
 
 /** The 256² cell tile (tx, ty). */
