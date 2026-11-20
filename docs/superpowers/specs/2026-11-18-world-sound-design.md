@@ -1678,3 +1678,45 @@ Set to 0.6 (the nearest heard as one about 55 cells off): flight-replay −4.9, 
 as it was (none reaches the ceiling). The whole suite otherwise passes but for mist-muffle-beds, whose one "click" at
 35.74 s is a smooth noise crest (its first difference 3.6σ, no step) flagged at 6.7 against the detector's 6.5; it is
 there at 39a6303 too, sample for sample, and the fresh beds (§14.8) will change that noise.
+
+### 14.8 Fresh noise: no bed comes round (2026-11-19/20)
+
+Every continuous bed's noise is now made as it plays and never repeats; the sparse ones (the rain's drops and plinks,
+the river's brook and flow) move to a new draw of their loop before it can come round.
+
+- **First, fresh loops** (`engine/fresh.ts`, `kit.request`, `synth/make.ts remake`). Each read asks the kit's worker
+  for generation g + 1 of its buffer (the same generator on a new draw) once it has played half its wrap, and
+  crossfades to it at equal power over 0.5 s, the new source silent until its curve begins (a source started under a
+  gain of 1 leaked its first sample: a click 6 ms after each move, the limiter's delay, until fixed). Offline engines
+  make their own generations, so a render does not depend on what the bench rendered before it. A blind critic chose
+  the fresh version in all six pairs (open sea, wind, cove, rain on the sea, brook, shower), no defect. But copying
+  ~0.8 M samples a second into AudioBuffers cost the page ~30 µs a frame at 4×.
+- **So the continuous noises come from an AudioWorklet** (`engine/noise-worklet.ts`): the buffet, rush, hiss, breeze,
+  brown, pink, white and the grain, with the buffers' colour filters, levels (worked out on the main thread from each
+  filter's impulse energy), stereo mixes and fixed biquads. A Gaussian table (4096 quantiles, tails cut near 3.7σ),
+  xorshift32 per channel, block loops with local state: 1.2–5.5 ns a sample-channel in node (Box–Muller and per-sample
+  calls were 20–28). The page copies nothing for them. The module is added from a Blob of one self-contained
+  function's source. Without a worklet, or until it loads, the beds use the fresh loops; `LOOPS.<bed> = 0` renders the
+  old plain loops sample for sample.
+- **Tested** (Cursor built both stages to failing tests written first; the test-shaped "easing" it first added to pass
+  a too-narrow colour window was removed and the tests made fair): generation 0 equals the kit, later generations
+  match colour within 1.5 dB (3 dB sparse) and level within 0.5 dB, no 80 ms window above chance; the worklet's output
+  matches each buffer's level within 0.3 dB, octave bands within 1 dB, width within 0.05.
+- **Heard**: the 80 ms-window self-match (median, 200–1200 Hz) open sea 0.97 → 0.35, cove 0.96 → 0.37, surf-far
+  0.97 → 0.36, wind 0.80 → 0.35, rain on the sea 0.77 → 0.37 (chance 0.36–0.37); the rain on land and the shower at
+  chance in their own band; the brook 0.62 → 0.58 and river 0.45 → 0.40 (300–3000 Hz, chance 0.51 and 0.39: the
+  bubbles' own likeness). A second blind critic chose the worklet beds over the old loops in all six pairs, five with
+  high confidence, the brook with low; no click, colour, width, level or peak-character difference.
+- **Costs.** Audio thread (ahead, best of three): wind-cruise 0.9 → 0.95 %, coast-run 3.9 → 4.3 %, shower-pass 4.0 →
+  4.6 %, river 1.2 → 1.2 % (bar 5 %). The whole bench passes (71 scenes).
+
+**The frame budget, in load-gated pairs (load 1.5–2.9), 4×.** Sound's mean a frame is now 56–80 µs (five pairs,
+median 65; bar 100), down from 119 (§14.4): the beds' loops no longer move on the page, and the lanes and the
+scheduler ride the ear's pass (§14.6). The frame's 95th percentile is not within its bar: sound on against off adds
++0.1, +0.2, +0.4, +0.4, +0.8 ms (median +0.4; bar +0.15). Three-arm rounds (off, nofresh, on) put it in two parts:
+sound with plain loops +0.2–0.3 (as in §14.4), the worklet a further +0.1–0.3, though the worklet's own work is 0.3–
+0.6 % of a core and a worklet that computes nothing measured +0.1 ± 0.3 in the same way. At 1× sound adds nothing
+measurable (+0.0 to −0.6). What sets the tail is sound's own heavy frames (its p95 is 0.5 ms at 4×: cue plays, the
+clock's sample, the census beside the voices), which a mean budget does not reach. Next, if the bar stands: defer the
+voices' half and the census on a frame the picture has already made long (a simulation on a recorded trace gained
+only 0.03 ms), or pool the bell strokes' nodes.

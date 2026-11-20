@@ -295,3 +295,17 @@ test("a move's source is silent until its fade begins", () => {
   assert.ok(moved.length > 0);
   for (const s of moved) assert.equal(((s.outs[0].to as FakeNode).gain as FakeParam).value, 0);
 });
+
+test("offline, nothing is let go: a render made ahead runs every frame first, and a disconnect then would silence a source for the whole render", () => {
+  const ctx = new FakeContext();
+  const kit = genKit(0);
+  const fresh = createFresh(ctx as unknown as Ctx, kit, { offline: true, seed: 3 });
+  let unwired = 0;
+  fresh.read("drops", { at: 0, offset: 0, wire: () => () => void unwired++ });
+  run(ctx, kit, fresh, 60, 30);
+  const all = sources(ctx);
+  assert.ok(all.length >= 4);
+  assert.equal(unwired, 0);
+  for (const s of all) assert.equal(s.outs.length, 1, "every source still reaches its fade");
+  for (const s of all) assert.equal((s.outs[0].to as FakeNode).outs.length, 1, "and every fade still reaches the read's out");
+});

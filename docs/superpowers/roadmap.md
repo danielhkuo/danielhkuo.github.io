@@ -301,10 +301,7 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 - **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
-  the way: the noise beds' loops are heard to come round (the open sea's wash every 4.855 s, the surf bed's, the
-  wind's): a pitch wander, tried, removes only exact repetition (a blind critic, spec §14.5), so each pass needs fresh
-  noise (an audio-worklet noise source, or fresh loops from the kit's worker); the same test for the rain's drops and
-  plinks, and for the river's brook loop (9.7 s). Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  the way: (done, spec §14.8) fresh noise for every bed, the continuous ones from an AudioWorklet. Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
   shower; spec §14.2).
   The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
   rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
@@ -312,7 +309,8 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
   small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
   and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
-  - Sound's 4× mean is 105 µs against 100: block row copy, one buffer a pass (spec §14.6). Gated off/on pairs still to run.
+  - Sound's 4× frame p95: +0.4 ms against the +0.15 bar (its mean, 65 µs, is within 100): its heavy frames set the
+    tail (spec §14.8). Defer the voices' half and the census on long frames, or pool the bells' nodes.
   - Owner's first listen (2026-11-19): default volume now Half, wind down 4 dB. The other voices went unnoticed: listen again with the wind down.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)

@@ -25,7 +25,7 @@ export interface Fresh {
    * `bed` is which bed the read belongs to, so one bed can be held on its first loop while another that shares the
    * buffer moves on.
    */
-  read(name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string }): { out: GainNode; stop(when?: number): void };
+  read(name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string }): { out: AudioNode; stop(when?: number): void };
   /** Requests, moves and cleanups that fall due at `now`. True when it did any of that. */
   frame(now: number): boolean;
   /** How many reads have moved onto a new generation. */
@@ -160,7 +160,9 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
 
   /** A source that finished its fade is unwired once the stop has had a moment to land. */
   const release = (p: Playing, now: number): boolean => {
-    if (p.gone || p.stopAt !== p.stopAt || !(now > p.stopAt + 0.1)) return false;
+    // Offline nothing is let go: a render made ahead runs every frame before the first sample, and a disconnect is not
+    // scheduled, so it would take a source out for the whole render (a render ends; nothing is kept for long).
+    if (opts.offline || p.gone || p.stopAt !== p.stopAt || !(now > p.stopAt + 0.1)) return false;
     p.unwire();
     try {
       p.fade.disconnect();
@@ -301,11 +303,10 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     // Made as it plays: there is no loop, so the wander (wire) and the playback rate do not apply, and the kit is
     // not asked for a generation. The node starts as it is connected; beds read at the frame's now.
     if (isNoiseName(name) && opts.worklet?.(name, o.bed) === true) {
+      // The node is the read's output itself: a gain after it would be one more node the audio thread visits.
       const node = noiseNode(ctx, name, noiseSeed(opts.seed, name, nextIndex(name)));
-      const out = gain(ctx, 1);
-      node.connect(out);
       return {
-        out,
+        out: node,
         stop(when?: number) {
           endNoise(node, when ?? 0);
         },
