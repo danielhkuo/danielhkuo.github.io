@@ -209,9 +209,10 @@ const SAVANNA_HILL = 0.3;
 /** Units the dry side's snowline stands above the wet side's: its winters are dry. */
 const DRY_SNOW = 12;
 /**
- * The dry side's thin snow (its higher snowline, its late snow gone by summer, its grass further toward the pole) is
- * whole up to the first of these cold shifts of the latitude and gone by the second: the coasts of the pack ice keep
- * the polar snow, so the lighthouse and the baths stand in white and not in stains of tundra.
+ * The dry side's thin snow (its higher snowline, and its late snow gone by summer) is whole up to the first of these
+ * cold shifts of the latitude and gone by the second: the coasts of the pack ice keep the polar snow, so the
+ * lighthouse and the baths stand in white and not in stains of tundra. Where its tundra begins is left alone: the
+ * border of steppe and tundra lies in these latitudes, and a fade across it would draw it as a line.
  */
 const DRY_THIN_WHOLE = 68;
 const DRY_THIN_GONE = 75;
@@ -1133,7 +1134,7 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   // a temperate mountain keeps its own alpine meadow and moor.
   if (shift > 0) {
     // The dry side's grass runs further toward the pole: its tundra begins some fourteen units colder.
-    const t = tundraAt(c, x, y, mask, n, shift, cold - 0.14 * aridNow * thinNow, st, curve, north);
+    const t = tundraAt(c, x, y, mask, n, shift, cold - 0.14 * aridNow, st, curve, north);
     if (t !== 0) return t;
   }
 
