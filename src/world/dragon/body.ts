@@ -27,7 +27,7 @@ export interface Pose {
 }
 
 /** Resting, a point of the body's path lies this far over the ground: the body's own half-height. */
-export const REST_HEIGHT = 2;
+export const REST_HEIGHT = 1.4;
 /** The swing at rest: the coil only breathes. */
 export const REST_SWING = 0.2;
 /** Rate (per second) at which the swing settles or widens. */

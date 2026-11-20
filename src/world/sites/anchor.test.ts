@@ -46,18 +46,19 @@ test("of two as tall, the nearer is the anchor", () => {
   assert.equal(anchorOf({ x: 1000, y: 1000, type: "yew" }, [far, near], N)!.x, 1003);
 });
 
-test("the coil rests just clear of the walls, never tighter than 8 or wider than 26", () => {
-  assert.equal(restRadius({ x: 0, y: 0, halfW: 3.5, halfD: 3.5, height: 34 }, "lighthouse"), 8);
-  assert.ok(Math.abs(restRadius({ x: 0, y: 0, halfW: 4.5, halfD: 4.5, height: 20 }, "windmill") - (Math.hypot(4.5, 4.5) + 3)) < 1e-9);
+test("the coil rests just clear of the walls, never tighter than 6 or wider than 26", () => {
+  assert.equal(restRadius({ x: 0, y: 0, halfW: 3.5, halfD: 3.5, height: 34 }, "lighthouse"), Math.sqrt(24.5) + 2);
+  assert.equal(restRadius({ x: 0, y: 0, halfW: 1.5, halfD: 1.5, height: 9 }, "lighthouse"), 6);
+  assert.ok(Math.abs(restRadius({ x: 0, y: 0, halfW: 4.5, halfD: 4.5, height: 20 }, "windmill") - (Math.hypot(4.5, 4.5) + 2)) < 1e-9);
   assert.equal(restRadius({ x: 0, y: 0, halfW: 40, halfD: 30, height: 9 }, "bridge"), 26);
 });
 
 test("without a building, the radius goes by the kind of landmark", () => {
-  assert.equal(restRadius(null, "lighthouse"), 8);
+  assert.equal(restRadius(null, "lighthouse"), 6);
   assert.ok(restRadius(null, "abbey") > restRadius(null, "windmill"));
   for (const t of ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"] as const) {
     const r = restRadius(null, t);
-    assert.ok(r >= 8 && r <= 26, `${t}: ${r}`);
+    assert.ok(r >= 6 && r <= 26, `${t}: ${r}`);
   }
 });
 
@@ -72,7 +73,7 @@ test("a town's anchor is its harbour: the widest dredged basin near it, where th
   const h = harbourOf({ x: 1000, y: 1000 }, conforms, N)!;
   assert.deepEqual(h, { x: 1000, y: 1068, halfW: 32, halfD: 12, height: 0, inside: true });
   // The coil lies inside it, clear of its quays: never wider than the basin is deep.
-  assert.equal(restRadius(h, "town"), 9);
+  assert.equal(restRadius(h, "town"), 7);
   assert.equal(harbourOf({ x: 5000, y: 5000 }, conforms, N), null);
 });
 
@@ -89,15 +90,15 @@ test("resting places: each landmark's target is its building, and the town's is 
     N,
   );
   assert.deepEqual(places.targets, [
-    { id: "lighthouse-0", x: 1000.5, y: 1000.5, radius: 8 },
-    { id: "town-0", x: 2000, y: 2068, radius: 9 },
-    { id: "yew-0", x: 4000, y: 4000, radius: 21 },
+    { id: "lighthouse-0", x: 1000.5, y: 1000.5, radius: Math.sqrt(24.5) + 2 },
+    { id: "town-0", x: 2000, y: 2068, radius: 7 },
+    { id: "yew-0", x: 4000, y: 4000, radius: 20 },
   ]);
   assert.equal(places.anchors.get("town-0")?.inside, true);
   assert.equal(places.anchors.get("yew-0"), null);
   // A town with no harbour falls back to its tallest building: the bell tower.
   const dry = restingPlaces([{ id: "town-0", type: "town", x: 2000, y: 2000 }], { structures, conforms: [] }, N);
-  assert.deepEqual(dry.targets, [{ id: "town-0", x: 2000.5, y: 2000.5, radius: 8 }]);
+  assert.deepEqual(dry.targets, [{ id: "town-0", x: 2000.5, y: 2000.5, radius: Math.sqrt(24.5) + 2 }]);
   // Without the built world at all, the sites' own points.
-  assert.deepEqual(restingPlaces([{ id: "town-0", type: "town", x: 2000, y: 2000 }], undefined, N).targets, [{ id: "town-0", x: 2000, y: 2000, radius: 8 }]);
+  assert.deepEqual(restingPlaces([{ id: "town-0", type: "town", x: 2000, y: 2000 }], undefined, N).targets, [{ id: "town-0", x: 2000, y: 2000, radius: 6 }]);
 });

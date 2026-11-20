@@ -12,6 +12,7 @@ import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createRegionLand } from "../../world/runtime/regionLand";
 import { createDragon } from "../../world/dragon/index";
 import { imageOn } from "../../world/dragon/parts";
+import { RIVER_LENGTH } from "../../world/dragon/river";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
 import { airOf, lightFor, lightMoved, type Air } from "../../world/sky/air";
@@ -41,9 +42,9 @@ const AT_SOUTH = 150;
 const FOCUS_HEIGHT = 0.35;
 /** Below this width the Codex is a sheet along the bottom (codex.module.css). */
 const NARROW = 760;
-/** The body's joints a guide keeps clear of: this many, this many cells apart (about the dragon's length). */
-const BODY_JOINTS = 16;
-const BODY_SPACING = 5.5;
+/** The body's joints a guide keeps clear of: this many cells apart, and this many of them (about the dragon's length). */
+const BODY_SPACING = 3.5;
+const BODY_JOINTS = Math.ceil(RIVER_LENGTH / BODY_SPACING) + 1;
 /** How fast a guide that has moved to another slot glides there: the share left after a second is e^−GLIDE. */
 const GLIDE = 10;
 /** A gap this long between frames, while flying on a touch screen, is a stall: the page was frozen, s. */

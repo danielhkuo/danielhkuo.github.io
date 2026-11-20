@@ -9,8 +9,8 @@ import { REST_HEIGHT, REST_SWING } from "./body.ts";
 import { createDragon } from "./index.ts";
 import type { Land } from "./parts.ts";
 import { LACQUER } from "./look.ts";
-import { RIVER_REACH } from "./river.ts";
-import { windAmount } from "./wind.ts";
+import { RIVER_LENGTH, RIVER_REACH } from "./river.ts";
+import { WIND_BACK, windAmount } from "./wind.ts";
 
 const W = 400, H = 225, N = 1280, GREY = 0xff808080, SHADE = 0xff535353;
 /** One dragon now (the owner chose A); the loops below keep their shape so another could be added. */
@@ -18,9 +18,9 @@ const DRAGON_IDS = ["a"] as const;
 type DragonId = (typeof DRAGON_IDS)[number];
 const REACH: Record<DragonId, number> = { a: RIVER_REACH };
 /** Frame columns of a dragon heading east at the frame's middle that hold its body behind the mane and ahead of the fin. */
-const BODY_FROM = 156, BODY_TO = 186;
+const BODY_FROM = 170, BODY_TO = 190;
 /** Length along the heading, pixels: least and most. */
-const LENGTH: Record<DragonId, [number, number]> = { a: [56, 72] };
+const LENGTH: Record<DragonId, [number, number]> = { a: [44, 54] };
 
 /** The flier at (500, 500), 30 up, at the middle of the frame. */
 const rect: ViewRect = { x: 500 - 200, y: Math.floor(0.8 * 500 - 30) - 112, w: W, h: H };
@@ -235,7 +235,7 @@ test("A rolls into its turns: the gold belly shows on the outside", () => {
     return above;
   };
   const right = side(1), left = side(-1);
-  assert.ok(right > 8 && left < -8, `right ${right}, left ${left}`);
+  assert.ok(right > 5 && left < -5, `right ${right}, left ${left}`);
 });
 
 test("at rest the coil breathes: the wave's swing settles to a fifth, and widens again in flight", () => {
@@ -316,7 +316,7 @@ test("brought to rest in a hard turn, the body lies flat: the belly it showed on
     return above;
   };
   const turning = gold(0), resting = gold(3);
-  assert.ok(turning > 8, `turning ${turning}`);
+  assert.ok(turning > 5, `turning ${turning}`);
   assert.ok(resting <= 0, `resting ${resting}`);
 });
 
@@ -330,20 +330,25 @@ test("resting, the body sinks onto the ground it lies on, and stays there when i
   }
   const land: Land = { depthAt: flat.depthAt, groundHeight: () => 0 };
   const out = new Uint32Array(W * H);
-  assert.ok(dragon.pose.chain.joints(40, 1.3)[39].alt > REST_HEIGHT + 10, "the tail starts in the air");
+  assert.ok(dragon.pose.chain.joints(30, 1.3)[29].alt > REST_HEIGHT + 8, "the tail starts in the air");
   s = { ...s, speed: 0 };
   for (let k = 0; k < 120; k++) {
     dragon.step(s, 1 / 60, 1);
     dragon.draw(out, rect, s, land);
   }
-  for (const [i, j] of dragon.pose.chain.joints(40, 1.3).entries()) assert.ok(Math.abs(j.alt - REST_HEIGHT) < 0.1, `joint ${i} at ${j.alt}`);
+  for (const [i, j] of dragon.pose.chain.joints(30, 1.3).entries()) assert.ok(Math.abs(j.alt - REST_HEIGHT) < 0.1, `joint ${i} at ${j.alt}`);
   // Flying on, what lay on the ground stays there: only the head's new path rises.
   for (let k = 1; k <= 10; k++) {
     s = { ...s, speed: CRUISE, x: 500 + k, alt: REST_HEIGHT + k };
     dragon.step(s, 1 / 60, 0);
     dragon.draw(out, rect, s, land);
   }
-  const after = dragon.pose.chain.joints(40, 1.3);
+  const after = dragon.pose.chain.joints(30, 1.3);
   assert.ok(Math.abs(after[0].alt - (REST_HEIGHT + 10)) < 1e-9);
-  for (let i = 9; i < 40; i++) assert.ok(Math.abs(after[i].alt - REST_HEIGHT) < 0.1, `joint ${i} at ${after[i].alt}`);
+  for (let i = 9; i < 30; i++) assert.ok(Math.abs(after[i].alt - REST_HEIGHT) < 0.1, `joint ${i} at ${after[i].alt}`);
+});
+
+test("what is sized to the body follows its size: it rests at its own half-height, and a boost's wind trails it no farther than a quarter of its length behind its tail", () => {
+  assert.ok(REST_HEIGHT >= 1.2 && REST_HEIGHT <= 1.6, `rests ${REST_HEIGHT} over the ground`);
+  assert.ok(WIND_BACK >= RIVER_LENGTH && WIND_BACK <= RIVER_LENGTH * 1.25, `wind reaches ${WIND_BACK} back, the body ${RIVER_LENGTH}`);
 });
