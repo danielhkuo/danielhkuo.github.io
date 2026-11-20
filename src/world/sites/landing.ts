@@ -35,6 +35,8 @@ export const LOOK = 10;
 export const GAIN = 4;
 /** At rest the head is this far over the ground: where the dragon's body lies (dragon/body.ts). */
 export const REST_LIFT = REST_HEIGHT;
+/** Coming down, the head keeps this far over the ground: the flight model's floor, or lower where the body rests lower. */
+const LAND_GAP = Math.min(MIN_GAP, REST_LIFT);
 /** Points round the coil's ring where its height is worked out. */
 const RING_POINTS = 32;
 /** Taking off, the head climbs no more than this for each cell it flies: as steep as the body can follow. */
@@ -283,7 +285,7 @@ function stepApproach(s: FlightState, from: Approach, dt: number, terrain: Terra
   const altStar = a.alt0 + (ringAt(ring, phi) + REST_LIFT - a.alt0) * smooth(u / SINK_END);
   // No faster than the flight model climbs, and no steeper than the body bends along the path it will lie on.
   const most = Math.min(CLIMB, SETTLE_SLOPE * speed) * step;
-  const alt = Math.max(s.alt + clamp(altStar - s.alt, -most, most), terrain.groundHeight(x, y) + MIN_GAP);
+  const alt = Math.max(s.alt + clamp(altStar - s.alt, -most, most), terrain.groundHeight(x, y) + LAND_GAP);
 
   const time = a.time + step;
   const done = swept >= a.sweep || time >= LANDING_CAP;
@@ -325,7 +327,7 @@ export function advance(
     // Leaving a site it rises no steeper than RISE_SLOPE: from rest the flight model would lift the head straight up
     // off its body.
     const most = s.alt + RISE_SLOPE * dist(s.x, s.y, next.x, next.y, n);
-    if (next.alt > most) next = { ...next, alt: Math.max(most, terrain.groundHeight(next.x, next.y) + MIN_GAP) };
+    if (next.alt > most) next = { ...next, alt: Math.max(most, terrain.groundHeight(next.x, next.y) + LAND_GAP) };
     const left = targets.find((t) => t.id === phase.quiet);
     const far = !left || dist(next.x, next.y, left.x, left.y, n) > NEAR * QUIET_FACTOR;
     return { phase: far ? { kind: "flying", quiet: null } : phase, s: next, landed: null };

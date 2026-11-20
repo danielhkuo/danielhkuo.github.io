@@ -78,7 +78,7 @@ test("from any heading and distance, the dragon coils down to rest at the landma
         const label = `d ${d} bearing ${bearing.toFixed(2)} heading ${heading.toFixed(2)}`;
         const { s, phase, t } = comeDown(start, TOWER, FLAT, LANDING_CAP + 1, (prev, next) => {
           assert.ok(Math.abs(turned(next.heading, prev.heading)) <= MAX_TURN * DT + 1e-9, `${label}: heading jumped`);
-          assert.ok(next.alt >= 5 + MIN_GAP - 1e-9, `${label}: below the ground`);
+          assert.ok(next.alt >= 5 + Math.min(MIN_GAP, REST_LIFT) - 1e-9, `${label}: below the ground`);
         });
         assert.equal(phase.kind, "landed", label);
         assert.ok(t < LANDING_CAP - 1, `${label}: took ${t.toFixed(1)} s`);
@@ -131,7 +131,7 @@ test("round a coil that crosses a cliff it rises and falls no steeper than its b
     while (phase.kind === "landing") {
       const a = phase.approach, before = s;
       ({ phase, s } = advance(phase, s, STILL, DT, cliff, N, TARGETS));
-      assert.ok(s.alt >= cliff.groundHeight(s.x, s.y) + MIN_GAP - 1e-9, `under the ground at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
+      assert.ok(s.alt >= cliff.groundHeight(s.x, s.y) + Math.min(MIN_GAP, REST_LIFT) - 1e-9, `under the ground at (${s.x.toFixed(1)}, ${s.y.toFixed(1)})`);
       if (a.swept / a.sweep <= SINK_END + 0.05) continue;
       const run = Math.hypot(delta(before.x, s.x), delta(before.y, s.y));
       assert.ok(Math.abs(s.alt - before.alt) <= SETTLE_SLOPE * run + 0.02, `stepped ${(s.alt - before.alt).toFixed(3)} over ${run.toFixed(3)} cells`);
