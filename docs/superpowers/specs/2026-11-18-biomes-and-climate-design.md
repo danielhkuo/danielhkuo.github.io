@@ -325,6 +325,14 @@ UPLAND, CANOPY, STONE, PALE). Warm grounds sit inside the reserved sector and ke
 | **Savanna** | Golden grass with red-earth patches and worn tracks | flat-topped acacias, wide apart, thicker toward the jungle; termite mounds; gallery forest on rivers | Waterholes with a green rim |
 | **Jungle** | Dark understorey, seldom seen | closed canopy of large crowns in four greens, emergent giants, palms at every edge | Mossy rock; palm beaches of pale sand; mangrove on sheltered muddy shores; turquoise shallows |
 
+**The two sides in the cold and the hot.** The dry side's winters are dry: its snowline stands 12 units higher and
+its late snow is gone by summer, so its tundra shows stony ground where the wet side's lies white. That thin snow
+fades out toward the pole (whole to a cold shift of 68 at the sea, gone by 75): the coasts of the pack ice keep the
+polar snow, and the lighthouse and the baths stand in white. The dry side's savanna runs nearly to the equator on
+level ground only; hills in those latitudes keep the forest of the shorter belt, as broken ground does where grass
+fires run. (Both were found by the side-by-side scoring of 6.7: tundra stains on the polar snow, and a ridged
+island's spurs as tan wedges.)
+
 **[Critic] What tells them apart is texture and value, not hue.** Jungle and taiga are the two most likely to read
 as a recoloured temperate wood, tundra as today's moor, steppe as mud. So: jungle crowns half as large again, lumpy,
 with no ground between; taiga as dark spires on a pale floor; tundra lighter and rustier than moor, with its pools
@@ -535,7 +543,9 @@ bridge. The marsh house may stand in any marsh off the ice; the bridge town coun
 - **The town and the abbey** stay on the home island, unchanged.
 - **Wonders** keep their terrain rules and each gains a climate window, so none lands somewhere silly: the great oak
   and the bridge town in temperate or Mediterranean country, the drowned church in a lake that is not frozen, the
-  marsh house off tundra and jungle. The baths prefer cold country; the hotel prefers warm.
+  marsh house off tundra and jungle. The baths prefer cold country; the hotel prefers warm. The observatory stands
+  under clear skies: the highest summit of the dry side's hot country (sea-level temperature 0.72 to 0.9), between the
+  Mediterranean's woods and the equator's cloud forest. A wonder's window may name a side, as a landmark's does.
 
 ## 9. Size
 
@@ -668,35 +678,36 @@ On `claude/biomes-f95fc9`. Not pushed, not merged; no world is committed.
 | Fields by climate beyond the Mediterranean and the steppe (oasis plots are built; paddies are not) | partly |
 | The six churches of the climates | built, then cut by the owner: commit `967f669` holds them |
 
-Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7, world `3389a57cc203`):
+Measured on seed 3 at 10240 (2026-11-19, on the native land of 6.7 after the side-by-side scoring, world
+`3a2f194713e2`, with `world/bigmap` merged at `19db4c2`):
 
-- **Native land:** of the 43 islands, 19 are grown again for their climate and 6 kept from today's land (home, the
-  temperate cone and caldera, three skerry groups); the rest are cones, calderas and skerries of the cold and wet,
-  which keep their forms but are worn under their own rain. Land is 27 % of the world (34.7 % before; the plains and
-  low deserts stand lower and lose their drowned margins). The land for the climates takes about 4 minutes to grow
-  and is cached apart; the join, the climate and the landforms take seconds on every read.
-- **Landmarks:** all seven placed in their own climate and side, none let out: lighthouse by the pack ice, yew off
-  home, cathedral in the wet side's jungle (the dry side's equator is savanna), windmill in the Mediterranean, bridge
-  on the steppe. The six projects hold the six that are not the abbey (`assignments.json`, world `3389a57cc203`, from
-  a build with the real pinned repos). Eight of nine wonders placed; the marsh house finds no marsh 300 cells clear of
-  the landmarks and the other wonders.
-- **Download:** the whole world 8293 KB (9191 before climates); before first flight 1226 KB (1447); the core 687 KB.
-  The new land is lower and smoother, so it packs smaller.
+- **Native land:** of the 43 islands, 20 are taken from the land grown for the climates (six of the ice, three of the
+  taiga, one of the dry side's tundra, three of the desert, two of the savanna, five of the jungle) and 23 from
+  today's land (home, six temperate, five of the warm forest, five of the Mediterranean, the steppe's, two of the dry
+  tundra, three on the equator line, one desert volcano): 6.7 says why each is kept. Land is 30 % of the world. The
+  land for the climates takes about 4 minutes to grow and is cached apart; the join, the climate and the landforms
+  take seconds on every read.
+- **Landmarks and wonders:** all seven landmarks placed in their own climate and side, none let out: lighthouse by the
+  pack ice, yew off home, cathedral in the wet side's jungle, windmill in the Mediterranean, bridge on the steppe. All
+  nine wonders placed. The six projects hold the six landmarks that are not the abbey (`assignments.json`, world
+  `3a2f194713e2`, from a build with the real pinned repos; a second build asks for no change).
+- **Nothing lower than before:** every climate, landmark and wonder scored side by side against Fable's last state by
+  three fresh critics (look ledger, round 9).
+- **Download:** the whole world 8519 KB (9191 before climates); before first flight 1330 KB (1447); the core 803 KB.
 - **Identity:** the build's start and abbey frames, as generated and as shipped, are the same files, to the byte, as
   every earlier build's (md5 `9b28eb…`, `b3064c…`, `4af97f…`, `99b54d…`).
 - **Bake** (`scripts/world-climate-cost.ts`: the same tiles of this world built with its climates and as a temperate
-  world, in turn, warm, load average 2 to 4): a tile whose every climate node is on the wet side's plateau costs what
-  it did (37.7 ms against 37.0, +1.8 %); any other tile 61.0 ms against 46.9, **+30 %**, over the 15 % this design set
-  in section 11 (it was about +40 % on the first build). The painter's chunk over cached tiles costs the same
-  (7.5 ms against 8.0). The bake runs in workers; it is the time to a full view, not the frame.
-- **Frame:** nothing new is drawn per frame. `world-fly.mjs` on a quiet machine (load average 2.4 to 5, no other
-  flight running), in turn with a build of `world/bigmap` at `0aef5c8` on its own world, three pairs: at 4× throttle
-  the base's p95 ran 3.9, 4.1 and 4.0 ms and this branch's 4.2, 4.1 and 3.8 (p50 2.4 to 2.6 against 2.4 to 3.0); at
-  1× 2.1 to 2.5 against 2.3 to 2.6. The two cannot be told apart, and both sit on the 4 ms line. Chunks baked a second
-  at 4×: 1.79 to 1.86 against 1.34 to 1.66, the bake's 30 %. (Three earlier runs alone showed 14 ms at 4×: another
-  session was flying at the same time.)
-- **Tests:** 1579, all passing (with `world/bigmap` merged); types and lint clean. `npm run build` passes with the
-  real pinned repos.
+  world, in turn, warm; three runs at load averages of 3 to 8): a tile whose every climate node is on the wet side's
+  plateau costs what it did (+1 to 2 %); any other tile 53 to 54 ms against 39 to 40, **+34 to 37 %**, over the 15 %
+  this design set in section 11. The painter's chunk over cached tiles costs the same (7.6 ms against 7.7). The bake
+  runs in workers; it is the time to a full view, not the frame.
+- **Frame:** nothing new is drawn per frame. Measured on the earlier native world (`3389a57cc203`): `world-fly.mjs`
+  on a quiet machine, in turn with a build of `world/bigmap` at `0aef5c8` on its own world, three pairs: at 4×
+  throttle the base's p95 ran 3.9, 4.1 and 4.0 ms and this branch's 4.2, 4.1 and 3.8; at 1× 2.1 to 2.5 against 2.3 to
+  2.6. The two cannot be told apart, and both sit on the 4 ms line. Not measured again on this world: the changes
+  since are to land, cover and siting, which the frame does not read.
+- **Tests:** 1571, all passing; types and lint clean. `npm run build` passes with the real pinned repos and without a
+  token.
 
 Critic scores and what each round changed are in the look ledger ("Climate rounds").
 

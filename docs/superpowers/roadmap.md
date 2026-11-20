@@ -145,8 +145,11 @@ Last updated 2026-11-19.
   are joined island by island through open sea, so home's start and abbey frames are the same to the byte. Hamlets
   and houses by climate. Temperature and the dry side's share ship as two more sections a region;
   the haze and the manifest know the climate. Design, measurements and follow-ups:
-  `specs/2026-11-18-biomes-and-climate-design.md`. The world on disk has not been re-shipped: `npm run world:build --
-  --seed 3 --n 10240 --cache` makes the new one, and `src/world/sites/assignments.json` is pinned to it.
+  `specs/2026-11-18-biomes-and-climate-design.md`. Every climate, landmark and wonder was then scored side by side
+  against the climates on the old land, and where the new land scored lower the old was kept (the steppe's, the
+  Mediterranean's and the warm forest's islands, fens, cold tables) or the look fixed (look ledger, round 9). The
+  world on disk has not been re-shipped: `npm run world:build -- --seed 3 --n 10240 --cache` makes world
+  `3a2f194713e2`, and `src/world/sites/assignments.json` is pinned to it.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 - **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
@@ -393,9 +396,10 @@ From the climates (2026-11-19):
   the island, or plains cut by braided rivers); the warm forest drawn in the temperate hand, apart from the jungle;
   the jungle's coastal plains and mangroves (its rain cuts them into hills); the pack as floes along the coasts, not a
   band; repeated stamps (sea-stack rows, horseshoe amphitheatres, acacia carpets, tower cones) and roads ruled along
-  the grid; the marsh house finds no marsh clear of the landmarks on seed 3 (8 of 9 wonders); a seed search for
-  islands that fall more evenly into the climates.
-- The climates' bake: tiles outside the temperate plateau cost 30 % more than as a temperate world (the design's
+  the grid; a seed search for islands that fall more evenly into the climates. From round 9: stray ink dashes on
+  the ice sheet's ridges (leave the sheet's snow un-inked: tried, 0.45 % of two frames), the pack's square-edged floes
+  at its margin, the two savanna ovals alike, the windmill too small to read.
+- The climates' bake: tiles outside the temperate plateau cost 34 to 37 % more than as a temperate world (the design's
   limit is 15 %; `scripts/world-climate-cost.ts`). The frame is unchanged.
 - The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
   are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.

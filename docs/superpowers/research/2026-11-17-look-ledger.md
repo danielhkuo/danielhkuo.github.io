@@ -206,6 +206,82 @@ khaki steppe). Not answered, and named in the roadmap: the steppe's and Mediterr
 fall in their bands keep the ridge recipe of their mean climate), the warm forest drawn in the temperate hand, the
 pack as a band, repeated stamps and the ruled roads.
 
+**Round 9 (2026-11-19, Opus: native land judged side by side).** The owner's rule: nothing judged before may score
+lower. Each climate, landmark and wonder was rendered in Fable's last state (`269bb41`, the climates on the old land)
+and on this branch, and fresh Opus critics scored the two side by side, blind (the order on each sheet set by a hash
+of the subject's name): climates on Reads, Land, Style and Craft, landmarks and wonders on Distinct, Setting and
+Craft, the overview on Globe and Geography, each 0–4. Where the new land scored lower, the old land was kept or the
+look fixed, and the subject was scored again.
+
+- Rounds 1 to 3: one critic a group, each world at its own views (where its land lies most wholly in each climate).
+  After round 1: fens keep the old land in every climate (the marsh house and the bridge town place again), and so
+  do the warm forest's islands, the equator's and the cold's tables. After round 2: the steppe's, the
+  Mediterranean's and dry volcanoes' islands keep the old land; the windmill keeps off sheer falls only; savanna
+  groves thinner. After round 3: the karst towers as Fable built them (wider clusters had emptied the jungle's
+  views); the observatory off the ice and the tundra (it stands on round 2's summit again, and the great oak on
+  Fable's own knoll).
+- The critics were noisy: the cathedral's unchanged site scored 3/4/3 in round 2 and 3/2/2 in round 3, the
+  lighthouse 3/3/3 and then 3/3/2 on near-identical renders. And each world's own views made the temperate a
+  comparison of two places (the "comb of tree spikes" a critic marked down is on old land both worlds share).
+- So round 4 is the decision: three critics a subject, and every climate row shows one place in both worlds (both
+  worlds' views, less any where one version is open sea: an island grown again has moved). Subjects whose renders
+  are the same to the byte are equal without a critic.
+
+- Round 4 found four things lower (three critics each): the lighthouse's and the baths' snow stained with tundra, a
+  ruler-straight ice edge by the baths, the cove hotel's hillsides as tan wedges, and a jungle ridge under the
+  observatory. Fixed: the dry side's thin snow fades out toward the pack ice; the pack's edge is back at 82; the
+  savanna's long belt holds on level ground only; the observatory stands on the highest summit of the dry side's hot
+  country. Round 5 scored the subjects those fixes changed (two critics reported before the owner called it good
+  enough; a later border fix moved 0.14 % of four frames' pixels or less).
+
+Means of the critics, before (`269bb41`) and after (this branch):
+
+| Climate | Reads / Land / Style / Craft, before | after | |
+|---|---|---|---|
+| Ice | 4 / 3.5 / 3 / 3 | 4 / 3 / 3 / 3 | round 5: one point lower from one critic |
+| Tundra | 2 / 2.5 / 3 / 3 | 3 / 3 / 3 / 3 | round 5 |
+| Taiga | 2.5 / 3 / 3 / 3 | 3.5 / 4 / 3 / 3 | round 5 |
+| Temperate | 3 / 3 / 3 / 2.67 | 4 / 3.33 / 3 / 3 | round 4 |
+| Warm forest | 3 / 3 / 3 / 3 | 3 / 3 / 3 / 3 | round 4 |
+| Jungle | the same render | the same render | to the byte |
+| Savanna | 2 / 2 / 3 / 2.5 | 4 / 4 / 3.5 / 3 | round 5 |
+| Desert | 3 / 3 / 3 / 2.33 | 4 / 3.33 / 3 / 3 | round 4 |
+| Mediterranean | 3 / 3 / 3 / 3 | 3 / 3 / 3 / 3 | round 4 |
+| Steppe | 2 / 1.67 / 2.33 / 2.67 | 3.33 / 3 / 3 / 3 | round 4 |
+
+| Overview | Globe / Geography, before | after | |
+|---|---|---|---|
+| Overview | 3 / 2 | 4 / 3 | round 5 |
+
+| Landmark | Distinct / Setting / Craft, before | after | |
+|---|---|---|---|
+| Abbey | the same render | the same render | to the byte |
+| Harbour town | the same render | the same render | to the byte |
+| Lighthouse | 3.5 / 4 / 3 | 3.5 / 4 / 3.5 | round 5 |
+| Churchyard yew | 3 / 3.67 / 3 | 3 / 3.67 / 3 | round 4 |
+| Ruined cathedral | 3.33 / 3.33 / 2.67 | 3.33 / 3.67 / 3 | round 4 |
+| Windmill | 2 / 3 / 3 | 2 / 3 / 3 | round 4 |
+| Old bridge | the same render | the same render | to the byte |
+
+| Wonder | Distinct / Setting / Craft, before | after | |
+|---|---|---|---|
+| Baths | 3 / 3 / 2 | 3 / 3 / 3 | round 5 |
+| Tide railway | the same render | the same render | to the byte |
+| Drowned church | 3 / 3 / 2 | 3 / 3 / 2 | round 4 |
+| Cove hotel | 3.5 / 3.5 / 3 | 3.5 / 3.5 / 3 | round 5 |
+| Marsh house | 3 / 3.33 / 3 | 3 / 3.33 / 3 | round 4 |
+| Airship mast | 3.5 / 3 / 2.5 | 3.5 / 4 / 3 | round 5 |
+| Bridge town | 3 / 4 / 3 | 3 / 4 / 3 | round 4 |
+| Great oak | 4 / 3.33 / 2.67 | 4 / 3.33 / 2.67 | round 4 |
+| Observatory | 3.5 / 3 / 3 | 3 / 3.5 / 3 | round 5: one point lower from one critic |
+
+What is left lower, each by one point from one critic: the ice's Land on the same-place sheet (no place holds
+ice-sheet land in both worlds, so those rows set land against frozen sea; at each world's own views three critics gave
+the new ice 4 / 3 / 3 / 2.67 against 3 / 2.33 / 3.33 / 2.33), and the observatory's Distinct (cream walls on pale
+hills; its Setting is higher). The owner's word on these (2026-11-19): good enough. Known and not fixed: stray black
+ink dashes on the new ice sheet's ridges (a trial that left the sheet's snow un-inked changed 0.45 % of two frames and
+nothing else; not shipped), and the pack's floes in square-edged blocks at its margin.
+
 Consensus left: the borders the tests hold to 150 cells are measured on level ground; one south-west wind puts rain
 on the same side of every island, where a globe has trades and westerlies; the open polar sea and the polar shallows
 are the temperate blue and turquoise (a cold sea colour is a live-layer change); the jungle's coastal plains are cut
