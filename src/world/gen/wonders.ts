@@ -17,7 +17,7 @@ import { sortIndicesBy } from "../core/heap.ts";
 import { torusDelta, wrap } from "../core/torus.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Conform, Structure } from "./built.ts";
-import { coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext, tempAt } from "./sites.ts";
+import { aridAt, coverAtNode, heightAt, isFarmable, isOpenCover, type SiteContext, tempAt } from "./sites.ts";
 import { boat, put, sculpt } from "./structures.ts";
 import * as W from "./wonderworks.ts";
 
@@ -984,10 +984,10 @@ function worked(m: number): boolean {
 /**
  * The sea-level temperatures each wonder may stand in (design 8), and how much a place's temperature adds to its
  * score: the great oak in temperate country, the bridge town in temperate and warm country, the drowned church in
- * a lake that is not frozen, the marsh house off the tundra and the jungle, the observatory off the ice and the
- * tundra; the baths lean to the cold and the hotel to the warm.
+ * a lake that is not frozen, the marsh house off the tundra and the jungle, the observatory in the dry side's hot
+ * country; the baths lean to the cold and the hotel to the warm.
  */
-const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean?: (t: number) => number }>> = {
+const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; side?: "wet" | "dry"; lean?: (t: number) => number }>> = {
   "great-oak": { lo: 0.44, hi: 0.62 },
   "bridge-town": { lo: 0.44, hi: 0.66 },
   "drowned-church": { lo: 0.32, hi: 1 },
@@ -997,8 +997,9 @@ const WONDER_CLIMATE: Readonly<Record<WonderType, { lo: number; hi: number; lean
   // The tide railway runs over open shallows: it leans to seas the pack ice does not reach.
   railway: { lo: 0, hi: 1, lean: (t) => (t > 0.34 ? 2 : 0) },
   "airship-mast": { lo: 0, hi: 1 },
-  // A dome on a snowfield was judged a poor setting side by side: the highest summit of the warmer country.
-  observatory: { lo: 0.38, hi: 1 },
+  // Under clear skies: the highest summit of the dry side's hot country, between the Mediterranean's woods and the
+  // equator's cloud forest. (A white dome on a snowfield read poorly side by side, and a jungle ridge suited it less.)
+  observatory: { lo: 0.72, hi: 0.9, side: "dry" },
 };
 
 const KINDS: Record<WonderType, Kind> = {
@@ -1032,8 +1033,8 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
   const wonders: PlacedWonder[] = [], skipped: string[] = [];
   for (const type of WONDER_ORDER) {
     if (opts.only && !opts.only.includes(type)) continue;
-    const kind = KINDS[type], climate = WONDER_CLIMATE[type], bounded = climate.lo > 0 || climate.hi < 1;
-    const inClimate = `in its climate (temperature ${climate.lo}–${climate.hi})`;
+    const kind = KINDS[type], climate = WONDER_CLIMATE[type], bounded = climate.lo > 0 || climate.hi < 1 || climate.side !== undefined;
+    const inClimate = `in its climate (temperature ${climate.lo}–${climate.hi}${climate.side ? `, the ${climate.side} side` : ""})`;
     const names = bounded ? [...kind.rules(rules), inClimate] : kind.rules(rules);
     const tally = new Tally(names);
     const found = kind.candidates(land, rules, tally);
@@ -1044,6 +1045,7 @@ export function placeWonders(land: WonderLand, taken: readonly { x: number; y: n
       if (c.island[wrap(Math.floor(q.y / 4), c.gN) * c.gN + wrap(Math.floor(q.x / 4), c.gN)] === c.home) continue;
       const t = tempAt(c, q.x, q.y);
       if (t < climate.lo || t > climate.hi) continue;
+      if (climate.side !== undefined && (aridAt(c, q.x, q.y) > 0.5) !== (climate.side === "dry")) continue;
       if (bounded) tally.pass(inClimate);
       cands.push(climate.lean ? { ...q, score: q.score + climate.lean(t) } : q);
     }

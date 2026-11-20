@@ -202,9 +202,19 @@ function coldShift(temp: number): number {
 /** Lakes freeze from this shift, rivers from this, and the pack's edge lies about here: all a little short of the snowline's 93. */
 const LAKE_FREEZE = 74;
 const RIVER_FREEZE = 84;
-const PACK_EDGE = 87;
+const PACK_EDGE = 82;
+/** The savanna's long belt holds on ground no steeper than the first of these slopes of the form, and is the short belt from the second. */
+const SAVANNA_LEVEL = 0.14;
+const SAVANNA_HILL = 0.3;
 /** Units the dry side's snowline stands above the wet side's: its winters are dry. */
 const DRY_SNOW = 12;
+/**
+ * The dry side's thin snow (its higher snowline, its late snow gone by summer, its grass further toward the pole) is
+ * whole up to the first of these cold shifts of the latitude and gone by the second: the coasts of the pack ice keep
+ * the polar snow, so the lighthouse and the baths stand in white and not in stains of tundra.
+ */
+const DRY_THIN_WHOLE = 68;
+const DRY_THIN_GONE = 75;
 /** Side of a frost polygon, in cells. */
 const FROST_CELLS = 8;
 /** Side of the net the pack's floes are cut from, in cells. */
@@ -448,13 +458,18 @@ function hotGround(c: CoverInput, x: number, y: number, mask: Uint8Array, n: num
   // How much rain a forest needs. The savanna's latitudes have a long dry season and burn: there only the wettest
   // ground, the river banks and the hollows keep forest. At the equator it rains all year, and nearly all of it is forest.
   // The belt is the latitude's, read at the sea: a mountain in the wet tropics is forest to its tree line, not savanna half way up.
-  // (Only the dry side reaches here: the wet side is forest to the equator.) Its savanna runs nearly to the equator.
-  const belt = heat <= 0.5 ? 0 : heat >= 0.985 ? 0 : heat < 0.72 ? (heat - 0.5) / 0.22 : (0.985 - heat) / 0.265;
+  // (Only the dry side reaches here: the wet side is forest to the equator.) Its savanna runs nearly to the equator
+  // on the plains. Hills there keep their forest, as the shorter belt left them: fire runs over level grass and
+  // dies on broken ground, and grass on every spur of a ridged island was a hillside of tan wedges.
+  const plain = st <= SAVANNA_LEVEL ? 1 : st >= SAVANNA_HILL ? 0 : (SAVANNA_HILL - st) / (SAVANNA_HILL - SAVANNA_LEVEL);
+  const far = heat <= 0.5 ? 0 : heat >= 0.985 ? 0 : heat < 0.72 ? (heat - 0.5) / 0.22 : (0.985 - heat) / 0.265;
+  const short = heat <= 0.5 ? 0 : heat >= 0.9 ? 0 : heat < 0.68 ? (heat - 0.5) / 0.18 : (0.9 - heat) / 0.22;
+  const belt = short + (far - short) * plain;
   const forest = 0.57 + 0.3 * belt;
   if (wet < forest + 0.012 * j) {
     if (tropic < 0) return M.steppeCool + hueVariant(x, y, HUE_CLASS.scrub, mask, n);
     // Forest islands stand in the grass toward the forest's edge, in the hollows first.
-    if (wet > forest - 0.2 && soft(x, y, n, 60, WARM_SEED + 18) + 0.2 * soft(x, y, n, 19, WARM_SEED + 19) + (wet - forest + 0.1) * 5 > 0.45) return M.floorJungle;
+    if (wet > forest - 0.2 && soft(x, y, n, 60, WARM_SEED + 18) + 0.2 * soft(x, y, n, 19, WARM_SEED + 19) + (wet - forest + 0.1) * 5 > 0.3 + 0.15 * plain) return M.floorJungle;
     // Red earth shows through the grass in small worn patches.
     if (st < 0.16 && soft(x, y, n, 23, WARM_SEED + 15) + 0.5 * soft(x, y, n, 6, WARM_SEED + 16) > 0.8) return M.earthRed;
     return M.savannaCool + hueVariant(x, y, HUE_CLASS.pasture, mask, n);
@@ -833,6 +848,8 @@ function coldSkin(m: number, c: CoverInput, x: number, y: number, mask: Uint8Arr
 let ruledField = false;
 /** The dry side's share at the cell being covered (CoverInput.arid), for the rules that read it deep in the table. */
 let aridNow = 0;
+/** How much of the dry side's thin snow the cell being covered has: 1, fading to 0 toward the pole (DRY_THIN_*). */
+let thinNow = 1;
 
 // What snowAt found beside the score: what steepness and sharpness took off it, the share of that a sharp crest
 // shed, and the fine noise of the snow's edge.
@@ -899,6 +916,9 @@ function snowAt(x: number, y: number, n: number, mask: Uint8Array, ef: number, e
 export function cover(c: CoverInput, mask: Uint8Array, n: number = WORLD_N): number {
   const arid = c.arid !== undefined && c.arid > 0 ? (c.arid > 1 ? 1 : c.arid) : 0;
   aridNow = arid;
+  // Faded by the latitude's own cold, not its wandering line, so the fade is a broad band and draws no edge.
+  const polar = c.temp === undefined || c.temp !== c.temp ? 0 : coldShift(c.temp);
+  thinNow = polar <= DRY_THIN_WHOLE ? 1 : polar >= DRY_THIN_GONE ? 0 : (DRY_THIN_GONE - polar) / (DRY_THIN_GONE - DRY_THIN_WHOLE);
   if (arid === 0 && isTemperate(c.temp)) return rules(c, mask, n, 0);
   // The dry side has no plateau: a cell of it at the plateau's own temperature is dressed like its neighbours.
   const temp = c.temp === undefined || c.temp !== c.temp ? TEMPERATE_T : c.temp;
@@ -960,7 +980,7 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   if (shift > 0) {
     // An ice cap's edge on level ground is not a line: snowfields a few dozen cells across lie out on the tundra
     // before it, and windows of bare ground are open in it behind.
-    snowScore = snowAt(x, y, n, mask, ef, ef + shift - DRY_SNOW * aridNow, st, curve, north, relief) +
+    snowScore = snowAt(x, y, n, mask, ef, ef + shift - DRY_SNOW * aridNow * thinNow, st, curve, north, relief) +
       (shift >= 40 ? 1 : shift / 40) * (0.4 * soft(x, y, n, 90, ICE_SEED + 20) + 0.75 * soft(x, y, n, 31, ICE_SEED + 21) + 0.5 * soft(x, y, n, 12, ICE_SEED + 22));
     snowKnown = true;
     if (snowScore > 0) return iceOf(c, x, y, n, st);
@@ -1017,7 +1037,7 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   // hollow far below it, and no valley floor, is ever white. All of it is
   // read off smooth fields; the edge is broken by noise at three scales and
   // a little dither.
-  if (!snowKnown) snowScore = snowAt(x, y, n, mask, ef, ef + shift - (shift > 0 ? DRY_SNOW * aridNow : 0), st, curve, north, relief);
+  if (!snowKnown) snowScore = snowAt(x, y, n, mask, ef, ef + shift - (shift > 0 ? DRY_SNOW * aridNow * thinNow : 0), st, curve, north, relief);
   /** What steepness and sharpness took off the score: ground that would be white but for it is bare rock. */
   const shed = snowShed;
   /** The share of that which a sharp crest shed. */
@@ -1106,14 +1126,14 @@ function rules(c: CoverInput, mask: Uint8Array, n: number, shift: number): numbe
   if (snowScore > -0.45) {
     if (shift <= 0) return M.snowLate;
     // The dry side's winters are dry: its late snow is gone by summer but in the deepest hollows.
-    if (snowScore > -0.2 - 0.25 * soft(x, y, n, 9, ICE_SEED + 23) + (aridNow >= 0.5 ? 0.17 : 0)) return M.snow;
+    if (snowScore > -0.2 - 0.25 * soft(x, y, n, 9, ICE_SEED + 23) + (aridNow >= 0.5 ? 0.17 * thinNow : 0)) return M.snow;
   }
 
   // Tundra: the ground beyond the tree line of a cold latitude, whatever the region. Weighted in by the shift, so
   // a temperate mountain keeps its own alpine meadow and moor.
   if (shift > 0) {
     // The dry side's grass runs further toward the pole: its tundra begins some fourteen units colder.
-    const t = tundraAt(c, x, y, mask, n, shift, cold - 0.14 * aridNow, st, curve, north);
+    const t = tundraAt(c, x, y, mask, n, shift, cold - 0.14 * aridNow * thinNow, st, curve, north);
     if (t !== 0) return t;
   }
 
