@@ -48,17 +48,16 @@ const EMPTY = quatrefoil(PAPER);
 const FULL = quatrefoil(VERMILION);
 
 /**
- * The arrow pointing east, as a shape: a broad head and a short shaft. Inside the head and shaft is vermilion, the
- * rim ink. Sampled turned to each of TURNS directions.
+ * The arrow pointing east, as a shape: a notched pointer, vermilion inside, inked round. Sampled turned to each of
+ * TURNS directions.
  */
 function inArrow(u: number, v: number): number {
-  // u along the arrow (head at +), v across it, px from the box's centre.
-  const head = u >= -0.5 && u <= 7.5 && Math.abs(v) <= (7.5 - u) * 0.9;
-  const shaft = u >= -7.5 && u < 0 && Math.abs(v) <= 2.1;
-  if (!head && !shaft) return 0;
-  const headIn = u >= 0.6 && u <= 6.3 && Math.abs(v) <= (6.3 - u) * 0.9 - 0.3;
-  const shaftIn = u >= -6.4 && u < 1 && Math.abs(v) <= 1.1;
-  return headIn || shaftIn ? VERMILION : INK;
+  // A pointer: one broad triangle, its tip at +7, its back notched so it reads as pointing, not as a kite.
+  const back = -5 + 2.2 * (1 - Math.abs(v) / 6.5);
+  const out = u <= 7.5 && u >= back - 0.6 && Math.abs(v) <= (7.5 - u) * 0.62;
+  if (!out) return 0;
+  const inside = u <= 5.8 && u >= back + 0.9 && Math.abs(v) <= (5.8 - u) * 0.62 - 0.4;
+  return inside ? VERMILION : INK;
 }
 
 function arrowSprite(angle: number): Sprite {

@@ -133,19 +133,21 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     ".............bBBb.............",
     "............bbBBbb............",
   ], 15, 24, yewInk);
-  const pineInk = { p: [M.yew, 9], P: [M.yew, 4], t: [M.timber, 4], k: [M.timber, 1], o: [M.roofTile, 9], O: [M.roofTile, 5] } as const;
+  const pineInk = { p: [M.hedge, 12], P: [M.hedge, 7], t: [M.timber, 4], k: [M.timber, 2], o: [M.roofTile, 10], O: [M.roofTile, 6] } as const;
   const pineRest = paint.add([
-    "..p..",
-    ".pPp.",
-    ".PpP.",
-    "pPpPp",
-    "PpPpP",
-    "..t..",
-    "kkkkk",
-    "koOok",
-    ".kOk.",
-    ".kkk.",
-  ], 2, 9, pineInk);
+    "...p...",
+    "..pPp..",
+    "..PpP..",
+    ".pPpPp.",
+    ".PpPpP.",
+    "pPpPpPp",
+    "...t...",
+    "kkkkkkk",
+    "kooooOk",
+    ".kOOOk.",
+    ".kOOOk.",
+    "..kkk..",
+  ], 3, 11, pineInk);
   const shearsInk = { x: [M.roofLead, 2], X: [M.roofLead, 9] } as const;
   const shears = paint.add(["x...", ".X..", "..xx", "..x."], 1, 3, shearsInk);
   const shearsOpen = paint.add(["x..x", ".xx.", ".XX.", "x..x"], 2, 3, shearsInk);
@@ -155,7 +157,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   // flies up.
   const deskInk = {
     d: [M.timber, 7], D: [M.timber, 3], w: [M.whitewash, 15], W: [M.whitewash, 10], h: [M.timber, 1], f: [M.plaster, 11],
-    k: [M.roofSlate, 2], g: [M.wheat, 11], G: [M.wheat, 6],
+    k: [M.roofSlate, 2], g: [M.sandPale, 13], G: [M.sand, 9],
   } as const;
   const deskA = paint.add([
     ".hh.........",
@@ -280,7 +282,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
 
   // 5. The peach basket nailed to a dead oak at a field's edge, and a boy with a ball. He bounces it; once found he
   // throws, misses, throws again and scores.
-  const oakInk = { b: [M.timber, 6], B: [M.timber, 3], g: [M.stoneDark, 6], k: [M.wheat, 10], K: [M.wheat, 5] } as const;
+  const oakInk = { b: [M.timber, 6], B: [M.timber, 3], g: [M.stoneDark, 6], k: [M.roofTile, 11], K: [M.roofTile, 7], n: [M.whitewash, 15] } as const;
   const oak = paint.add([
     "g.....g...g.",
     ".g...g...g..",
@@ -289,9 +291,9 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     ".g..bgg..g..",
     "..g.bB.gg...",
     "...gbB......",
-    "....bBkkkk..",
-    "....bBKkkK..",
-    "....bB.KK...",
+    "....bBkkkkk.",
+    "....bBKkkkK.",
+    "....bB.nKn..",
     "....bB......",
     "....bB......",
     "....bB......",
@@ -301,7 +303,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   const boyInk = { h: [M.timber, 1], f: [M.plaster, 11], s: [M.whitewash, 14], S: [M.whitewash, 9], l: [M.roofSlate, 3] } as const;
   const boy = paint.add([".h.", ".f.", "sss", "sSs", ".l.", "l.l"], 1, 5, boyInk);
   const boyThrow = paint.add([".h.s", ".fs.", "sss.", "sSs.", ".l..", "l.l."], 1, 5, boyInk);
-  const ball = paint.add(["oo", "oO"], 0, 1, { o: [M.roofTile, 10], O: [M.roofTile, 5] });
+  const ball = paint.add([".o.", "ooO", ".O."], 1, 2, { o: [M.roofTile, 11], O: [M.roofTile, 6] });
 
   // The pennant, in the dragon's vermilion, on a pole: two frames of the wind.
   const pennant = [
@@ -325,10 +327,10 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   // from the south as the baked houses are: the roof's slope above, the front wall below, inked at the edges, with a
   // shadow cast to the east on the grass.
   const hallInk = {
-    k: [M.roofSlate, 1], r: [M.roofSlate, 8], R: [M.roofSlate, 5], q: [M.roofSlate, 11],
-    s: [M.stone, 12], S: [M.stone, 9], z: [M.stone, 6], o: [M.opening, 1], O: [M.opening, 3],
-    d: [M.roofTile, 7], D: [M.roofTile, 4], w: [M.whitewash, 14], l: [M.lantern, 10],
-    g: "mane", h: [M.timber, 1, 110],
+    k: [M.timber, 2], r: [M.roofLead, 9], R: [M.roofLead, 6], q: [M.roofLead, 12],
+    s: [M.plaster, 13], S: [M.plaster, 10], z: [M.plaster, 7], o: [M.opening, 1], O: [M.opening, 4],
+    d: [M.timber, 6], D: [M.timber, 3], w: [M.whitewash, 14], l: [M.lantern, 10], c: [M.cobble, 10], C: [M.cobble, 7],
+    g: "mane", h: [M.timber, 1, 90],
   } as const;
   const hallSprite = paint.add([
     "...................g....................",
@@ -340,16 +342,17 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     "...krqrrqrrqrrqrrqrrqrrqrrqrrqrrqrrqk...",
     "..krrrrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrrk..",
     ".krrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrrRrrrk.",
-    "kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRk.",
-    "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
-    ".kssSssssssssssskkkkkkkssssssssssSsssk..",
-    ".ksOsssOsssOssskdddddddksssOsssOsssOsk..",
-    ".ksosSsosSsossskdDdDdDdkssosSsosSsosk.h.",
-    ".ksosssosssossskdDdDdDdksssosssosssosk.h",
-    ".kssssssssssssskdDdDdDdkssssssssssssskhh",
-    ".kzzzzzzzzzzzzzkdDdDdDdkzzzzzzzzzzzzzkhh",
+    "kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkh",
+    "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkh",
+    ".ksssssssssssssskkkkkkkssssssssssssssskh",
+    ".kss.o.ss.o.sssk.ddddd.kss.o.ss.o.ssskh.",
+    ".kssoooSsoooSssk.dDdDd.ksSoooSsoooSsskhh",
+    ".ksSoooSsoooSssk.dDdDd.ksSoooSsoooSsskhh",
+    ".ksSsssSsssSsssk.dDdDd.ksSsssSsssSssskhh",
+    ".kzzzzzzzzzzzzzk.dDdDd.kzzzzzzzzzzzzzkhh",
     ".kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkhh",
-    "..hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+    "..hhhhhhhhhhhhhCcCcCcCchhhhhhhhhhhhhhhhh",
+    "..............cCcCcCcCcC................",
   ], 19, 17, hallInk);
 
   const foundAt = new Map<StopKey, number>();
@@ -367,17 +370,18 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
 
   function drawPine(f: LiveFrame, p: StoryPlace, since: number): void {
     put(f, yew, p.x - 8, p.y - 4);
-    put(f, pineRest, p.x + 8, p.y + 2);
+    // The pot stands on the open grass in front of the yew, the shears beside it.
+    put(f, pineRest, p.x + 2, p.y + 7);
     if (since < 0) {
-      put(f, shears, p.x + 13, p.y + 3);
+      put(f, shears, p.x + 7, p.y + 8);
       return;
     }
     const snip = since < 2 ? Math.floor(since * 4) % 2 : 1;
-    if (since < 2) put(f, snip ? shearsOpen : shears, p.x + 12, p.y + 2, 7);
-    else put(f, shears, p.x + 13, p.y + 3);
+    if (since < 2) put(f, snip ? shearsOpen : shears, p.x + 6, p.y + 7, 8);
+    else put(f, shears, p.x + 7, p.y + 8);
     // The cone falls from the pine's top and stays at its foot.
     const fall = since < 2 ? 0 : Math.min(1, (since - 2) / 0.6);
-    put(f, cone, p.x + 11, p.y + 3, Math.round(9 * (1 - fall)));
+    put(f, cone, p.x + 5, p.y + 8, Math.round(10 * (1 - fall)));
   }
 
   function drawDesk(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
@@ -423,7 +427,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   function drawMill(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
     put(f, race, p.x + 6, p.y + 3);
     put(f, shed, p.x, p.y);
-    put(f, sails[cycle(t, 1.6, 2)], p.x - 2, p.y, 13);
+    put(f, sails[cycle(t, 1.6, 2)], p.x - 4, p.y, 7);
     put(f, wheel[cycle(t, 1.2, 2)], p.x + 9, p.y + 2);
     put(f, pole, p.x - 10, p.y + 2);
     // The flag runs up after it is found, and stays up.
