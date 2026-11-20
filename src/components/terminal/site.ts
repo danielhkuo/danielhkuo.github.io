@@ -1,21 +1,15 @@
 // The site's content as files: the tree the shell starts in. Markdown, so
 // `cat` can lay it out (see markdown.ts for the subset it reads).
 
-import { bareUrl, contactLinks, projectFacts, withScheme } from "../../lib/site-content.ts";
+import type { Project } from "../../lib/projects.ts";
+import { bareUrl, contactLinks, formatDay, nestMarkdown, projectFacts } from "../../lib/site-content.ts";
 import { EMAIL, LINKS, PROFILE } from "./content.ts";
 import { HOME, dir, file, type DirNode } from "./fs.ts";
-import type { PageLink, SiteInfo, SlimProject } from "./types";
+import type { PageLink, SiteInfo } from "./types";
 
-/** "github.com/danielhkuo": an address as its link's label. */
-function bare(url: string): string {
-  return url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
-}
-
-/** "8 Sep 2026". UTC, so the same string everywhere. */
-function day(iso: string): string {
-  const d = new Date(iso);
-  const month = d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
-  return `${d.getUTCDate()} ${month} ${d.getUTCFullYear()}`;
+/** A summary is one line, but nothing enforces it. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 const ABOUT = `# ${PROFILE.name}
@@ -33,52 +27,57 @@ The work is in \`projects/\`. To get in touch, \`cat contact.md\` or \`open resu
 const CONTACT = `# Contact
 
 - **Email** [${EMAIL}](${LINKS.email})
-- **GitHub** [${bare(LINKS.github)}](${LINKS.github})
-- **LinkedIn** [${bare(LINKS.linkedin)}](${LINKS.linkedin})
+- **GitHub** [${bareUrl(LINKS.github)}](${LINKS.github})
+- **LinkedIn** [${bareUrl(LINKS.linkedin)}](${LINKS.linkedin})
 
 Or send a note with the form at the foot of the page.
 `;
 
-/** A pinned repo's README: what its card on the page shows, and the full language mix. */
-function readme(p: SlimProject): string {
-  const lines = [`# ${p.name}`, ""];
-  if (p.description) lines.push(p.description, "");
-  lines.push(
-    `- **Stars** ${p.stargazerCount}`,
-    `- **Forks** ${p.forkCount}`,
-    `- **Updated** ${day(p.updatedAt)}`,
-    "",
-  );
-  // Anything that would print as 0.0% is noise.
-  const mix = p.languages.filter((l) => l.percentage >= 0.05);
-  if (mix.length) {
-    lines.push("## Languages", "", ...mix.map((l) => `- ${l.name} ${l.percentage.toFixed(1)}%`), "");
+/** A project's README: summary, counts, description, languages and links, each only when the project has it. */
+function readme(p: Project): string {
+  const blocks = [`# ${p.name}`];
+  const summary = oneLine(p.summary);
+  if (summary) blocks.push(summary);
+  const github = p.github;
+  if (github) {
+    blocks.push(`- **Stars** ${github.stars}\n- **Forks** ${github.forks}\n- **Updated** ${formatDay(github.updatedAt)}`);
   }
-  lines.push("## Links", "", `- **Repository** [${bare(p.url)}](${p.url})`);
-  if (p.homepageUrl) lines.push(`- **Homepage** [${bare(p.homepageUrl)}](${p.homepageUrl})`);
-  return `${lines.join("\n")}\n`;
+  const body = p.body.trim();
+  if (body) blocks.push(nestMarkdown(body, 1));
+  // Anything that would print as 0.0% is noise.
+  const mix = (github?.languages ?? []).filter((l) => l.percentage >= 0.05);
+  if (mix.length) blocks.push(["## Languages", "", ...mix.map((l) => `- ${l.name} ${l.percentage.toFixed(1)}%`)].join("\n"));
+  const links: string[] = [];
+  if (p.repoUrl) links.push(`- **Repository** [${bareUrl(p.repoUrl)}](${p.repoUrl})`);
+  if (p.link) links.push(`- **Link** [${bareUrl(p.link)}](${p.link})`);
+  if (links.length) blocks.push(["## Links", "", ...links].join("\n"));
+  return `${blocks.join("\n\n")}\n`;
 }
 
-/** Where the pinned repos are on GitHub: what `open projects` shows. */
+/** Where the projects are on GitHub: what `open projects` shows. */
 const REPOSITORIES = `${LINKS.github}?tab=repositories`;
 
 /**
- * projects/README.md: every pinned repo under its name, which links to it:
- * what it is, then its details as a list (its language, counts and last
- * update; its homepage). The minimal version prints this as its Projects
- * section.
+ * projects/README.md: every project under its name. The name links to the
+ * repository, or to the link when there is no repository. Then the summary,
+ * the facts, and the link again when the name already goes to the repository.
  */
-function projectsIndex(projects: readonly SlimProject[]): string {
+function projectsIndex(projects: readonly Project[]): string {
   const lines = ["# Projects", ""];
-  if (!projects.length) lines.push(`The projects are pinned on [${bareUrl(LINKS.github)}](${LINKS.github}).`, "");
+  if (!projects.length) lines.push(`The code is on [${bareUrl(LINKS.github)}](${LINKS.github}).`, "");
   for (const p of projects) {
-    lines.push(`## [${p.name}](${p.url})`, "");
-    // One line on GitHub, but nothing enforces it.
-    const description = p.description.replace(/\s+/g, " ").trim();
-    if (description) lines.push(description, "");
-    lines.push(`- ${projectFacts(p)}`);
-    if (p.homepageUrl) lines.push(`- [${bareUrl(p.homepageUrl)}](${withScheme(p.homepageUrl)})`);
-    lines.push("");
+    const href = p.repoUrl ?? p.link;
+    const block = [href ? `## [${p.name}](${href})` : `## ${p.name}`];
+    const summary = oneLine(p.summary);
+    if (summary) block.push("", summary);
+    const facts = projectFacts(p);
+    const extra = p.repoUrl && p.link ? `- [${bareUrl(p.link)}](${p.link})` : "";
+    if (facts || extra) {
+      block.push("");
+      if (facts) block.push(`- ${facts}`);
+      if (extra) block.push(extra);
+    }
+    lines.push(block.join("\n"), "");
   }
   return lines.join("\n");
 }
@@ -97,8 +96,9 @@ function sitemap(pages: readonly PageLink[]): string {
 
 /**
  * The filesystem: /Users/daniel holding the bio, the contact card, the
- * résumé, and a directory per pinned repo. A repo's directory opens the
- * repository and carries its last update as its date; everything else is
+ * résumé, and a directory per project, named by its slug. A project's
+ * directory opens its repository, or its link when it has none, and is dated
+ * by that repository's last update when GitHub gave one; everything else is
  * dated by the build.
  *
  * Given the site's other pages (`site.pages`: the minimal version, and the
@@ -107,14 +107,17 @@ function sitemap(pages: readonly PageLink[]): string {
  * résumé on it, and ~/sitemap.md. The contact card of the old home page
  * points at the form at its foot instead.
  */
-export function siteTree(projects: readonly SlimProject[], site: SiteInfo): DirNode {
+export function siteTree(projects: readonly Project[], site: SiteInfo): DirNode {
   const built = site.builtAt;
+  const dated = (p: Project) => p.github?.updatedAt ?? built;
+  const opens = (p: Project) => p.repoUrl ?? p.link ?? undefined;
   const repos = projects.map((p) =>
-    dir(p.name, p.updatedAt, [file("README.md", p.updatedAt, { text: readme(p), url: p.url })], p.url),
+    dir(p.slug, dated(p), [file("README.md", dated(p), { text: readme(p), url: opens(p) })], opens(p)),
   );
   let latest = "";
   for (const p of projects) {
-    if (!latest || Date.parse(p.updatedAt) > Date.parse(latest)) latest = p.updatedAt;
+    const at = p.github?.updatedAt;
+    if (at && (!latest || Date.parse(at) > Date.parse(latest))) latest = at;
   }
   const updated = latest || built;
 

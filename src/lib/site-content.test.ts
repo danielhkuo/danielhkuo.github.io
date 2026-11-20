@@ -13,36 +13,40 @@ import {
   profileFacts,
   profileSummary,
   projectFacts,
-  publishedProjects,
-  withScheme,
-  type Project,
+  nestMarkdown,
 } from "./site-content.ts";
+import type { Project } from "./projects.ts";
 
 const ZETA: Project = {
+  slug: "zeta-tool",
   name: "zeta-tool",
-  description: "A sample project showcasing modern web development",
-  url: "https://github.com/danielhkuo/zeta-tool",
-  homepageUrl: "https://www.example.com/",
-  primaryLanguage: { name: "TypeScript" },
-  languages: [
-    { name: "TypeScript", percentage: 65.44 },
-    { name: "JavaScript", percentage: 34.52 },
-  ],
-  stargazerCount: 42,
-  forkCount: 7,
-  updatedAt: "2026-09-08T12:00:00Z",
+  summary: "A sample project showcasing modern web development",
+  body: "",
+  order: 1,
+  repo: "danielhkuo/zeta-tool",
+  repoUrl: "https://github.com/danielhkuo/zeta-tool",
+  link: "https://www.example.com/",
+  image: null,
+  github: {
+    stars: 42,
+    forks: 7,
+    language: { name: "TypeScript", color: "#3178c6" },
+    languages: [
+      { name: "TypeScript", color: "#3178c6", percentage: 65.44 },
+      { name: "JavaScript", color: "#f1e05a", percentage: 34.52 },
+    ],
+    updatedAt: "2026-09-08T12:00:00Z",
+  },
 };
 
 const BARE: Project = {
+  ...ZETA,
+  slug: "Alpha",
   name: "Alpha",
-  description: "",
-  url: "https://github.com/danielhkuo/Alpha",
-  homepageUrl: null,
-  primaryLanguage: null,
-  languages: [],
-  stargazerCount: 0,
-  forkCount: 0,
-  updatedAt: "2026-08-29T12:00:00Z",
+  repo: "danielhkuo/Alpha",
+  repoUrl: "https://github.com/danielhkuo/Alpha",
+  link: null,
+  github: { stars: 0, forks: 0, language: null, languages: [], updatedAt: "2026-08-29T12:00:00Z" },
 };
 
 test("an address is shown without its scheme, www or trailing slash", () => {
@@ -56,12 +60,6 @@ test("a path on the site becomes an address on the live site; other addresses ar
   assert.equal(absoluteUrl("/"), "https://danielhkuo.github.io/");
   assert.equal(absoluteUrl("https://github.com/someone"), "https://github.com/someone");
   assert.equal(absoluteUrl("mailto:someone@example.com"), "mailto:someone@example.com");
-});
-
-test("an address without a scheme gets https; one with a scheme is kept", () => {
-  assert.equal(withScheme("example.com/app"), "https://example.com/app");
-  assert.equal(withScheme("http://example.com"), "http://example.com");
-  assert.equal(withScheme("https://example.com/"), "https://example.com/");
 });
 
 test("a date reads as day, month and year, in UTC", () => {
@@ -87,7 +85,7 @@ test("a project's facts give its language, stars, forks and last update", () => 
 });
 
 test("one star and one fork are singular", () => {
-  const one = { ...ZETA, primaryLanguage: { name: "Rust" }, stargazerCount: 1, forkCount: 1 };
+  const one: Project = { ...ZETA, github: { ...ZETA.github!, language: { name: "Rust", color: "#dea584" }, stars: 1, forks: 1 } };
   assert.equal(projectFacts(one), "Rust · 1 star · 1 fork · updated 8 Sep 2026");
 });
 
@@ -95,12 +93,17 @@ test("with no language, stars or forks, the facts are only the update, capitalis
   assert.equal(projectFacts(BARE), "Updated 29 Aug 2026");
 });
 
-test("pinned repos fetched from GitHub are published as they are", () => {
-  assert.deepEqual(publishedProjects({ repos: [ZETA, BARE], source: "github" }), [ZETA, BARE]);
+test("a project built without GitHub's stats has no facts", () => {
+  assert.equal(projectFacts({ ...ZETA, github: null }), "");
 });
 
-test("the offline sample repos are never published", () => {
-  assert.deepEqual(publishedProjects({ repos: [ZETA, BARE], source: "sample" }), []);
+test("a description's headings are moved down under the page's own, and code is left as it is", () => {
+  const body = "Intro.\n\n# Why\n\n## How\n\n```sh\n# a comment, not a heading\n```\n\n###### Deepest\n\n#hashtag";
+  assert.equal(
+    nestMarkdown(body, 3),
+    "Intro.\n\n#### Why\n\n##### How\n\n```sh\n# a comment, not a heading\n```\n\n###### Deepest\n\n#hashtag",
+  );
+  assert.equal(nestMarkdown("", 3), "");
 });
 
 test("the one-line summary names the title, school, location and what is being built", () => {

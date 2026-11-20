@@ -1,40 +1,11 @@
 // The landmarks a flight can land at: the abbey, the hall, and one stop for each of the five.
 
+import type { Project } from "../../lib/projects.ts";
 import type { PlaceType } from "./assign.ts";
 import { isStopKey, STOPS, type StopKey } from "../story/stops.ts";
 
-/** A project as the hall shows it: the same shape as src/lib/projects.ts's Project (world/projects); at that merge this becomes `import type { Project }`. */
-export interface HallProject {
-  slug: string;
-  name: string;
-  summary: string;
-  body: string;
-  order: number;
-  repo: string | null;
-  repoUrl: string | null;
-  link: string | null;
-  image: string | null;
-  github: {
-    stars: number;
-    forks: number;
-    language: { name: string; color: string } | null;
-    languages: { name: string; color: string; percentage: number }[];
-    updatedAt: string;
-  } | null;
-}
-
-/** A pinned project as the Codex shows it. */
-export interface ProjectEntry {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  language: string | null;
-  stars: number;
-  forks: number;
-  /** ISO 8601. */
-  updatedAt: string;
-}
+/** A project as the hall shows it: one Markdown file in projects/, read at build time (src/lib/projects.ts). */
+export type HallProject = Project;
 
 /** What a landmark holds: About Me at the abbey, every project at the hall, or one stop. */
 export type Holding = { kind: "about" } | { kind: "hall"; projects: HallProject[] } | { kind: "stop"; stop: StopKey };
@@ -54,18 +25,6 @@ export interface LandmarkSet {
   worldId: string;
   n: number;
   landmarks: Landmark[];
-}
-
-/** The fields of a pinned repository (lib/github.ts) the Codex reads. */
-export interface RepoLike {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  primaryLanguage: { name: string } | null;
-  stargazerCount: number;
-  forkCount: number;
-  updatedAt: string;
 }
 
 const KINDS = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew", "hall", "curio"] as const;
@@ -99,20 +58,6 @@ function ordered(projects: readonly HallProject[]): HallProject[] {
     if (a.name > b.name) return 1;
     return 0;
   });
-}
-
-/** A repository as the Codex shows it. GitHub reports "no homepage" as an empty string as well as null. */
-export function entryOf(r: RepoLike): ProjectEntry {
-  return {
-    name: r.name,
-    description: r.description,
-    url: r.url,
-    homepageUrl: r.homepageUrl ? r.homepageUrl : null,
-    language: r.primaryLanguage?.name ?? null,
-    stars: r.stargazerCount,
-    forks: r.forkCount,
-    updatedAt: r.updatedAt,
-  };
 }
 
 interface ManifestSite {

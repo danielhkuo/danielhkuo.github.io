@@ -48,9 +48,9 @@ function Entries({ section }: { section: Section }) {
   return (
     <ul className="nano-entries" style={width}>
       {section.entries?.map((entry: Entry) => (
-        <li key={entry.link.href}>
+        <li key={entry.key}>
           <p className={entry.note ? "nano-head nano-noted" : "nano-head"}>
-            <A link={entry.link} />
+            {typeof entry.name === "string" ? <span>{entry.name}</span> : <A link={entry.name} />}
             {entry.note && <span>{entry.note}</span>}
           </p>
           {entry.lines.map((line) => (

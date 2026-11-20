@@ -1,28 +1,14 @@
 // What every text view of the site shares: the text version (TEXT_PAGE) and
 // the agent files at /agents.md and /llms.txt. Everything here is derived from the
-// two content sources, the profile in terminal/content.ts and the pinned
-// GitHub repos; nothing is copied out of them. Pure, with no React, so
+// two content sources, the profile in terminal/content.ts and the project
+// files in `projects/`; nothing is copied out of them. Pure, with no React, so
 // `node --test` runs it as it is.
 
 import { EMAIL, LINKS, PROFILE } from "../components/terminal/content.ts";
+import type { Project } from "./projects.ts";
 
 /** Where the site is published. The agent files give whole addresses, so a link still works out of context. */
 export const SITE_URL = "https://danielhkuo.github.io";
-
-/** What the text views need of a pinned repo. `PinnedRepo` and the terminal's `SlimProject` both fit. */
-export interface Project {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  primaryLanguage: { name: string } | null;
-  /** Largest first, as GitHub reports them. */
-  languages: readonly { name: string; percentage: number }[];
-  stargazerCount: number;
-  forkCount: number;
-  /** ISO 8601. */
-  updatedAt: string;
-}
 
 /**
  * Where the text version lives: the one page that holds the whole site as
@@ -98,11 +84,6 @@ export function bareUrl(url: string): string {
   return url.replace(/^[a-z][a-z\d+.-]*:\/\/(www\.)?/i, "").replace(/\/$/, "");
 }
 
-/** A homepage as GitHub gives it may lack its scheme ("example.com"); as a link that would be a path on this site. */
-export function withScheme(url: string): string {
-  return /^[a-z][a-z\d+.-]*:/i.test(url) ? url : `https://${url}`;
-}
-
 /** "8 Sep 2026". UTC, so the same string wherever it is built. */
 export function formatDay(iso: string): string {
   const d = new Date(iso);
@@ -162,21 +143,45 @@ function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** "TypeScript · 42 stars · 7 forks · updated 8 Sep 2026". Zero counts and a missing language are left out. */
+/**
+ * "TypeScript · 42 stars · 7 forks · updated 8 Sep 2026". Zero counts and a missing language are left out; with no
+ * stats from GitHub (a build without a token), there are no facts at all.
+ */
 export function projectFacts(p: Project): string {
+  if (!p.github) return "";
   const facts: string[] = [];
-  if (p.primaryLanguage) facts.push(p.primaryLanguage.name);
-  if (p.stargazerCount > 0) facts.push(count(p.stargazerCount, "star"));
-  if (p.forkCount > 0) facts.push(count(p.forkCount, "fork"));
-  const updated = formatDay(p.updatedAt);
+  if (p.github.language) facts.push(p.github.language.name);
+  if (p.github.stars > 0) facts.push(count(p.github.stars, "star"));
+  if (p.github.forks > 0) facts.push(count(p.github.forks, "fork"));
+  const updated = formatDay(p.github.updatedAt);
   return facts.length ? [...facts, `updated ${updated}`].join(" · ") : `Updated ${updated}`;
 }
 
 /**
- * The projects a page may publish. The mock repos that stand in when the
- * build cannot reach GitHub keep a tokenless build working, but they are not
- * Daniel's work, so they are never shown as if they were.
+ * Move every ATX heading down by `levels` (six at most), so it sits under the page's own.
+ * A line inside a fence (a line of three or more backticks or tildes, opened and closed) is left as written.
+ * `#hashtag` is not a heading.
  */
-export function publishedProjects<T extends Project>(loaded: { repos: T[]; source: "github" | "sample" }): T[] {
-  return loaded.source === "github" ? loaded.repos : [];
+export function nestMarkdown(markdown: string, levels: number): string {
+  let fence: "`" | "~" | null = null;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const mark = /^(```+|~~~+)/.exec(line);
+      if (fence === null) {
+        if (mark) {
+          fence = mark[1][0] === "`" ? "`" : "~";
+          return line;
+        }
+      } else if (line.startsWith(fence === "`" ? "```" : "~~~")) {
+        fence = null;
+        return line;
+      } else {
+        return line;
+      }
+      const heading = /^(#{1,6})([ \t].*)$/.exec(line);
+      if (!heading) return line;
+      return `${"#".repeat(Math.min(6, heading[1].length + levels))}${heading[2]}`;
+    })
+    .join("\n");
 }

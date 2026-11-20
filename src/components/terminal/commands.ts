@@ -44,7 +44,7 @@ export function welcomeLines(now: Date): TerminalLine[] {
   ];
 }
 
-/** `neofetch` without the logo: user@host, the bio, the pinned repos, the colour blocks. */
+/** `neofetch` without the logo: user@host, the bio, the projects, the colour blocks. */
 function neofetch(api: TerminalApi): TextRun[][] {
   const title: TextRun[] = [
     { text: USER, fg: NF_TITLE, bold: true },
@@ -69,8 +69,12 @@ function neofetch(api: TerminalApi): TextRun[][] {
     row("School", { text: PROFILE.school }),
     row("Location", { text: PROFILE.location }),
   ];
-  const pinned = api.getProjects().flatMap((p, i) => [...(i ? [{ text: " · " }] : []), link(p.name, p.url)]);
-  if (pinned.length) rows.push(row("Pinned", ...pinned));
+  const projects = api.getProjects().flatMap((p, i) => {
+    const url = p.repoUrl ?? p.link;
+    const item: TextRun = url ? link(p.name, url) : { text: p.name };
+    return i ? [{ text: " · " }, item] : [item];
+  });
+  if (projects.length) rows.push(row("Projects", ...projects));
   rows.push(
     row("Contact", link(EMAIL, LINKS.email), { text: " · " }, link("resume.pdf", LINKS.resume)),
     [],
@@ -210,11 +214,11 @@ export function buildCommands(api: TerminalApi, session: Session): CommandMap {
     },
 
     work: {
-      desc: "browse pinned repos · `↑↓` move · `⏎` open · `/` filter · `q` quit",
+      desc: "browse the projects · `↑↓` move · `⏎` open · `/` filter · `q` quit",
       run: (_args, ctx) => {
         const projects = api.getProjects();
         if (!projects.length) {
-          ctx.out("no pinned repositories found.");
+          ctx.out("no projects found.");
           return;
         }
         void import("./work/program")
