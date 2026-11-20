@@ -36,7 +36,8 @@
     "lucide-react": "^1.18.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.6.2",
