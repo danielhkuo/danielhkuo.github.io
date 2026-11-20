@@ -264,9 +264,10 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 - **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
-  the way, each for its own A/B: the open sea's wash repeats every 4.855 s (r = 0.97; the rain's pitch wander would
-  break it) and the coast's wind every 5.000 s (r ≈ 0.5); the river's brook loop (9.7 s) should get the same loop
-  test. Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  the way: the noise beds' loops are heard to come round (the open sea's wash every 4.855 s, the surf bed's, the
+  wind's): a pitch wander, tried, removes only exact repetition (a blind critic, spec §14.5), so each pass needs fresh
+  noise (an audio-worklet noise source, or fresh loops from the kit's worker); the same test for the rain's drops and
+  plinks, and for the river's brook loop (9.7 s). Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
   shower; spec §14.2).
   The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
   rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later

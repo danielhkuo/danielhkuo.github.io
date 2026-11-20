@@ -50,6 +50,12 @@ export interface EngineOptions {
   n?: number;
   /** No waves, laps or beds (a measuring arm). */
   noSurf?: boolean;
+  /**
+   * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
+   * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
+   * placed voices). Never set otherwise.
+   */
+  skip?: string;
   /** Only the waves' hiss path sounds (no wind, no beds, no other part of a wave): the repetition check's render. */
   hissOnly?: boolean;
   /** A calibration tone into the master chain: dBFS peak and Hz. */
@@ -158,10 +164,12 @@ const FADE_FOOT = 0.02;
 
 const MIX_EVERY = 1 / 30;
 /** The scheduler looks at most this often on the page, seconds (a hair under a sixtieth, so a 60 Hz display looks every frame). */
-const SCHED_EVERY = 1 / 60 - 1e-4;
+/** Sources the scheduler asks a frame on the page (offline renders ask them all every step). */
+const SCHED_EACH = 2;
+const HALF_VOICES = 1, HALF_EMITTERS = 2;
 
 /** What a frame did, as bits. */
-export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128 } as const;
+export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048 } as const;
 /** Level of the bench's pips and tails, dB. */
 const PIP_DB = -18, TAIL_DB = -22;
 /** The pad of digital silence at the head of every one-shot buffer, seconds. */
@@ -317,8 +325,14 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let lookahead = LOOKAHEAD;
   const reading: ClockReading = { currentTime: 0, outputLatency: 0, stamp: null, now: 0 };
   let lastMix = NaN;
-  /** World time the scheduler last looked. */
-  let lastSched = NaN;
+  /** The first of the sources the scheduler asks next (on the page). */
+  let schedNext = 0;
+  /** A second half waiting for this frame: HALF_VOICES (the mix's) or HALF_EMITTERS (the waves'), or 0. */
+  let half = 0;
+  /** Where the mix's second half takes up its sends (−1: none waiting). */
+  let sendsFrom = -1;
+  /** Cues found on the page and not yet played (see playQueued). */
+  const queued: Due[] = [];
   let lastWaves = NaN;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
@@ -588,12 +602,17 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   };
 
   /** Sends the targets that moved. `outright` sets every parameter to its target at once: only ever under a mute gain at 0. */
-  const apply = (now: number, calm: boolean, outright: boolean) => {
+  /**
+   * Sends the targets of bindings [from, to) that have moved. `fresh`: the first call of a mix (it turns which half of
+   * the slow targets is looked at).
+   */
+  const apply = (now: number, calm: boolean, outright: boolean, from = 0, to = Infinity, fresh = true) => {
     const silent = outright || fadeAt(fade, now) < 1e-3;
     // Slow targets (time constants of 150 ms or more) are looked at on alternate mixes, half of them each time, so a
     // mix sends about half as much; the quick ones (the whoosh, pans, the volume) every time.
-    turn ^= 1;
-    for (let k = 0; k < bindings.length; k++) {
+    if (fresh) turn ^= 1;
+    const end = Math.min(to, bindings.length);
+    for (let k = from; k < end; k++) {
       const b = bindings[k];
       if (!outright && !offline && (k & 1) === turn && SEND[b.i].down >= 0.15 && SEND[b.i].up >= 0.15 && b.sent === b.sent) continue;
       const v = targets[b.i];
@@ -674,6 +693,114 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (gulls.call(cue, when, now, pose, calm)) gullLog.push({ t: cue.t, when, colony: cue.colony ?? -1, bird: cue.bird ?? 0, call: cue.call ?? 0 });
     }
   };
+
+  /** The scheduler's look: the cues falling due in its window, each played. */
+  const runScheduler = (pose: Pose, dt: number, look: number, now: number, calm: boolean, first = 0, count = Infinity) => {
+    work |= WORK.sched;
+    due.length = 0;
+    last.night = pose.night ?? 0;
+    scheduler.pass(pose.t, dt, look, due, first, count);
+    last.x = pose.x;
+    last.y = pose.y;
+    // Offline every cue is played as it is found; on the page they wait in a queue, played a few a frame.
+    if (offline) for (const d of due) play(d, pose, now, look, calm);
+    else for (const d of due) queued.push(d);
+    shots.prune(now);
+    bells?.prune(now);
+  };
+  /**
+   * The mix's first half: the targets, the beds they call for, and the sends; with `split`, only the first half of
+   * the sends, the rest going with the second half.
+   */
+  const mixHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, split: boolean) => {
+    lastTurn = 0;
+    work |= WORK.mix;
+    nearestAbbey(pose);
+    mix(pose, hearing, census, prefs, memory, targets);
+    lastMix = pose.t;
+    tendBeds(pose.t, now);
+    if (opts.skip === "nosends") return;
+    if (split) {
+      sendsFrom = (bindings.length + 1) >> 1;
+      apply(now, prefs.calm, false, 0, sendsFrom);
+    } else apply(now, prefs.calm, false);
+  };
+  /** Its second half: the rest of the sends, and the voices placed by where they are (the moments, the gulls, the falls). */
+  const voicesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number) => {
+    work |= WORK.voices;
+    if (opts.skip === "novoices") return;
+    if (sendsFrom >= 0) {
+      apply(now, prefs.calm, false, sendsFrom, Infinity, false);
+      sendsFrom = -1;
+    }
+    if (moments.size) {
+      const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
+      lastMoments = pose.t;
+      for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+    }
+    if (gulls) {
+      if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+      sends += gulls.update(pose, now, prefs.calm);
+    }
+    if (falls) {
+      const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
+      lastFalls = pose.t;
+      fallNow = now;
+      sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
+    }
+  };
+  /** The waves' first half: the lanes choose them, and each starts. */
+  const lanesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, look: number) => {
+    lastTurn = 1;
+    work |= WORK.lanes;
+    if (opts.skip === "nowaves") {
+      lastWaves = pose.t;
+      return;
+    }
+    const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
+    lastWaves = pose.t;
+    waveStarts.length = 0;
+    lapStarts.length = 0;
+    lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
+    if (waveStarts.length) work |= WORK.wave;
+    if (lapStarts.length) work |= WORK.lap;
+    for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
+    if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
+  };
+  /** Its second half: the emitters' sends, and what has finished let go. */
+  const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
+    if (!surf || opts.skip === "nowaves") return;
+    work |= WORK.emitters;
+    sends += surf.update(pose, lanes.emitters, now, prefs.calm);
+    surf.prune(now);
+    shots.prune(now);
+  };
+  /**
+   * Whether the next frame (a frame's time on) will have neither the mix nor the waves due, the mix last run at
+   * `mixAt` and the waves at `wavesAt`: room for a second half.
+   */
+  const roomNext = (t: number, dt: number, mixAt: number, wavesAt: number): boolean => {
+    const next = t + (dt > 0 && dt < STALL ? dt : 1 / 60);
+    if (!(next - mixAt < MIX_EVERY - 1e-4)) return false;
+    return !(surfBuilt && surf !== null && !opts.beds && !(next - wavesAt < MIX_EVERY - 1e-4));
+  };
+  /**
+   * Plays cues the scheduler has found (on the page): any due within a tenth of a second, and two more at most, so a
+   * look that finds many (a peal) spreads their starting over frames; each was found a sixth of a second or more ahead.
+   */
+  const playQueued = (pose: Pose, now: number, look: number, calm: boolean) => {
+    let spare = 2;
+    for (let i = 0; i < queued.length; ) {
+      const d = queued[i];
+      if (d.rejoin || cueAt(d.cue) - now < 0.1 || spare > 0) {
+        if (!(d.rejoin || cueAt(d.cue) - now < 0.1)) spare--;
+        queued.splice(i, 1);
+        play(d, pose, now, look, calm);
+      } else i++;
+    }
+  };
+  /** A cue's audio time. */
+  const cueAt = (cue: Cue) => cue.t + o;
 
   const readLimiter = (now: number) => {
     // By the context's own clock: a timeline scheduled ahead of its render has nothing to read yet.
@@ -756,66 +883,51 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         for (const tap of IR_TAPS) onsets.push(at + tap[0] + LIMITER_DELAY_S);
       }
 
-      // The scheduler, every frame up to sixty a second (it looks a quarter of a second ahead: on a faster display a
-      // look every other frame only widens its window). Offline renders step at 60 and look every step.
-      if (sources.length && (offline || !(pose.t - lastSched < SCHED_EVERY) || dt < 0 || dt > STALL)) {
-        lastSched = pose.t;
-        due.length = 0;
-        last.night = pose.night ?? 0;
-        scheduler.pass(pose.t, dt, look, due);
-        last.x = pose.x;
-        last.y = pose.y;
-        for (const d of due) play(d, pose, now, look, prefs.calm);
-        shots.prune(now);
-        bells?.prune(now);
-      }
-
-      // Thirty times a second each, on alternate turns so no frame carries both: the mix and its sends; and the
-      // waves (lanes choose them, each takes an emitter where it breaks) with the emitters' own sends. Cues are
-      // found a quarter of a second ahead, so a thirtieth of a second between looks loses nothing.
+      // Thirty times a second each: the mix and its sends; and the waves (lanes choose them, each takes an emitter
+      // where it breaks) with the emitters' own sends. Cues are found a quarter of a second ahead, so a thirtieth of a
+      // second between looks loses nothing.
       const mixDue = !(pose.t - lastMix < MIX_EVERY - 1e-4) || dt < 0;
       const wavesDue = surfBuilt && surf !== null && !opts.beds && (!(pose.t - lastWaves < MIX_EVERY - 1e-4) || dt < 0 || dt > STALL);
-      if (mixDue && (offline || !wavesDue || lastTurn !== 0)) {
-        lastTurn = 0;
-        work |= WORK.mix;
-        nearestAbbey(pose);
-        mix(pose, hearing, census, prefs, memory, targets);
-        lastMix = pose.t;
-        tendBeds(pose.t, now);
-        apply(now, prefs.calm, false);
-        if (moments.size) {
-          const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
-          lastMoments = pose.t;
-          for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+      if (offline) {
+        // Offline: the scheduler every step, then whatever falls due, whole. (Renders do not depend on how the page
+        // spreads its work.)
+        if (sources.length) runScheduler(pose, dt, look, now, prefs.calm);
+        if (mixDue) {
+          mixHalf(pose, hearing, prefs, now, false);
+          voicesHalf(pose, hearing, prefs, now);
         }
-        if (gulls) {
-          if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
-          sends += gulls.update(pose, now, prefs.calm);
+        if (wavesDue && surf) {
+          lanesHalf(pose, hearing, prefs, now, look);
+          emittersHalf(pose, prefs, now);
         }
-        if (falls) {
-          const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
-          lastFalls = pose.t;
-          fallNow = now;
-          sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
-        }
-        if (!wavesDue || !offline) return;
+        return;
       }
-      if (wavesDue && surf) {
-        lastTurn = 1;
-        work |= WORK.lanes;
-        const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
-        lastWaves = pose.t;
-        waveStarts.length = 0;
-        lapStarts.length = 0;
-        lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
-        if (waveStarts.length) work |= WORK.wave;
-        if (lapStarts.length) work |= WORK.lap;
-        for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
-        if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
-        sends += surf.update(pose, lanes.emitters, now, prefs.calm);
-        surf.prune(now);
-        shots.prune(now);
+      // On the page each comes in two halves, the second a frame after the first when that frame has nothing else
+      // due: on a 120 Hz display every frame then carries a quarter of the work, where every other frame carried half
+      // of it (and the frames' 95th percentile is set by the heaviest). At 60 Hz a frame never has room, so each runs
+      // whole, as it always did. The mix and the waves still take turns.
+      if (half === HALF_VOICES) voicesHalf(pose, hearing, prefs, now);
+      else if (half === HALF_EMITTERS) emittersHalf(pose, prefs, now);
+      half = 0;
+      if (mixDue && (!wavesDue || lastTurn !== 0)) {
+        const room = roomNext(pose.t, dt, pose.t, lastWaves);
+        mixHalf(pose, hearing, prefs, now, room);
+        if (room) half = HALF_VOICES;
+        else voicesHalf(pose, hearing, prefs, now);
+      } else if (wavesDue && surf) {
+        const room = roomNext(pose.t, dt, lastMix, pose.t);
+        lanesHalf(pose, hearing, prefs, now, look);
+        if (room) half = HALF_EMITTERS;
+        else emittersHalf(pose, prefs, now);
       }
+      // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
+      // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
+      // frame as much as a first half. What it finds is played a few a frame.
+      if (sources.length && opts.skip !== "nosched") {
+        runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
+        schedNext = (schedNext + SCHED_EACH) % scheduler.size;
+      }
+      if (queued.length) playQueued(pose, now, look, prefs.calm);
     },
     enable(first) {
       if (live) return;
@@ -838,6 +950,9 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + 0.25);
       lastMoments = NaN;
       lastFalls = NaN;
+      half = 0;
+      sendsFrom = -1;
+      queued.length = 0;
       lanes.clear();
       scheduler.clear();
       lastT = NaN;
@@ -973,7 +1088,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf" });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
   let warped = false;
   let kitMs = 0;
@@ -981,6 +1096,8 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
   const census = createCensus(opts.n);
   const startlePool: Startle[] = [];
   let censusAt = NaN;
+  /** Whether this frame ran the census (a work bit). */
+  let censused = false;
   return {
     frame(pose, prefs, seen) {
       if (!warped && kit.ready("surf")) {
@@ -989,17 +1106,22 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
         warped = true;
       }
       const hearing = listener.step(pose, seen, engine.laneMask());
-      // The census: which gulls the flier has just put up, fifteen times a second.
-      if (gullList.length > 0 || seen.bake) {
-        if (!(pose.t - censusAt < 1 / 15)) {
+      censused = false;
+      engine.frame(pose, hearing, prefs);
+      // The census: which gulls the flier has just put up, fifteen times a second, after the engine's frame and on a
+      // frame that carried neither the mix's nor the waves' first half, where it can wait a frame for one. (The birds
+      // it finds are voiced by the mix's second half, a frame or two on.)
+      if ((gullList.length > 0 || seen.bake) && opts.arm !== "nocensus") {
+        const since = pose.t - censusAt;
+        if (!(since < 1 / 15) && ((engine.work() & (WORK.mix | WORK.lanes)) === 0 || !(since < 1 / 15 + 1 / 30) || since < 0)) {
           censusAt = pose.t;
           // The beaches' lattice is walked only where the ear has found beach or shingle in the frame.
           let beach = hearing.surf[0].e > 0 || hearing.surf[1].e > 0;
           for (let i = 0; !beach && i < hearing.shores.length; i++) beach = hearing.shores[i].kind === 1 || hearing.shores[i].kind === 2;
           census.run(beach ? seen : NO_FRAME, pose, opts.seed, gullList, hearing.startled, startlePool);
+          censused = true;
         }
       }
-      engine.frame(pose, hearing, prefs);
       if (kit.done()) {
         kitMs = 0;
       } else {
@@ -1015,7 +1137,7 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
       }
     },
     kitMs: () => kitMs,
-    work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0),
+    work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0) | (censused ? WORK.census : 0),
     settled: () => kit.done() && engine.built(),
     hearing: () => listener.hearing(),
     enable: (first) => engine.enable(first),
