@@ -33,6 +33,17 @@ export interface CoverInput {
   rock: number;
   /** Six archetype weights (home, highland, slate, lakes, karst, skerry), summing to 1. */
   region: ArrayLike<number>;
+  /**
+   * Optional: sea-level temperature, 0 at the pole … 1 at the equator, 0.5 on the temperate plateau
+   * (gen/climate.ts). Absent, or exactly 0.5, the cover is the temperate one. The cover cools it with height.
+   */
+  temp?: number;
+  /**
+   * Optional: the dry side's share, 0–1 (gen/climate.ts). The world has two routes from its pole to its equator: the
+   * wet side, which passes home, and the dry side. Absent or 0 is the wet side. Above 0 the ground is dressed for dry
+   * country at every temperature, the plateau's own included.
+   */
+  arid?: number;
   /** 0 land, 1 sea, 2 lake, 3 river. */
   water: number;
   /** Shore class from the coast stage: 0 none, 1 beach, 2 rocky, 3 cliff, 4 cove. */
@@ -49,6 +60,11 @@ export interface CoverInput {
    */
   riverDx?: number;
   riverDy?: number;
+  /**
+   * Optional: 1 on a river cell that is a one-cell stream, not a river with banks. A stream is the first water a
+   * climate takes: dry in a desert, lost under the snow on an ice cap.
+   */
+  stream?: number;
   /**
    * Optional: 1 when the river in sight due north or south of this cell is at
    * least 2 cells wide. Only such rivers carry riverside trees; a line of
@@ -105,9 +121,18 @@ export interface Stamp {
   h: number;
   /** Material of the stamped cells. */
   mat: number;
-  /** 0 dome (broadleaf, boulder), 1 cone (conifer). */
+  /**
+   * 0 dome (broadleaf, boulder), 1 cone (conifer). From SHAPE_PICTURE up the stamp is a picture, a crown over a
+   * stem, drawn into the chunk a pixel at a time and not stamped into the ground (bake/sprites.ts): 2 a palm, 3 an
+   * umbrella acacia, 4 an umbrella pine, 5 a columnar cactus. For a picture, `r` is the crown's half-width in
+   * pixels and `h` the stem's height.
+   */
   shape: number;
 }
+
+/** Stamp shapes from this value up are pictures. */
+export const SHAPE_PICTURE = 2;
+export const SHAPE = { dome: 0, cone: 1, palm: 2, acacia: 3, pine: 4, cactus: 5 } as const;
 
 /** Palette lookup: index (material << 8) | light → packed RGBA (little-endian 0xAABBGGRR). */
 export type Palette = Uint32Array;

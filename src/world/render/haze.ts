@@ -17,13 +17,29 @@ const KY = 0.8;
 /** The paper's own colour at noon, packed: what the washes fade toward unless the light says otherwise. */
 export const CREAM_RGBA = 0xffd2e8f0;
 
-/** The overview's washes: sea, sand, pasture, moor, snow. Each sample is one of them at one tone, `kind << 4 | tone`. */
-const WASHES = [M.sea, M.sand, M.pastureMid, M.moorMid, M.snow];
+/**
+ * The overview's washes: sea, sand, pasture, moor and snow, the temperate land's by height; then the climates' own
+ * (look/haze-wash.ts). Each sample is one of them at one tone, `kind << 4 | tone`, so there may be sixteen at most.
+ */
+const WASHES = [M.sea, M.sand, M.pastureMid, M.moorMid, M.snow, M.seaClear, M.packIce, M.tundraMid, M.spruceMid, M.steppeMid, M.sageMid, M.desertSand, M.savannaMid, M.jungleMid];
 
-/** The wash of one overview sample, `kind << 4 | tone`: material by height, tone by a north-west light on the slope. */
-function washOf(h: number, nw: number): number {
-  const kind = h <= 0 ? 0 : h <= 1.5 ? 1 : h <= 45 ? 2 : h <= 85 ? 3 : 4;
-  if (kind === 0) return 8;
+/** The kind of each material that is a wash, or −1. */
+export const WASH_KIND: Int8Array = (() => {
+  const k = new Int8Array(256).fill(-1);
+  WASHES.forEach((m, i) => { k[m] = i; });
+  return k;
+})();
+
+/**
+ * The wash of one overview sample, `kind << 4 | tone`: material by height, or the climate's own (`over`, 0 for none),
+ * and tone by a north-west light on the slope.
+ */
+function washOf(h: number, nw: number, over: number): number {
+  const kind = over !== 0 && WASH_KIND[over] >= 0 ? WASH_KIND[over] : h <= 0 ? 0 : h <= 1.5 ? 1 : h <= 45 ? 2 : h <= 85 ? 3 : 4;
+  const mat = WASHES[kind];
+  if (mat === M.sea || mat === M.seaClear) return (kind << 4) | 8;
+  // Ice on the sea is flat: one tone.
+  if (h <= 0) return (kind << 4) | 9;
   // Ground rising toward the south-east faces the sun.
   const lit = Math.round((h - nw) * 0.12);
   return (kind << 4) | (9 + (lit < -3 ? -3 : lit > 4 ? 4 : lit));
@@ -35,29 +51,30 @@ function fade(c: number, cream: number): [number, number, number] {
   return [r + (((cr - r) * HAZE_FADE) >> 8), g + (((cg - g) * HAZE_FADE) >> 8), b + (((cb - b) * HAZE_FADE) >> 8)];
 }
 
-/** Each sample's wash, worked out once per sample grid: a new palette only recolours the few washes. */
-const WASH_OF = new WeakMap<object, Uint8Array>();
+/** Each sample's wash, worked out once per sample grid (and climate plane): a new palette only recolours the few washes. */
+const WASH_OF = new WeakMap<object, { over: ArrayLike<number> | undefined; out: Uint8Array }>();
 
-function washesOf(samples: ArrayLike<number>, oN: number): Uint8Array {
+function washesOf(samples: ArrayLike<number>, oN: number, over?: ArrayLike<number>): Uint8Array {
   const hit = WASH_OF.get(samples as object);
-  if (hit) return hit;
+  if (hit && hit.over === over) return hit.out;
   const out = new Uint8Array(oN * oN);
   for (let oy = 0; oy < oN; oy++) for (let ox = 0; ox < oN; ox++) {
-    const xw = (ox - 1 + oN) % oN, yw = (oy - 1 + oN) % oN;
-    out[oy * oN + ox] = washOf(samples[oy * oN + ox], samples[yw * oN + xw]);
+    const xw = (ox - 1 + oN) % oN, yw = (oy - 1 + oN) % oN, i = oy * oN + ox;
+    out[i] = washOf(samples[i], samples[yw * oN + xw], over ? over[i] : 0);
   }
-  WASH_OF.set(samples as object, out);
+  WASH_OF.set(samples as object, { over, out });
   return out;
 }
 
 /**
  * Packed RGBA for bake pixel (bx, by), from one height sample per HAZE_CELLS cell (row-major, (n / HAZE_CELLS)²).
  * The north-west sample shades the slope. The flight data's means and the core's overview both feed this. The washes
- * fade toward `cream`, the paper in the palette's light.
+ * fade toward `cream`, the paper in the palette's light. `over`, one per sample, is the climates' own wash where the
+ * land is not temperate (a core's overviewWash), 0 to leave a sample to its height.
  */
-export function hazeFromSamples(samples: ArrayLike<number>, n: number, palette: Palette, cream = CREAM_RGBA): (bx: number, by: number) => number {
+export function hazeFromSamples(samples: ArrayLike<number>, n: number, palette: Palette, cream = CREAM_RGBA, over?: ArrayLike<number>): (bx: number, by: number) => number {
   const oN = n / HAZE_CELLS;
-  const wash = washesOf(samples, oN);
+  const wash = washesOf(samples, oN, over);
   // The faded colour of every wash, three channels each.
   const rgb = new Uint8Array(WASHES.length * 16 * 3);
   for (let kind = 0; kind < WASHES.length; kind++) for (let tone = 0; tone < 16; tone++) {

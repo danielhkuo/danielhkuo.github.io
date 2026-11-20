@@ -34,7 +34,22 @@ export interface Manifest {
   sites: { id: string; type: string; x: number; y: number }[];
   /** The wonders that stand in this world. Absent from a world built before there were any. */
   wonders?: ManifestWonder[];
+  /**
+   * The world's climate, for a latitude readout, the map and the story: the rows of the equator line and of the pole
+   * line, in cells (half a world apart). Latitude runs from 0 on the one to 90° on the other, north of the equator
+   * line and south of it alike. Absent from a world with one temperate climate.
+   */
+  climate?: { equatorY: number; poleY: number };
   start: Start;
+}
+
+/** Latitude in degrees, 0 at the equator line … 90 at the pole line, of the row y. `north` says which side of the equator line it lies on. */
+export function latitudeOf(m: Pick<Manifest, "n" | "climate">, y: number): { degrees: number; north: boolean } | null {
+  if (!m.climate) return null;
+  const n = m.n;
+  let d = (((y - m.climate.equatorY) % n) + n) % n;
+  if (d >= n / 2) d -= n;
+  return { degrees: (90 * (d < 0 ? -d : d)) / (n / 2), north: d < 0 };
 }
 
 /** A wonder as the page reads it: where it stands and the points its moment needs. */

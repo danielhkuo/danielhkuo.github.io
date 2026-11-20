@@ -13,7 +13,7 @@ import { generatedWorld } from "../testing/bakefix.ts";
 import { readShipped } from "./shipped.ts";
 import { decodeFlightData, decodeWorld, encodeWorld } from "./world.ts";
 
-const GRIDS = ["ground", "base", "conform", "waterLevel", "waterKind", "hand", "shore", "moisture", "wind", "exposure", "debris", "rock", "regions"] as const;
+const GRIDS = ["ground", "base", "conform", "waterLevel", "waterKind", "hand", "shore", "moisture", "wind", "exposure", "debris", "rock", "regions", "temp"] as const;
 const VECTORS = ["rivers", "roads", "falls", "stamps", "ponds", "bars", "built"] as const;
 
 test("a world shipped whole (format 1, world.bin) reads as decodeWorld gives it", async () => {

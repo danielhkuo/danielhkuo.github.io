@@ -12,7 +12,7 @@ import { torusDelta, wrap } from "../core/torus.ts";
 import type { CoverInput } from "../look/contract.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { LandmarkType } from "../sites/assign.ts";
-import { ARCHETYPE, countFor, lengthScale } from "./params.ts";
+import { ARCHETYPE, lengthScale } from "./params.ts";
 import { visibility } from "./visibility.ts";
 
 /** What siting reads. Everything is on G unless it says C. */
@@ -37,6 +37,10 @@ export interface SiteFields {
   moisture: ArrayLike<number>;
   wind: ArrayLike<number>;
   regions: ArrayLike<number>;
+  /** C grid: sea-level temperature, 0.5 on the temperate plateau (gen/climate.ts). Absent: one temperate climate. */
+  temp?: ArrayLike<number>;
+  /** C grid: the dry side's share, 0 on the wet side … 1 on the dry (gen/climate.ts). Absent: one side. */
+  arid?: ArrayLike<number>;
   reaches: readonly SiteReach[];
   /** Sea stacks from the coast stage, in cells. */
   stacks: readonly { x: number; y: number; r: number; top: number }[];
@@ -93,9 +97,10 @@ export const BOX: Record<LandmarkType, { w: number; d: number; h: number; round:
  * world keeps them and holds more landmarks (one abbey and one town in any world).
  */
 export function siteRules(n: number): SiteRules {
-  const k = lengthScale(n), two = countFor(n, 2);
+  const k = lengthScale(n);
   return {
-    counts: { abbey: 1, town: 1, lighthouse: two, bridge: two, cathedral: two, windmill: two, yew: two },
+    // One of each, in a world of any size: a project is at the windmill, never at the third lighthouse.
+    counts: { abbey: 1, town: 1, lighthouse: 1, bridge: 1, cathedral: 1, windmill: 1, yew: 1 },
     spacing: 1500 * k,
     homeRiver: [1200 * k, 2000 * k],
     visible: 0.8,
@@ -166,6 +171,8 @@ export interface SitesResult {
   home: number;
   /** Types that fell short when `strict` was off, with the rule that failed. */
   shortfall: string[];
+  /** Kinds that found no ground in their own climate and stand in another, with where. */
+  displaced: string[];
 }
 
 // Sixteen compass rays, clockwise from east (y runs south): 0 E, 4 S, 8 W, 12 N.
@@ -399,13 +406,17 @@ export function coverAtNode(c: SiteContext, gx: number, gy: number): number {
     x: 4 * wrap(gx, gN) + 2, y: 4 * wrap(gy, gN) + 2, e: c.h[i], slope: s, northness: s > 1e-6 ? dy / s : 0,
     hand: c.hand[i], moisture: c.moisture[ci], wind: c.wind[ci], exposure: c.exposure[i], debris: d > 1 ? 1 : d,
     rock: c.rock[i], region: region6, water: 0, shore: c.shoreClass[i],
+    temp: c.temp ? c.temp[ci] : undefined,
+    arid: c.arid ? c.arid[ci] : undefined,
   };
   return cover(inp, FLAT_MASK, c.n);
 }
 
 /** Open ground a building can stand in: grass, heath, moor, scrub or crops. */
 export function isOpenCover(m: number): boolean {
-  return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.wheatRow && m <= M.stubbleRow);
+  return (m >= M.alpineCool && m <= M.moorWarm) || (m >= M.wheat && m <= M.vine) || (m >= M.meadowCool && m <= M.scrubWarm) || (m >= M.wheatRow && m <= M.stubbleRow) ||
+    // The open ground of the other climates: tundra, steppe and savanna grass, garrigue, worn earth.
+    (m >= M.tundraCool && m <= M.sedge) || (m >= M.steppeCool && m <= M.steppeWarm) || (m >= M.savannaCool && m <= M.savannaWarm) || (m >= M.sageCool && m <= M.sageWarm) || m === M.garrigue || m === M.earthPale;
 }
 
 /** Ground a plough could work: meadow, pasture or crops; never heath, moor, scrub or wood. */
@@ -715,6 +726,13 @@ function windmillCandidates(c: SiteContext, r: SiteRules, tally: Tally): Cand[] 
     tally.pass(L.along);
     if (!isOpenCover(coverAtNode(c, gx, gy))) continue;
     tally.pass(L.cover);
+    // Not on the brink of a sheer fall: the camera looks north, and a mill's foot over a cliff's face (its shadow
+    // down the face) reads as a seam. A headland with the sea beyond a slope is the mill's own place.
+    let brink = false;
+    for (let dy = 1; dy <= 6 && !brink; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (c.h[idx(c, gx + dx, gy + dy)] - c.h[idx(c, gx + dx, gy + dy + 1)] > 5) { brink = true; break; }
+    }
+    if (brink) continue;
     const seen = seenShare(c, gx, gy, 1, 1, level, BOX.windmill.h);
     if (seen.box < r.visible || seen.pad < r.visible) continue;
     tally.pass(L.seen);
@@ -1046,6 +1064,48 @@ export interface PlaceOptions {
 /** Order the types are taken in after the abbey and the town. */
 export const SITE_ORDER: readonly LandmarkType[] = ["lighthouse", "bridge", "cathedral", "windmill", "yew"];
 
+/** Where a kind stands: the sea-level temperature of its site (gen/climate.ts: 0.5 is the temperate plateau), and its side of the world. */
+export interface SiteClimate {
+  temp: readonly [number, number];
+  /** The wet side is the route from pole to equator through home; the dry side the other. Absent: either. */
+  side?: "wet" | "dry";
+  /** Not on the home island, which has the abbey and the town. */
+  away?: boolean;
+}
+
+/**
+ * Each kind in a climate that suits it, so that the seven are told apart by their ground as well as their shape:
+ * the lighthouse on the cold coast by the pack ice, the yew in temperate country on another island than home, the
+ * ruined cathedral in the jungle of the wet side (the dry side's equator is savanna nearly to the line), the
+ * windmill in the Mediterranean and the old bridge on the steppe. The abbey
+ * and the town are on the home island, which is temperate by rule.
+ */
+export const SITE_CLIMATE: Readonly<Record<LandmarkType, SiteClimate>> = {
+  abbey: { temp: [0, 1] }, town: { temp: [0, 1] },
+  lighthouse: { temp: [0.18, 0.42] },
+  yew: { temp: [0.47, 0.53], side: "wet", away: true },
+  cathedral: { temp: [0.82, 1], side: "wet" },
+  bridge: { temp: [0.3, 0.49], side: "dry" },
+  windmill: { temp: [0.53, 0.72], side: "dry" },
+};
+
+/** How far each end of a kind's temperatures is let out when its own climate has no ground that passes its rule. */
+const CLIMATE_SLACK = 0.12;
+
+/** Sea-level temperature at a cell: the temperate plateau's where the world has no climates. */
+export function tempAt(c: Pick<SiteContext, "gN" | "temp">, x: number, y: number): number {
+  if (!c.temp) return 0.5;
+  const cN = c.gN / 2;
+  return c.temp[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
+}
+
+/** The dry side's share at a cell (gen/climate.ts): 0 where the world has one side. */
+export function aridAt(c: Pick<SiteContext, "gN" | "arid">, x: number, y: number): number {
+  if (!c.arid) return 0;
+  const cN = c.gN / 2;
+  return c.arid[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
+}
+
 export class SitingError extends Error {
   rule: string;
   constructor(type: string, rule: string) {
@@ -1095,6 +1155,7 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
 
   // The rest: a depth-first search over each type's best candidates, so an early pick cannot starve a later type.
   const lists = new Map<LandmarkType, Cand[]>(), tallies = new Map<LandmarkType, Tally>(), every = new Map<LandmarkType, Cand[]>();
+  const displaced: string[] = [];
   let slots: LandmarkType[] = [];
   for (const type of SITE_ORDER) {
     const count = rules.counts[type];
@@ -1102,6 +1163,33 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
     const tally = new Tally();
     const all = type === "lighthouse" ? lighthouseCandidates(c, rules, tally) : type === "bridge" ? bridgeCandidates(c, rules, tally)
       : type === "cathedral" ? cathedralCandidates(c, rules, tally) : type === "windmill" ? windmillCandidates(c, rules, tally) : yewCandidates(c, rules, tally);
+    // Each kind keeps to its own climate. A kind is never dropped for want of ground there: its climate is let out
+    // by steps (a little warmer and colder; then either side of the world; then anywhere) until some ground passes.
+    if (c.temp && all.length > 0) {
+      const want = SITE_CLIMATE[type], [lo, hi] = want.temp;
+      const side = (q: Cand): boolean => want.side === undefined || (aridAt(c, q.x, q.y) > 0.5) === (want.side === "dry");
+      const tiers: [string, (q: Cand, t: number) => boolean][] = [
+        [`in its own climate (temperature ${lo}–${hi}${want.side ? `, the ${want.side} side` : ""}${want.away ? ", off the home island" : ""})`,
+          (q, t) => t >= lo && t <= hi && side(q) && !(want.away && c.island[idx(c, q.gx, q.gy)] === c.home)],
+        ["near its own climate", (q, t) => t >= lo - CLIMATE_SLACK && t <= hi + CLIMATE_SLACK && side(q)],
+        ["on either side of the world", (_q, t) => t >= lo - CLIMATE_SLACK && t <= hi + CLIMATE_SLACK],
+      ];
+      for (let k = 0; k < tiers.length; k++) {
+        const kept: Cand[] = [];
+        for (const q of all) if (tiers[k][1](q, tempAt(c, q.x, q.y))) kept.push(q);
+        tally.declare(tiers[k][0]);
+        for (let q = 0; q < kept.length; q++) tally.pass(tiers[k][0]);
+        if (kept.length > 0 || k === tiers.length - 1) {
+          // With none even at the last step the kind stands wherever its rule passes.
+          if (kept.length > 0) {
+            all.length = 0;
+            for (const q of kept) all.push(q);
+          }
+          if (k > 0 || kept.length === 0) displaced.push(`${type}: no ground ${tiers[0][0]}; placed ${kept.length > 0 ? tiers[k][0] : "wherever its rule passes"}`);
+          break;
+        }
+      }
+    }
     every.set(type, all);
     lists.set(type, thin(c, all, rules.spacing / 12, 90));
     tallies.set(type, tally);
@@ -1192,5 +1280,5 @@ export function placeSitesOn(c: SiteContext, rules: SiteRules, opts: PlaceOption
     counts.set(type, j + 1);
     placed.push(place(c, type, j, chosen[k]));
   }
-  return { sites: placed, home: c.home, shortfall };
+  return { sites: placed, home: c.home, shortfall, displaced };
 }

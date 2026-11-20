@@ -29,14 +29,11 @@ test("a larger world keeps the 6400 world's lengths and holds more islands, with
   assert.equal(new Set(big.cores.archetypes.map((a) => FORM_NAMES[a.form])).size, FORM_NAMES.length);
 });
 
-test("a larger world holds more landmarks at the same spacing, still one abbey and one town", () => {
+test("a world of any size holds one landmark of each kind, at the same spacing", () => {
   for (const rules of [siteRules, builtRules]) {
     const small = rules(6400), big = rules(10240);
     assert.equal(big.spacing, small.spacing);
     assert.deepEqual(big.homeRiver, small.homeRiver);
-    assert.equal(big.counts.abbey, 1);
-    assert.equal(big.counts.town, 1);
-    for (const t of ["lighthouse", "bridge", "cathedral", "windmill", "yew"] as const) assert.equal(big.counts[t], 5);
-    assert.equal(small.counts.lighthouse, 2);
+    for (const world of [small, big]) for (const count of Object.values(world.counts)) assert.equal(count, 1);
   }
 });

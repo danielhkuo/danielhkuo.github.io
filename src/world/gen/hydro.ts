@@ -208,7 +208,11 @@ export function smoothLakeBeds(ground: Float64Array, n: number, lakeId: Int32Arr
   }
 }
 
-export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: HydroParams): HydroResult {
+/**
+ * `runoff`, per node, scales the rain that runs off into the streams (the climate's rain, gen/native.ts): a desert
+ * gathers few channels. The rain returned is the wind's own, unscaled: the climate reads its moisture from it.
+ */
+export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: HydroParams, runoff?: ArrayLike<number>): HydroResult {
   const nn = n * n;
   const rain = rainfall(h, n, isSea, p);
 
@@ -352,7 +356,12 @@ export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: Hydr
   }
 
   const order = topoOrder(rcv, isSea);
-  const q = accumulate(order, rcv, isSea, rain);
+  let wet = rain;
+  if (runoff) {
+    wet = new Float64Array(nn);
+    for (let i = 0; i < nn; i++) wet[i] = rain[i] * runoff[i];
+  }
+  const q = accumulate(order, rcv, isSea, wet);
 
   const channel = new Uint8Array(nn);
   const qChannel = p.qChannel;

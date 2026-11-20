@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PlacedSite } from "../gen/sites.ts";
-import { START_OFFSHORE, START_SOUTH, startOf } from "./manifest.ts";
+import { latitudeOf, START_OFFSHORE, START_SOUTH, startOf } from "./manifest.ts";
 
 function site(type: PlacedSite["type"], x: number, y: number, extra: Partial<PlacedSite> = {}): PlacedSite {
   return {
@@ -40,4 +40,16 @@ test("without a town the flight begins south of the abbey, heading north", () =>
 
 test("without an abbey the flight begins in the middle, heading north", () => {
   assert.deepEqual(startOf([site("windmill", 10, 10)], 1280), { x: 640, y: 640, dx: 0, dy: -1 });
+});
+
+test("latitude: 0 on the equator line, 90 on the pole line, north of the one and south of it alike", () => {
+  const m = { n: 10240, climate: { equatorY: 5960, poleY: 840 } };
+  assert.deepEqual(latitudeOf(m, 5960), { degrees: 0, north: false });
+  assert.equal(latitudeOf(m, 840)?.degrees, 90);
+  // Half way to the pole, on either side.
+  assert.deepEqual(latitudeOf(m, 5960 - 2560), { degrees: 45, north: true });
+  assert.deepEqual(latitudeOf(m, 5960 + 2560), { degrees: 45, north: false });
+  // Past the pole the rows are southern latitudes: the far side of the world.
+  assert.equal(latitudeOf(m, 840 - 512)?.north, false);
+  assert.equal(latitudeOf({ n: 10240 }, 100), null);
 });

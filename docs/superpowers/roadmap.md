@@ -15,6 +15,7 @@ Last updated 2026-11-19.
 | Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
 | The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
 | Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
+| Climates and biomes, and one landmark of each kind | `docs/superpowers/specs/2026-11-18-biomes-and-climate-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
 | Look rounds: critic scores and what changed | `docs/superpowers/research/2026-11-17-look-ledger.md` |
 | Bake speed gate | `docs/superpowers/research/2026-11-17-bake-gate.md` |
@@ -128,6 +129,27 @@ Last updated 2026-11-19.
   it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
   `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
   live prompt (sections 1–12 there); the abbey's terminal in `/world` still reads that page's files (`site.pages`).
+- **Climates and biomes** (2026-11-19, `claude/biomes`, Fable). The torus reads as round, and its two routes differ
+  (the owner's decisions of 2026-11-19). Temperature is a band by latitude from an equator line to a pole line and
+  back, cooler with height. The route through home is the wet side: taiga, the temperate belt (unchanged to the
+  byte, and held round the home island), warm forest, jungle. The other is the dry side: stony tundra, steppe, the
+  Mediterranean, desert with sand seas and wadis, savanna. So a lap meets each of ten climates once. Landforms by
+  climate reshape the grown land outside the temperate belt: desert benches, mesas and dune ridges, an ice sheet,
+  karst towers in the jungle, rock domes on the savanna (`gen/landforms.ts`); rivers, coasts and the home island
+  are untouched. Palms, acacias, umbrella pines and cactus are small pictures drawn over the painted land. Seven
+  landmarks, one of each kind, each in a climate that suits it: the lighthouse by the pack ice, the yew in temperate
+  country off the home island, the ruined cathedral in the jungle, the windmill in the Mediterranean, the bridge on
+  the steppe. Every island outside home is grown again for its climate (`gen/native.ts`): plains for the steppe and
+  savanna, low mesa plateaus and ergs for the desert, fjords and glaciated hills for the taiga, an ice sheet at the
+  pole, rugged limestone for the Mediterranean, rias for the warm forest, karst plains for the jungle. Two grown lands
+  are joined island by island through open sea, so home's start and abbey frames are the same to the byte. Hamlets
+  and houses by climate. Temperature and the dry side's share ship as two more sections a region;
+  the haze and the manifest know the climate. Design, measurements and follow-ups:
+  `specs/2026-11-18-biomes-and-climate-design.md`. Every climate, landmark and wonder was then scored side by side
+  against the climates on the old land, and where the new land scored lower the old was kept (the steppe's, the
+  Mediterranean's and the warm forest's islands, fens, cold tables) or the look fixed (look ledger, round 9). The
+  world on disk has not been re-shipped: `npm run world:build -- --seed 3 --n 10240 --cache` makes world
+  `3a2f194713e2`, and `src/world/sites/assignments.json` is pinned to it.
 - **Live-layer plumbing** (Cursor). The bake pixel under each frame pixel, a layer hook before the paper grain, sprites
   hidden by nearer land, the flier handed to layers, a discovery log with a caption, and `npm run world:live` frame strips.
 - **Coast glitches fixed** (2026-11-18, `gulls-coast`). Gulls remember their flight once startled, so turning, the
@@ -363,6 +385,25 @@ From the lingering sights (2026-11-18), for the frame-edge work:
   up to 119 px from it, the ship 112, the fox 70 and the heron about 255: moving the view can drop one mid-frame. The
   ship and the fox are culled by their anchor at the frame's edge; the monk shows only while the abbey's whole road
   box is in frame. In its window the ship still vanishes where its course meets water shallower than tone 5.
+From the climates (2026-11-19):
+- Winds in bands for the rain (trades in the tropics, westerlies beyond), so deserts lie on the right coasts.
+- A cold sea colour and a silty river: each needs the same line in five live-layer tables (`live/water.ts` CLASS, and
+  `isSea` in life, sights, rare and moments).
+- Life by climate: the live rain and rainbows have no land check, so they fall on dunes and ice; sheep only know
+  pasture; no animal belongs to the new climates yet.
+- Native land, next (look ledger, round 8): the steppe and Mediterranean as land of their own (an island takes the
+  recipe of its mean climate, so one that reaches into the steppe band is still ridged; a recipe by latitude within
+  the island, or plains cut by braided rivers); the warm forest drawn in the temperate hand, apart from the jungle;
+  the jungle's coastal plains and mangroves (its rain cuts them into hills); the pack as floes along the coasts, not a
+  band; repeated stamps (sea-stack rows, horseshoe amphitheatres, acacia carpets, tower cones) and roads ruled along
+  the grid; a seed search for islands that fall more evenly into the climates. From round 9: stray ink dashes on
+  the ice sheet's ridges (leave the sheet's snow un-inked: tried, 0.45 % of two frames), the pack's square-edged floes
+  at its margin, the two savanna ovals alike, the windmill too small to read.
+- The climates' bake: tiles outside the temperate plateau cost 34 to 37 % more than as a temperate world (the design's
+  limit is 15 %; `scripts/world-climate-cost.ts`). The frame is unchanged.
+- The landforms are a first pass: benches are faint on gentle ground, the ice sheet only fills hollows, rock domes
+  are few. Pingos on the tundra and terraces on Mediterranean coasts are not built.
+- Black sand on tropical volcanic islands; tidewater glaciers; burn scars on the savanna.
 
 From landing (2026-11-18):
 - Fixed the same day, after the owner's first flight: the coil unravelling at rest and the body regrowing on take-off
@@ -399,6 +440,14 @@ From the first-flight review:
 - Over lakes, the shadow falls on the lake bed and vanishes.
 - Small code cleanups: the worker message types are defined twice; the codec branches on the same node kinds in
   three places.
+
+## Decisions waiting: climates (2026-11-19)
+
+The owner decided the large ones on 2026-11-19 (a simple story that asks nothing of the generator; two sides, each
+climate once a lap; seven landmarks; size left to the design, which keeps 10240). Still open in
+`specs/2026-11-18-biomes-and-climate-design.md`, each built as recommended until the owner says otherwise: north
+colder at home; the home island kept temperate with the belt swelling round it; no new water colours yet. Native
+land was decided (grow it) and is built (spec 6.7).
 
 ## Decisions waiting (2026-11-18 morning)
 
