@@ -5,6 +5,7 @@
 // the world has drawn its first view, and the ways in come up while it does. A phone never mounts the world.
 
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Flight, { type FlightProps } from "../../app/world/Flight";
 import { fell } from "../../app/world/fonts";
@@ -321,11 +322,12 @@ export default function Title({ world, header, shell }: TitleProps) {
           </button>
           <ul className={styles.links}>
             <li>
-              <a href={MINIMAL_PAGE} onClick={onMinimal}>
+              <Link href={MINIMAL_PAGE} onClick={onMinimal}>
                 Minimal version
-              </a>
+              </Link>
             </li>
             <li>
+              {/* A file at the site's root, not a page of the app: a plain link. */}
               <a href="/agents.md">agents.md</a>
             </li>
             <li>

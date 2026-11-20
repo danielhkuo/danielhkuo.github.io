@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Terminal from "../../components/terminal/Terminal";
 import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
@@ -60,25 +60,23 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
   const { shell, touch } = usePhoneFlight(rootRef, panel.open);
   // The sound's control is made first, so the flight finds it when the world has loaded.
   const sound = useSound();
-  // The latest values, so the flight's link can be built once and still see this render's.
-  const heldRef = useRef(held);
-  const holdAtRef = useRef(holdAt);
-  const leaveRef = useRef(onLeave);
-  const readyRef = useRef(onReady);
-  heldRef.current = held;
-  holdAtRef.current = holdAt;
-  leaveRef.current = onLeave;
-  readyRef.current = onReady;
-  const title = useMemo<TitleLink | undefined>(() => {
-    // Built once from the first values. /world passes none, so it gets no link and the flight is unchanged.
-    if (heldRef.current === undefined && leaveRef.current === undefined && readyRef.current === undefined) return undefined;
-    return {
-      held: () => heldRef.current ?? false,
-      holdAt: () => holdAtRef.current ?? HOLD_AT,
-      leave: () => leaveRef.current?.(),
-      ready: () => readyRef.current?.(),
-    };
-  }, []);
+  // The title's latest values, which the frame loop reads through one link built once. They are written after each
+  // render, before the next frame, so the loop never sees a render React threw away.
+  const latest = useRef({ held, holdAt, onLeave, onReady });
+  useLayoutEffect(() => {
+    latest.current = { held, holdAt, onLeave, onReady };
+  });
+  // /world passes none of them, so it gets no link and its flight is unchanged.
+  const [title] = useState<TitleLink | undefined>(() =>
+    held === undefined && onLeave === undefined && onReady === undefined
+      ? undefined
+      : {
+        held: () => latest.current.held ?? false,
+        holdAt: () => latest.current.holdAt ?? HOLD_AT,
+        leave: () => latest.current.onLeave?.(),
+        ready: () => latest.current.onReady?.(),
+      },
+  );
   // The title's Settings opens the world's options. show is stable, so the listener is added once.
   const openOptions = panel.show;
   useEffect(() => {

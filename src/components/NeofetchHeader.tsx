@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, type MouseEvent, type ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { EMAIL, LINKS, PROFILE, WORLD_COMMAND, WORLD_LINES } from "@/components/terminal/content";
 import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
@@ -9,14 +9,15 @@ import ReturnKey from "@/components/title/ReturnKey";
 
 /** A ⏎ in a printed line becomes the pixel key cap; the rest of the line is text. */
 function withReturns(line: string): ReactNode {
-  const parts = line.split("⏎");
-  if (parts.length === 1) return line;
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {part}
-      {i < parts.length - 1 ? <ReturnKey className="nf-key" /> : null}
-    </Fragment>
-  ));
+  const at = line.indexOf("⏎");
+  if (at < 0) return line;
+  return (
+    <>
+      {line.slice(0, at)}
+      <ReturnKey className="nf-key" />
+      {withReturns(line.slice(at + 1))}
+    </>
+  );
 }
 
 /** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
