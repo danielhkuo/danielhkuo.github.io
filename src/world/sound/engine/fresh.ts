@@ -5,7 +5,7 @@
 import { hashString, mix32 } from "../../core/hash.ts";
 import { gain, loop, type Ctx } from "./graph.ts";
 import { endNoise, isNoiseName, noiseNode } from "./noise-worklet.ts";
-import { remake } from "../synth/make.ts";
+import { remake, type Raw } from "../synth/make.ts";
 import type { Kit } from "./kit.ts";
 
 /**
@@ -397,12 +397,43 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
   return { read, group, frame, get swaps() { return swaps; } };
 }
 
+/** Builds one generation's raw samples. The page uses remake; a test can pass its own. */
+type MakeGeneration = (name: string, generation: number, seed: number, sampleRate: number) => Raw;
+
+/**
+ * Made generations, one map per maker, shared by every ownGenerations in the process. Keyed by name, generation, seed
+ * and sample rate, so a scene rendered again (the bench keeps the best of several) reuses the samples instead of
+ * making them during the timed render. At most 64; the one made earliest is dropped.
+ */
+const MADE_MAX = 64;
+const madeGenerations = new WeakMap<MakeGeneration, Map<string, Raw>>();
+
+function cachedRaw(make: MakeGeneration, name: string, generation: number, seed: number, sampleRate: number): Raw {
+  let cache = madeGenerations.get(make);
+  if (!cache) madeGenerations.set(make, (cache = new Map()));
+  // Name last: it is the only part that is not a number, so two keys cannot collide.
+  const key = `${sampleRate}:${seed}:${generation}:${name}`;
+  const found = cache.get(key);
+  if (found) return found;
+  const raw = make(name, generation, seed, sampleRate);
+  cache.set(key, raw);
+  if (cache.size > MADE_MAX) {
+    for (const oldest of cache.keys()) {
+      cache.delete(oldest);
+      break;
+    }
+  }
+  return raw;
+}
+
 /**
  * Generations an offline engine makes for itself, in place, one engine's worth: its renders must not depend on what
  * other engines on the same kit rendered before (the bench renders every scene on one kit, and the page's kit carries
- * its generations from one engine to the next). Generation 0 is the kit's own buffer; the last three are kept.
+ * its generations from one engine to the next). Generation 0 is the kit's own buffer; the last three are kept, each
+ * copied into a buffer of this context. The raw samples come from `make` through the process cache, so the same
+ * generation is the same samples wherever it is heard.
  */
-export function ownGenerations(ctx: Ctx, kit: Pick<Kit, "buffer">, seed: number): FreshKit {
+export function ownGenerations(ctx: Ctx, kit: Pick<Kit, "buffer">, seed: number, make: MakeGeneration = remake): FreshKit {
   const made = new Map<string, { newest: number; held: Map<number, AudioBuffer> }>();
   const of = (name: string) => {
     let m = made.get(name);
@@ -421,7 +452,7 @@ export function ownGenerations(ctx: Ctx, kit: Pick<Kit, "buffer">, seed: number)
     request(name, generation) {
       const m = of(name);
       if (generation !== m.newest + 1) throw new Error(`fresh: ${name} generation ${generation} is not the next one`);
-      const raw = remake(name, generation, seed, ctx.sampleRate);
+      const raw = cachedRaw(make, name, generation, seed, ctx.sampleRate);
       const b = ctx.createBuffer(raw.channels.length, raw.channels[0].length, raw.rate);
       for (let c = 0; c < raw.channels.length; c++) b.copyToChannel(raw.channels[c] as Float32Array<ArrayBuffer>, c, 0);
       m.held.set(generation, b);

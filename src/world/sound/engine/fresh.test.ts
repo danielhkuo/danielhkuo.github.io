@@ -347,3 +347,19 @@ test("offline, a source is let go when it has ended (its ended event), never bef
   assert.equal(unwired, stopped.length);
   for (const s of stopped) assert.equal((s.outs[0].to as FakeNode).outs.length, 0, "its fade leads nowhere once it has ended");
 });
+
+test("offline generations are made once a process: a second engine on the same seed reuses them (the bench renders a scene again for its best time)", () => {
+  const made: string[] = [];
+  const kit = { buffer: (name: string) => ({ name, duration: 5, numberOfChannels: 1 }) as unknown as AudioBuffer };
+  const make = (name: string, g: number) => {
+    made.push(`${name}/${g}`);
+    return { rate: 48000, channels: [new Float32Array(8)] };
+  };
+  for (let k = 0; k < 2; k++) {
+    const ctx = new FakeContext();
+    const own = ownGenerations(ctx as unknown as Ctx, kit, 3, make);
+    own.request("drops", 1);
+    own.request("drops", 2);
+  }
+  assert.deepEqual(made, ["drops/1", "drops/2"]);
+});
