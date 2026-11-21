@@ -1,0 +1,143 @@
+/* The sound bench: game layer, Ink & Glyph. Cream paper, ink rules, IM Fell English. Not Astryx. */
+
+.bench {
+  --ink: #2e2a24;
+  --ink-soft: #5a5246;
+  --paper: #f0e8d2;
+  --paper-deep: #e6dabb;
+  --vermilion: #b0341f;
+  --teal: #2c6b66;
+  --font-family-heading: var(--font-fell), Georgia, serif;
+  --font-family-body: var(--font-fell), Georgia, serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 2rem clamp(1rem, 4vw, 3rem) 4rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-fell), Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.bench h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.9rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.lede {
+  margin: 0 0 1.25rem;
+  max-width: 46rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.desk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.5rem;
+  padding: 0.7rem 0;
+  border-top: 3px double var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+.desk label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.desk input[type="range"] {
+  width: 9rem;
+  accent-color: var(--ink);
+}
+
+.desk input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--ink);
+}
+
+.status {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.scenes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scene {
+  display: grid;
+  grid-template-columns: 11rem 3.5rem 1fr auto;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px dotted var(--ink-soft);
+}
+
+.name {
+  font-size: 1.05rem;
+}
+
+.seconds {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.about {
+  color: var(--ink-soft);
+}
+
+.button {
+  min-width: 4.25rem;
+  min-height: 2rem;
+  padding: 0.15rem 0.8rem;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--paper-deep);
+}
+
+.button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.button:focus-visible,
+.desk input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.note {
+  margin: 1rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 720px) {
+  .scene {
+    grid-template-columns: 1fr auto;
+  }
+
+  .seconds {
+    display: none;
+  }
+
+  .about {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

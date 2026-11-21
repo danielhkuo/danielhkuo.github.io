@@ -1,5 +1,5 @@
 /**
- * `work` — the pinned repositories as a TUI, the way lazygit or gh-dash would
+ * `work` — the projects as a TUI, the way lazygit or gh-dash would
  * show them: a list pane, a detail pane, a header bar and a keybar. It runs
  * through the same full-screen program path as cbonsai, so it owns the
  * character grid and the ANSI palette until `q`.
@@ -8,9 +8,10 @@
  * a list that drills down into the detail — and the keybar stops being a
  * legend and becomes the controls, since a phone has no keys to press.
  */
-import { DEFAULT_FG, Screen, Win, type CellRun } from "../tty/screen.ts";
+import type { Project } from "../../../lib/projects.ts";
 import { textWidth, wrapRuns } from "../claude/wrap.ts";
-import type { ProgramHost, ScreenProgram, SlimProject } from "../types";
+import { DEFAULT_FG, Screen, Win, type CellRun } from "../tty/screen.ts";
+import type { ProgramHost, ScreenProgram } from "../types";
 
 /** Where the program can send the visitor. */
 export interface WorkApi {
@@ -50,7 +51,7 @@ export function longDate(iso: string): string {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-/** "example.com" for a homepage link. */
+/** "example.com" for a project's link. */
 export function hostOf(url: string): string {
   try {
     return new URL(url).host.replace(/^www\./, "");
@@ -59,7 +60,7 @@ export function hostOf(url: string): string {
   }
 }
 
-export function createWorkProgram(projects: readonly SlimProject[], api: WorkApi): WorkProgram {
+export function createWorkProgram(projects: readonly Project[], api: WorkApi): WorkProgram {
   return new WorkProgram(projects, api);
 }
 
@@ -67,7 +68,7 @@ export class WorkProgram implements ScreenProgram {
   readonly captureEscape = true;
   readonly title = "work";
 
-  private readonly all: readonly SlimProject[];
+  private readonly all: readonly Project[];
   private readonly api: WorkApi;
   private screen: Screen | null = null;
   private win: Win | null = null;
@@ -81,7 +82,7 @@ export class WorkProgram implements ScreenProgram {
   private filter = "";
   private hits: Hit[] = [];
 
-  constructor(projects: readonly SlimProject[], api: WorkApi) {
+  constructor(projects: readonly Project[], api: WorkApi) {
     this.all = projects;
     this.api = api;
   }
@@ -93,7 +94,7 @@ export class WorkProgram implements ScreenProgram {
 
   // ---- state for tests ---------------------------------------------------------
 
-  get selected(): SlimProject | null {
+  get selected(): Project | null {
     return this.shown()[this.sel] ?? null;
   }
 
@@ -191,7 +192,7 @@ export class WorkProgram implements ScreenProgram {
         this.primary();
         return;
       case "o":
-        this.homepage();
+        this.openLink();
         return;
       case "/":
         this.filterOpen = true;
@@ -246,7 +247,7 @@ export class WorkProgram implements ScreenProgram {
     hit?.act();
   }
 
-  /** Enter: the repository on a split; on a phone, the list drills into the detail first. */
+  /** Enter: the repository, or the link when there is none; on a phone, the list drills into the detail first. */
   private primary(): void {
     const p = this.selected;
     if (!p) return;
@@ -255,12 +256,14 @@ export class WorkProgram implements ScreenProgram {
       this.render();
       return;
     }
-    this.api.openUrl(p.url);
+    const url = p.repoUrl ?? p.link;
+    if (url) this.api.openUrl(url);
   }
 
-  private homepage(): void {
+  /** `o` opens the project's link. */
+  private openLink(): void {
     const p = this.selected;
-    if (p?.homepageUrl) this.api.openUrl(p.homepageUrl);
+    if (p?.link) this.api.openUrl(p.link);
   }
 
   private move(by: number): void {
@@ -275,16 +278,18 @@ export class WorkProgram implements ScreenProgram {
 
   // ---- data ---------------------------------------------------------------------------
 
-  /** The repos the list shows: all of them, or those matching the filter. */
-  private shown(): SlimProject[] {
+  /** The projects the list shows: all of them, or those matching the filter. */
+  private shown(): Project[] {
     const q = this.filter.toLowerCase();
     if (!q) return [...this.all];
     return this.all.filter((p) => p.name.toLowerCase().includes(q));
   }
 
-  private meta(p: SlimProject): string {
-    const lang = p.primaryLanguage?.name ?? "no language data";
-    return `${lang} · ★ ${p.stargazerCount} · ⑂ ${p.forkCount}`;
+  /** Under a name on a phone: the GitHub line, or the summary when the build had no stats. */
+  private meta(p: Project): string {
+    if (!p.github) return p.summary;
+    const lang = p.github.language?.name ?? "no language data";
+    return `${lang} · ★ ${p.github.stars} · ⑂ ${p.github.forks}`;
   }
 
   /** List rows the layout has room for. */
@@ -352,10 +357,10 @@ export class WorkProgram implements ScreenProgram {
     const listW = Math.min(34, Math.floor(cols * 0.38));
     const list = this.shown();
 
-    this.bar(0, 0, cols, [R("work — pinned repositories", BLUE, true, true)], [R("github.com/danielhkuo", BLUE, true, true)], BLUE, true);
+    this.bar(0, 0, cols, [R("work — projects", BLUE, true, true)], [R("github.com/danielhkuo", BLUE, true, true)], BLUE, true);
 
     // List pane.
-    this.put(2, 1, [R(`[1] repos ─ ${list.length}`, GRAY)]);
+    this.put(2, 1, [R(`[1] projects ─ ${list.length}`, GRAY)]);
     const cap = this.listCapacity();
     const y0 = 3;
     for (let i = 0; i < cap && this.listScroll + i < list.length; i++) {
@@ -364,10 +369,10 @@ export class WorkProgram implements ScreenProgram {
       const y = y0 + i;
       const on = idx === this.sel;
       if (on) this.fill(y, 0, listW, DEFAULT_FG, true);
-      const stars = `★${String(p.stargazerCount).padStart(2)}`;
-      const nameW = listW - 2 - 1 - stars.length - 2;
+      const stars = p.github ? `★${String(p.github.stars).padStart(2)}` : "";
+      const nameW = listW - 2 - 1 - (stars ? stars.length + 2 : 0);
       this.put(y, 1, [R(on ? "› " : "  ", DEFAULT_FG, false, on), ...this.nameRuns(p.name, nameW, on)]);
-      this.put(y, listW - 1 - stars.length, [R(stars, DEFAULT_FG, false, on)]);
+      if (stars) this.put(y, listW - 1 - stars.length, [R(stars, DEFAULT_FG, false, on)]);
       this.hits.push({ y0: y, y1: y + 1, x0: 0, x1: listW, act: () => this.select(idx) });
     }
     const hintY = y0 + Math.min(cap, list.length) + 1;
@@ -390,7 +395,7 @@ export class WorkProgram implements ScreenProgram {
     this.put(2, x, [R("[2] detail", GRAY)]);
     const p = this.selected;
     if (p) this.drawDetail(p, 3, x, w, rows - 3, false);
-    else this.put(4, x, [R("no repo matches", GRAY)]);
+    else this.put(4, x, [R("no project matches", GRAY)]);
 
     // Keybar, or the filter prompt in its place.
     if (this.filterOpen) {
@@ -399,8 +404,8 @@ export class WorkProgram implements ScreenProgram {
     } else
       this.drawKeys(rows - 2, rows, cols, [
         ["↑↓", "move", () => this.move(1)],
-        ["⏎", "repository", () => this.primary()],
-        ["o", "homepage", () => this.homepage()],
+        ["⏎", "open", () => this.primary()],
+        ["o", "link", () => this.openLink()],
         ["/", "filter", () => this.key("/", false)],
         ["q", "quit", () => this.exit()],
       ]);
@@ -412,11 +417,12 @@ export class WorkProgram implements ScreenProgram {
     const { rows, cols } = this.screen as Screen;
     const list = this.shown();
     const filtering = this.filterOpen || this.filter !== "";
+    const n = this.all.length;
     this.bar(
       0,
       0,
       cols,
-      [R(filtering ? `work — ${list.length} of ${this.all.length}` : `work — ${this.all.length} pinned`, BLUE, true, true)],
+      [R(filtering ? `work — ${list.length} of ${n}` : `work — ${n} project${n === 1 ? "" : "s"}`, BLUE, true, true)],
       [R(filtering ? "filtering" : "github.com/danielhkuo", BLUE, true, true)],
       BLUE,
       true,
@@ -434,7 +440,7 @@ export class WorkProgram implements ScreenProgram {
         this.fill(y + 1, 0, cols, DEFAULT_FG, true);
       }
       this.put(y, 1, [R(on ? "› " : "  ", DEFAULT_FG, on, on), ...this.nameRuns(p.name, cols - 4, on, on)]);
-      const dot = p.primaryLanguage ? [R("■ ", on ? DEFAULT_FG : LANG_SLOTS[0], false, on)] : [];
+      const dot = p.github?.language ? [R("■ ", on ? DEFAULT_FG : LANG_SLOTS[0], false, on)] : [];
       this.put(y + 1, 3, [...dot, R(this.meta(p).slice(0, cols - 6), DEFAULT_FG, false, on)]);
       const at = idx;
       this.hits.push({
@@ -450,7 +456,7 @@ export class WorkProgram implements ScreenProgram {
       y += 3;
     }
     if (this.filter && y < rows - 3) this.put(y, 1, [R(`${this.all.length - list.length} hidden by filter`, GRAY)]);
-    if (!list.length && !this.filter) this.put(2, 1, [R("no pinned repositories", GRAY)]);
+    if (!list.length && !this.filter) this.put(2, 1, [R("no projects", GRAY)]);
 
     if (this.filterOpen) {
       this.put(rows - 3, 0, [R("─".repeat(cols), GRAY)]);
@@ -458,7 +464,7 @@ export class WorkProgram implements ScreenProgram {
     } else {
       this.drawKeys(rows - 3, rows, cols, [
         ["⏎", "open", () => this.primary()],
-        ["o", "site", () => this.homepage()],
+        ["o", "link", () => this.openLink()],
         ["/", "filter", () => this.key("/", false)],
         ["q", "quit", () => this.exit()],
       ]);
@@ -467,21 +473,22 @@ export class WorkProgram implements ScreenProgram {
 
   private drawNarrowDetail(): void {
     const { rows, cols } = this.screen as Screen;
-    const p = this.selected as SlimProject;
+    const p = this.selected;
+    if (!p) return;
     const list = this.shown();
     this.bar(0, 0, cols, [R(`‹ work / ${p.name}`, BLUE, true, true)], [R(`${this.sel + 1}/${list.length}`, BLUE, true, true)], BLUE, true);
     this.hits.push({ y0: 0, y1: 1, x0: 0, x1: cols, act: () => this.key("Escape", false) });
     this.drawDetail(p, 2, 2, cols - 4, rows - 3, true);
     this.drawKeys(rows - 3, rows, cols, [
       ["esc", "back", () => this.key("Escape", false)],
-      ["⏎", "repository", () => this.api.openUrl(p.url)],
-      ["o", "homepage", () => this.homepage()],
+      ["⏎", "open", () => this.primary()],
+      ["o", "link", () => this.openLink()],
     ]);
   }
 
   // -- shared pieces --
 
-  /** The repo name, clipped to `w`; while filtering, the match is picked out in yellow. */
+  /** The project's name, clipped to `w`; while filtering, the match is picked out in yellow. */
   private nameRuns(name: string, w: number, inverse: boolean, bold = false): CellRun[] {
     const text = name.length > w ? name.slice(0, Math.max(0, w - 1)) + "…" : name;
     const q = this.filter.toLowerCase();
@@ -495,20 +502,24 @@ export class WorkProgram implements ScreenProgram {
     ];
   }
 
-  /** Name, description, facts and the language mix, from row `y` in a column `w` wide. */
-  private drawDetail(p: SlimProject, y: number, x: number, w: number, yMax: number, stacked: boolean): void {
+  /** Name, summary, facts and the language mix, from row `y` in a column `w` wide. */
+  private drawDetail(p: Project, y: number, x: number, w: number, yMax: number, stacked: boolean): void {
     this.put(y++, x, [R(p.name.slice(0, w), YELLOW, true)]);
-    for (const row of wrapRuns([R(p.description || "no description")], w)) {
+    for (const row of wrapRuns([R(p.summary)], w)) {
       if (y >= yMax) return;
       this.put(y++, x, row);
     }
     y++;
-    const facts: [string, CellRun][] = [
-      ["stars", R(String(p.stargazerCount), GREEN)],
-      ["forks", R(String(p.forkCount), GREEN)],
-      ["updated", R(longDate(p.updatedAt))],
-    ];
-    if (p.homepageUrl) facts.push(["homepage", R(hostOf(p.homepageUrl), BLUE)]);
+    const facts: [string, CellRun][] = [];
+    if (p.github) {
+      facts.push(
+        ["stars", R(String(p.github.stars), GREEN)],
+        ["forks", R(String(p.github.forks), GREEN)],
+        ["updated", R(longDate(p.github.updatedAt))],
+      );
+    }
+    if (p.repo) facts.push(["repo", R(p.repo)]);
+    if (p.link) facts.push(["link", R(hostOf(p.link), BLUE)]);
     for (const [k, v] of facts) {
       if (y >= yMax) return;
       this.put(y++, x, [R(k.padEnd(10), GRAY), v]);
@@ -516,7 +527,7 @@ export class WorkProgram implements ScreenProgram {
     y++;
     if (y >= yMax) return;
     this.put(y++, x, [R("language mix", GRAY)]);
-    const langs = p.languages.filter((l) => l.percentage > 0.05);
+    const langs = (p.github?.languages ?? []).filter((l) => l.percentage > 0.05);
     if (!langs.length) {
       if (y < yMax) this.put(y, x, [R("none reported", GRAY)]);
       return;

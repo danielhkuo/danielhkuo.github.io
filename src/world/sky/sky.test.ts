@@ -201,3 +201,64 @@ test("the busiest view draws in under 3 ms in Node", () => {
   times.sort((a, b) => a - b);
   assert.ok(times[25] < 3, `median ${times[25].toFixed(2)} ms`);
 });
+
+test("the sky in noon's air is the sky as painted; weather clouds gather only as the weather builds", async () => {
+  const { NOON_AIR, airOf } = await import("./air.ts");
+  const { parseWeather } = await import("./weather.ts");
+  const plain = createSky(3, N, STYLES.cumulus);
+  const noon = createSky(3, N, STYLES.cumulus);
+  noon.setAir(NOON_AIR);
+  // Over black a shadow changes nothing, so only cloud is counted.
+  const covered = (sky: ReturnType<typeof createSky>, x: number, y: number): number => {
+    const out = new Uint32Array(W * H).fill(BLACK);
+    sky.draw(out, rect(x, y), 0, "below");
+    return out.filter((v) => v !== BLACK).length;
+  };
+  let busy = 0;
+  for (let k = 0; k < 12; k++) {
+    const x = k * 97, y = k * 61;
+    const a = frame(), b = frame();
+    plain.draw(a, rect(x, y), 0, "below");
+    noon.draw(b, rect(x, y), 0, "below");
+    assert.deepEqual(a, b, "noon is the sky as painted");
+    const built = createSky(3, N, STYLES.cumulus);
+    built.setAir(airOf(0.5, 0.25, parseWeather("clouds") ?? undefined));
+    busy += covered(built, x, y) - covered(plain, x, y);
+  }
+  assert.ok(busy > 12 * W * H * 0.08, `the built sky covers more: ${busy}`);
+});
+
+test("at night the clouds go dark and blue, and before rain they go grey", async () => {
+  const { airOf } = await import("./air.ts");
+  const { parseWeather } = await import("./weather.ts");
+  const { rampIn } = await import("./sky.ts");
+  const { oklabOf } = await import("../render/palette.ts");
+  const noon = rampIn(airOf(0.5, 0.25));
+  const night = rampIn(airOf(0.92, 0.25));
+  const storm = rampIn(airOf(0.5, 0.25, parseWeather("clouds") ?? undefined));
+  for (let k = 0; k < noon.tones.length; k++) {
+    const d = oklabOf(noon.tones[k]), n = oklabOf(night.tones[k]), s = oklabOf(storm.tones[k]);
+    assert.ok(n[0] < d[0] - 0.25 && n[2] < -0.01, `tone ${k} at night`);
+    assert.ok(s[0] < d[0] - 0.02 && Math.hypot(s[1], s[2]) < Math.hypot(d[1], d[2]) + 0.01, `tone ${k} before rain`);
+  }
+});
+
+test("a low sun burns on a cloud's rim and crown over violet undersides; the moon leaves it blue-grey", async () => {
+  const { rampIn } = await import("./sky.ts");
+  const { airOf } = await import("./air.ts");
+  const { oklabOf } = await import("../render/palette.ts");
+  for (const time of [0.25, 0.75]) {
+    const ramp = rampIn(airOf(time, 0.25));
+    const rim = oklabOf(ramp.rim), crown = oklabOf(ramp.tones[0]), under = oklabOf(ramp.tones[ramp.tones.length - 1]);
+    assert.ok(rim[1] > 0.02 && rim[2] > 0 && crown[1] > 0.015, `rim ${rim} crown ${crown} at ${time}`);
+    assert.ok(under[2] < -0.03 && under[0] < rim[0] - 0.2, `underside ${under} at ${time}`);
+  }
+  const golden = oklabOf(rampIn(airOf(0.705, 0.25)).rim);
+  assert.ok(golden[2] > 0.035 && golden[2] > golden[1], `golden rim ${golden}`);
+  const night = rampIn(airOf(0, 0.25));
+  for (const c of [night.rim, ...night.tones]) {
+    const [, a, b] = oklabOf(c);
+    assert.ok(b < -0.02 && Math.hypot(a, b) < 0.09, `a cloud at night ${[a, b]}`);
+  }
+  assert.ok(oklabOf(night.rim)[0] > oklabOf(night.tones[4])[0] + 0.1);
+});

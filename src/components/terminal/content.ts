@@ -19,3 +19,27 @@ export const PROFILE = {
   location: "Houston, TX",
   building: "AI products · self-hosted systems · developer tools",
 } as const;
+
+/** One line for each of the five interests. The quest and the Codex read this list. */
+export const INTERESTS: readonly { key: string; line: string }[] = [
+  { key: "bonsai", line: "Daniel likes slow, careful work." },
+  { key: "reading", line: "Daniel reads a lot." },
+  { key: "faith", line: "Daniel thinks about faith, technology and what AI is." },
+  { key: "homelab", line: "Daniel runs a home lab on Unraid." },
+  { key: "basketball", line: "Daniel plays basketball and follows the Houston Rockets." },
+];
+
+/**
+ * What the title's terminal runs after neofetch, and the lines it prints under it.
+ * A ⏎ in a line is drawn as a key cap, not left as the character alone.
+ */
+export const WORLD_COMMAND = "./world";
+
+export const WORLD_LINES = ["A world to fly over.", "Press ⏎ or choose Enter world."] as const;
+
+/**
+ * What the quest collects: the five panes of coloured glass missing from the projects hall's rose window, one kept at
+ * each of the five places (the owner's choice, 2026-11-21). `short` is the count's label in the flight view. This is
+ * the one place to change the words.
+ */
+export const GLASS = { one: "pane", many: "panes", short: "glass", whole: "panes of coloured glass" } as const;

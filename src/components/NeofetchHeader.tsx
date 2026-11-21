@@ -1,21 +1,46 @@
 "use client";
 
 import Image from "next/image";
-import type { MouseEvent } from "react";
-import { EMAIL, LINKS, PROFILE } from "@/components/terminal/content";
+import type { MouseEvent, ReactNode } from "react";
+import { EMAIL, LINKS, PROFILE, WORLD_COMMAND, WORLD_LINES } from "@/components/terminal/content";
 import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
+import ReturnKey from "@/components/title/ReturnKey";
+import type { HeaderProject } from "./headerProjects.ts";
 
-/** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
-export interface HeaderProject {
-  name: string;
-  url: string;
-  language: { name: string; color: string } | null;
-  stars: number;
-  forks: number;
+export type { HeaderProject };
+
+/** A ⏎ in a printed line becomes the pixel key cap; the rest of the line is text. */
+function withReturns(line: string): ReactNode {
+  const at = line.indexOf("⏎");
+  if (at < 0) return line;
+  return (
+    <>
+      {line.slice(0, at)}
+      <ReturnKey className="nf-key" />
+      {withReturns(line.slice(at + 1))}
+    </>
+  );
 }
 
-/** Ask the TerminalLauncher to open the live shell, returning focus to `trigger` on close. */
+export interface NeofetchHeaderProps {
+  projects: HeaderProject[];
+  /** After the colour blocks, the terminal runs `./world` and prints how to enter. */
+  world?: boolean;
+  /** The window's yellow light. */
+  onMinimize?: () => void;
+  /** The window's green light. */
+  onZoom?: () => void;
+  /**
+   * The live prompt, in place of the idle `./` row. The title's window is the
+   * terminal; a page without this still asks the launcher to open one over it.
+   */
+  terminal?: ReactNode;
+  /** The static rows above the prompt are gone: `clear`, or a full-screen program. */
+  bare?: boolean;
+}
+
+/** Ask for the live shell: on the title, the window's own prompt. */
 function openShell(trigger: HTMLElement | null) {
   window.dispatchEvent(
     new CustomEvent("terminal:open", { detail: { trigger } }),
@@ -30,9 +55,13 @@ function Prompt() {
   return <span className="nf-ps1">{promptFor("~")}</span>;
 }
 
-/** `intro`: the one that follows the typing, and exists only while the intro plays. */
-function Cursor({ intro = false }: { intro?: boolean }) {
-  return <span className={intro ? "nf-cursor nf-cursor-intro" : "nf-cursor"} aria-hidden />;
+/**
+ * `intro`: the one that follows the typing, and exists only while the intro plays. `world`: the same for the title's
+ * `./world`, typed later.
+ */
+function Cursor({ intro = false, world = false }: { intro?: boolean; world?: boolean }) {
+  const extra = intro ? " nf-cursor-intro" : world ? " nf-cursor-world" : "";
+  return <span className={`nf-cursor${extra}`} aria-hidden />;
 }
 
 /**
@@ -52,9 +81,22 @@ function Cursor({ intro = false }: { intro?: boolean }) {
  * block goes above the table and every Label / value pair stacks. The Contact
  * row becomes three 44pt prompt lines at the bottom so they are tappable.
  *
- * Any click on the body that is not on a link opens the live shell over it.
+ * Any click on the body that is not on a link asks for the live shell.
+ * On the title, `world` adds the `./world` lines and the yellow and green
+ * lights are the ways in; the page's own CSS takes the full-screen height off.
+ * With `terminal`, that shell is this window's own prompt.
  */
-export default function NeofetchHeader({ projects }: { projects: HeaderProject[] }) {
+export default function NeofetchHeader({
+  projects,
+  world = false,
+  onMinimize,
+  onZoom,
+  terminal,
+  bare = false,
+}: NeofetchHeaderProps) {
+  // A build where no project has GitHub stats prints names and summaries. Counts, and the column that holds
+  // them, appear only when at least one row actually has them.
+  const anyStats = projects.some((p) => p.stats !== null);
   const onBodyClick = (e: MouseEvent<HTMLDivElement>) => {
     const target = e.target as Element;
     if (target.closest("a, button")) return;
@@ -69,7 +111,7 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
       <div className="nf-dock">
         <div className="nf-frame">
           <div className="term-bar static">
-            <Lights />
+            <Lights onMinimize={onMinimize} onZoom={onZoom} />
             <ProxyIcon />
             <div className="title">
               daniel — -zsh<span className="nf-title-dims"> — 132×38</span>
@@ -78,7 +120,13 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
           {/* role=presentation: the body is not itself a control. The launcher
               button, the mobile `./shell` row and ⌘K are the accessible
               triggers; a click here is a pointer shortcut. */}
-          <div className="nf-body ink-panel" role="presentation" onClick={onBodyClick}>
+          <div
+            className={`nf-body ink-panel${terminal ? " nf-live" : ""}`}
+            role="presentation"
+            onClick={onBodyClick}
+          >
+            {bare ? null : (
+              <>
             <p className="nf-cmd">
               <Prompt />
               <span className="nf-typed">neofetch</span>
@@ -117,33 +165,50 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
                   <dd>{PROFILE.location}</dd>
                   {projects.length > 0 && (
                     <>
-                      <dt>Pinned</dt>
+                      <dt>Projects</dt>
                       <dd>
-                        <ul className="nf-pins">
+                        <ul className={anyStats ? "nf-pins" : "nf-pins nf-pins-plain"}>
                           {projects.map((p) => (
                             <li key={p.name} className="nf-pin">
-                              <span className="nf-pin-lang">
-                                <span
-                                  className="nf-pin-dot"
-                                  style={
-                                    p.language ? { backgroundColor: p.language.color } : undefined
-                                  }
-                                  aria-hidden
-                                />
-                                {p.language?.name ?? "n/a"}
-                              </span>
-                              <a
-                                className="nf-link nf-pin-name"
-                                href={p.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {p.name}
-                              </a>
-                              <span className="nf-pin-stats">
-                                <span className="nf-stat">★ {p.stars}</span>
-                                <span className="nf-stat">⑂ {p.forks}</span>
-                              </span>
+                              {anyStats ? (
+                                p.stats ? (
+                                  <span className="nf-pin-lang">
+                                    <span
+                                      className="nf-pin-dot"
+                                      style={
+                                        p.stats.language
+                                          ? { backgroundColor: p.stats.language.color }
+                                          : undefined
+                                      }
+                                      aria-hidden
+                                    />
+                                    {p.stats.language?.name ?? "n/a"}
+                                  </span>
+                                ) : (
+                                  // Keeps the name and the counts in their columns when a neighbour has stats.
+                                  <span className="nf-pin-lang" aria-hidden="true" />
+                                )
+                              ) : null}
+                              {p.url ? (
+                                <a
+                                  className="nf-link nf-pin-name"
+                                  href={p.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {p.name}
+                                </a>
+                              ) : (
+                                <span className="nf-pin-name">{p.name}</span>
+                              )}
+                              {p.stats ? (
+                                <span className="nf-pin-stats">
+                                  <span className="nf-stat">★ {p.stats.stars}</span>
+                                  <span className="nf-stat">⑂ {p.stats.forks}</span>
+                                </span>
+                              ) : (
+                                <span className="nf-pin-summary">{p.summary}</span>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -178,10 +243,29 @@ export default function NeofetchHeader({ projects }: { projects: HeaderProject[]
               </div>
             </div>
 
-            <p className="nf-cmd nf-idle">
-              <Prompt />
-              <Cursor />
-            </p>
+            {world ? (
+              <>
+                <p className="nf-cmd nf-world">
+                  <Prompt />
+                  <span className="nf-typed nf-typed-world">{WORLD_COMMAND}</span>
+                  <Cursor world />
+                </p>
+                {WORLD_LINES.map((line) => (
+                  <p className="nf-out" key={line}>
+                    {withReturns(line)}
+                  </p>
+                ))}
+              </>
+            ) : null}
+              </>
+            )}
+
+            {terminal ?? (
+              <p className="nf-cmd nf-idle">
+                <Prompt />
+                <Cursor />
+              </p>
+            )}
 
             <div className="nf-actions">
               <a className="nf-action nf-link" href={LINKS.email}>

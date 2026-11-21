@@ -16,7 +16,7 @@ import path from "node:path";
 import puppeteer from "puppeteer";
 
 /** The pages held to zero violations. Add a page here once it passes. */
-const PAGES = ["/recruiter"];
+const PAGES = ["/", "/minimal"];
 
 const OUT = path.resolve("out");
 

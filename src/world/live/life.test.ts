@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mix32 } from "../core/hash.ts";
 import { isCanopy, isGrass, MATERIAL as M } from "../look/materials.ts";
 import { buildPalette, MIDDAY } from "../render/palette.ts";
 import { differing, drawn, frameOf, land, manifest, seaFrame, shot } from "../testing/liveShot.ts";
-import { isBeach, isPasture, isRoof, isSea, lifeLayer, LOW, REACH, startledFor, UPLAND, type Placed } from "./life.ts";
+import { isBeach, isPasture, isRoof, isSea, lifeLayer, LOW, mayStartle, REACH, startledFor, UPLAND, type Placed } from "./life.ts";
 import type { Flier, LiveLayer } from "./live.ts";
 import { lightOf, matOf } from "./pixel.ts";
 import { makeLayers } from "./registry.ts";
 import { KITE_EVERY, NET_EVERY, RAINBOW_EVERY, sightsLayer, type Sight } from "./sights.ts";
-import { worldRowAt } from "./sprites.ts";
+import { bakeAt, worldRowAt } from "./sprites.ts";
 import { GUST_SPEED, windLayer } from "./wind.ts";
 
 const ctx = { seed: manifest.seed, n: manifest.n, sites: manifest.sites, land };
@@ -23,9 +24,9 @@ async function placed(view: string, t: number, flier?: Flier): Promise<Placed[]>
   return life.log;
 }
 
-test("the registry runs the wind, the life, the sights, the rare sights and the wake after the water", () => {
+test("the registry runs the wind, the rain's splashes, the life, the sights, the rare sights, the wake, the mist and the night after the water", () => {
   const names = makeLayers(ctx).map((l) => l.name);
-  assert.deepEqual(names, ["water", "wind", "life", "sights", "rare", "wake"]);
+  assert.deepEqual(names, ["water", "wind", "splashes", "life", "sights", "moments", "rare", "wake", "mist", "night"]);
 });
 
 test("the same time gives the same frame, whatever was drawn before", async () => {
@@ -99,19 +100,21 @@ test("small life stands only where it belongs", async () => {
   for (const view of ["start", "town", "abbey"]) {
     const s = await shot(view);
     for (const t of [0, 20, 61.5]) {
+      const f = frameOf(s, t);
       for (const p of await placed(view, t)) {
         if (p.kind === "gull") { gulls++; continue; }
-        assert.ok(p.px >= 0 && p.px < W && p.py >= 0 && p.py < H, `${view}: ${p.kind} in the frame`);
-        const v = s.bake[p.py * W + p.px], m = matOf(v);
+        // A thing just past the frame's edge is placed too, on the land there, when some of it can show.
+        assert.ok(p.px >= -12 && p.px < W + 12 && p.py >= -12 && p.py < H + 25, `${view}: ${p.kind} at ${p.px},${p.py}, in reach of the frame`);
+        const v = bakeAt(f, p.px, p.py), m = matOf(v);
         if (p.kind === "sheep") {
           assert.equal(isPasture[m], 1, `${view}: a sheep on material ${m}`);
-          assert.ok(0.8 * worldRowAt(frameOf(s, t), p.px, p.py) - (s.rect.y + p.py) >= UPLAND - 3, `${view}: a sheep on low ground`);
+          assert.ok(0.8 * worldRowAt(f, p.px, p.py) - (s.rect.y + p.py) >= UPLAND - 3, `${view}: a sheep on low ground`);
           sheep++;
         } else if (p.kind === "smoke") {
           assert.equal(isRoof[m], 1, `${view}: smoke from material ${m}`);
           smoke++;
         } else if (p.kind === "boat") {
-          for (let d = -4; d <= 4; d += 2) assert.equal(isSea[matOf(s.bake[p.py * W + p.px + d])], 1, `${view}: a boat's hull off the sea`);
+          for (let d = -4; d <= 4; d += 2) assert.equal(isSea[matOf(bakeAt(f, p.px + d, p.py))], 1, `${view}: a boat's hull off the sea`);
           boats++;
         } else {
           assert.equal(isBeach[m], 1, `${view}: a gull resting on material ${m}`);
@@ -172,6 +175,26 @@ test("a bird is startled when the flier's track comes within reach, low, and set
   assert.equal(startledFor(undefined, n, 1010, 2000, 5), -1, "nor no flier at all");
   // Across the world's seam.
   assert.ok(startledFor({ x: n - 3, y: 10, alt: 20, heading: north, speed: 60 }, n, 4, n - 10, 5) >= 0);
+});
+
+test("mayStartle passes over only birds the flier cannot have startled, from bake pixels alone", () => {
+  const n = ctx.n;
+  let passed = 0, startled = 0;
+  for (let k = 0; k < 40000; k++) {
+    const h = (i: number): number => (mix32(k * 11 + i) >>> 0) / 4294967296;
+    const fl: Flier = { x: h(1) * n, y: h(2) * n, alt: h(3) * 160, heading: h(4) * 2 * Math.PI, speed: h(5) * 120 };
+    // Birds round the flier's track, on the ground it could be startled from and a little either side of that.
+    const x = (((fl.x + (h(6) - 0.5) * 700) % n) + n) % n, ground = fl.alt + (h(7) - 0.5) * 2.4 * LOW;
+    const y = fl.y + (h(8) - 0.5) * 700, by = 0.8 * y - ground;
+    // On its own pixel, and anywhere in a box of pixels round it.
+    const bx0 = x - h(9) * 30, by0 = by - h(10) * 24;
+    const may = mayStartle(fl, n, x, x, by, by), mayBox = mayStartle(fl, n, bx0, bx0 + 30, by0, by0 + 24);
+    if (!may) passed++;
+    if (startledFor(fl, n, x, y, ground) < 0) continue;
+    startled++;
+    assert.ok(may && mayBox, `a startled bird at ${x.toFixed(1)},${y.toFixed(1)} on ${ground.toFixed(1)} was passed over`);
+  }
+  assert.ok(startled > 1000 && passed > 20000, `${startled} startled, ${passed} passed over`);
 });
 
 test("gulls on the beach lift and scatter when the flier passes low over them", async () => {
@@ -295,13 +318,18 @@ test("a rainbow stands for a while, fades in and out, and is gone between times"
   const full = sightsOver(bow.x, bow.y - 40, when);
   assert.ok(full.log.some((p) => p.kind === "rainbow"));
   assert.ok(full.changed > 800, `the bow is drawn (${full.changed} pixels)`);
-  // A wash, never a solid colour: every pixel stays close to the sea under it.
+  // A wash, never a solid colour: every pixel of the bow (within its radius of its foot) stays close to the sea under it.
   const f = seaFrame(Math.round(bow.x) - 200, Math.round(0.8 * (bow.y - 40)) - 112, when, palette, ctx.n, M.sea);
   const sea = f.out[0];
+  sights.log = [];
   sights.draw(f);
+  const foot = sights.log.find((p) => p.kind === "rainbow");
+  assert.ok(foot);
   for (let i = 0; i < f.out.length; i++) {
+    if (Math.hypot((i % W) - foot.px, Math.floor(i / W) - foot.py) > 70) continue;
     for (let c = 0; c < 24; c += 8) assert.ok(Math.abs(((f.out[i] >>> c) & 255) - ((sea >>> c) & 255)) < 60);
   }
+  sights.log = null;
   // Fading: half a minute later or earlier there is a moment it is fainter, and a time it is gone.
   const fades = sights.rainbowsAt(when - 3).concat(sights.rainbowsAt(when - 6)).filter((r) => r.x === bow?.x && r.shown < 1);
   assert.ok(fades.length > 0, "it eases in");

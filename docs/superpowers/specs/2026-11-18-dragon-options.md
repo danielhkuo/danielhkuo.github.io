@@ -16,9 +16,14 @@ follow, for the record.
 - the wake on water and startled birds, through the live layers;
 - boost streaks: above cruise, pale streaks peel off the flanks and slip back along the path, with a faint bow of air at
   the snout (`wind.ts`, Fable, 2026-11-18);
-- the bench, `npm run world:dragon`.
+- landing: it coils down round a landmark, settles onto the ground, lies flat with its whiskers hanging, and unwinds
+  on take-off (`specs/2026-11-18-landing-and-codex-design.md`);
+- the bench, `npm run world:dragon`, which also draws a landing.
 
-**Next**, with the landmarks: coiling down onto a site's pad to land.
+**Size.** The owner found the first build a little too big (2026-11-18), then still coarse beside the land (2026-11-19): its
+2–3 pixel bands and inked outline read chunky against land whose detail is 1–2 pixels. It is now about half the first
+build: 45 px long against 84, a chest of 1.65 against 3.1, the head redrawn for the size. Everything sized to the body
+(rest height, the wind, the coil's clearances, the guides) follows.
 
 ## What is already settled
 

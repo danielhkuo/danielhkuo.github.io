@@ -39,9 +39,9 @@ export const SKY_HEIGHT = 40;
 export const SKY_REACH = 3;
 export const SKY_LINE = 5;
 /** No bedding line is drawn within this many pixels below a wall's top. */
-export const LIP_BEDS = 9;
+export const LIP_BEDS = 5;
 /** And this many in sedimentary rock, whose beds are thin. */
-export const LIP_BEDS_SOFT = 5;
+export const LIP_BEDS_SOFT = 3;
 /** A lip is not inked where a line already runs within this many rows above it, across unbroken rock. */
 export const LIP_ABOVE = 18;
 /** No second line is laid within this many rows of one already drawn. */
@@ -50,8 +50,8 @@ export const INK_CLEAR = 4;
 export const CREST_REACH = 24;
 /** Hatching reaches this many pixels down from a cliff's lip. */
 export const LIP_HATCH = 7;
-/** Of 256: the share of columns that carry hatching at all. */
-export const HATCH_PICK = 44;
+/** Of 256: the share of the rows of a cliff's hatching band that carry strokes. */
+export const HATCH_ROWS = 150;
 /** A cliff lip is inked above a rock wall at least this tall. */
 export const LIP_RUN = 5;
 /** From a wall this tall the lip's ink is full; a shorter crag's is soft. */
@@ -71,7 +71,21 @@ export const SPAN_CAP = 12;
 export const WALL_SPAN = 5;
 /** Beds of sedimentary rock are about this thick, in height units; hard rock breaks into blocks about this tall. */
 export const BED_SOFT = 4;
-export const BED_HARD = 8;
+export const BED_HARD = 6;
+/** How far a bed's tone stands above or below the face's, of 255: sedimentary beds, and hard rock's blocks. */
+export const BED_TONE = 18;
+export const BED_TONE_HARD = 20;
+/** The lift of the sunlit ledge under a bedding line on a wall in shade, of 255. */
+export const LEDGE_LIFT = 20;
+/** A rock face takes its light from this many columns to either side, so it is lit as a face and not column by column. */
+export const FACE_REACH = 5;
+/** Steep rock that is not a wall takes it from this many: its ribs are broad, and lit one by one they stripe the face. */
+export const ROCK_REACH = 9;
+/** The share of its depth of shade a rock face in shade keeps. */
+export const ROCK_SHADE_KEEP = 0.62;
+/** The snow above a rock edge takes a line only where it fills SNOW_FIELD of the pixels within SNOW_FIELD_R rows above and columns beside it. */
+export const SNOW_FIELD_R = 3;
+export const SNOW_FIELD = 16;
 /** A sea cliff is wet and dark this far up from the water, and darkens towards it from WET_FADE. */
 export const WET_FOOT = 2.2;
 export const WET_FADE = 7;
@@ -115,6 +129,11 @@ export interface Painted {
   ink: Uint8Array;
   /** The wash each land pixel's light belongs to (wash.ts): 0 shade, 1 mid, 2 light; 255 where none is laid. */
   step: Uint8Array;
+  /**
+   * The tiles the painter read, in the order it first read them, each under its unwrapped tile position
+   * (ty · 65536 + tx, offset so neither is negative). The pictures of the plants rooted in them are drawn from this.
+   */
+  tiles?: Map<number, unknown>;
 }
 
 export function newPainted(x0: number, r0: number, w: number, h: number): Painted {
@@ -395,13 +414,36 @@ export function inkCrests(p: Painted, bare?: Uint8Array): void {
  * this is the line that bounds it. Against turf the snow's edge is left to the wash.
  */
 export function inkSnowEdge(p: Painted, isSnow: Uint8Array): void {
-  const { w, h, x0, r0, flags, ink, aux, y, mat } = p;
+  const { w, h, x0, r0, flags, ink, aux, y, mat, hidden } = p;
+  // Inside a snowfield the light already parts the faces: a line laid where the lit snow meets the shaded, with nothing
+  // hidden behind it, is a seam in the snow. Only its outline and its real breaks keep their ink.
+  for (let r = 1; r + 1 < h; r++) {
+    for (let c = 1; c + 1 < w; c++) {
+      const i = r * w + c;
+      if (ink[i] === 0 || hidden[i] !== 0 || isSnow[mat[i]] !== 1) continue;
+      if (isSnow[mat[i - w]] === 1 && isSnow[mat[i + w]] === 1 && isSnow[mat[i - 1]] === 1 && isSnow[mat[i + 1]] === 1) ink[i] = 0;
+    }
+  }
   for (let r = INK_CLEAR; r + INK_CLEAR < h; r++) {
     for (let c = 1; c < w; c++) {
       const i = r * w + c;
       if (ink[i] !== 0 || (aux[i] & AUX_ROCK) === 0 || (flags[i] & (F_QUIET | F_CANOPY)) !== 0) continue;
       const j = isSnow[mat[i - w]] === 1 ? i - w : isSnow[mat[i - 1]] === 1 ? i - 1 : -1;
       if (j < 0 || (flags[j] & (F_QUIET | F_CANOPY)) !== 0) continue;
+      // A small patch lying on a ledge is not ringed: an inked rim round it reads as a hole in the rock.
+      let field = 0;
+      for (let dr = -SNOW_FIELD_R; dr <= 0; dr++) for (let dc = -SNOW_FIELD_R; dc <= SNOW_FIELD_R; dc++) {
+        const k = j + dr * w + dc;
+        if (k >= 0 && k < w * h && isSnow[mat[k]] === 1) field++;
+      }
+      if (field < SNOW_FIELD) continue;
+      // Nor is a small outcrop standing in the snow: inked round, it reads as a blot.
+      let crag = 0;
+      for (let dr = 0; dr <= SNOW_FIELD_R; dr++) for (let dc = -SNOW_FIELD_R; dc <= SNOW_FIELD_R; dc++) {
+        const k = i + dr * w + dc;
+        if (k >= 0 && k < w * h && (aux[k] & AUX_ROCK) !== 0) crag++;
+      }
+      if (crag < SNOW_FIELD - 4) continue;
       const dy = y[i] - y[j];
       if (dy > 3 || dy < -3) continue;
       // About one stretch in three is left open.
@@ -465,41 +507,47 @@ export function evenLines(p: Painted): void {
 }
 
 /**
- * Hatching, as soft ink: only on steep faces that are in shade, and in deep
- * terrain shadow. Strokes run down the fall line (down the screen on the
- * faces the camera sees). Which columns carry a stroke, where each stroke
- * starts and how long it runs all come from a hash of the position, so there
- * is no grid; cliffs carry more and longer strokes than merely steep ground.
+ * Hatching, as soft ink: only on steep faces that are in shade, and in deep terrain shadow, in the few rows under a
+ * cliff's lip. Strokes run across the face, along the contour, a row or two apart, as an engraver shades a crag: strokes
+ * down the face read as a comb of ticks. Which rows carry strokes, where each stroke starts and how long it runs all
+ * come from a hash of the position, so there is no grid; cliffs carry more and longer strokes than merely steep ground.
  */
 export function hatch(p: Painted, mask: Uint8Array): void {
   const { w, h, x0, r0, flags, ink, aux, light } = p;
+  // Rows since the cliff began, column by column: hatching hangs from the lip and stops a little way down.
+  const below = new Uint8Array(w * h);
   for (let c = 0; c < w; c++) {
-    const X = x0 + c;
-    const hx = hash2(X, 17, 0x4a7c);
-    // About one column in six carries strokes at all.
-    const pick = hx & 255;
-    const period = 11 + ((hx >>> 8) & 7), phase = (hx >>> 12) & 31;
-    // Rows since the cliff began in this column: hatching hangs from the lip and stops a little way down.
-    let below = LIP_HATCH;
+    let run = LIP_HATCH + 1;
     for (let r = 0; r < h; r++) {
       const i = r * w + c;
       const f = flags[i];
       // A wall is drawn by its strata (rockFaces); strokes are for steep ground and for headwalls that are not walls.
-      // Rock is drawn by its beds (rockFaces), wall or not: strokes down every column of a mountain face read as a comb.
+      // Rock is drawn by its beds (rockFaces), wall or not.
       const cliff = (f & F_CLIFF) !== 0 && (aux[i] & AUX_STEEP) >= 2 && (aux[i] & AUX_ROCK) === 0 && (f & (F_QUIET | F_CANOPY)) === 0;
-      if (!cliff) { below = 0; continue; }
-      below++;
-      // Only at the slope break: nothing over the open face below it.
-      if (below > LIP_HATCH || ink[i] !== 0) continue;
-      if ((f & F_DEEP) === 0 && light[i] > 100) continue;
-      if (pick > HATCH_PICK) continue;
-      const R = r0 + r;
-      // Strokes of 3–8 px with gaps, each band of the column offset by a second hash; blue noise frays their ends.
-      const band = Math.floor((R + phase) / period);
-      const hb = hash2(X, band, 0x91e3);
-      const start = hb & 3, len = (cliff ? 4 : 3) + ((hb >>> 2) & 3) + (cliff ? (hb >>> 4) & 1 : 0);
-      const q = R + phase - band * period;
-      if (q >= start && q < start + len && (hb >>> 8 & 3) !== 0 && mask[(R & 255) * 256 + (X & 255)] < 235) ink[i] = INK_SOFT;
+      run = cliff ? (run > LIP_HATCH ? 1 : run + 1) : LIP_HATCH + 1;
+      // A face that runs on from above the window counts from the window's top.
+      if (cliff && r === 0) run = 1;
+      below[i] = cliff ? run : 0;
+    }
+  }
+  for (let r = 0; r < h; r++) {
+    const R = r0 + r;
+    // About half the rows carry strokes, never two touching rows.
+    const hr = hash2(R >> 1, 23, 0x4a7c);
+    if ((R & 1) !== (hr & 1) || ((hr >>> 1) & 255) > HATCH_ROWS) continue;
+    const period = 9 + ((hr >>> 9) & 7), phase = (hr >>> 12) & 31;
+    for (let c = 0; c < w; c++) {
+      const i = r * w + c;
+      const b = below[i];
+      if (b === 0 || b > LIP_HATCH || ink[i] !== 0) continue;
+      if ((flags[i] & F_DEEP) === 0 && light[i] > 100) continue;
+      const X = x0 + c;
+      // Strokes of 3–7 px with gaps, each slot of the row its own; blue noise frays their ends.
+      const slot = Math.floor((X + phase) / period);
+      const hs = hash2(slot, R, 0x91e3);
+      const start = hs & 3, len = 3 + ((hs >>> 2) & 3) + ((hs >>> 4) & 1);
+      const q = X + phase - slot * period;
+      if (q >= start && q < start + len && ((hs >>> 8) & 3) !== 0 && mask[(R & 255) * 256 + (X & 255)] < 235) ink[i] = INK_SOFT;
     }
   }
 }
@@ -536,9 +584,10 @@ export function rockFaces(p: Painted): void {
       const sea = (flags[i] & F_SEACLIFF) !== 0;
       let l = src[i];
       if (kind === 2) {
-        // The face's light, not the column's: the mean over the wall three columns to either side.
+        // The face's light, not the column's: the mean over the wall FACE_REACH columns to either side, so the gullies cut
+        // down it do not stripe it; its beds carry its texture.
         let sum = 0, count = 0;
-        for (let dc = -3; dc <= 3; dc++) if (rock[i + dc] === 2) { sum += src[i + dc]; count++; }
+        for (let dc = c < FACE_REACH ? -c : -FACE_REACH; dc <= FACE_REACH && c + dc < w; dc++) if (rock[i + dc] === 2) { sum += src[i + dc]; count++; }
         l = sum / count;
         // Ink traced down a column inside the face is a picket; the face's own lines replace it.
         if (ink[i] !== 0 && hidden[i] === 0 && rock[i - 1] === 2 && rock[i + 1] === 2) ink[i] = 0;
@@ -546,35 +595,44 @@ export function rockFaces(p: Painted): void {
         // Steep rock's gullies light every other column: most of that goes, on every face and not only on headwalls, so
         // a mountain face is modelled and not striped. The nearer columns count for more.
         let sum = 0, count = 0;
-        for (let dc = -3; dc <= 3; dc++) if (rock[i + dc] !== 0) { const k = 4 - (dc < 0 ? -dc : dc); sum += k * src[i + dc]; count += k; }
-        l += 0.85 * (sum / count - l);
+        for (let dc = c < ROCK_REACH ? -c : -ROCK_REACH; dc <= ROCK_REACH && c + dc < w; dc++) if (rock[i + dc] !== 0) { const k = ROCK_REACH + 1 - (dc < 0 ? -dc : dc); sum += k * src[i + dc]; count += k; }
+        l += 0.9 * (sum / count - l);
       }
+      // A face in shade is one face: its ribs and couloirs part in light only by part of what they would, so its beds,
+      // not its ribs, carry it, and it does not band down the slope.
+      if (l < 128) l = 128 - (128 - l) * ROCK_SHADE_KEEP;
       // Lines are drawn only where the wall runs on to both sides: a lone tall cell in a broken face takes none.
       const whole = kind === 2 && rock[i - 1] === 2 && rock[i + 1] === 2;
       const bedded = (flags[i] & F_BEDDED) !== 0;
       const T = bedded ? BED_SOFT : BED_HARD;
       const z = height[i] - wall[i];
       // Beds wander a little along the face, and sedimentary beds dip gently to the east.
-      const zz = z + (bedded ? 5 : 3) * drift(X, 4, 0x3be1) + 1.2 * drift(X, 2, 0x3be2) + (bedded ? X * 0.05 : 0);
+      // (Only slow wander: a quicker one jogs the bedding lines from column to column, and the jogs read as a comb.)
+      const zz = z + (bedded ? 5 : 3) * drift(X, 4, 0x3be1) + 0.6 * drift(X, 3, 0x3be2) + (bedded ? X * 0.05 : 0);
       const k = Math.floor(zz / T), off = zz - k * T;
       const j = ((hash2(k, 1, 0x3be3) & 255) / 255) * T * 0.5;
       const band = off >= j ? k : k - 1;
       const hb = hash2(band, 2, 0x3be4);
-      let d = bedded ? ((band & 1) !== 0 ? 13 : -11) + ((hb & 7) - 3) * 2 : ((hb & 7) - 3) * 5;
+      // Each bed its own tone, the beds of sedimentary rock alternating pale and dark, hard rock's blocks less evenly.
+      let d = ((band & 1) !== 0 ? 1 : -1) * (bedded ? BED_TONE : BED_TONE_HARD) + ((hb & 7) - 3) * 2;
       const edge = off >= j && off < j + 1;
       if (kind === 2) {
         // A bedding line close under the lip would read as a second lip: the first beds below it are parted by tone alone.
         if (edge && wall[i] > (bedded ? LIP_BEDS_SOFT : LIP_BEDS)) d -= whole ? 26 : 12;
-        else if (off < j && off >= j - 1 && l > 96) d += 14;
-        // Fissures: one to a slot of uneven width, running through a few beds, jogging a column as it goes.
-        const P = bedded ? 23 : 15;
+        // The ledge under a bedding line faces up, so it catches the sun even on a wall turned away from it: a pale
+        // strip along each bed, which is what makes the beds read across a face in shade.
+        // Not every bed has one, nor all along: the ledges come and go, and some are two pixels deep.
+        else if (wall[i] > (bedded ? LIP_BEDS_SOFT : LIP_BEDS) - 2 && (hb & 7) < 3 && (hash2(X >> 2, band, 0x3bea) & 3) !== 0 && off < j && off >= j - ((hb >>> 3) & 1 ? 2 : 1)) d += l > 96 ? 12 : LEDGE_LIFT;
+        // Fissures: few, one to a slot of uneven width and each within one bed, jogging a column as it goes, so they break
+        // the beds without ruling the face into columns.
+        const P = bedded ? 29 : 19;
         const slot = Math.floor(X / P);
-        const hs = hash2(slot, bedded ? Math.floor(zz / (3 * T)) : band, 0x3be5);
-        if (whole && (hs & 7) < (bedded ? 3 : 2)) {
+        const hs = hash2(slot, band, 0x3be5);
+        if (whole && (hs & 31) < (bedded ? 2 : 3)) {
           const cx = slot * P + 1 + ((hs >>> 4) % (P - 2)) + ((hash2(slot, Math.floor(z / 2), 0x3be6) & 3) === 0 ? 1 : 0);
           // A dark cleft, and its sunward lip a touch lighter.
-          if (X === cx) d -= 42;
-          else if (X === cx + 1 && l > 96) d += 8;
+          if (X === cx) d -= 20;
+          else if (X === cx + 1 && l > 96) d += 5;
         }
         // A bedding line is inked in stretches, so the face is drawn and not ruled.
         if (whole && edge && wall[i] > (bedded ? LIP_BEDS_SOFT : LIP_BEDS) && ink[i] === 0 && (hash2(X >> 2, k, 0x3be7) & 7) < (bedded ? 3 : 2)) ink[i] = INK_SOFT;
@@ -584,8 +642,10 @@ export function rockFaces(p: Painted): void {
           else if (z < WET_FADE) d -= 5 * (WET_FADE - z);
         }
       } else {
-        // A face that is not a wall: the beds' tones, a bedding line in stretches that wander with the beds, and no strokes.
-        d = d * 0.8 - (edge && (hash2(X >> 3, k, 0x3be9) & 3) !== 0 ? 14 : 0);
+        // A face that is not a wall: the beds' tones, a bedding line in stretches that wander with the beds over a pale
+        // ledge, and no strokes.
+        const stretch = (hash2(X >> 3, k, 0x3be9) & 7) !== 0;
+        d = d - (edge && stretch ? 16 : 0) + (stretch && off < j && off >= j - 1 ? (l > 96 ? 10 : 0.8 * LEDGE_LIFT) : 0);
       }
       const v = Math.floor(l + d + 0.5);
       light[i] = v < 10 ? 10 : v > 240 ? 240 : v;

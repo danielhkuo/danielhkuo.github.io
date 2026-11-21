@@ -13,11 +13,13 @@ import { MATERIAL as M } from "../look/materials.ts";
 import { furrowAt, newParcel, parcelAt } from "../parcels.ts";
 import { featureFor, type LandmarkType } from "../sites/assign.ts";
 import { type Built, type Conform, conformed, conformGrid, ROAD_PIECE, type RoadLine, type Structure } from "./built.ts";
-import { ARCHETYPE } from "./params.ts";
+import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
-import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules } from "./sites.ts";
+import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, aridAt, tempAt } from "./sites.ts";
+import { monument, projectsHall, type MonumentKey } from "./monuments.ts";
 import * as S from "./structures.ts";
+import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
 /** The fields siting reads, from the generator's stages. */
 export function siteFieldsOf(t: Terrain): SiteFields {
@@ -27,7 +29,7 @@ export function siteFieldsOf(t: Terrain): SiteFields {
   return {
     n: land.p.n, gN: land.p.gN, h: rivers.ground, isSea: land.isSea, lakeId: hydro.lakeId, hand: hydro.hand,
     exposure: land.exposure, shoreClass: land.shoreClass, debris: land.debris, rock: land.rock,
-    moisture: climate.moisture, wind: climate.wind, regions: land.plan.regions,
+    moisture: climate.moisture, wind: climate.wind, regions: land.plan.regions, temp: climate.temp, arid: climate.arid,
     reaches: rivers.reaches, stacks,
   };
 }
@@ -46,12 +48,21 @@ export interface Settlement {
   sites: PlacedSite[];
   /** Types siting could not place, with the rule that failed; empty when all twelve stand. */
   shortfall: string[];
+  /** Kinds that stand outside their own climate for want of ground in it (gen/sites.ts). */
+  displaced: string[];
   /** The home island's land component. */
   home: number;
   hamlets: Hamlet[];
   built: Built;
   /** Ground on G with pads, quays and the harbour cut in. */
   ground: Float64Array;
+  /** The wonders that found their land, and one line for each that did not. */
+  wonders: PlacedWonder[];
+  wonderSkips: string[];
+  /** The quest's monuments that stand, each where its option put it (gen/monuments.ts). */
+  monuments: { id: string; key: MonumentKey; x: number; y: number }[];
+  /** The projects hall, where its option put it. */
+  hall: { id: string; x: number; y: number } | null;
 }
 
 export interface SettleOptions extends PlaceOptions {
@@ -60,6 +71,13 @@ export interface SettleOptions extends PlaceOptions {
   occupied?: ReadonlySet<string>;
   /** Lay the road network (default). Off, sites and buildings are placed without it: quick, for tuning their look. */
   lanes?: boolean;
+  /** Site the wonders (default), none of them, or only the types listed. */
+  wonders?: boolean | readonly WonderType[];
+  wonderRules?: WonderRules;
+  /** The quest's monuments, each stood on a levelled pad at its point (cells). Absent: none. */
+  monuments?: readonly { key: MonumentKey; x: number; y: number }[];
+  /** The projects hall (gen/monuments.ts projectsHall), stood as the monuments are at this point (cells). */
+  hall?: { x: number; y: number };
 }
 
 const MATS = { path: M.path, road: M.road, retaining: M.stone, yard: M.pastureWarm, vine: M.vine };
@@ -190,6 +208,42 @@ export function bridge(ax: number, ay: number, bx: number, by: number, water: nu
 
 // ---------------------------------------------------------------------------
 // The sites.
+
+/**
+ * One of the quest's monuments, on a pad levelled to the ground's mean under it and kept clear of roads and
+ * hamlets, as a landmark's is.
+ */
+function standMonument(w: Work, key: MonumentKey | "hall", x: number, y: number): { id: string; key: MonumentKey | "hall"; x: number; y: number } {
+  const st = key === "hall" ? projectsHall() : monument(key);
+  const rx = st.w / 2 + 2, ry = st.h / 2 + 2;
+  const level = padLevel(w, x, y, rx, ry);
+  addConform(w, flat(x, y, rx + 1, ry + 1, true, level, 10));
+  block(w, x, y, rx + 4, ry + 4);
+  // Its setting first, as the abbey's grove and orchard are, so nothing overgrows it: trees, a cottage on its own
+  // small pad, and where the land is farmed, fields.
+  const seed = hash2(Math.floor(x), Math.floor(y), w.seed);
+  const half = st.h / 2;
+  const cottageAt = (cx: number, cy: number): void => {
+    if (!dry(w, cx, cy) || Math.abs(groundAt(w, cx, cy) - level) > 3) return;
+    addConform(w, flat(cx, cy, 4, 3.5, false, groundAt(w, cx, cy), 3, 1.5));
+    w.structures.push(S.standAt(S.countryHouse(seed >>> 2, isSlate(w.c, node(w.c, cx, cy)), houseStyle(w.c, cx, cy)), cx, cy, footing(w, cx, cy, 3, 2.5)));
+  };
+  if (key === "pine") {
+    w.structures.push(S.standAt(S.grove(46, 14, seed), x - 2, y - half - 10, 0));
+    w.structures.push(S.standAt(S.orchard(30, 13, seed), x + 22, y + 12, 0));
+    cornBy(w, x, y, seed);
+  } else if (key === "desk") {
+    w.structures.push(S.standAt(S.copse(52, 40, 17, 12, seed), x, y, 0));
+    w.structures.push(S.standAt(S.gardenPlot(12, 8, seed), x - 16, y + 6, 0));
+  } else if (key === "mill") {
+    w.structures.push(S.standAt(S.oliveGrove(34, 14, seed), x - 20, y + 12, 0));
+  } else if (key === "basket") {
+    // Savanna: the land's own scattered trees are setting enough; a copse or a kitchen plot reads as brought in.
+    cottageAt(x - 16, y + 3);
+  }
+  w.structures.push(S.standAt(st, x, y, level));
+  return { id: key === "hall" ? "hall-0" : `curio-${key}`, key, x, y };
+}
 
 /** Mean ground over a pad of half-sizes (rx, ry): the level that cuts as much as it fills. */
 function padLevel(w: Work, x: number, y: number, rx: number, ry: number): number {
@@ -405,8 +459,23 @@ const HB = { w: 98, h: 44, x: 49, y: 3 };
  * from the quay's middle on the shore line, y to the south. The lobe's x is given for the river on the east.
  */
 const BASIN: readonly (readonly [number, number, number, number])[] = [[0, 14, 32, 12], [-13, 17, 20, 10]];
-/** The mole follows an ellipse round the basin, centred on the first ellipse's centre. */
-const MOLE = { y: 14, rx: 40, ry: 19 };
+/**
+ * The mole follows an ellipse round the basin, centred on the first ellipse's centre. It ends at `end` of the way round
+ * (see harbourWorks), its head on the ray (headU, headV), so a wide mouth is left between it and the pier.
+ */
+const MOLE = { y: 14, rx: 40, ry: 19, end: 1.4, headU: -0.556, headV: 0.831 };
+/**
+ * The harbour's mouth, between the mole's head and the pier, in cells from the quay's middle on the shore line (x for
+ * the river on the east), and the way out from it; and the fairway dredged on from it: [cells out, radius].
+ */
+const MOUTH = { x: 23.2, y: 29.5, ux: 0.832, uy: 0.555 };
+const FAIRWAY: readonly (readonly [number, number])[] = [[0, 7], [7, 7.5], [14, 8], [21, 8.5], [28, 9]];
+/** The basin's floor: as deep as the sea it opens to, so its water is the sea's own and not a darker pool. */
+const BASIN_LEVEL = -2.2;
+/** Twelve directions round a circle, for testing a fairway's edge against the shore. */
+const AROUND: readonly (readonly [number, number])[] = [
+  [1, 0], [0.866, 0.5], [0.5, 0.866], [0, 1], [-0.5, 0.866], [-0.866, 0.5], [-1, 0], [-0.866, -0.5], [-0.5, -0.866], [0, -1], [0.5, -0.866], [0.866, -0.5],
+];
 
 /** True inside the basin, its ellipses grown by `grow` cells. (lx, ly) are cells from the quay's middle on the shore line. */
 export function inBasin(lx: number, ly: number, river: number, grow: number): boolean {
@@ -428,7 +497,7 @@ export function inBasin(lx: number, ly: number, river: number, grow: number): bo
 export function harbourWorks(river: number, land?: (i: number, j: number) => boolean): Structure {
   const W = HB.w, H = HB.h, s = S.sculpt(W, H);
   // The mole's head: where the ellipse is met by a ray most of the way round to the river's side.
-  const hu = -0.55, hv = 0.45, hk = 1 / Math.sqrt((hu * hu) / (MOLE.rx * MOLE.rx) + (hv * hv) / (MOLE.ry * MOLE.ry));
+  const hu = MOLE.headU, hv = MOLE.headV, hk = 1 / Math.sqrt((hu * hu) / (MOLE.rx * MOLE.rx) + (hv * hv) / (MOLE.ry * MOLE.ry));
   const headX = -river * hu * hk, headY = MOLE.y + hv * hk;
   const slip = river * 13;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
@@ -455,7 +524,7 @@ export function harbourWorks(river: number, land?: (i: number, j: number) => boo
     const d = len * (1 - 1 / q);
     const a = v >= 0 ? 1 - u / (Math.abs(u) + v) : u > 0 ? u / (u - v) - 1 : -3;
     const head = Math.sqrt((lx - headX) * (lx - headX) + (ly - headY) * (ly - headY));
-    const mole = (Math.abs(d) <= 2.3 && a >= -0.25 && a <= 1.55) || head <= 3.3;
+    const mole = (Math.abs(d) <= 2.3 && a >= -0.25 && a <= MOLE.end) || head <= 3.3;
     const pier = Math.abs(d) <= 1.9 && ((v >= 0 && a >= 1.8) || (v < 0 && u < 0 && v > -5));
     if (!mole && !pier) continue;
     if (land && land(i, j)) continue;
@@ -501,7 +570,19 @@ function standTown(w: Work, site: PlacedSite): void {
   // The quay and the low ground behind it, built up clear of the tide as far as the first street; then the
   // basin, cut out of it.
   addConform(w, { kind: "raise", x: hx, y: shore - 4, rx: 50, ry: 18, round: true, level: 1.8, skirt: 3, limit: 0 });
-  BASIN.forEach((b, k) => addConform(w, { kind: "dredge", x: hx + (k === 0 ? b[0] : river * b[0]), y: shore + b[1], rx: b[2], ry: b[3], round: true, level: -3, skirt: 2, limit: 0 }));
+  BASIN.forEach((b, k) => addConform(w, { kind: "dredge", x: hx + (k === 0 ? b[0] : river * b[0]), y: shore + b[1], rx: b[2], ry: b[3], round: true, level: BASIN_LEVEL, skirt: 2, limit: 0 }));
+  // The fairway: the mouth between the mole's head and the pier is dredged on out through the shallows, so the basin's
+  // deep water runs on into the sea's and the harbour reads as open to it. Only over water: where the shore stands in
+  // the way the channel is narrowed, or stops.
+  for (const [along, r] of FAIRWAY) {
+    const fx = hx + river * (MOUTH.x + MOUTH.ux * along), fy = shore + MOUTH.y + MOUTH.uy * along;
+    let room = r;
+    for (let q = 0; q < AROUND.length && room >= 3; q++) {
+      if (heightAt({ h: natural, gN: w.c.gN }, fx + room * AROUND[q][0], fy + room * AROUND[q][1]) > 0.2) { room -= 1.5; q = -1; }
+    }
+    if (room < 3) break;
+    addConform(w, { kind: "dredge", x: fx, y: fy, rx: room, ry: room, round: true, level: BASIN_LEVEL + 0.04 * along, skirt: 3, limit: 0 });
+  }
   block(w, hx, shore - 40, 60, 44);
   const taken: [number, number, number, number][] = [];
   w.town = { hx, shore, taken };
@@ -722,7 +803,7 @@ function greenBelt(w: Work, roads: readonly RoadLine[]): void {
   const wood = new Map<number, boolean>();
   for (let j = 0; j < bh; j++) for (let i = 0; i < bw; i++) {
     const dx = i - ra, dy = j - rb, x = cx + dx + 0.5, y = cy + dy + 0.5;
-    if ((dx * dx) / (ra * ra) + (dy * dy) / (rb * rb) + 0.2 * drift(x, y, 28 * (n / 6400), n, w.seed ^ 0x77b1) > 0.94) continue;
+    if ((dx * dx) / (ra * ra) + (dy * dy) / (rb * rb) + 0.2 * drift(x, y, 28 * lengthScale(n), n, w.seed ^ 0x77b1) > 0.94) continue;
     const ni = node(c, x, y);
     if (c.isSea[ni] || c.lakeId[ni] >= 0 || c.rw[ni] > 0) continue;
     let f = wood.get(ni);
@@ -768,13 +849,33 @@ function greenBelt(w: Work, roads: readonly RoadLine[]): void {
 // ---------------------------------------------------------------------------
 // Hamlets.
 
+/** No hamlet stands where the sea-level temperature is under this: the ice, and the tundra's far edge. */
+const HAMLET_COLDEST = 0.2;
+
+/** How a house is built at a place, by its climate (structures.ts HOUSE_STYLE). */
+function houseStyle(c: SiteContext, x: number, y: number): number {
+  const temp = tempAt(c, x, y);
+  if (temp < 0.44) return S.HOUSE_STYLE.cold;
+  // The wet side builds as home does well into the warm forest, and then as the jungle does.
+  if (!(aridAt(c, x, y) > 0.5)) return temp <= 0.68 ? S.HOUSE_STYLE.temperate : S.HOUSE_STYLE.jungle;
+  // The dry side: whitewash and terracotta from the steppe's warm edge through the Mediterranean, then by the rain.
+  if (temp < 0.7) return S.HOUSE_STYLE.mediterranean;
+  const cN = c.gN / 2, rain = c.moisture[wrap(Math.floor(y / 8), cN) * cN + wrap(Math.floor(x / 8), cN)];
+  return rain < 0.3 ? S.HOUSE_STYLE.desert : rain < 0.62 ? S.HOUSE_STYLE.savanna : S.HOUSE_STYLE.jungle;
+}
+
+/** Snow and ice: ground nobody builds on. */
+function isSnow(m: number): boolean {
+  return m === M.snow || m === M.snowLate || (m >= M.packIce && m <= M.crevasse);
+}
+
 function isSlate(c: SiteContext, i: number): boolean {
   const cN = c.gN / 2, gx = i % c.gN, gy = (i - gx) / c.gN, ci = (gy >> 1) * cN + (gx >> 1), cc = cN * cN;
   return c.regions[ARCHETYPE.slate * cc + ci] + c.regions[ARCHETYPE.highland * cc + ci] + c.regions[ARCHETYPE.lakes * cc + ci] > 0.5;
 }
 
 function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
-  const c = w.c, gN = c.gN, k = c.n / 6400;
+  const c = w.c, gN = c.gN, k = lengthScale(c.n);
   const xs: number[] = [], ys: number[] = [], score: number[] = [];
   for (let gy = 0; gy < gN; gy += 2) for (let gx = 0; gx < gN; gx += 2) {
     const i = gy * gN + gx;
@@ -786,6 +887,13 @@ function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
       s += c.slope[j];
     }
     if (wet || s / 25 > 0.16) continue;
+    // Nobody settles the ice. The tundra is thinly settled, and dry country only where there is water.
+    const temp = tempAt(c, 4 * gx + 2, 4 * gy + 2);
+    if (temp < HAMLET_COLDEST) continue;
+    // Nor a mountain's snow, in any latitude.
+    if (temp !== 0.5 && isSnow(coverAtNode(c, gx, gy))) continue;
+    const cN = gN / 2, rain = c.moisture[(gy >> 1) * cN + (gx >> 1)];
+    const arid = temp > 0.66 && rain < 0.24;
     // By a river or a sheltered shore: where a road would cross or end.
     let water = 0;
     for (let d = 3; d <= 9 && water === 0; d += 2) for (let q = 0; q < 8; q++) {
@@ -795,9 +903,10 @@ function pickHamlets(w: Work, sites: readonly PlacedSite[]): Hamlet[] {
       else if (c.rw[j] === 1) water = Math.max(water, 0.8);
       else if (c.isSea[j] && c.exposure[i] < 0.4) water = Math.max(water, 0.7);
     }
+    if (arid && water < 0.8) continue;
     xs.push(4 * gx + 2);
     ys.push(4 * gy + 2);
-    score.push(1 - (s / 25) / 0.16 + water + (hash2(gx, gy, w.seed) & 255) / 512);
+    score.push(1 - (s / 25) / 0.16 + water + (hash2(gx, gy, w.seed) & 255) / 512 - (temp < 0.3 ? 0.9 : 0) - (arid ? 0.3 : 0));
   }
   const order = sortIndicesBy(score.map((v) => -v));
   const out: Hamlet[] = [];
@@ -834,7 +943,7 @@ function standHamlet(w: Work, hm: Hamlet): void {
     const hsh = hash2(k, Math.floor(hm.x) + 7919 * Math.floor(hm.y), w.seed);
     const cx = Math.floor(hm.x + ax * t - ay * side + ((hsh & 3) - 1.5)), cy = Math.floor(hm.y + ay * t + ax * side + (((hsh >>> 2) & 3) - 1.5));
     if (!dry(w, cx, cy) || !dry(w, cx - 4, cy) || !dry(w, cx + 4, cy) || !dry(w, cx, cy + 4) || c.slope[node(c, cx, cy)] > 0.3) continue;
-    const hs = S.countryHouse(hsh >>> 4, slate);
+    const hs = S.countryHouse(hsh >>> 4, slate, houseStyle(c, hm.x, hm.y));
     const base = groundAt(w, cx, cy + hs.h / 2);
     if (base < 1) continue;
     addConform(w, flat(cx, cy, hs.w / 2 + 1, hs.h / 2 + 1, false, base, 3, 1.5));
@@ -1239,11 +1348,11 @@ function lanesOf(w: Work, path: number[], a: Stop, b: Stop, width: number, roads
   const open = (x: number, y: number): boolean => dry(w, x, y) && !w.blocked[node(c, x, y)];
   // The grid's path is ruled between its turns. First the whole map drifts a little under it, so a long straight
   // bends; the drift is a function of the place, so two lanes through one node still agree.
-  const amp = WANDER * (n / 6400);
+  const amp = WANDER * lengthScale(n);
   for (let k = 1; k < m - 1; k++) {
     if (fixed[k]) continue;
     const ease = c.slope[node(c, px[k], py[k])] > 0.25 ? 0.4 : 1;
-    const dx = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a71), dy = amp * ease * drift(px[k], py[k], WANDER_CELLS * (n / 6400), n, w.seed ^ 0x3a72);
+    const dx = amp * ease * drift(px[k], py[k], WANDER_CELLS * lengthScale(n), n, w.seed ^ 0x3a71), dy = amp * ease * drift(px[k], py[k], WANDER_CELLS * lengthScale(n), n, w.seed ^ 0x3a72);
     for (const f of [1, 0.5]) if (open(px[k] + f * dx, py[k] + f * dy)) { px[k] += f * dx; py[k] += f * dy; break; }
   }
   // Then the stairs are smoothed out, and on a slope each point slides along it to the height halfway between
@@ -1360,8 +1469,63 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   // A main road is two pixels wide: its crown, and a darker verge beside it.
   const roads = lanes.concat(lanes.filter((r) => r.width >= 2).map(verge));
 
+  // The wonders come last and only add to what is built: a world without them is the same world.
+  let wonders: PlacedWonder[] = [], wonderSkips: string[] = [];
+  if (opts.wonders !== false) {
+    const villages = hamlets.filter((h) => h.houses > 0).map((h) => ({ x: h.x, y: h.y }));
+    for (const s of placed.sites) if (s.type === "town") villages.push({ x: s.x, y: s.y });
+    const land = wonderLandOf(t, w, roads, villages);
+    const found = placeWonders(land, placed.sites, opts.wonderRules, { only: Array.isArray(opts.wonders) ? opts.wonders : undefined });
+    wonders = found.wonders;
+    wonderSkips = found.skipped;
+    for (const wonder of wonders) {
+      const made = standWonder(land, wonder);
+      for (const cf of made.conforms) addConform(w, cf);
+      for (const st of made.structures) w.structures.push(st);
+    }
+  }
+
+  // The quest's monuments come after everything, and as the wonders do only add to what is built: a world without
+  // them is the same world, and with them nothing but their own pads changes.
+  const monuments: Settlement["monuments"] = [];
+  let hall: Settlement["hall"] = null;
+  const stood: { key: MonumentKey | "hall"; x: number; y: number }[] = [...(opts.monuments ?? [])];
+  if (opts.hall) stood.push({ key: "hall", ...opts.hall });
+  for (const m of stood) {
+    const placed = standMonument(w, m.key, m.x, m.y);
+    if (m.key === "hall") hall = { id: placed.id, x: m.x, y: m.y };
+    else monuments.push({ id: placed.id, key: m.key, x: m.x, y: m.y });
+    // A track from its gate to the nearest lane, as a landmark has its spur: a thing on no way reads as dropped there.
+    const gx = m.x, gy = m.y + (m.key === "hall" ? projectsHall() : monument(m.key)).h / 2 + 2;
+    let best = -1, bx = 0, by = 0;
+    for (const r of lanes) for (let k = 0; k + 1 < r.vertices.length; k += 2) {
+      const dx = torusDelta(gx, r.vertices[k], c.n), dy = torusDelta(gy, r.vertices[k + 1], c.n), d = dx * dx + dy * dy;
+      if (d < 500 * 500 && (best < 0 || d < best)) { best = d; bx = gx + dx; by = gy + dy; }
+    }
+    if (best >= 0) {
+      const len = Math.sqrt(best), bow = ((hash2(Math.floor(gx), Math.floor(gy), w.seed) & 7) - 3.5) * 0.05 * len;
+      const mx = (gx + bx) / 2 - ((by - gy) / (len || 1)) * bow, my = (gy + by) / 2 + ((bx - gx) / (len || 1)) * bow;
+      roads.push(curve([gx, gy, mx, my, bx, by], 1));
+    }
+  }
+
   return {
-    sites: placed.sites, shortfall: placed.shortfall, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
-    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g,
+    sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
+    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips, monuments, hall,
   };
+}
+
+/** What wonder siting reads: the settled land, its lakes and coves, and the nodes that are already built on. */
+function wonderLandOf(t: Terrain, w: Work, roads: readonly RoadLine[], villages: WonderLand["villages"]): WonderLand {
+  const c = w.c, gN = c.gN;
+  const busy = Uint8Array.from(w.blocked);
+  const mark = (x0: number, y0: number, x1: number, y1: number): void => {
+    for (let j = Math.floor(y0 / 4); j <= Math.floor(y1 / 4); j++) for (let i = Math.floor(x0 / 4); i <= Math.floor(x1 / 4); i++) busy[wrap(j, gN) * gN + wrap(i, gN)] = 1;
+  };
+  for (const s of w.structures) mark(s.x, s.y, s.x + s.w - 1, s.y + s.h - 1);
+  for (const cf of w.conforms) mark(cf.x - cf.rx - cf.skirt, cf.y - cf.ry - cf.skirt, cf.x + cf.rx + cf.skirt, cf.y + cf.ry + cf.skirt);
+  for (const r of roads) for (let k = 0; k + 1 < r.vertices.length; k += 2) mark(r.vertices[k], r.vertices[k + 1], r.vertices[k], r.vertices[k + 1]);
+  const coves: WonderLand["coves"][number][] = [];
+  for (const s of t.land.stamps) if (s.kind === "cove") coves.push({ x: s.x, y: s.y, ax: s.ax, ay: s.ay, len: s.len, width: s.width });
+  return { c, g: w.g, seed: t.land.seed, lakes: t.hydro.lakes, coves, busy, villages };
 }

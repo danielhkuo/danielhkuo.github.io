@@ -74,6 +74,10 @@ export function mirrored(s: Structure): Structure {
     o.paint[b] = s.paint[a];
   }
   for (let k = 0; k < s.marks.length; k += 5) o.marks.push(s.w - 1 - s.marks[k], s.marks[k + 1], s.marks[k + 2], s.marks[k + 3], s.marks[k + 4]);
+  if (s.shadow) {
+    o.shadow = new Uint8Array(s.w * s.h);
+    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) o.shadow[y * s.w + (s.w - 1 - x)] = s.shadow[y * s.w + x];
+  }
   o.x = s.x; o.y = s.y; o.base = s.base;
   if (s.onGround) o.onGround = true;
   return o;
@@ -87,6 +91,8 @@ export interface HouseOptions {
   /** 0 none, 1 a door and small windows, 2 tall lancets (a church). */
   openings: number;
   chimney: boolean;
+  /** Gable 0 only: the end two columns' lift falls to 0, west lit and east in shade. */
+  hip?: boolean;
 }
 
 /**
@@ -101,7 +107,17 @@ export function house(s: Structure, x: number, y: number, w: number, d: number, 
     for (let q = 0; q < rows; q++) {
       const lift = roof * (1 - Math.abs(q - mid) / (mid + 1));
       const tone = q < mid - 0.25 ? T_SOUTH : q > mid + 0.25 ? T_NORTH : T_RIDGE;
-      for (let i = 0; i < w; i++) put(s, x + i, south - 1 - q, wall + lift, o.roofMat, tone);
+      for (let i = 0; i < w; i++) {
+        let liftH = lift, toneH = tone;
+        if (o.hip) {
+          const fromEnd = i < w / 2 ? i : w - 1 - i;
+          if (fromEnd < 2) {
+            liftH = lift * (fromEnd / 2);
+            toneH = i < w / 2 ? T_WEST : T_EAST;
+          }
+        }
+        put(s, x + i, south - 1 - q, wall + liftH, o.roofMat, toneH);
+      }
     }
   } else {
     const mid = (w - 1) / 2;
@@ -567,12 +583,65 @@ export function boat(seed: number): Structure {
 }
 
 /** A house of the countryside: sizes, ridge and materials from a hash of where it stands. */
-export function countryHouse(seed: number, slate: boolean): Structure {
+/** How a house is built, by its climate: 0 as the temperate land builds, then the cold, the Mediterranean, the desert, the savanna, the jungle. */
+export const HOUSE_STYLE = { temperate: 0, cold: 1, mediterranean: 2, desert: 3, savanna: 4, jungle: 5 } as const;
+
+export function countryHouse(seed: number, slate: boolean, style: number = 0): Structure {
+  if (style !== HOUSE_STYLE.temperate) return climateHouse(seed, style);
   const w = 5 + (seed & 3), d = 4 + ((seed >>> 2) & 1) + ((seed >>> 3) & 1);
   const gable = ((seed >>> 4) & 3) === 0 ? 1 : 0;
   const s = sculpt(gable ? Math.min(w, 6) : w, d);
   const wallMat = slate ? (((seed >>> 6) & 3) === 0 ? M.whitewash : M.stoneDark) : ((seed >>> 6) & 3) === 0 ? M.stone : M.whitewash;
   house(s, 0, 0, s.w, d, 3 + ((seed >>> 8) & 1), 3, { gable, wallMat, roofMat: slate ? M.roofSlate : ((seed >>> 9) & 3) === 0 ? M.roofSlate : M.roofTile, openings: 1, chimney: ((seed >>> 11) & 1) === 0 });
+  return s;
+}
+
+/**
+ * A house as another climate builds it. The cold: dark timber or rubble under a steep roof of slate, or of turf in
+ * one in three. The Mediterranean: whitewash under low terracotta. The desert: a flat-roofed block of mud plaster
+ * with a parapet. The savanna: a round house of mud under a cone of thatch. The jungle: a timber house under deep
+ * thatch, on posts.
+ */
+function climateHouse(seed: number, style: number): Structure {
+  const w = 5 + (seed & 3), d = 4 + ((seed >>> 2) & 1) + ((seed >>> 3) & 1);
+  if (style === HOUSE_STYLE.desert) {
+    const s = sculpt(w, d), top = 3.5 + ((seed >>> 8) & 1);
+    block(s, 0, 0, w, d, top, M.adobe, M.adobe, T_FLAT + 14);
+    // A parapet along the south edge, and a door.
+    for (let x = 0; x < w; x++) mark(s, x, d - 1, top, M.adobe, 150);
+    mark(s, w >> 1, d - 1, 1, M.opening);
+    mark(s, w >> 1, d - 1, 2, M.opening);
+    if (w > 5) mark(s, 1, d - 1, 2, M.opening);
+    return s;
+  }
+  if (style === HOUSE_STYLE.savanna) {
+    // A round house: a low drum of mud and a cone of thatch standing well over it.
+    const s = sculpt(7, 7), r = 2.6 + 0.4 * ((seed >>> 4) & 1);
+    drum(s, 3, 3, r, 2.5, M.adobe);
+    for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+      const dx = x - 3, dy = y - 3, q = Math.sqrt(dx * dx + dy * dy);
+      if (q > r + 0.6) continue;
+      const lift = 2.6 + 3.4 * (1 - q / (r + 0.6));
+      // The cone's faces by the way they look: lit to the north-west, shaded to the south-east.
+      put(s, x, y, lift, M.thatch, q < 0.6 ? T_RIDGE : dx + dy < -0.5 ? T_NORTH : dx + dy > 0.5 ? T_SOUTH : dx < 0 ? T_WEST : T_EAST);
+    }
+    // The wall shows under the eave on the south side, with its door.
+    for (let x = 2; x <= 4; x++) put(s, x, 6, 2.5, M.adobe, T_WALL);
+    mark(s, 3, 6, 1, M.opening);
+    return s;
+  }
+  const gable = ((seed >>> 4) & 3) === 0 ? 1 : 0;
+  const s = sculpt(gable ? Math.min(w, 6) : w, d);
+  if (style === HOUSE_STYLE.cold) {
+    const turf = (seed >>> 9) % 3 === 0;
+    house(s, 0, 0, s.w, d, 3, 4.2, { gable, wallMat: ((seed >>> 6) & 1) === 0 ? M.timber : M.stoneDark, roofMat: turf ? M.turf : M.roofSlate, openings: 1, chimney: true });
+  } else if (style === HOUSE_STYLE.mediterranean) {
+    house(s, 0, 0, s.w, d, 3 + ((seed >>> 8) & 1), 2, { gable, wallMat: ((seed >>> 6) & 3) === 0 ? M.stone : M.whitewash, roofMat: M.roofTile, openings: 1, chimney: false, hip: gable === 0 });
+  } else {
+    // The jungle: timber under deep thatch. The posts it stands on show as dark marks under the south wall.
+    house(s, 0, 0, s.w, d, 4.5, 3.6, { gable, wallMat: M.timber, roofMat: M.thatch, openings: 1, chimney: false });
+    for (let x = 0; x < s.w; x += 2) mark(s, x, d - 1, 1, M.opening, 70);
+  }
   return s;
 }
 

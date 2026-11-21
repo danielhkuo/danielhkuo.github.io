@@ -2,20 +2,39 @@
 // scaled by paramsFor(n); heights are absolute units and never scale.
 // These values set the land's character and are tuned on renders.
 
+import type { ClimateParams } from "./climate.ts";
+
 export const ARCHETYPE = { home: 0, highland: 1, slate: 2, lakes: 3, karst: 4, skerry: 5 } as const;
 export type Archetype = (typeof ARCHETYPE)[keyof typeof ARCHETYPE];
 export const ARCHETYPE_COUNT = 6;
 
+/**
+ * How an island is built. `belts` is the fold-belt spindle and `cluster` a skerry group; the rest are landforms of
+ * their own. A form is not a region: each takes the look of one of the six archetypes (or a blend of them).
+ */
+export const FORM = { belts: 0, cluster: 1, caldera: 2, cone: 3, table: 4, fen: 5, fjord: 6 } as const;
+export type Form = (typeof FORM)[keyof typeof FORM];
+export const FORM_NAMES = ["belts", "cluster", "caldera", "cone", "table", "fen", "fjord"] as const;
+
 export const ROCK = { hard: 0, medium: 1, soft: 2 } as const;
 
 export interface ArchetypeSpec {
+  /** The region whose look, rock and climate rules the island takes. */
   id: Archetype;
+  form: Form;
+  /** Region membership as (archetype, share) pairs summing to 1, the largest on `id`; all on `id` when absent. */
+  look?: readonly (readonly [Archetype, number])[];
   /** Inclusive range of how many cores take this archetype. */
   count: readonly [number, number];
   /** Island length along strike, in cells. */
   diameter: readonly [number, number];
-  /** Island width across strike as a share of its length. */
-  aspect: number;
+  /** Island width across strike as a share of its length, drawn from this range: long to round. */
+  aspect: readonly [number, number];
+  /** The island's strike may turn this far (radians) from the world's. */
+  turn: number;
+  /** Overrides of uplift.rugged and erode.d, which otherwise follow `id`. */
+  rugged?: number;
+  d?: number;
   /** Target peak height in units. */
   peak: number;
   /** Relative odds of hard, medium and soft rock within the island. */
@@ -24,6 +43,15 @@ export interface ArchetypeSpec {
   ridges: readonly [number, number];
   /** Width of a rock stripe across strike, in cells. */
   stripeWidth: readonly [number, number];
+  /**
+   * Overrides for the islands grown for their climate (gen/native.ts): the share of the half-width that is flat top
+   * (a plateau); a lowland share added everywhere (a plain); the scale of the outline's bays and coves; the scale of
+   * the uplift's grain. Absent: the form's own.
+   */
+  plateau?: number;
+  lowland?: number;
+  bite?: number;
+  grain?: number;
 }
 
 export interface WorldParams {
@@ -31,8 +59,8 @@ export interface WorldParams {
   gN: number;
   cN: number;
   cores: { poissonR: number; archetypes: readonly ArchetypeSpec[] };
-  /** tan 25°: spines run within 25° of west–east. */
-  strike: { maxSlope: number };
+  /** maxSlope is tan 25°: the world's strike lies within 25° of west–east. An island turns from it by its own `turn`, never past maxTurn (radians) from west–east. */
+  strike: { maxSlope: number; maxTurn: number };
   spine: { segments: readonly [number, number]; ridgeGap: number; bend: number; plateau: number };
   /** `rugged` per archetype (home, highland, slate, lakes, karst, skerry): 0 a smooth fold belt, 1 a massif of branching ridges. */
   uplift: { scale: number; base: number; ridgedAmp: number; stretch: number; featureCells: number; rugged: readonly number[] };
@@ -42,7 +70,12 @@ export interface WorldParams {
   /** S5 talus: repose per rock class (height per cell) and sweeps; land is scaled down uniformly if it rises above `cap`. */
   talus: { repose: readonly [number, number, number]; sweeps: number; cap: number; scree: { shed: number; rate: number; repose: number; wash: number; passes: number; sweeps: number } };
   /** S8 climate fields on C (see gen/climate.ts ClimateParams); lengths in C nodes. */
-  climate: { moistureRadius: number; windReach: number; windDropPerNode: number; windScale: number };
+  climate: ClimateParams;
+  /**
+   * Native land (gen/native.ts): every island outside home grown again for its climate, joined to the land the
+   * generator grows for home. Off for the small worlds the tests grow.
+   */
+  native: boolean;
   hydro: { rainBase: number; orographic: number; recharge: number; depletion: number; lakeMinNodes: number; lakeMinDepth: number; qChannel: number };
   /** S7 rivers (see gen/rivers.ts RiverParams). Pixel-scale lengths are in cells and never scale. */
   rivers: {
@@ -231,26 +264,52 @@ export interface WorldParams {
   };
 }
 
+/**
+ * Lengths are tuned on the 6400 world. A smaller world (the tests' mini-worlds) shrinks them with it; a larger world
+ * keeps them and holds more land instead, so it is more of the same world, not the same world magnified.
+ */
+export function lengthScale(n: number): number {
+  return n <= 6400 ? n / 6400 : 1;
+}
+
+/** How many 6400 worlds of area a world of n cells holds: 1 at 6400 and below. */
+export function areaScale(n: number): number {
+  return n <= 6400 ? 1 : (n / 6400) * (n / 6400);
+}
+
+/** A count of things per 6400 world, for a world of n cells: more of them in a larger world, never fewer. */
+export function countFor(n: number, c: number): number {
+  return Math.round(c * areaScale(n));
+}
+
 export function paramsFor(n: number): WorldParams {
   if (!Number.isInteger(n) || n % 64 !== 0 || n < 256) throw new Error(`world size ${n} must be a multiple of 64, at least 256`);
-  const s = n / 6400;
-  const A = ARCHETYPE;
+  const s = lengthScale(n);
+  const A = ARCHETYPE, F = FORM;
+  const many = (lo: number, hi: number): [number, number] => [countFor(n, lo), countFor(n, hi)];
   return {
     n,
     gN: n / 4,
     cN: n / 8,
     cores: {
       poissonR: 900 * s,
+      // Counts are per 6400 world. Region looks: caldera and cone stand on slate rock, the table on karst
+      // limestone, the fjord coast on highland, the fen on a blend of the lakes and home lowlands.
       archetypes: [
-        { id: A.highland, count: [1, 1], diameter: [3400 * s, 3800 * s], aspect: 0.45, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [4, 5], stripeWidth: [300 * s, 600 * s] },
-        { id: A.home, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: 0.5, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.lakes, count: [1, 1], diameter: [2700 * s, 3100 * s], aspect: 0.48, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
-        { id: A.slate, count: [1, 1], diameter: [2400 * s, 2800 * s], aspect: 0.45, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [4, 5], stripeWidth: [150 * s, 300 * s] },
-        { id: A.karst, count: [2, 2], diameter: [2000 * s, 2400 * s], aspect: 0.5, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
-        { id: A.skerry, count: [5, 7], diameter: [320 * s, 720 * s], aspect: 0.8, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
+        { id: A.highland, form: F.belts, count: many(1, 1), diameter: [3000 * s, 3400 * s], aspect: [0.38, 0.62], turn: 0.9, peak: 130, rockBias: [0.75, 0.25, 0], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.home, form: F.belts, count: [1, 1], diameter: [2800 * s, 3200 * s], aspect: [0.5, 0.5], turn: 0.1, peak: 50, rockBias: [0.15, 0.4, 0.45], ridges: [3, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.highland, form: F.fjord, count: many(0.6, 0.6), diameter: [2500 * s, 2900 * s], aspect: [0.5, 0.62], turn: 0.3, peak: 120, rockBias: [0.85, 0.15, 0], ridges: [2, 3], stripeWidth: [300 * s, 600 * s] },
+        { id: A.lakes, form: F.belts, count: many(1, 1), diameter: [2400 * s, 2800 * s], aspect: [0.4, 0.7], turn: 0.9, peak: 95, rockBias: [0.25, 0.6, 0.15], ridges: [3, 5], stripeWidth: [300 * s, 600 * s] },
+        { id: A.slate, form: F.belts, count: many(1, 1), diameter: [2100 * s, 2500 * s], aspect: [0.36, 0.6], turn: 0.9, peak: 65, rockBias: [0.5, 0.0, 0.5], ridges: [3, 5], stripeWidth: [150 * s, 300 * s] },
+        { id: A.lakes, form: F.fen, look: [[A.lakes, 0.55], [A.home, 0.45]], count: many(0.8, 0.8), diameter: [1900 * s, 2300 * s], aspect: [0.6, 0.8], turn: 1.2, peak: 24, rockBias: [0, 0.25, 0.75], ridges: [4, 6], stripeWidth: [300 * s, 600 * s], rugged: 0, d: 0.02 },
+        { id: A.karst, form: F.belts, count: many(1, 1), diameter: [1800 * s, 2200 * s], aspect: [0.4, 0.7], turn: 0.9, peak: 45, rockBias: [0.85, 0.15, 0.0], ridges: [2, 4], stripeWidth: [300 * s, 600 * s] },
+        { id: A.karst, form: F.table, count: many(0.8, 0.8), diameter: [950 * s, 1250 * s], aspect: [0.55, 0.9], turn: 1.2, peak: 48, rockBias: [1, 0, 0], ridges: [1, 1], stripeWidth: [3000 * s, 3000 * s], rugged: 0 },
+        { id: A.slate, form: F.cone, count: many(1, 1), diameter: [1100 * s, 1400 * s], aspect: [0.84, 1], turn: 1.5, peak: 105, rockBias: [0.7, 0.3, 0], ridges: [1, 1], stripeWidth: [3000 * s, 3000 * s], rugged: 0, d: 0.002 },
+        { id: A.slate, form: F.caldera, count: many(1, 1), diameter: [950 * s, 1250 * s], aspect: [1, 1], turn: 1.5, peak: 75, rockBias: [0.8, 0.2, 0], ridges: [1, 2], stripeWidth: [3000 * s, 3000 * s], rugged: 0, d: 0.003 },
+        { id: A.skerry, form: F.cluster, count: many(5, 7), diameter: [320 * s, 720 * s], aspect: [0.8, 0.8], turn: 1.5, peak: 25, rockBias: [0.9, 0.1, 0.0], ridges: [1, 6], stripeWidth: [300 * s, 600 * s] },
       ],
     },
-    strike: { maxSlope: 0.4663076581549986 },
+    strike: { maxSlope: 0.4663076581549986, maxTurn: 1.2 },
     spine: { segments: [3, 6], ridgeGap: 120 * s, bend: 0.25, plateau: 0.35 },
     uplift: { scale: 1.2e-3, base: 0.55, ridgedAmp: 0.45, stretch: 3, featureCells: 400 * s, rugged: [0, 1, 0.5, 0.8, 0.35, 0] },
     rock: { kMul: [0.4, 1, 2.2], kBase: 1e-2, warpCells: 250 * s },
@@ -260,7 +319,35 @@ export function paramsFor(n: number): WorldParams {
     // Rockfall: ground steeper than 0.72 sheds, and the debris lies at 0.55 where the slope eases, unless a stream carries it off.
     talus: { repose: [1.8, 1.0, 0.6], sweeps: 30, cap: 128, scree: { shed: 0.72 / s, rate: 5 * s, repose: 0.55 / s, wash: 2400 * s * s, passes: 4, sweeps: 24 } },
     // Moisture blurred over ~120 cells; wind horizon searched 300 cells upwind, dropping 0.1 per cell.
-    climate: { moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30 },
+    // The zones (gen/climate.ts): latitude is a share of the world, so they fit a world of any size. The home island
+    // lies at 56° north on the wet side, the route from the pole to the equator that is forest all the way: taiga,
+    // the temperate belt (flat at 0.5 across φ 0.52–0.66), warm forest, jungle. The other route, the dry side, has no
+    // plateau: tundra, steppe, the Mediterranean (it passes 0.5 at φ 0.62), desert, savanna, jungle. So a lap of the
+    // world meets each climate once. Conifers take the woods by 0.42, the tree line reaches the sea at 0.27 and the
+    // snowline at 0.14 (cover.ts climateShift). The two sides' curves meet at the pole and at the equator.
+    native: n >= 6400,
+    climate: {
+      moistureRadius: 15, windReach: 38, windDropPerNode: 0.8, windScale: 30,
+      zones: {
+        homeLat: 0.62,
+        temp: [[0, 1], [0.1, 0.97], [0.22, 0.88], [0.34, 0.74], [0.46, 0.58], [0.52, 0.5], [0.66, 0.5], [0.73, 0.415], [0.85, 0.27], [0.92, 0.142], [1, 0.02]],
+        rain: [[0, 1.7], [0.3, 1.6], [0.46, 1.25], [0.52, 1], [0.66, 1], [0.73, 0.98], [0.85, 0.85], [0.92, 0.65], [1, 0.5]],
+        dry: {
+          temp: [[0, 1], [0.08, 0.97], [0.2, 0.93], [0.3, 0.91], [0.42, 0.87], [0.5, 0.77], [0.56, 0.62], [0.62, 0.5], [0.72, 0.4], [0.84, 0.28], [0.94, 0.142], [1, 0.02]],
+          rain: [[0, 1.7], [0.05, 1.45], [0.1, 1], [0.2, 0.7], [0.27, 0.38], [0.31, 0.19], [0.46, 0.19], [0.52, 0.42], [0.58, 0.55], [0.64, 0.55], [0.74, 0.5], [0.84, 0.55], [0.94, 0.55], [1, 0.5]],
+        },
+        aridRamp: 0.1,
+        warp: [[2, 0.07], [5, 0.05], [13, 0.02]],
+        inlandRadius: Math.max(2, Math.round(40 * s)),
+        inlandFrom: 0.45,
+        inlandTemp: 0.06,
+        inlandDry: 0.35,
+        // Wide enough that the sea the opening flight crosses is the plateau's too: its tiles are then built as a
+        // temperate world's are, at no cost for the climates.
+        homeNear: 240 * s,
+        homeFar: 1100 * s,
+      },
+    },
     hydro: { rainBase: 1, orographic: 0.08, recharge: 0.3, depletion: 0.004, lakeMinNodes: 8, lakeMinDepth: 1.5, qChannel: 40 },
     // Tuned 2026-11-17 on the 6400 world, where the largest river carries
     // ~14 000 node-rains: 420 makes it 6 px and leaves 92 % of channel nodes
@@ -345,12 +432,12 @@ export function paramsFor(n: number): WorldParams {
       gateCos: 0.5,
       capSlope: [0.5 / s, 0.72 / s],
       minCliff: 5,
-      stackArea: [8 * s * s, 120 * s * s],
+      stackArea: [18 * s * s, 120 * s * s],
       stackNoise: 0.8,
       stackNoiseCells: 40 * s,
       stackTop: [4, 36],
       stackLead: [14, 28],
-      stackApron: 3.5 * s,
+      stackApron: 5.5 * s,
       shoalR: [16 * s, 40 * s],
       headlandStacks: [2, 4],
       headlandSpacing: 260 * s,

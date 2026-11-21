@@ -22,8 +22,8 @@ import type { LiveFrame, LiveLayer } from "./live.ts";
 /** Seconds from one wave reaching a shore to the next. */
 export const WAVE_PERIOD = 5.2;
 /** How strongly each wave of a set runs in (0 a lull … 3 the big one); the set repeats. */
-const SETS = 9;
-const SET = [2, 3, 3, 1, 2, 3, 2, 0, 1] as const;
+export const SETS = 9;
+export const SET = [2, 3, 3, 1, 2, 3, 2, 0, 1] as const;
 /** Bake pixels between swell crests on open water, and how fast they travel (pixels a second). */
 const SWELL_LENGTH = 51.2;
 const SWELL_SPEED = 3.2;
@@ -31,7 +31,7 @@ const SWELL_SPEED = 3.2;
 const FLOW_SPEED = 5;
 const FLOW_SPEED_STEEP = 9;
 /** Height lost per pixel (in eighths of a unit) from which a reach counts as steep. */
-const STEEP = 5;
+export const STEEP = 5;
 /** Falling water, pixels a second. */
 const FALL_SPEED = 15;
 /** A fall this many pixels tall or more gets the wide spray. */
@@ -156,7 +156,7 @@ const WARP = 256;
 const STREAKS = 512;
 
 /** Smooth noise 0–255, 256² and wrapping: it bends the wave fronts and the swell so no two stretches keep time. */
-function warpTile(seed: number): Uint8Array {
+export function warpTile(seed: number): Uint8Array {
   const raw = new Float32Array(WARP * WARP);
   let lo = Infinity, hi = -Infinity;
   for (let y = 0; y < WARP; y++) for (let x = 0; x < WARP; x++) {
@@ -210,9 +210,11 @@ function streakTile(seed: number): Uint8Array {
 
 const MAX_FEET = 96;
 
-/** Copy `n` bytes from one kept field onto the next. A view, not a fresh buffer. */
-function copyBytes(src: Uint8Array, srcAt: number, dst: Uint8Array, dstAt: number, n: number): void {
-  dst.set(src.subarray(srcAt, srcAt + n), dstAt);
+/** `dst` takes `src` moved by `delta` (dst[k] = src[k + delta]) wherever both are in range: a whole kept field, slid. */
+function shiftInto(src: Uint8Array, dst: Uint8Array, delta: number): void {
+  const n = src.length;
+  if (delta >= 0) dst.set(src.subarray(delta, n), 0);
+  else dst.set(src.subarray(0, n + delta), -delta);
 }
 
 /** The overlap agrees: current bake (x, y) is the kept bake (x + dx, y + dy). */
@@ -229,10 +231,18 @@ function sameBake(bake: Uint32Array, kept: Uint32Array, w: number, h: number, dx
   return true;
 }
 
+export interface WaterOptions {
+  /** Walk every pixel and look everything up: the plain path the tests hold the fast one to. */
+  plain?: boolean;
+}
+
 /** The moving water. `seed` is the world's. */
-export function waterLayer(seed: number): LiveLayer {
+export function waterLayer(seed: number, opts: WaterOptions = {}): LiveLayer {
+  const plain = opts.plain === true;
   const surf = surfTable();
   const swell = swellTable();
+  /** The lowest the swell's threshold goes: a streak value at or under it never shows. */
+  const swellMin = swell.reduce((a, b) => (b < a ? b : a), 255);
   const warp = warpTile(seed);
   const grit = gritTile(seed);
   const streaks = streakTile(seed);
@@ -240,6 +250,10 @@ export function waterLayer(seed: number): LiveLayer {
   // `workF` are the ones being written. `keptBake` is the land those fields were built from.
   let dist = new Uint8Array(0);
   let workD = new Uint8Array(0);
+  // Whether each pixel of the field can ever draw (laid out as `dist`, and kept and slid with it): not land, not an inked
+  // line, and not open water out of the surf's reach with no streak under it. The paint steps over the rest unread.
+  let live = new Uint8Array(0);
+  let workL = new Uint8Array(0);
   let fallRun = new Uint8Array(0);
   let workF = new Uint8Array(0);
   let keptBake = new Uint32Array(0);
@@ -328,7 +342,21 @@ export function waterLayer(seed: number): LiveLayer {
     }
   };
 
-  const paint = (f: LiveFrame, w: number, h: number, rx: number, ry: number, pw: number, dist: Uint8Array, fallRun: Uint8Array): void => {
+  // Whether each pixel of one span can draw, from its land and its finished shore distance (see `live`).
+  const liveSpan = (bake: Uint32Array, rx: number, ry: number, w: number, pw: number, dstD: Uint8Array, dstL: Uint8Array, py: number, px0: number, px1: number): void => {
+    const streakRow = ((ry + py) & (STREAKS - 1)) * STREAKS;
+    let i = py * w + px0, j = (py + 1) * pw + px0 + 1;
+    for (let px = px0; px < px1; px++, i++, j++) {
+      const v = bake[i];
+      const c = CLASS[v & 255], light = (v >>> 8) & 255;
+      // Open water draws only a streak, and only above the swell's threshold (see paint).
+      const still = c === C_LAND || light >= 64 ||
+        (c !== C_RIVER && dstD[j] === FAR && ((light & 15) === 0 || streaks[streakRow + ((rx + px) & (STREAKS - 1))] <= swellMin));
+      dstL[j] = still ? 0 : 1;
+    }
+  };
+
+  const paint = (f: LiveFrame, w: number, h: number, rx: number, ry: number, pw: number, dist: Uint8Array, fallRun: Uint8Array, live: Uint8Array): void => {
     const { out, bake, palette, t } = f;
     // The clocks, each stepped in whole units.
     const wave = Math.floor(((t < 0 ? 0 : t) / WAVE_PERIOD) * 256);
@@ -341,17 +369,38 @@ export function waterLayer(seed: number): LiveLayer {
     const foam = (M.river << 8) | FOAM_TONE;
     const fallPale = (M.river << 8) | FALL_TONE;
     let nFeet = 0;
+    // The tables, as locals: the loops below would otherwise read each one through the closure on every pixel.
+    const classOf = CLASS, surfAt = surf, swellAt = swell, warpAt = warp, gritAt = grit, streakAt = streaks;
+    const swellLow = swellMin, skipOpen = !plain, skipStill = !plain;
+    const words = new Uint32Array(live.buffer, live.byteOffset, live.length >> 2);
 
     for (let py = h - 1; py >= 0; py--) {
       const by = ry + py;
       const base = Math.floor(by / 256) * 2560, baseDown = Math.floor((by + 1) / 256) * 2560;
       const gritRow = (by & 255) << 8, warpRow = ((by >> 1) & 255) << 8, streakRow = (by & (STREAKS - 1)) * STREAKS;
       const swellRow = by * 5 - swellT;
-      let i = py * w + w - 1, j = (py + 1) * pw + w;
-      for (let px = w - 1; px >= 0; px--, i--, j--) {
+      for (let px = w - 1, i = py * w + w - 1, j = (py + 1) * pw + w; px >= 0; px--, i--, j--) {
+        if (skipStill && live[j] === 0) {
+          // A run of pixels that cannot draw (mostly land and open sea): stepped over in a bare loop, several times
+          // faster than this loop's body can turn them away, four at a time where a whole aligned word of them is still.
+          const first = j - px;
+          do {
+            px--;
+            i--;
+            j--;
+            if ((j & 3) === 3) {
+              while (j - 3 >= first && words[(j - 3) >> 2] === 0) {
+                px -= 4;
+                i -= 4;
+                j -= 4;
+              }
+            }
+          } while (px >= 0 && live[j] === 0);
+          if (px < 0) break;
+        }
         const v = bake[i];
         const m = v & 255;
-        const c = CLASS[m];
+        const c = classOf[m];
         if (c === C_LAND) continue;
         const d = dist[j];
         const row = base + (v >>> 16);
@@ -363,18 +412,21 @@ export function waterLayer(seed: number): LiveLayer {
           const bx = rx + px;
 
           if (c !== C_RIVER) {
-            // Sea and lake.
-            const bend = warp[warpRow | ((bx >> 1) & 255)];
+            // Sea and lake. Out of the surf's reach a pixel draws only a streak, and only above the swell's threshold:
+            // where the streak is no higher than the threshold ever goes (most of the open sea), nothing is drawn, so
+            // the bend and the swell are not looked up.
+            if (skipOpen && d === FAR && (tone === 0 || streakAt[streakRow + (bx & (STREAKS - 1))] <= swellLow)) continue;
+            const bend = warpAt[warpRow | ((bx >> 1) & 255)];
             if (d !== FAR) {
               const kind = c === C_LAKE ? K_CALM : d & 3;
               // Two trains of waves half a period apart: one is breaking while the last drains.
               const ph = wave + bend, ph2 = ph + 128;
               const at = (kind * 4 * 256) * REACH + (d >> 2);
-              const I1 = surf[at + ((SET[(ph >> 8) % SETS] << 8) | (ph & 255)) * REACH];
-              const I2 = surf[at + ((SET[((ph2 >> 8) + 4) % SETS] << 8) | (ph2 & 255)) * REACH];
+              const I1 = surfAt[at + ((SET[(ph >> 8) % SETS] << 8) | (ph & 255)) * REACH];
+              const I2 = surfAt[at + ((SET[((ph2 >> 8) + 4) % SETS] << 8) | (ph2 & 255)) * REACH];
               const I = I1 > I2 ? I1 : I2;
               if (I !== 0) {
-                const g = grit[gritRow | (bx & 255)];
+                const g = gritAt[gritRow | (bx & 255)];
                 if (I > 170) {
                   if (g < (I - 170) * 3) out[i] = palette[foam | shade];
                   else if (tone !== 0) out[i] = palette[(m << 8) | shade];
@@ -388,10 +440,10 @@ export function waterLayer(seed: number): LiveLayer {
             }
             // Open water: streaks that swell and fade as each crest passes.
             if (tone === 0) continue;
-            let thr = swell[(swellRow + bend) & 255];
+            let thr = swellAt[(swellRow + bend) & 255];
             if (thr === 255) continue;
             if (c === C_LAKE) thr += 35;
-            const sv = streaks[streakRow + (bx & (STREAKS - 1))];
+            const sv = streakAt[streakRow + (bx & (STREAKS - 1))];
             if (sv > thr) {
               const lift = sv > thr + 70 ? 3 : 2;
               out[i] = palette[(m << 8) | (tone > lift ? tone - lift : 1) | shade];
@@ -400,7 +452,7 @@ export function waterLayer(seed: number): LiveLayer {
           }
 
           // River.
-          const g = grit[gritRow | (bx & 255)];
+          const g = gritAt[gritRow | (bx & 255)];
           if (tone < 8) {
             // A wide river. Its surface level is in the pixel: 0.8 of the depth's world row, less the frame row.
             const e = px + 1 < w ? bake[i + 1] : 0, s = py + 1 < h ? bake[i + w] : 0;
@@ -414,7 +466,7 @@ export function waterLayer(seed: number): LiveLayer {
               const steep = fall >= STEEP;
               const level = Math.floor(row * 0.8) - by * 8;
               const lane = eRiver && ((e >>> 8) & 15) === tone ? bx : by;
-              const lg = grit[((lane & 255) << 8) | 91];
+              const lg = gritAt[((lane & 255) << 8) | 91];
               // On a steep reach the level is read coarser, or a drop of a unit a pixel would light a whole column at once.
               const at = ((steep ? (level >> 2) + flowSteep : level + flow) + (lg >> 4)) & 7;
               if (steep) {
@@ -427,9 +479,9 @@ export function waterLayer(seed: number): LiveLayer {
             const along = px >= 2 && px + 2 < w && (bake[i - 2] & 255) === M.river && (bake[i + 2] & 255) === M.river;
             const down = !along && py >= 2 && py + 2 < h && (bake[i - 2 * w] & 255) === M.river && (bake[i + 2 * w] & 255) === M.river;
             if (!along && !down) continue;
-            const thr = swell[(warp[warpRow | ((bx >> 1) & 255)] * 2 + flowStill) & 255];
+            const thr = swellAt[(warpAt[warpRow | ((bx >> 1) & 255)] * 2 + flowStill) & 255];
             if (thr === 255) continue;
-            const sv = along ? streaks[streakRow + (bx & (STREAKS - 1))] : streaks[(bx & (STREAKS - 1)) * STREAKS + (by & (STREAKS - 1))];
+            const sv = along ? streakAt[streakRow + (bx & (STREAKS - 1))] : streakAt[(bx & (STREAKS - 1)) * STREAKS + (by & (STREAKS - 1))];
             if (sv > thr + 20) out[i] = palette[(m << 8) | 13 | shade];
             continue;
           }
@@ -460,9 +512,9 @@ export function waterLayer(seed: number): LiveLayer {
           // Rock showing through the fall stays where it is.
           if (tone < FALL_TONE) continue;
           // Each column pours at its own pace: runs of foam and of pale water slide down it.
-          const cg = grit[((bx & 255) << 8) | 173];
+          const cg = gritAt[((bx & 255) << 8) | 173];
           const slid = by - Math.floor(fallT * (0.8 + (cg & 63) / 160)) + cg;
-          const band = grit[((bx * 7) & 255) | (((slid >> 1) & 255) << 8)];
+          const band = gritAt[((bx * 7) & 255) | (((slid >> 1) & 255) << 8)];
           out[i] = palette[(band < 150 ? foam : fallPale) | shade];
         }
       }
@@ -488,7 +540,7 @@ export function waterLayer(seed: number): LiveLayer {
             const v = bake[o];
             const far = dx * dx + dy * dy * 1.5;
             let share: number, shade = (v >>> 8) & 0x30;
-            if (CLASS[v & 255] !== C_LAND) {
+            if (classOf[v & 255] !== C_LAND) {
               if (((v >>> 8) & 255) >= 64) continue;
               share = 215 - (far * 190) / (r * r) + 45 * beat;
             } else {
@@ -500,7 +552,7 @@ export function waterLayer(seed: number): LiveLayer {
               if (shade > 0x10) shade = 0x10;
             }
             if (share <= 0) continue;
-            const g = grit[(((ry + y) & 255) << 8) | ((rx + x) & 255)];
+            const g = gritAt[(((ry + y) & 255) << 8) | ((rx + x) & 255)];
             if (((g + boil) & 255) < share) out[o] = palette[foam | shade];
           }
         }
@@ -521,6 +573,8 @@ export function waterLayer(seed: number): LiveLayer {
         const cells = w * h, plane = pw * (h + 2);
         dist = new Uint8Array(plane);
         workD = new Uint8Array(plane);
+        live = new Uint8Array(plane);
+        workL = new Uint8Array(plane);
         fallRun = new Uint8Array(cells);
         workF = new Uint8Array(cells);
         keptBake = new Uint32Array(cells);
@@ -536,7 +590,7 @@ export function waterLayer(seed: number): LiveLayer {
       const trusted = f.bakeVersion !== undefined && f.bakeVersion === keptVersion;
       // Still, and the land is the land we built from: only the paint depends on the clock.
       if (slide && dx === 0 && dy === 0 && (trusted || sameBake(bake, keptBake, w, h, 0, 0))) {
-        paint(f, w, h, rx, ry, pw, dist, fallRun);
+        paint(f, w, h, rx, ry, pw, dist, fallRun, live);
         return;
       }
       const moved = slide && (trusted || sameBake(bake, keptBake, w, h, dx, dy));
@@ -557,12 +611,18 @@ export function waterLayer(seed: number): LiveLayer {
         if (sy1 < sy0) { sy0 = 0; sy1 = 0; }
       }
 
-      const dstD = workD, dstF = workF;
+      const dstD = workD, dstF = workF, dstL = workL;
+      if (moved && sx1 > sx0 && sy1 > sy0) {
+        // The kept fields, slid with the land in one copy each. Only the safe interior keeps what it is handed: every
+        // other pixel is built again below, before anything reads it (falls are read only where a fall is written).
+        shiftInto(dist, dstD, dy * pw + dx);
+        shiftInto(live, dstL, dy * pw + dx);
+        shiftInto(fallRun, dstF, dy * w + dx);
+      }
       // Only the frame's own border has no shore in reach; every interior sample is written below.
       dstD.fill(FAR, 0, pw);
       dstD.fill(FAR, pw * (h + 1), pw * (h + 2));
       for (let y = 1; y <= h; y++) { dstD[y * pw] = FAR; dstD[y * pw + pw - 1] = FAR; }
-      const srcD = dist, srcF = fallRun;
       for (let py = 0; py < h; py++) {
         if (!moved || py < sy0 || py >= sy1) {
           forwardSpan(bake, ry, w, pw, dstD, py, 0, w);
@@ -570,9 +630,6 @@ export function waterLayer(seed: number): LiveLayer {
         } else {
           if (sx0 > 0) { forwardSpan(bake, ry, w, pw, dstD, py, 0, sx0); fallSpan(bake, ry, w, dstF, py, 0, sx0); }
           if (sx1 > sx0) {
-            const n = sx1 - sx0;
-            copyBytes(srcD, (py + dy + 1) * pw + sx0 + dx + 1, dstD, (py + 1) * pw + sx0 + 1, n);
-            copyBytes(srcF, (py + dy) * w + sx0 + dx, dstF, py * w + sx0, n);
             for (let m = 0; m < nMarked; m++) {
               const px = marked[m];
               if (px >= sx0 && px < sx1) fallSpan(bake, ry, w, dstF, py, px, px + 1);
@@ -588,10 +645,19 @@ export function waterLayer(seed: number): LiveLayer {
           if (sx0 > 0) backSpan(bake, ry, w, pw, dstD, py, 0, sx0);
         }
       }
+      // Which pixels can draw, on the spans whose distance was built again; the interior's came with its distance.
+      for (let py = 0; py < h; py++) {
+        if (!moved || py < sy0 || py >= sy1) liveSpan(bake, rx, ry, w, pw, dstD, dstL, py, 0, w);
+        else {
+          if (sx0 > 0) liveSpan(bake, rx, ry, w, pw, dstD, dstL, py, 0, sx0);
+          if (sx1 < w) liveSpan(bake, rx, ry, w, pw, dstD, dstL, py, sx1, w);
+        }
+      }
 
-      paint(f, w, h, rx, ry, pw, dstD, dstF);
+      paint(f, w, h, rx, ry, pw, dstD, dstF, dstL);
 
       workD = dist; dist = dstD;
+      workL = live; live = dstL;
       workF = fallRun; fallRun = dstF;
       if (bake.length === w * h) keptBake.set(bake);
       else for (let i = 0, n = w * h; i < n; i++) keptBake[i] = bake[i];

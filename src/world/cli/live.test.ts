@@ -7,27 +7,36 @@ import { matOf } from "../live/pixel.ts";
 import { makeLayers } from "../live/registry.ts";
 import type { Manifest } from "../pack/manifest.ts";
 import { namedViews, renderStrip } from "./live.ts";
+import { readShipped } from "../pack/shipped.ts";
+import { FIXTURE_WORLD } from "../testing/fixtureWorld.ts";
+import type { BakeWorld } from "../bake/world.ts";
+import type { FlightData } from "../pack/world.ts";
 
 const root = process.cwd();
-function shipped(): { bin: Uint8Array; manifest: Manifest; mask: Uint8Array } {
-  const { worldId } = JSON.parse(readFileSync(join(root, "public/world/current.json"), "utf8")) as { worldId: string };
-  return {
-    bin: new Uint8Array(readFileSync(join(root, "public/world", worldId, "world.bin"))),
-    manifest: JSON.parse(readFileSync(join(root, "public/world", worldId, "manifest.json"), "utf8")) as Manifest,
-    mask: new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin"))),
-  };
+let memo: Promise<{ world: BakeWorld; flight: FlightData; manifest: Manifest; mask: Uint8Array }> | null = null;
+function shipped(): Promise<{ world: BakeWorld; flight: FlightData; manifest: Manifest; mask: Uint8Array }> {
+  memo ??= (async () => {
+    const s = await readShipped(FIXTURE_WORLD);
+    return {
+      world: s.world,
+      flight: s.flight,
+      manifest: s.manifest as unknown as Manifest,
+      mask: new Uint8Array(readFileSync(join(root, "public/world/bluenoise.bin"))),
+    };
+  })();
+  return memo;
 }
 
-test("the registry gives a list of layers, each with a name", () => {
-  const { manifest } = shipped();
+test("the registry gives a list of layers, each with a name", async () => {
+  const { manifest } = await shipped();
   const layers = makeLayers({ seed: manifest.seed, n: manifest.n, sites: manifest.sites });
   assert.ok(Array.isArray(layers));
   for (const l of layers) assert.equal(typeof l.name, "string");
 });
 
 test("named views lie on the world and include the waterfall", async () => {
-  const { bin, manifest } = shipped();
-  const views = await namedViews(bin, manifest);
+  const { world, manifest } = await shipped();
+  const views = await namedViews(world, manifest);
   for (const name of ["start", "town", "abbey", "falls", "river", "peak", "sea"]) {
     const v = views[name];
     assert.ok(v, name);
@@ -37,7 +46,7 @@ test("named views lie on the world and include the waterfall", async () => {
 });
 
 test("a strip is fully baked land, one frame per time, and layers move it", async () => {
-  const { bin, manifest, mask } = shipped();
+  const { world, flight, manifest, mask } = await shipped();
   // A layer that marks the first water pixel with a colour that depends on t.
   let sawWater = false;
   const tick: LiveLayer = {
@@ -49,7 +58,7 @@ test("a strip is fully baked land, one frame per time, and layers move it", asyn
       }
     },
   };
-  const frames = await renderStrip({ bin, manifest, mask, x: manifest.start.x, y: manifest.start.y, times: [0, 0.5], layers: [tick], clouds: null });
+  const frames = await renderStrip({ world, flight, manifest, mask, x: manifest.start.x, y: manifest.start.y, times: [0, 0.5], layers: [tick], clouds: null });
   assert.equal(frames.length, 2);
   for (const f of frames) assert.equal(f.length, 400 * 225);
   assert.ok(sawWater, "the start view has water");

@@ -14,6 +14,10 @@ export const WORLD_FORMAT = 1;
 export const H_SCALE = 16;
 /** Steps over [0, 1] for the C fields (moisture, wind, exposure, debris) and the region weights. */
 export const FIELD_SCALE = 63;
+/** Steps over [0, 1] for sea-level temperature: finer than the other fields, since the cover reads height off it (half a unit a step). */
+export const TEMP_SCALE = 500;
+/** Steps over [0, 1] for the dry side's share. */
+export const ARID_SCALE = 100;
 /** Steps per cell for river and road vertices (x, y and width). */
 export const XY_SCALE = 16;
 
@@ -66,6 +70,8 @@ const EXPOSURE = "exposure";
 const DEBRIS = "debris";
 const ROCK = "rock";
 const REGIONS = "regions";
+const TEMP = "temp";
+const ARID = "arid";
 const RIVERS = "rivers";
 const ROADS = "roads";
 const STAMPS = "stamps";
@@ -74,11 +80,16 @@ const BARS = "bars";
 const BUILT = "built";
 const OCCL = "occl";
 
-interface Meta {
+export interface Meta {
   format: number;
   n: number;
   gN: number;
   cN: number;
+  /** Set on a tiled core or region file: cells a side of one region. */
+  regionCells?: number;
+  /** Set on a region file. */
+  rx?: number;
+  ry?: number;
   base?: boolean;
   conform?: boolean;
   stamps?: boolean;
@@ -86,6 +97,12 @@ interface Meta {
   bars?: boolean;
   built?: boolean;
   roads?: boolean;
+  /** The world has climates: a temp plane on C. Absent: one temperate climate. */
+  temp?: boolean;
+  /** The world has two sides: an arid plane on C. Absent: one side, the wet. */
+  arid?: boolean;
+  /** A core's overview has the climates' washes beside it (look/haze-wash.ts). */
+  wash?: boolean;
   /** Occlusion cell size. Absent when the file has no occlusion section. */
   block?: number;
 }
@@ -107,11 +124,11 @@ const TYPED: Record<string, TypedSpec> = {
   Int32Array: { bytes: 4, make: (n) => new Int32Array(n) },
 };
 
-function fail(message: string): never {
+export function fail(message: string): never {
   throw new WorldDecodeError(message);
 }
 
-function asDecodeError(e: unknown): WorldDecodeError {
+export function asDecodeError(e: unknown): WorldDecodeError {
   if (e instanceof WorldDecodeError) return e;
   return new WorldDecodeError(e instanceof Error ? e.message : "world decode failed");
 }
@@ -122,13 +139,13 @@ function partMap(sections: PackSection[]): Map<string, Uint8Array> {
   return parts;
 }
 
-function requirePart(parts: Map<string, Uint8Array>, name: string): Uint8Array {
+export function requirePart(parts: Map<string, Uint8Array>, name: string): Uint8Array {
   const bytes = parts.get(name);
   if (!bytes) fail(`missing section ${name}`);
   return bytes;
 }
 
-function parseMeta(bytes: Uint8Array): Meta {
+export function parseMeta(bytes: Uint8Array): Meta {
   let meta: Meta;
   try {
     meta = JSON.parse(textDecoder.decode(bytes)) as Meta;
@@ -173,7 +190,7 @@ export async function verifyWorld(bin: Uint8Array, verify: readonly WorldSection
   }
 }
 
-async function loadHeights(bytes: Uint8Array, w: number, h: number): Promise<ArrayLike<number>> {
+export async function loadHeights(bytes: Uint8Array, w: number, h: number): Promise<ArrayLike<number>> {
   try {
     return await decodeHeights(bytes, w, h);
   } catch (e) {
@@ -181,7 +198,7 @@ async function loadHeights(bytes: Uint8Array, w: number, h: number): Promise<Arr
   }
 }
 
-async function loadBytes(bytes: Uint8Array, length: number): Promise<Uint8Array> {
+export async function loadBytes(bytes: Uint8Array, length: number): Promise<Uint8Array> {
   try {
     return await decodeBytes(bytes, length);
   } catch (e) {
@@ -190,7 +207,7 @@ async function loadBytes(bytes: Uint8Array, length: number): Promise<Uint8Array>
 }
 
 /** Uncompressed length, then deflate-raw. Variable sections have no size in the grid. */
-async function storeRaw(raw: Uint8Array): Promise<Uint8Array> {
+export async function storeRaw(raw: Uint8Array): Promise<Uint8Array> {
   const z = await encodeBytes(raw);
   const out = new Uint8Array(4 + z.length);
   new DataView(out.buffer).setUint32(0, raw.length, true);
@@ -198,32 +215,46 @@ async function storeRaw(raw: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-async function loadRaw(stored: Uint8Array): Promise<Uint8Array> {
+export async function loadRaw(stored: Uint8Array): Promise<Uint8Array> {
   if (stored.length < 4) fail("truncated section");
   const len = new DataView(stored.buffer, stored.byteOffset, stored.byteLength).getUint32(0, true);
   return loadBytes(stored.subarray(4), len);
 }
 
-function quantised(h: ArrayLike<number>, scale: number): Float32Array {
+export function quantised(h: ArrayLike<number>, scale: number): Float32Array {
   const out = new Float32Array(h.length);
   for (let i = 0; i < h.length; i++) out[i] = Math.round(h[i] * scale) / scale;
   return out;
 }
 
-function fromQuantised(q: ArrayLike<number>, scale: number): Float32Array {
+export function fromQuantised(q: ArrayLike<number>, scale: number): Float32Array {
   const out = new Float32Array(q.length);
   for (let i = 0; i < q.length; i++) out[i] = q[i] / scale;
   return out;
 }
 
+/**
+ * Base minus the quantised ground. A residual that quantises to -0 is stored as +0: subtracting the quantised ground
+ * again cannot bring the sign back, so base = groundQ + residualQ would not round-trip -0.
+ */
+export function baseResidual(base: ArrayLike<number>, ground: ArrayLike<number>): Float32Array {
+  const groundQ = quantised(ground, H_SCALE);
+  const residual = new Float32Array(base.length);
+  for (let i = 0; i < residual.length; i++) {
+    const r = base[i] - groundQ[i];
+    residual[i] = Object.is(Math.round(r * H_SCALE), -0) ? 0 : r;
+  }
+  return residual;
+}
+
 /** Lake nodes keep their level; every other node is stored as zero. */
-function lakeLevels(level: ArrayLike<number>, kind: ArrayLike<number>): Float32Array {
+export function lakeLevels(level: ArrayLike<number>, kind: ArrayLike<number>): Float32Array {
   const out = new Float32Array(level.length);
   for (let i = 0; i < level.length; i++) if (kind[i] === 2) out[i] = level[i];
   return out;
 }
 
-function handBytes(hand: ArrayLike<number>): Uint8Array {
+export function handBytes(hand: ArrayLike<number>): Uint8Array {
   const out = new Uint8Array(hand.length);
   for (let i = 0; i < hand.length; i++) {
     const r = Math.round(hand[i]);
@@ -232,7 +263,7 @@ function handBytes(hand: ArrayLike<number>): Uint8Array {
   return out;
 }
 
-function bytesOf(view: ArrayBufferView): Uint8Array {
+export function bytesOf(view: ArrayBufferView): Uint8Array {
   return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 }
 
@@ -240,7 +271,7 @@ function bytesOf(view: ArrayBufferView): Uint8Array {
  * Integer weights summing to FIELD_SCALE, by largest remainder.
  * Ties keep the lower plane index. Already-exact integers (k / FIELD_SCALE) come back unchanged.
  */
-function regionWeights(src: ArrayLike<number>, cN: number): Float32Array {
+export function regionWeights(src: ArrayLike<number>, cN: number): Float32Array {
   const c2 = cN * cN;
   const out = new Float32Array(6 * c2);
   const fl = new Int32Array(6);
@@ -274,7 +305,7 @@ function regionWeights(src: ArrayLike<number>, cN: number): Float32Array {
   return out;
 }
 
-function frameChunks(chunks: Uint8Array[]): Uint8Array {
+export function frameChunks(chunks: Uint8Array[]): Uint8Array {
   let n = 0;
   for (let i = 0; i < chunks.length; i++) n += 4 + chunks[i].length;
   const out = new Uint8Array(n);
@@ -289,7 +320,7 @@ function frameChunks(chunks: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function readFramed(bytes: Uint8Array, count: number): Uint8Array[] {
+export function readFramed(bytes: Uint8Array, count: number): Uint8Array[] {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const out: Uint8Array[] = [];
   let o = 0;
@@ -318,7 +349,7 @@ function unzigzag32(z: number): number {
  * or the vertex before it does not begin a segment. Counts, then zigzag-delta
  * int32 x, y and width across the whole vertex array.
  */
-function encodeRiverBytes(ix: RiverIndex): Uint8Array {
+export function encodeRiverBytes(ix: RiverIndex): Uint8Array {
   const nv = (ix.vertices.length / 4) | 0;
   const mark = new Uint8Array(nv);
   for (let i = 0; i < ix.segments.length; i++) {
@@ -372,7 +403,7 @@ function readDeltas(dv: DataView, offset: number, n: number): Int32Array {
   return out;
 }
 
-function decodeLines(raw: Uint8Array): RiverLine[] {
+export function decodeLines(raw: Uint8Array): RiverLine[] {
   if (raw.length < 4) fail("bad lines");
   const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
   const lineCount = dv.getUint32(0, true);
@@ -446,7 +477,7 @@ interface TypCol {
  * plus one byte-planed f32 column per number path and one concatenated buffer per typed-array path.
  * Array indices are dropped from the path, so every stamp's `x` shares a column.
  */
-function encodeValue(value: unknown): Uint8Array {
+export function encodeValue(value: unknown): Uint8Array {
   const numOrder: string[] = [];
   const nums = new Map<string, NumCol>();
   const typOrder: string[] = [];
@@ -547,7 +578,7 @@ function isMarker(node: unknown): node is { $t: string; n: number } {
   return typeof o.$t === "string" && typeof o.n === "number";
 }
 
-function decodeValue(raw: Uint8Array): unknown {
+export function decodeValue(raw: Uint8Array): unknown {
   if (raw.length < 4) fail("bad value");
   const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
   const jsonLen = dv.getUint32(0, true);
@@ -668,11 +699,13 @@ function buildMeta(w: BakeWorld, occlusion?: Occlusion): Uint8Array {
   if (w.bars) meta.bars = true;
   if (w.built) meta.built = true;
   if (w.roads) meta.roads = true;
+  if (w.temp) meta.temp = true;
+  if (w.arid) meta.arid = true;
   if (occlusion) meta.block = occlusion.block;
   return textEncoder.encode(JSON.stringify(meta));
 }
 
-function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads"): boolean {
+export function flagged(meta: Meta, key: "base" | "conform" | "stamps" | "ponds" | "bars" | "built" | "roads" | "temp" | "arid" | "wash"): boolean {
   return meta[key] === true;
 }
 
@@ -680,7 +713,7 @@ async function loadGround(parts: Map<string, Uint8Array>, gN: number): Promise<F
   return fromQuantised(await loadHeights(requirePart(parts, GROUND), gN, gN), H_SCALE);
 }
 
-async function loadOcclusion(parts: Map<string, Uint8Array>, meta: Meta): Promise<{ occlusion: Uint8Array; block: number }> {
+export async function loadOcclusion(parts: Map<string, Uint8Array>, meta: Meta): Promise<{ occlusion: Uint8Array; block: number }> {
   const block = meta.block;
   if (typeof block !== "number") {
     if (parts.has(OCCL)) fail("missing block");
@@ -701,16 +734,7 @@ export async function encodeWorld(w: BakeWorld, extra?: { occlusion?: Occlusion 
   };
 
   push(GROUND, encodeHeights(w.ground, gN, gN, H_SCALE));
-  if (w.base) {
-    const groundQ = quantised(w.ground, H_SCALE);
-    const residual = new Float32Array(w.base.length);
-    for (let i = 0; i < residual.length; i++) {
-      const r = w.base[i] - groundQ[i];
-      // -0 does not survive base = groundQ + residualQ: subtracting groundQ again yields +0.
-      residual[i] = Object.is(Math.round(r * H_SCALE), -0) ? 0 : r;
-    }
-    push(BASE, encodeHeights(residual, gN, gN, H_SCALE));
-  }
+  if (w.base) push(BASE, encodeHeights(baseResidual(w.base, w.ground), gN, gN, H_SCALE));
   if (w.conform) push(CONFORM, encodeHeights(w.conform, gN, gN, H_SCALE));
   push(WLEVEL, encodeHeights(lakeLevels(w.waterLevel, w.waterKind), gN, gN, H_SCALE));
   push(WKIND, encodeBytes(w.waterKind));
@@ -722,6 +746,8 @@ export async function encodeWorld(w: BakeWorld, extra?: { occlusion?: Occlusion 
   push(EXPOSURE, encodeHeights(w.exposure, cN, cN, FIELD_SCALE));
   push(DEBRIS, encodeHeights(w.debris, cN, cN, FIELD_SCALE));
   push(ROCK, encodeBytes(w.rock));
+  if (w.temp) push(TEMP, encodeHeights(w.temp, cN, cN, TEMP_SCALE));
+  if (w.arid) push(ARID, encodeHeights(w.arid, cN, cN, ARID_SCALE));
 
   const weights = regionWeights(w.regions, cN);
   push(REGIONS, Promise.all([0, 1, 2, 3, 4, 5].map((k) => encodeHeights(weights.subarray(k * c2, (k + 1) * c2), cN, cN, 1))).then(frameChunks));
@@ -799,6 +825,8 @@ async function decodeWorldInner(bin: Uint8Array, verify?: readonly WorldSection[
   if (flagged(meta, "bars")) world.bars = (await decodeValue(await loadRaw(requirePart(parts, BARS)))) as BakeWorld["bars"];
   if (flagged(meta, "built")) world.built = indexBuilt((await decodeValue(await loadRaw(requirePart(parts, BUILT)))) as Built, n);
   if (roads) world.roads = roads;
+  if (flagged(meta, "temp")) world.temp = fromQuantised(await loadHeights(requirePart(parts, TEMP), cN, cN), TEMP_SCALE);
+  if (flagged(meta, "arid")) world.arid = fromQuantised(await loadHeights(requirePart(parts, ARID), cN, cN), ARID_SCALE);
   // The occlusion floor is for the flier on the main thread (decodeFlightData); the bake does not read it.
   return world;
 }

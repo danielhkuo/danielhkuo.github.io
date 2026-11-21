@@ -65,15 +65,20 @@ same islands. Above 6400 it will keep lengths at the 6400 scale and multiply isl
 
 | Islands | Count |
 |---|---|
-| Highland | 2 |
+| Highland | 3 |
 | Home | 1 |
 | Lakes | 3 |
-| Slate | 2 |
+| Slate | 3 |
 | Karst | 5 |
 | Skerries | 13–18 |
 
-Landmarks scale the same way: one abbey and one town; five each of lighthouses, bridges, cathedrals, windmills and
-yews. Site spacing stays 1500 cells. Worlds of 6400 and below are unchanged, byte for byte.
+Every count other than home is the 6400 count × 2.56, rounded. Landmarks scale the same way: one abbey and one town;
+five each of lighthouses, bridges, cathedrals, windmills and yews. Site spacing stays 1500 cells. Worlds of 6400 and
+below are unchanged, byte for byte (seed 3 rebuilds to the same world id).
+
+**Seed 4 [Call].** Of seeds 1–7 at 10240, only seeds 4 and 5 give the home island a river long enough for the town (the
+others place no abbey or town). Seed 4 places every landmark but one yew, on about 15 large islands with 27.6 % land.
+A 10240 world generates in about 4–5 minutes at a 2.8 GB peak; its single file would be 7.6 MB.
 
 **[Call] Workers hold a window, not the world.** The file splits into:
 
@@ -84,11 +89,15 @@ A worker fetches and decodes the tiles a chunk needs, plus its apron, and keeps 
 baked from tiles must be byte-identical to one baked from the whole world. That test decides the seam; the seam itself
 is chosen after mapping what the bake reads.
 
+**The core holds every vector [Call].** Coast stamps alone are 1.3 MB at 10240, so the core is about 1.9 MB. Cutting
+stamps into regions would save most of that, but stamps apply in order and reach across region edges; that is later
+work, listed in the roadmap.
+
 **Budgets.**
 
 | What | Budget |
 |---|---|
-| Before first flight (core and start tiles) | ≤ 1 MB |
+| Before first flight (core and start regions) | ≤ 3 MB, under today's 3.2 MB |
 | Whole world | ≤ 10 MB |
 | One worker's decoded tiles | ≤ 40 MB |
 | Frame | unchanged |

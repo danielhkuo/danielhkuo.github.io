@@ -247,8 +247,8 @@ const SHELF_DROP = 4;
 const DEEP = 6;
 /** A stack's top is flat out to this share of its radius. */
 const STACK_FLAT = 0.6;
-/** Depth of the shoal ring at a stack's foot and at its outer edge. */
-const SURF: readonly [number, number] = [0.25, 1.1];
+/** Depth of the shoal ring at a stack's foot, where the surf breaks pale round it, and at its outer edge. */
+const SURF: readonly [number, number] = [0.05, 0.9];
 /** Cove water is at least this deep. */
 const COVE_MIN = 0.3;
 /** A cove is widest this share of the way in. */

@@ -18,5 +18,5 @@ export interface FishData {
   soft: number[];
 }
 
-/** Every pinned project's fish, keyed by repo name. */
+/** Every project's fish, keyed by project slug. */
 export type FishSheet = Record<string, FishData>;

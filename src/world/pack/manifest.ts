@@ -1,8 +1,8 @@
-// The manifest beside world.bin: what the page reads first.
+// The manifest the page reads first: a format-2 world is a core plus one file per region.
 
 import { torusDelta, wrap } from "../core/torus.ts";
 import type { PlacedSite } from "../gen/sites.ts";
-import type { WorldSection } from "./world.ts";
+import type { PlacedWonder } from "../gen/wonders.ts";
 
 /** Where the flight begins: a point and the unit vector it heads along. */
 export interface Start {
@@ -12,18 +12,73 @@ export interface Start {
   dy: number;
 }
 
+/** One region file. The manifest lists them row-major (ry, then rx). */
+export interface RegionFile {
+  rx: number;
+  ry: number;
+  bytes: number;
+  sha256: string;
+}
+
 export interface Manifest {
-  format: 1;
+  format: 2;
   worldId: string;
   n: number;
   seed: number;
-  /** Length of world.bin. */
-  bytes: number;
-  sections: WorldSection[];
+  /** Cells a side of one region. */
+  regionCells: number;
+  core: { bytes: number; sha256: string };
+  regions: RegionFile[];
   /** Cells per occlusion block. */
   block: number;
   sites: { id: string; type: string; x: number; y: number }[];
+  /** The wonders that stand in this world. Absent from a world built before there were any. */
+  wonders?: ManifestWonder[];
+  /**
+   * The world's climate, for a latitude readout, the map and the story: the rows of the equator line and of the pole
+   * line, in cells (half a world apart). Latitude runs from 0 on the one to 90° on the other, north of the equator
+   * line and south of it alike. Absent from a world with one temperate climate.
+   */
+  climate?: { equatorY: number; poleY: number };
   start: Start;
+}
+
+/** Latitude in degrees, 0 at the equator line … 90 at the pole line, of the row y. `north` says which side of the equator line it lies on. */
+export function latitudeOf(m: Pick<Manifest, "n" | "climate">, y: number): { degrees: number; north: boolean } | null {
+  if (!m.climate) return null;
+  const n = m.n;
+  let d = (((y - m.climate.equatorY) % n) + n) % n;
+  if (d >= n / 2) d -= n;
+  return { degrees: (90 * (d < 0 ? -d : d)) / (n / 2), north: d < 0 };
+}
+
+/** A wonder as the page reads it: where it stands and the points its moment needs. */
+export interface ManifestWonder {
+  id: string;
+  type: string;
+  /** Its focus, cells. */
+  x: number;
+  y: number;
+  /** The height it stands on, and how far it stands above that. */
+  level: number;
+  height: number;
+  /** Named points, cells: the quay, the track's ends, the pontoon. */
+  anchors: Record<string, [number, number]>;
+}
+
+/** The manifest's entry for each placed wonder, every position wrapped into the world. */
+export function manifestWonders(wonders: readonly PlacedWonder[], n: number): ManifestWonder[] {
+  return wonders.map((w) => {
+    const anchors: Record<string, [number, number]> = {};
+    for (const [name, [x, y]] of Object.entries(w.anchors)) anchors[name] = [plain(wrap(x, n)), plain(wrap(y, n))];
+    return { id: w.id, type: w.type, x: plain(wrap(w.x, n)), y: plain(wrap(w.y, n)), level: plain(w.level), height: w.height, anchors };
+  });
+}
+
+/** The wonders a manifest lists: none for a world built before there were any, or when the field is malformed. */
+export function wondersOf(m: Pick<Manifest, "wonders">): ManifestWonder[] {
+  if (!Array.isArray(m.wonders)) return [];
+  return m.wonders.filter((w) => w && typeof w.id === "string" && typeof w.type === "string" && Number.isFinite(w.x) && Number.isFinite(w.y));
 }
 
 /** How far out to sea from the home river's mouth the flight begins, in cells. */

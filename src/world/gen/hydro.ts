@@ -164,7 +164,55 @@ function topoOrder(rcv: Int32Array, isSea: Uint8Array): Uint32Array {
   return order;
 }
 
-export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: HydroParams): HydroResult {
+/** A lake node's bed stands at most this far over the mean of the lake's beds round it, after SHOAL_PASSES passes. */
+export const SHOAL_RISE = 0.05;
+export const SHOAL_PASSES = 6;
+
+/**
+ * Lake beds without lone shoals. A bump in a lake bed, or a lone islet node at the water's level, is drawn by the bake's
+ * cubic spline as a pale rounded square in deep water. Each node ringed by one lake (a member of it, or a lone node it
+ * surrounds) is held to SHOAL_RISE over the mean bed of the lake nodes round it, pass by pass, lowering only; the lake's
+ * level and its shore stay as they were, and islets of more than a node keep their ground.
+ */
+export function smoothLakeBeds(ground: Float64Array, n: number, lakeId: Int32Array): void {
+  const nn = n * n;
+  // Each node's lake: its own, or for a lone node ringed by one lake, that lake's.
+  const lid = Int32Array.from(lakeId);
+  for (let i = 0; i < nn; i++) {
+    if (lakeId[i] >= 0) continue;
+    const x = i % n, y = (i - x) / n;
+    const id = lakeId[wrapIndex(x + 1, y, n)];
+    if (id < 0) continue;
+    let ringed = true;
+    for (let k = 0; k < 8 && ringed; k++) ringed = lakeId[wrapIndex(x + NB8_DX[k], y + NB8_DY[k], n)] === id;
+    if (ringed) lid[i] = id;
+  }
+  for (let pass = 0; pass < SHOAL_PASSES; pass++) {
+    const was = Float64Array.from(ground);
+    for (let i = 0; i < nn; i++) {
+      const id = lid[i];
+      if (id < 0) continue;
+      const x = i % n, y = (i - x) / n;
+      let sum = 0, count = 0;
+      for (let k = 0; k < 8; k++) {
+        const j = wrapIndex(x + NB8_DX[k], y + NB8_DY[k], n);
+        if (lid[j] !== id) break;
+        sum += was[j];
+        count++;
+      }
+      // A node at the shore keeps its shelf: only a bed ringed by its lake is evened.
+      if (count < 8) continue;
+      const cap = sum / count + SHOAL_RISE;
+      if (was[i] > cap) ground[i] = cap;
+    }
+  }
+}
+
+/**
+ * `runoff`, per node, scales the rain that runs off into the streams (the climate's rain, gen/native.ts): a desert
+ * gathers few channels. The rain returned is the wind's own, unscaled: the climate reads its moisture from it.
+ */
+export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: HydroParams, runoff?: ArrayLike<number>): HydroResult {
   const nn = n * n;
   const rain = rainfall(h, n, isSea, p);
 
@@ -223,6 +271,8 @@ export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: Hydr
       cursor = base;
     }
   }
+
+  smoothLakeBeds(ground, n, lakeId);
 
   for (let L = 0; L < lakes.length; L++) {
     const level = lakes[L].level;
@@ -306,7 +356,12 @@ export function hydrology(h: Float64Array, n: number, isSea: Uint8Array, p: Hydr
   }
 
   const order = topoOrder(rcv, isSea);
-  const q = accumulate(order, rcv, isSea, rain);
+  let wet = rain;
+  if (runoff) {
+    wet = new Float64Array(nn);
+    for (let i = 0; i < nn; i++) wet[i] = rain[i] * runoff[i];
+  }
+  const q = accumulate(order, rcv, isSea, wet);
 
   const channel = new Uint8Array(nn);
   const qChannel = p.qChannel;
