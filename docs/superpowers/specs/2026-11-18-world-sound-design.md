@@ -1720,3 +1720,23 @@ measurable (+0.0 to −0.6). What sets the tail is sound's own heavy frames (its
 clock's sample, the census beside the voices), which a mean budget does not reach. Next, if the bar stands: defer the
 voices' half and the census on a frame the picture has already made long (a simulation on a recorded trace gained
 only 0.03 ms), or pool the bell strokes' nodes.
+
+**Measured again on the merged world (fecdc46 + the cuts in 077dd39), 2026-11-20.** Each run gated at a 1-minute load
+of 8 or less, the arms alternating run by run.
+
+- *Audio thread* (ahead, best of three; bar 5 %): shower-pass with fresh noise 5.01, 5.17, 5.10 % (loads 7.7, 8.0,
+  5.0); with the plain loops 6.14, 5.78, 4.50 % (loads 7.7, 5.6, 6.6). coast-run 4.19–4.39 against 3.94–5.14. The
+  earlier clean pairs (§14.8 list) put fresh noise 0.6–0.75 points above the plain loops on shower-pass; the join gains
+  removed and the loops moving at three fifths of a wrap took some of that back. shower-pass is still at or just over
+  5 %: the rain's fresh loops (~0.3 points: crossfades and a fade gain a read) and the wind's and sea's worklets
+  (~0.25) are what is left to cut.
+- *Frame, 4×* (six rounds, loads 2.1–4.2), p95 medians: sound off 2.85 ms, plain loops 3.1 (+0.25), worklet 3.25
+  (+0.4). The worklet against the plain loops, round by round: +0.2, +0.2, +0.1, +0.2, +0.1, +0.1 ms, every round
+  the same way, while sound's own time on the page is the same in both (means 62–73 µs against 64–74 µs; bar 100).
+  So of the +0.4 ms, about +0.25 is sound's heavy page frames (there with the plain loops too, as in §14.4) and
+  about +0.15 the worklet, which costs the page nothing it measures: the likeliest cause is the audio thread's extra
+  work competing with the throttled main thread (4× is CPU emulation on the same cores). The +0.15 ms bar is not met.
+- *Frame, 1×*: sound adds nothing measurable (off 2.6–3.0, plain loops 2.3–2.5, worklet 2.2–2.4).
+- *The title at /*: no AudioContext before the first gesture (state "waiting"); a click on the title starts the
+  ambience behind it, at rest; Enter world as the first gesture starts it, fading in from −93 dB, no click, no
+  console error (recorded from the page's own output).
