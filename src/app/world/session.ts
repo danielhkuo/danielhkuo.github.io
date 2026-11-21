@@ -26,8 +26,8 @@ import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
 import { drawQuest, SHOW } from "../../world/story/overlay";
-import { PIECE_AT } from "../../world/gen/monuments";
-import { find, nextStop, type StopPlace } from "../../world/story/quest";
+import { HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
+import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
 import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
@@ -398,6 +398,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     let taking: { key: StopPlace["key"]; x: number; y: number; z: number; t0: number } | null = null;
     const drawnStops: { key: StopPlace["key"]; x: number; y: number; baked: boolean }[] = [];
     let liveHall: { x: number; y: number } | undefined;
+    let bakedHall: { id: string; x: number; y: number } | undefined;
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
       for (const l of landmarks.landmarks) {
         byId.set(l.id, l);
@@ -407,6 +408,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
           drawnStops.push({ key: l.holds.stop, x: l.x, y: l.y, baked: !l.live });
         }
         if (l.holds.kind === "hall" && l.live) liveHall = { x: l.x, y: l.y };
+        else if (l.holds.kind === "hall" && l.type === "hall") bakedHall = { id: l.id, x: l.x, y: l.y };
       }
     }
     const layerContext: LayerContext = {
@@ -421,7 +423,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // ?sights=all shows every rare sight at once, to look them over without waiting for them.
       forceSights: params.get("sights") === "all",
       structures: loaded.core.world.built?.built.structures,
-      ...(stops.length > 0 || liveHall ? { story: { stops: drawnStops, hall: liveHall, found: () => getQuest().found } } : {}),
+      ...(stops.length > 0 || liveHall || bakedHall
+        ? { story: { stops: drawnStops, hall: liveHall, bakedHall, found: () => getQuest().found } }
+        : {}),
     };
     const sound = setup.sound?.() ?? null;
     if (probe) probe.soundLog = sound?.log() ?? null;
@@ -445,6 +449,19 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       for (const t of places.targets) targets.push(t);
       for (const [id, a] of places.anchors) anchors.set(id, a);
     }
+    // With the five found, the dragon comes down at the hall in its yard, where the rose window's light falls, and
+    // curls up there: the hall's landing rings the yard, close.
+    const toYard = () => {
+      if (!bakedHall || !complete(getQuest())) return;
+      const t = targets.find((x) => x.id === bakedHall!.id);
+      if (!t) return;
+      t.x = bakedHall.x + HALL_YARD.dx;
+      // The far half of the light on the ground (live/story.ts, a fan 13 px deep from the gable), so the window's
+      // colours lie between the door and the dragon and show round it.
+      t.y = bakedHall.y + HALL_YARD.dy + 6;
+      t.radius = HALL_YARD.rx - 2;
+    };
+    toYard();
 
     // ?at=<id> starts just south of a site, heading for it: a preview, like ?sights=all. A stop's id is not a
     // site in the manifest; the landmark of that id is started the same way.
@@ -561,6 +578,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
               taking = { key, x: l.x + o.dx, y: l.y + o.dy, z: o.z, t0: t / 1000 };
             }
             setQuest(find(getQuest(), key));
+            toYard();
           }
         }
         events.phase("landed", l);

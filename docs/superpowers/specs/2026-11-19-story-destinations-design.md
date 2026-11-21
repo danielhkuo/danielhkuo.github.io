@@ -3,10 +3,18 @@
 Status: approved by the owner, 2026-11-20 (draft 5). His answers: the quest is opt-in, offered at the end of the
 first-flight lesson; floating arrows point the way; the hall is approved; the five stand as drafted, and he may still
 swap any. The projects will later come from a curated list, not the pinned repos. Earlier drafts are in git (draft 2,
-with dialogue, at `2334b58`). After seeing the built stops (2026-11-20) he kept the five at their size ("Keep this
-size"): small beside the land, found by their pennants and the arrow.
+with dialogue, at `2334b58`). On 2026-11-21 he chose the glass framing: the hall's rose window is missing five panes of
+coloured glass, and each of the five places keeps one. The count is a small five-lobed rose that fills a lobe at each
+find; when all five are found the window lights, its colours fall on the ground before the hall, and the dragon curls
+up in that light.
 
 Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
+
+**Since built** (2026-11-21): the five and the hall are baked into the world by the generator
+(`src/world/gen/monuments.ts`, stood by `settle` from `places.json`; ship with `npm run world:build -- --seed 3 --n 10240
+--cache --story`), listed as `curio-*` and `hall-0` sites. The five are a walled garden, a stone library, a clock tower,
+an engine house and a court; the hall has a rose window and a paved yard. Only the panes and the ending's light are live
+(`src/world/live/story.ts`). The live hall and tableaux below remain as fallbacks for a world without them.
 
 **Built** (2026-11-20, `claude/story-0d42e5`), with two changes from this text, both at the coordinator's word:
 

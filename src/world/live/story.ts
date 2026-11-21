@@ -9,12 +9,12 @@ import { lookIn } from "../dragon/index.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Palette } from "../look/contract.ts";
 import { NOON_AIR, type Air } from "../sky/air.ts";
-import { PIECE_AT } from "../gen/monuments.ts";
+import { HALL_ROSE, HALL_YARD, PIECE_AT, ROSE_LIGHTS } from "../gen/monuments.ts";
 import { gradeRgb } from "../render/palette.ts";
-import { PIECE_RGB, type StopKey } from "../story/stops.ts";
+import { PIECE_RGB, STOPS, type StopKey } from "../story/stops.ts";
 import { frameX, groundRow, ringDelta, type Ink } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
-import { drawSprite, type LiveSprite } from "./sprites.ts";
+import { BLEND_ADD, BLEND_OVER, drawSprite, type LiveSprite } from "./sprites.ts";
 
 /** Where a stop stands, world cells. */
 export interface StoryPlace {
@@ -29,6 +29,8 @@ export interface StoryContext {
   stops: readonly StoryPlace[];
   /** The hall, where every project is kept, when it stands in places.json and not in the baked world. */
   hall?: { x: number; y: number };
+  /** The hall when it is baked (gen/monuments.ts projectsHall): its rose window takes each pane as it is found. */
+  bakedHall?: { x: number; y: number };
   /** The stops found so far, read each frame (`t` is the frame's seconds). */
   found(t: number): readonly StopKey[];
 }
@@ -414,17 +416,94 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     return sp;
   }
 
+  /**
+   * The window's light on the ground before the hall: a fan from the door, narrow at the wall and widening away from
+   * it, in five wedges whose order across matches the lights across the window. Its edge is dithered in a checker, its
+   * middle paler. By day it is pale colour laid on the ground in sunlight; by night it is light added to the dark.
+   */
+  const FAN_H = 13, FAN_TOP = 5, FAN_SPREAD = 6;
+  const FAN_W = 2 * (FAN_TOP + FAN_SPREAD) + 1;
+  /** The wedges west to east: the window's lights by their place across it (gen/monuments.ts ROSE_LIGHTS). */
+  const ACROSS: number[] = [];
+  for (const pick of ROSE_LIGHTS.map((_, i) => i)) {
+    const x = (k: number): number => ROSE_LIGHTS[k][0].dx + ROSE_LIGHTS[k][1].dx;
+    let at = ACROSS.length;
+    while (at > 0 && x(ACROSS[at - 1]) > x(pick)) at--;
+    ACROSS.splice(at, 0, pick);
+  }
+  const fans = new Map<number, LiveSprite>();
+  function fanOf(night: boolean): LiveSprite {
+    const key = night ? 1 : 0;
+    let sp = fans.get(key);
+    if (sp) return sp;
+    const cx = FAN_TOP + FAN_SPREAD;
+    sp = { w: FAN_W, h: FAN_H, rgba: new Uint32Array(FAN_W * FAN_H), alpha: new Uint8Array(FAN_W * FAN_H), ax: cx, ay: FAN_H - 1 };
+    for (let y = 0; y < FAN_H; y++) {
+      const hw = FAN_TOP + (FAN_SPREAD * y) / (FAN_H - 1);
+      for (let x = 0; x < FAN_W; x++) {
+        const u = (x - cx) / hw;
+        if (u < -1 || u > 1) continue;
+        // The edge, a pixel in from the sides and the far end, in a checker.
+        const edge = Math.abs(x - cx) > hw - 1 || y === FAN_H - 1;
+        if (edge && ((x + y) & 1) === 1) continue;
+        const band = Math.min(4, Math.floor(((u + 1) / 2) * 5));
+        const c = PIECE_RGB[STOPS[ACROSS[band]].key];
+        // Paler down the middle and near the wall, where the light is strongest.
+        const pale = Math.max(0, (night ? 0.45 : 0.6) - 0.35 * Math.abs(u) - (0.25 * y) / FAN_H) + (night ? 0 : 0.2);
+        const mix = (v: number): number => Math.round(v + (255 - v) * pale);
+        let r = mix(c & 255), g = mix((c >>> 8) & 255), b = mix((c >>> 16) & 255);
+        if (night) { r = Math.round(r * 0.75); g = Math.round(g * 0.75); b = Math.round(b * 0.75); }
+        const i = y * FAN_W + x;
+        sp.rgba[i] = (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+        sp.alpha[i] = night ? 255 : 165;
+      }
+    }
+    fans.set(key, sp);
+    return sp;
+  }
+  const lightSprites = new Map<string, LiveSprite>();
+  /** One light of the window in its pane's colour: as glass by day, lit from within (added) by night. */
+  function lightOf(key: StopKey, night: boolean): LiveSprite {
+    const id = `${key}${night ? "+" : ""}`;
+    let sp = lightSprites.get(id);
+    if (sp) return sp;
+    const c = night ? tint(PIECE_RGB[key], 1.2) : PIECE_RGB[key];
+    sp = { w: 1, h: 1, rgba: new Uint32Array([c]), alpha: new Uint8Array([255]), ax: 0, ay: 0 };
+    lightSprites.set(id, sp);
+    return sp;
+  }
+  function drawHall(f: LiveFrame, h: { x: number; y: number }, found: readonly StopKey[]): void {
+    const air = f.air ?? NOON_AIR;
+    const whole = STOPS.every((st) => found.includes(st.key));
+    // Night once the dark is more than half in: then light is added, not laid on.
+    const night = air.night > 0.5;
+    if (whole) {
+      // Its near edge on the first row before the gable, never on the wall: stood on the row its height reaches to.
+      put(f, fanOf(night), h.x + HALL_YARD.dx, h.y + HALL_ROSE.dy + 1 + Math.ceil(FAN_H / 0.8), 0, false, night ? BLEND_ADD : BLEND_OVER);
+    }
+    for (let i = 0; i < STOPS.length; i++) {
+      const key = STOPS[i].key;
+      if (!found.includes(key)) continue;
+      // Stood on the yard's first row, the ground before the gable (the gable's own row reads as the hall's top),
+      // and raised by that row's step back to the face. Lit from within only once the window is whole.
+      const lit = whole && night;
+      for (const l of ROSE_LIGHTS[i]) {
+        put(f, lightOf(key, lit), h.x + HALL_ROSE.dx + l.dx, h.y + HALL_ROSE.dy + 1, HALL_ROSE.z + l.dz + 0.8, false, lit ? BLEND_ADD : BLEND_OVER);
+      }
+    }
+  }
+
   const foundAt = new Map<StopKey, number>();
   const seen = new Set<StopKey>();
   let primed = false;
 
   /** Draws `s` with its anchor on the ground at (x + dx, y + dy) world cells, `up` pixels over it. */
-  function put(f: LiveFrame, s: LiveSprite, x: number, y: number, up = 0, flip = false): void {
+  function put(f: LiveFrame, s: LiveSprite, x: number, y: number, up = 0, flip = false, blend = BLEND_OVER): void {
     const col = frameX(f, x, REACH) | 0;
     if (col < -REACH || col >= f.rect.w + REACH) return;
     const row = groundRow(f, col, y, REACH);
     if (row === null) return;
-    drawSprite(f, s, f.rect.x + col, y, 0.8 * y - (f.rect.y + row) + up, flip);
+    drawSprite(f, s, f.rect.x + col, y, 0.8 * y - (f.rect.y + row) + up, flip, 255, blend);
   }
 
   function drawPine(f: LiveFrame, p: StoryPlace, since: number): void {
@@ -536,7 +615,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     name: "story",
     foundAt,
     draw(f: LiveFrame) {
-      if (ctx.stops.length === 0 && !ctx.hall) return;
+      if (ctx.stops.length === 0 && !ctx.hall && !ctx.bakedHall) return;
       paint.sync(f.palette, f.air ?? NOON_AIR);
       const found = ctx.found(f.t);
       // What was found before the first frame was found on another visit: it rests in its after-pose.
@@ -548,6 +627,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
       primed = true;
       const t = f.t;
       if (ctx.hall) put(f, hallSprite, ctx.hall.x, ctx.hall.y);
+      if (ctx.bakedHall) drawHall(f, ctx.bakedHall, found);
       for (const p of ctx.stops) {
         const col = frameX(f, p.x, REACH + 30);
         if (col < -REACH - 30 || col >= f.rect.w + REACH + 30) continue;

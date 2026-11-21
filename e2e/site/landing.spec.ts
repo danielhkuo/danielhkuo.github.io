@@ -124,7 +124,7 @@ test.describe("landing", () => {
     await expect.poll(() => openLeaf.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   });
 
-  test("landing at a stop fills one quatrefoil and stores the find", async ({ page }) => {
+  test("landing at a stop glazes one pane and stores the find", async ({ page }) => {
     const site = await landmark(page, "stop");
     const stop = STOPS.find((item) => item.key === site.name);
     if (!stop) throw new Error(`landmark ${site.id} is not one of the five`);
@@ -134,8 +134,10 @@ test.describe("landing", () => {
     await expect(codex).toBeVisible({ timeout: 20_000 });
     await expect(codex.getByText("¶ Found", { exact: true })).toBeVisible();
     const many = GLASS.many;
-    await expect(codex.getByRole("heading", { level: 3, name: `${titled(many)} · 1 of 5`, exact: true })).toBeVisible();
-    await expect(codex.getByText("One is kept at each of five places. Each tells you something about Daniel.", { exact: true })).toBeVisible();
+    await expect(codex.getByRole("heading", { level: 3, name: "Glass for the rose window · 1 of 5", exact: true })).toBeVisible();
+    await expect(
+      codex.getByText(`The hall's rose window is missing five ${GLASS.whole}. One is kept at each of five places, and each tells you something about Daniel.`, { exact: true }),
+    ).toBeVisible();
     const foils = codex.getByRole("group", { name: `1 of 5 ${many} found`, exact: true });
     await expect(foils).toBeVisible();
     await expect(codex.getByRole("button", { name: "Look for the glass" })).toBeVisible();

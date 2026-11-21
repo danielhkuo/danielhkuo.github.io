@@ -17,7 +17,7 @@ import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
 import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, aridAt, tempAt } from "./sites.ts";
-import { monument, type MonumentKey } from "./monuments.ts";
+import { monument, projectsHall, type MonumentKey } from "./monuments.ts";
 import * as S from "./structures.ts";
 import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
@@ -61,6 +61,8 @@ export interface Settlement {
   wonderSkips: string[];
   /** The quest's monuments that stand, each where its option put it (gen/monuments.ts). */
   monuments: { id: string; key: MonumentKey; x: number; y: number }[];
+  /** The projects hall, where its option put it. */
+  hall: { id: string; x: number; y: number } | null;
 }
 
 export interface SettleOptions extends PlaceOptions {
@@ -74,6 +76,8 @@ export interface SettleOptions extends PlaceOptions {
   wonderRules?: WonderRules;
   /** The quest's monuments, each stood on a levelled pad at its point (cells). Absent: none. */
   monuments?: readonly { key: MonumentKey; x: number; y: number }[];
+  /** The projects hall (gen/monuments.ts projectsHall), stood as the monuments are at this point (cells). */
+  hall?: { x: number; y: number };
 }
 
 const MATS = { path: M.path, road: M.road, retaining: M.stone, yard: M.pastureWarm, vine: M.vine };
@@ -209,8 +213,8 @@ export function bridge(ax: number, ay: number, bx: number, by: number, water: nu
  * One of the quest's monuments, on a pad levelled to the ground's mean under it and kept clear of roads and
  * hamlets, as a landmark's is.
  */
-function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: string; key: MonumentKey; x: number; y: number } {
-  const st = monument(key);
+function standMonument(w: Work, key: MonumentKey | "hall", x: number, y: number): { id: string; key: MonumentKey | "hall"; x: number; y: number } {
+  const st = key === "hall" ? projectsHall() : monument(key);
   const rx = st.w / 2 + 2, ry = st.h / 2 + 2;
   const level = padLevel(w, x, y, rx, ry);
   addConform(w, flat(x, y, rx + 1, ry + 1, true, level, 10));
@@ -231,17 +235,14 @@ function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: s
   } else if (key === "desk") {
     w.structures.push(S.standAt(S.copse(52, 40, 17, 12, seed), x, y, 0));
     w.structures.push(S.standAt(S.gardenPlot(12, 8, seed), x - 16, y + 6, 0));
-    cottageAt(x + 15, y + 4);
   } else if (key === "mill") {
     w.structures.push(S.standAt(S.oliveGrove(34, 14, seed), x - 20, y + 12, 0));
-    cottageAt(x - 15, y - 2);
   } else if (key === "basket") {
-    w.structures.push(S.standAt(S.copse(56, 44, 19, 14, seed), x, y, 0));
-    w.structures.push(S.standAt(S.gardenPlot(12, 8, seed), x + 17, y - 6, 0));
+    // Savanna: the land's own scattered trees are setting enough; a copse or a kitchen plot reads as brought in.
     cottageAt(x - 16, y + 3);
   }
   w.structures.push(S.standAt(st, x, y, level));
-  return { id: `curio-${key}`, key, x, y };
+  return { id: key === "hall" ? "hall-0" : `curio-${key}`, key, x, y };
 }
 
 /** Mean ground over a pad of half-sizes (rx, ry): the level that cuts as much as it fills. */
@@ -1487,10 +1488,15 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   // The quest's monuments come after everything, and as the wonders do only add to what is built: a world without
   // them is the same world, and with them nothing but their own pads changes.
   const monuments: Settlement["monuments"] = [];
-  for (const m of opts.monuments ?? []) {
-    monuments.push(standMonument(w, m.key, m.x, m.y));
+  let hall: Settlement["hall"] = null;
+  const stood: { key: MonumentKey | "hall"; x: number; y: number }[] = [...(opts.monuments ?? [])];
+  if (opts.hall) stood.push({ key: "hall", ...opts.hall });
+  for (const m of stood) {
+    const placed = standMonument(w, m.key, m.x, m.y);
+    if (m.key === "hall") hall = { id: placed.id, x: m.x, y: m.y };
+    else monuments.push({ id: placed.id, key: m.key, x: m.x, y: m.y });
     // A track from its gate to the nearest lane, as a landmark has its spur: a thing on no way reads as dropped there.
-    const gx = m.x, gy = m.y + monument(m.key).h / 2 + 2;
+    const gx = m.x, gy = m.y + (m.key === "hall" ? projectsHall() : monument(m.key)).h / 2 + 2;
     let best = -1, bx = 0, by = 0;
     for (const r of lanes) for (let k = 0; k + 1 < r.vertices.length; k += 2) {
       const dx = torusDelta(gx, r.vertices[k], c.n), dy = torusDelta(gy, r.vertices[k + 1], c.n), d = dx * dx + dy * dy;
@@ -1505,7 +1511,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
-    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips, monuments,
+    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips, monuments, hall,
   };
 }
 

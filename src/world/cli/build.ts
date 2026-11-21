@@ -6,7 +6,7 @@
 // Output: <out>/<worldId>/core.bin, <out>/<worldId>/regions/<rx>-<ry>.bin,
 // <out>/<worldId>/manifest.json, <out>/current.json.
 
-import { storyMonuments } from "./story.ts";
+import { storyHall, storyMonuments } from "./story.ts";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
@@ -94,6 +94,8 @@ export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
   const sites: { id: string; type: string; x: number; y: number }[] = world.settlement.sites.map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y }));
   // The quest's monuments, when the world stands them: the flight lands at them as curio sites.
   for (const m of world.settlement.monuments ?? []) sites.push({ id: m.id, type: "curio", x: m.x, y: m.y });
+  // And the projects hall, baked: it wins over a hall drawn live.
+  if (world.settlement.hall) sites.push({ id: world.settlement.hall.id, type: "hall", x: world.settlement.hall.x, y: world.settlement.hall.y });
   const manifest: Manifest = {
     format: 2,
     worldId,
@@ -181,7 +183,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const params = paramsFor(n);
-  const settleOpts = story ? { monuments: storyMonuments(n, seed) } : {};
+  const settleOpts = story ? { monuments: storyMonuments(n, seed), hall: storyHall(n, seed) } : {};
   const world = cache ? settleWorld(cachedTerrain(params, seed), settleOpts) : makeWorld(params, seed, settleOpts);
   let manifest: Manifest;
   try {

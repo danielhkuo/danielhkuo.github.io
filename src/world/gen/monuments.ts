@@ -19,8 +19,61 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
   desk: { dx: 0, dy: 4, z: 9 },
   bell: { dx: 2, dy: 4, z: 15 },
   mill: { dx: -3, dy: 4, z: 11 },
-  basket: { dx: 0, dy: -3, z: 9 },
+  basket: { dx: 0, dy: -3, z: 7 },
 };
+
+/**
+ * The projects hall's rose window, on its south gable: its heart from the raster's centre (cells east, cells south,
+ * height over its base), and the five lights round it in the order the quest's count fills them, top first and then
+ * clockwise as seen: each a petal of two cells (cells east, units up). The baked window is dark; the live layer glazes a light as its pane is found.
+ */
+export const HALL_ROSE = { dx: 0, dy: 0, z: 10 } as const;
+export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = [
+  [{ dx: 0, dz: 2 }, { dx: 0, dz: 3 }],
+  [{ dx: 2, dz: 1 }, { dx: 3, dz: 1 }],
+  [{ dx: 1, dz: -2 }, { dx: 2, dz: -2 }],
+  [{ dx: -1, dz: -2 }, { dx: -2, dz: -2 }],
+  [{ dx: -2, dz: 1 }, { dx: -3, dz: 1 }],
+];
+/** The rose window's ring, cells from its heart. */
+export const ROSE_R = 4;
+/** The paved yard before the hall, where the window's light falls once it is whole: its centre and half-sizes, cells. */
+export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 4 } as const;
+
+/**
+ * The projects hall (15 × 20, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
+ * door and, over it, a rose window of five lights; before it a paved yard inside a low wall, a yew at each front
+ * corner.
+ */
+export function projectsHall(): Structure {
+  const W = 15, H = 20;
+  const s = sculpt(W, H);
+  const cx = 7, cy = 10;
+  // The yard: paving, a low wall round it with a gap on the south, a clipped yew either side of the gap.
+  paint(s, 1, 11, W - 2, H - 12, M.path);
+  for (let y = 11; y < H; y++) { put(s, 0, y, 1.2, M.stone, T_WEST); put(s, W - 1, y, 1.2, M.stone, T_EAST); }
+  for (let x = 1; x < W - 1; x++) if (Math.abs(x - cx) > 1) put(s, x, H - 1, 1.2, M.stone, T_WALL);
+  for (const x of [cx - 3, cx + 3]) { put(s, x, H - 2, 3.4, M.yew, 130); put(s, x, H - 3, 3.0, M.yew, 110); }
+  // The hall, buttressed down its sides.
+  house(s, 1, 0, 13, 11, 8, 6, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
+  for (const y of [2, 5, 8]) { put(s, 0, y, 5, M.stoneDark, T_WEST); put(s, W - 1, y, 5, M.stoneDark, T_EAST); }
+  const face = 10;
+  // The door: wide, red, under a pointed head.
+  for (let z = 1; z <= 4; z++) for (let x = cx - 1; x <= cx + 1; x++) if (!(z === 4 && x !== cx)) mark(s, x, face, z, M.brick, 110);
+  // Narrow slits either side of the door, unglazed stone in shadow: the rose is the window that matters.
+  for (const x of [cx - 4, cx + 4]) for (let z = 2; z <= 4; z++) mark(s, x, face, z, M.stoneDark, 80);
+  // The rose window: a ring of dark stone, tracery within, a gilt boss, five dark lights of two cells each.
+  const rz = HALL_ROSE.z, rx = cx + HALL_ROSE.dx;
+  for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > ROSE_R + 0.45) continue;
+    mark(s, rx + dx, face, rz + dz, M.stoneDark, d > ROSE_R - 0.55 ? 70 : 120);
+  }
+  mark(s, rx, face, rz, M.gilt, 150);
+  for (const petal of ROSE_LIGHTS) for (const l of petal) mark(s, rx + l.dx, face, rz + l.dz, M.opening, 60);
+  void cy;
+  return s;
+}
 
 /** Every monument, built fresh. */
 export function monument(key: MonumentKey): Structure {
@@ -33,47 +86,54 @@ export function monument(key: MonumentKey): Structure {
 
 
 /**
- * Slow, careful work: a walled garden whose north wall carries an old pear trained flat against it, its branches in
- * level tiers turned up at the ends like a candelabrum, the work of a hundred springs of pruning (19 × 15, 12 tall).
- * Clipped box edges the beds before it. The piece is set in the pedestal before the gate.
+ * Slow, careful work: a kitchen garden walled in warm brick on three sides, whose north wall carries an old pear
+ * trained flat against it, its branches in level tiers turned up at the ends, the work of a hundred springs of pruning
+ * (19 × 15, 9 tall at the wall). Dug beds edged in clipped box before it, a walk down the middle to a gap in the low south wall,
+ * and the gardener's bothy against the east wall. The piece is set in the pedestal at the walk's head.
  */
 function knotGarden(): Structure {
   const W = 19, H = 15;
   const s = sculpt(W, H);
-  for (let y = 5; y < H - 2; y++) s.paint[y * W + 9] = M.path;
-  // The north wall: high, coped, its south face the espalier's ground.
+  // The beds: grass and greens, a walk down the middle.
+  paint(s, 1, 4, W - 2, H - 5, M.ley);
+  for (let y = 4; y < H - 1; y++) s.paint[y * W + 9] = M.path;
+  // The walls: high on the north, where the fruit is trained; lower east and west; a low wall on the south with a gap.
   const face = 3;
-  for (let x = 2; x < W - 2; x++) { put(s, x, face, 11, M.stone, T_WALL); put(s, x, face - 1, 11.5, M.stoneDark, T_RIDGE); }
-  // The tree on the wall's face: an old, leaning trunk and three tiers of branches of uneven reach, each turned up at
-  // its ends, clumps of leaves along them, and pears.
+  for (let x = 0; x < W; x++) { put(s, x, face, 9, M.brick, T_WALL); put(s, x, face - 1, 9.5, M.stoneDark, T_RIDGE); }
+  for (let y = face + 1; y < H; y++) {
+    put(s, 0, y, 5.5, M.brick, T_WEST);
+    put(s, W - 1, y, 5.5, M.brick, T_EAST);
+  }
+  for (let x = 1; x < W - 1; x++) if (Math.abs(x - 9) > 1) put(s, x, H - 1, 3, M.brick, T_WALL);
+  // The tree on the wall's face: an old trunk and three tiers of branches of uneven reach, each turned up at its ends,
+  // clumps of leaves along them, and pears.
   const cx = 9;
-  for (let z = 1; z <= 10; z++) mark(s, cx + (z > 7 ? 1 : 0), face, z, M.timber, 96);
-  for (const [z, west, east] of [[3, 7, 6], [6, 5, 7], [9, 3, 4]] as const) {
+  for (let z = 1; z <= 6; z++) mark(s, cx, face, z, M.timber, 96);
+  for (const [z, west, east] of [[2, 6, 5], [4, 5, 6], [6, 3, 4]] as const) {
     for (const [side, reach] of [[-1, west], [1, east]] as const) {
       for (let k = 1; k <= reach; k++) {
         mark(s, cx + side * k, face, z, M.timber, 108);
         if ((k + z) % 3 !== 0) mark(s, cx + side * k, face, z + 1, M.coniferMid, 150 - 6 * k);
       }
-      mark(s, cx + side * reach, face, z + 1, M.timber, 108);
-      mark(s, cx + side * reach, face, z + 2, M.coniferMid, 165);
-      mark(s, cx + side * (reach - 1), face, z + 2, M.coniferMid, 140);
+      mark(s, cx + side * reach, face, z + 1, M.coniferMid, 165);
     }
   }
-  for (const [x, z] of [[5, 4], [14, 7], [3, 4], [11, 4], [8, 7]] as const) mark(s, x, face, z, M.gilt, 135);
-  // The beds before the wall, edged in clipped box, a walk down the middle to the gate.
-  const hedge = (x: number, y: number): void => { if (s.top[y * W + x] === 0) put(s, x, y, 1.8, M.hedge, 96); };
+  for (const [x, z] of [[5, 3], [13, 5], [4, 5], [11, 3], [8, 5]] as const) mark(s, x, face, z, M.gilt, 135);
+  // The beds edged in clipped box, a pear tree in each.
+  const hedge = (x: number, y: number): void => { if (s.top[y * W + x] === 0) put(s, x, y, 1.2, M.hedge, 96); };
   for (const [x0, x1] of [[2, 7], [11, 16]] as const) {
-    for (let x = x0; x <= x1; x++) { hedge(x, 6); hedge(x, 11); }
-    for (let y = 6; y <= 11; y++) { hedge(x0, y); hedge(x1, y); }
-    // A clipped ball at each bed's heart.
-    put(s, (x0 + x1) >> 1, 8, 2.4, M.hedge, 150);
-    put(s, ((x0 + x1) >> 1) + 1, 8, 2.4, M.hedge, 130);
-    put(s, (x0 + x1) >> 1, 9, 2.4, M.hedge, 120);
-    put(s, ((x0 + x1) >> 1) + 1, 9, 2.4, M.hedge, 110);
+    for (let x = x0; x <= x1; x++) { hedge(x, 5); hedge(x, 11); }
+    for (let y = 5; y <= 11; y++) { hedge(x0, y); hedge(x1, y); }
+    // A pear in the bed's heart, a domed crown as an orchard's trees are.
+    const tx = ((x0 + x1) >> 1) + 0.5, ty = 8.5, r = 2.3;
+    for (let y = 6; y <= 11; y++) for (let x = x0 + 1; x < x1; x++) {
+      const d2 = (x - tx) * (x - tx) + (y - ty) * (y - ty);
+      if (d2 <= r * r) put(s, x, y, 2.5 + 3 * Math.sqrt(1 - d2 / (r * r)), M.broadleafMid, 0);
+    }
   }
-  // The gardener's cottage against the wall's east end, its windows lit.
-  house(s, 14, 4, 5, 5, 5, 3, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 1, chimney: true });
-  // The pedestal before the gate, where the piece is set.
+  // The gardener's bothy in the north-east corner, its lean-to roof against the wall.
+  house(s, 13, 4, 5, 4, 4, 2, { gable: 1, wallMat: M.brick, roofMat: M.roofTile, openings: 1, chimney: true });
+  // The pedestal at the walk's head, where the piece is set.
   put(s, cx, H - 3, 2.4, M.stone, T_WALL);
   mark(s, cx, H - 3, 2, M.opening);
   return s;
@@ -87,10 +147,10 @@ function knotGarden(): Structure {
 function stoneBook(): Structure {
   const s = sculpt(15, 11);
   // The hall behind, its ridge east to west, tall lancets along its south wall.
-  house(s, 1, 0, 13, 6, 8, 5, { gable: 0, wallMat: M.stone, roofMat: M.roofSlate, openings: 0, chimney: false });
+  house(s, 1, 0, 13, 6, 8, 5, { gable: 0, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
   for (const x of [2, 4, 10, 12]) for (let z = 3; z <= 6; z++) mark(s, x, 5, z, z === 6 ? M.opening : M.lantern, 140);
   // The porch: a gabled bay to the camera, a pointed arch in it, and the rose window above.
-  house(s, 5, 4, 5, 6, 10, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofSlate, openings: 0, chimney: false });
+  house(s, 5, 4, 5, 6, 10, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
   const face = 9;
   for (let z = 1; z <= 5; z++) for (let x = 6; x <= 8; x++) if (!(z === 5 && x !== 7)) mark(s, x, face, z, M.opening, 70);
   // The lectern and its open book, within the arch.
@@ -148,8 +208,8 @@ function clockJack(): Structure {
 }
 
 /**
- * The home lab: an engine house of stone (15 × 12, 30 tall) with its gable to the camera, a tall round chimney, a
- * water wheel turning in a race on its east side, and a lattice mast for the wires. Its windows are lit. The piece is
+ * The home lab: an engine house of stone (15 × 12, 15 tall) with its gable to the camera, a round chimney a little
+ * over its ridge, and a water wheel turning in a race on its east side. Its windows are lit. The piece is
  * the lamp in the gable window.
  */
 function engineHouse(): Structure {
@@ -166,8 +226,8 @@ function engineHouse(): Structure {
   mark(s, 4, face, 11, M.opening);
   mark(s, 5, face, 11, M.opening);
   // The chimney at the north-west corner, banded in brick.
-  drum(s, 2, 2, 1.8, 19, M.brick);
-  for (const z of [8, 13, 18]) for (let x = 1; x <= 3; x++) mark(s, x, 3, z, M.stoneDark, 110);
+  drum(s, 2, 2, 1.8, 15, M.brick);
+  for (const z of [8, 12]) for (let x = 1; x <= 3; x++) mark(s, x, 3, z, M.stoneDark, 110);
   // The water wheel, broadside to the camera at the house's south-east corner: a rim of timber, spokes and a hub.
   const hub = 5, wx = 12, wy = 10;
   for (let a = 0; a < 24; a++) {
@@ -200,17 +260,20 @@ function courtPost(): Structure {
     s.paint[y * 18 + x] = M.plaster;
   }
   for (let x = 1; x <= 16; x++) s.paint[12 * 18 + x] = M.plaster;
-  // Benches along the east and west walls.
-  for (let y = 4; y <= 9; y++) { put(s, 1, y, 1.8, M.stone, T_FLAT); put(s, 16, y, 1.8, M.stone, T_FLAT); }
-  // The stand along the north side: a long low roof on posts.
-  // Tiered stone seats along the north side, stepping up away from the court.
-  for (let x = 0; x < 18; x++) { put(s, x, 2, 1.5, M.stone, T_WALL); put(s, x, 1, 3, M.stone, T_WALL); put(s, x, 0, 4.5, M.stoneDark, T_WALL); }
-  // The post at the court's north end, the ring on its face, a net below.
-  for (let x = 8; x <= 9; x++) put(s, x, 3, 12, M.stoneDark, x === 8 ? T_WEST : T_EAST);
-  for (let z = 9; z <= 12; z++) for (let x = 7; x <= 10; x++) if (z === 12 || x === 7 || x === 10) mark(s, x, 3, z, M.plaster, 160);
-  for (let x = 7; x <= 10; x++) mark(s, x, 4, 9, M.brick, 160);
-  for (const x of [7, 10]) mark(s, x, 4, 8, M.plaster, 150);
-  for (const x of [8, 9]) mark(s, x, 4, 7, M.plaster, 150);
+  // Benches along the east and west sides.
+  for (let y = 4; y <= 9; y++) { put(s, 1, y, 1.2, M.stone, T_FLAT); put(s, 16, y, 1.2, M.stone, T_FLAT); }
+  // A stand along the north side: a long low roof of tile over the benches, open to the court.
+  house(s, 0, 0, 18, 3, 3.5, 2, { gable: 0, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
+  // The post at the court's north end, no taller than the board it carries; the board, solid white with the ring's
+  // square on it; the ring and its net hanging before it.
+  for (let x = 8; x <= 9; x++) put(s, x, 3, 7, M.stoneDark, x === 8 ? T_WEST : T_EAST);
+  for (let z = 7; z <= 10; z++) for (let x = 6; x <= 11; x++) {
+    const edge = z === 10 || z === 7 || x === 6 || x === 11;
+    mark(s, x, 3, z, edge ? M.stoneDark : M.plaster, edge ? 110 : 170);
+  }
+  for (let x = 7; x <= 10; x++) mark(s, x, 4, 7, M.stoneDark, 120);
+  for (const x of [7, 10]) mark(s, x, 4, 6, M.plaster, 150);
+  for (const x of [8, 9]) mark(s, x, 4, 5, M.plaster, 150);
   void T_NORTH; void T_RIDGE;
   return s;
 }

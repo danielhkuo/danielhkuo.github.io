@@ -1,7 +1,7 @@
 // Frame strips: a view of the shipped world drawn at several moments, with the live layers, the clouds and the
 // stand-in kite, to judge motion.
 //
-//   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--frames 6] [--dt 0.25]
+//   npm run world:live -- [--view start|town|abbey|falls|river|peak|sea|all] [--at x,y] [--kite dx,dy] [--frames 6] [--dt 0.25]
 //                         [--t 0] [--clouds <style>|none] [--sights all] [--time dusk] [--season autumn]
 //                         [--weather rain] [--out dir] [--times dawn,day,golden,dusk,night] [--weathers clear,rain]
 //
@@ -63,6 +63,8 @@ export type StripOptions = StripBase & (
   y: number;
   /** Seconds, one frame each. */
   times: readonly number[];
+  /** The kite this far from the camera's point, cells (--kite dx,dy): to see what it would sit on. */
+  kite?: { dx: number; dy: number };
   layers: readonly LiveLayer[];
   /** The cloud style to draw, or null for none. */
   clouds: CloudStyle | null;
@@ -150,6 +152,9 @@ function blit2(sheet: Uint8Array, sheetW: number, dx: number, dy: number, src: U
  * in-process (createWorldBakeHost, or createBakeHost when only `bin` is given) before drawing, the layers run by the
  * view, then sky below, the kite, sky above.
  */
+/** The kite's offset for this run's strips (--kite). */
+let KITE: { dx: number; dy: number } | undefined;
+
 export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const width = o.width ?? DEFAULT_W;
   const height = o.height ?? DEFAULT_H;
@@ -168,8 +173,8 @@ export async function renderStrip(o: StripOptions): Promise<Uint32Array[]> {
   const ground = view.groundHeight(o.x, o.y);
   const alt = ground + 18;
   const kite: FlightState = {
-    x: o.x,
-    y: o.y,
+    x: o.x + (o.kite?.dx ?? 0),
+    y: o.y + (o.kite?.dy ?? 0),
     heading: -Math.PI / 2,
     speed: 60,
     alt,
@@ -327,8 +332,12 @@ function storyFrom(argv: readonly string[], worldId: string, sites: readonly { i
   if (stops.length === 0) return undefined;
   const found = (readFlag(argv, "--found") ?? "").split(",").filter((k) => k !== "") as StopKey[];
   // Found from the strip's second frame, so the first shows the pennant and the piece starts then.
-  const from = readNumber(argv, "--t", 0) + 0.5 * readNumber(argv, "--dt", 0.25);
-  return { stops, hall: readFlag(argv, "--hall") ? parseHall(readFlag(argv, "--hall")!) : file.hall, found: (t) => (t < from ? [] : found) };
+  // A sweep through the hours or the weather holds one moment: there, found means found before it.
+  const from = argv.includes("--times") || argv.includes("--weathers") ? Number.NEGATIVE_INFINITY : readNumber(argv, "--t", 0) + 0.5 * readNumber(argv, "--dt", 0.25);
+  // A world that bakes the hall lists it as a site; then the hall is the world's, and only its window is drawn here.
+  const baked = sites.find((st) => st.type === "hall");
+  const hall = readFlag(argv, "--hall") ? parseHall(readFlag(argv, "--hall")!) : baked ? undefined : file.hall;
+  return { stops, hall, ...(baked ? { bakedHall: { x: baked.x, y: baked.y } } : {}), found: (t) => (t < from ? [] : found) };
 }
 
 /** --hall x,y tries the hall at another place than places.json's. */
@@ -370,6 +379,7 @@ async function writeStrip(
     x: place.x,
     y: place.y,
     times,
+    kite: KITE,
     layers,
     clouds,
     air,
@@ -412,6 +422,11 @@ export async function main(argv: readonly string[]): Promise<number> {
   const t0 = readNumber(argv, "--t", 0);
   const clouds = parseClouds(argv);
   const at = parseAt(argv);
+  const kiteRaw = readFlag(argv, "--kite");
+  if (kiteRaw) {
+    const [dx, dy] = kiteRaw.split(",").map(Number);
+    if (Number.isFinite(dx) && Number.isFinite(dy)) KITE = { dx, dy };
+  }
 
   const times: number[] = [];
   for (let i = 0; i < framesN; i++) times.push(t0 + i * dt);

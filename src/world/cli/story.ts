@@ -24,3 +24,14 @@ export function storyMonuments(n: number, seed: number): { key: MonumentKey; x: 
   }
   return out;
 }
+
+/** The projects hall's point from places.json, for the same seed and size only. */
+export function storyHall(n: number, seed: number): { x: number; y: number } | undefined {
+  const file = JSON.parse(readFileSync(fileURLToPath(new URL("../story/places.json", import.meta.url)), "utf8")) as {
+    seed?: number;
+    n?: number;
+    hall?: { x: number; y: number };
+  };
+  if (file.seed !== seed || file.n !== n || !file.hall) return undefined;
+  return Number.isFinite(file.hall.x) && Number.isFinite(file.hall.y) ? { x: file.hall.x, y: file.hall.y } : undefined;
+}
