@@ -289,7 +289,7 @@
   color: var(--ink-soft);
 }
 
-/* The hall's rows, a project's page, a stop's keepsake, and the five. */
+/* The hall's rows, a project's page, a stop's pane, and the five. */
 
 .projects {
   margin: 0.15rem 0 1.1rem;
@@ -424,10 +424,11 @@
   color: var(--ink-soft);
 }
 
-.keepsakeLarge {
+.paneLarge {
   display: block;
-  width: 40px;
-  height: 40px;
+  /* Four screen px to a pane pixel. */
+  width: 28px;
+  height: 44px;
   margin: 0.1rem 0 0.75rem;
   color: var(--ink);
 }
@@ -777,9 +778,9 @@
     margin-bottom: 0.35rem;
   }
 
-  .leaf:not(.hallLeaf) .keepsakeLarge {
-    width: 28px;
-    height: 28px;
+  .leaf:not(.hallLeaf) .paneLarge {
+    width: 21px;
+    height: 33px;
     margin: 0 0 0.3rem;
   }
 

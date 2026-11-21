@@ -78,11 +78,11 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
       <h2 id="quest-title" className={styles.title}>
         <PixelGlyph sprite={titleFoil()} px={px} />
         <Words px={px} ink={VERMILION}>
-          the quest
+          the rose window
         </Words>
       </h2>
       <p className={styles.line}>
-        <Words px={px}>five odd things, each a fact about daniel.</Words>
+        <Words px={px}>{"the hall's window is missing five panes of glass."}</Words>
       </p>
       <p className={styles.buttons}>
         <button type="button" className={styles.button} onClick={() => pick("off")}>
@@ -90,8 +90,8 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
           <span className={styles.sr}>not now</span>
         </button>
         <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => pick("on")}>
-          <PixelGlyph sprite={cardPlate("follow the quest", true)} px={px} />
-          <span className={styles.sr}>follow the quest</span>
+          <PixelGlyph sprite={cardPlate("look for them", true)} px={px} />
+          <span className={styles.sr}>look for them</span>
         </button>
       </p>
     </dialog>

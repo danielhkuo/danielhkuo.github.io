@@ -4,13 +4,13 @@
 // drawn in CSS and SVG, not Astryx. (The prompt that offers a landing is drawn into the world: controls/guides.ts.)
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { INTERESTS, KEEPSAKE, LINKS, PROFILE } from "../../components/terminal/content";
+import { GLASS, INTERESTS, LINKS, PROFILE } from "../../components/terminal/content";
 import { kindName, type HallProject, type Landmark } from "../../world/sites/landmarks";
 import { choose, complete, type QuestState } from "../../world/story/quest";
 import { PIECE_RGB, STOPS, type StopKey } from "../../world/story/stops";
 import styles from "./codex.module.css";
 import { fell } from "./fonts";
-import { Keepsake } from "./keepsakes";
+import { Pane } from "./panes";
 import { getQuest, setQuest, useQuest } from "./questStore";
 
 const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -295,7 +295,7 @@ function StopLeaf({ stop }: { stop: StopKey }) {
     <>
       <Rubric>Found</Rubric>
       <Illuminated text={stopTitle(found ? found.name : stop)} />
-      <Keepsake stop={stop} className={styles.keepsakeLarge} />
+      <Pane stop={stop} className={styles.paneLarge} />
       {line ? <p className={styles.lede}>{line}</p> : null}
       {stop === "pine" ? (
         <p className={styles.note}>
@@ -339,18 +339,20 @@ function AboutLeaf({ kind }: { kind: string }) {
 function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => void; shown?: StopKey }) {
   const n = STOPS.filter((stop) => quest.found.includes(stop.key)).length;
   const done = complete(quest);
-  const many = KEEPSAKE.many;
+  const many = GLASS.many;
   return (
     <section className={styles.register} aria-labelledby="codex-five">
       <h3 id="codex-five">
-        {capitalised(many)}
-        {" · "}
+        {"Glass for the rose window · "}
         <span className={styles.figures}>{n}</span>
         {" of "}
         <span className={styles.figures}>{STOPS.length}</span>
       </h3>
       {done ? null : (
-        <p className={styles.questLine}>One is kept at each of five places. Each tells you something about Daniel.</p>
+        <p className={styles.questLine}>
+          The hall&apos;s rose window is missing five {GLASS.whole}. One is kept at each of five places, and each tells
+          you something about Daniel.
+        </p>
       )}
       <div className={styles.foils} role="group" aria-label={`${n} of ${STOPS.length} ${many} found`}>
         {STOPS.map((stop) => {
@@ -382,6 +384,7 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
       </ul>
       {done ? (
         <>
+          <p className={styles.closing}>The rose window is whole.</p>
           <p className={styles.closing}>
             {"Those are five of the things Daniel cares about. If you'd like to tell him yours:"}
           </p>
@@ -389,7 +392,7 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
         </>
       ) : quest.mode !== "on" ? (
         <button type="button" className={styles.button} onClick={onFollow}>
-          Follow the quest
+          Look for the glass
         </button>
       ) : null}
     </section>

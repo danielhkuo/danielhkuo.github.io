@@ -3,7 +3,7 @@
 // terminal.
 
 import type { Page } from "@playwright/test";
-import { INTERESTS, KEEPSAKE, PROFILE } from "../../src/components/terminal/content.ts";
+import { GLASS, INTERESTS, PROFILE } from "../../src/components/terminal/content.ts";
 import { QUEST_KEY } from "../../src/world/story/quest.ts";
 import { PIECE_RGB, STOPS } from "../../src/world/story/stops.ts";
 import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "../support";
@@ -133,12 +133,12 @@ test.describe("landing", () => {
     const codex = page.getByRole("dialog");
     await expect(codex).toBeVisible({ timeout: 20_000 });
     await expect(codex.getByText("¶ Found", { exact: true })).toBeVisible();
-    const many = KEEPSAKE.many;
+    const many = GLASS.many;
     await expect(codex.getByRole("heading", { level: 3, name: `${titled(many)} · 1 of 5`, exact: true })).toBeVisible();
     await expect(codex.getByText("One is kept at each of five places. Each tells you something about Daniel.", { exact: true })).toBeVisible();
     const foils = codex.getByRole("group", { name: `1 of 5 ${many} found`, exact: true });
     await expect(foils).toBeVisible();
-    await expect(codex.getByRole("button", { name: "Follow the quest" })).toBeVisible();
+    await expect(codex.getByRole("button", { name: "Look for the glass" })).toBeVisible();
 
     const place = titled(stop.name);
     const row = codex.getByRole("listitem").filter({ hasText: place });
