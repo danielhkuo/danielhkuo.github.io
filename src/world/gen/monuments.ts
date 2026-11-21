@@ -9,7 +9,7 @@
 import { pcos, PI, psin } from "../core/psin.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
-import { drum, house, mark, paint, put, sculpt, T_EAST, T_FLAT, T_NORTH, T_RIDGE, T_SOUTH, T_WALL, T_WEST, tower } from "./structures.ts";
+import { drum, house, mark, paint, put, sculpt, T_EAST, T_FLAT, T_NORTH, T_RIDGE, T_WALL, T_WEST, tower } from "./structures.ts";
 
 export type MonumentKey = "pine" | "desk" | "bell" | "mill" | "basket";
 
