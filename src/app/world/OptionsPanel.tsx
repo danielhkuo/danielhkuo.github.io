@@ -10,6 +10,8 @@ import { INK_SOFT, keyCap, plate, slip, text, VERMILION } from "../../world/cont
 import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
 import type { PhaseKind } from "./session";
 import type { Options } from "../../world/controls/options";
+import { choose } from "../../world/story/quest";
+import { getQuest, setQuest, useQuest } from "./questStore";
 import type { Platform } from "../../world/mobile/layout";
 import { SOUND_UI, type SoundControl } from "../../world/sound/control";
 import styles from "./options.module.css";
@@ -103,21 +105,21 @@ function Action({ children, onClick, px }: { children: ReactNode; onClick(): voi
   );
 }
 
-/** The volume's steps (0–1, the slider's value before it is squared): "mute" is silence, "loud" the default. */
+/** The volume's steps (0–1, the slider's value before it is squared): "mute" is silence, "half" the default. */
 const VOLUMES = [["mute", 0], ["soft", 0.3], ["half", 0.5], ["loud", 0.7], ["full", 1]] as const;
 type VolumeStep = (typeof VOLUMES)[number][0];
 const VOLUME_SAY: Record<VolumeStep, string> = {
   mute: "Volume off: no sound at all",
   soft: "Soft",
-  half: "Half",
-  loud: "Loud (the usual)",
+  half: "Half (the usual)",
+  loud: "Loud",
   full: "Full",
 };
 
 const offOnServer = (): "off" => "off";
 
 function nearestStep(v: number): VolumeStep {
-  let best: VolumeStep = "loud", d = Infinity;
+  let best: VolumeStep = "half", d = Infinity;
   for (const [name, at] of VOLUMES) if (Math.abs(at - v) < d) [best, d] = [name, Math.abs(at - v)];
   return best;
 }
@@ -170,6 +172,7 @@ function pxVar(px: number): CSSProperties {
 }
 
 export default function OptionsPanel({ open, px, options, device, platform, onChange, sound, onTeach, onClose, onLeave }: OptionsPanelProps) {
+  const quest = useQuest();
   const touch = device === "touch";
   const canBuzz = platform === "android" && typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
   const dialog = useRef<HTMLDialogElement>(null);
@@ -290,6 +293,16 @@ export default function OptionsPanel({ open, px, options, device, platform, onCh
         )}
         <Action px={px} onClick={onTeach}>
           <Words px={px}>show the lesson again</Words>
+        </Action>
+        <Action
+          px={px}
+          onClick={() => {
+            const q = getQuest();
+            setQuest(choose(q, q.mode === "on" ? "off" : "on"));
+            dialog.current?.close();
+          }}
+        >
+          <Words px={px}>{quest.mode === "on" ? "leave the quest" : "follow the quest"}</Words>
         </Action>
         <Link className={styles.action} href="/" onClick={onLeave && ((e) => {
           e.preventDefault();

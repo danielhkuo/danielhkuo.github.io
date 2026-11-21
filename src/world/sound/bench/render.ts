@@ -18,7 +18,8 @@
 
 import { createEngine } from "../engine/engine.ts";
 import type { Kit } from "../engine/kit.ts";
-import { K_BELL, K_CLOCK, K_FERRY, K_FLOCK, K_GULL, K_PLANE, K_RAIN, K_RIVER, K_SURF, K_TRAIN, K_WIND, RAIN } from "../levels.ts";
+import { loadNoise } from "../engine/noise-worklet.ts";
+import { K_BELL, K_CLOCK, K_FERRY, K_FLOCK, K_GULL, K_PLANE, K_RAIN, K_RIVER, K_SURF, K_TRAIN, K_WIND, LOOPS, RAIN } from "../levels.ts";
 import { callLength } from "../schedule/gulls.ts";
 import { repeatCheck } from "./repeat.ts";
 import type { Pose } from "../types.ts";
@@ -36,7 +37,7 @@ export interface RenderOptions {
 }
 
 /** The level tables a calibration render may touch. */
-const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL, K_CLOCK, K_TRAIN, K_PLANE, K_FERRY, K_FLOCK, K_RAIN, RAIN: RAIN as unknown as Record<string, number> };
+const TABLES: Record<string, Record<string, number>> = { K_WIND, K_SURF: K_SURF as unknown as Record<string, number>, K_BELL, K_RIVER, K_GULL, K_CLOCK, K_TRAIN, K_PLANE, K_FERRY, K_FLOCK, K_RAIN, RAIN: RAIN as unknown as Record<string, number>, LOOPS };
 
 /** Runs `run` with some level constants replaced, and puts them back: how a layer is soloed to calibrate it. */
 export async function withLevels<R>(set: Record<string, number> | undefined, run: () => Promise<R>): Promise<R> {
@@ -124,8 +125,11 @@ async function renderScene(scene: Scene, kit: Kit, opts: RenderOptions): Promise
   const pre = actions.some((a) => a.do === "on") ? 0 : PRE;
   const total = pre + scene.seconds;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * rate), rate);
+  // Before the first frame, so a context that can run the worklet uses it for the whole render. One that cannot, or a
+  // bed whose LOOPS is 0, stays on the plain loops.
+  const noiseReady = await loadNoise(ctx);
   const engine = createEngine(ctx, kit, {
-    touch: scene.prefs.touch, seed: 3, offline: true, probe: scene.probe, beds: opts.beds, tone: scene.tone, hissOnly: scene.hissOnly, n: scene.places?.n, abbeys: scene.places?.abbeys,
+    touch: scene.prefs.touch, seed: 3, offline: true, probe: scene.probe, beds: opts.beds, tone: scene.tone, hissOnly: scene.hissOnly, n: scene.places?.n, abbeys: scene.places?.abbeys, noise: () => noiseReady,
     oneStroke: scene.stroke === undefined ? undefined : scene.t0 + scene.stroke,
     impulse: scene.impulse === undefined ? undefined : scene.t0 + scene.impulse,
     gulls: scene.places?.gulls,

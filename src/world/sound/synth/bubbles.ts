@@ -128,7 +128,27 @@ export function lap(sampleRate: number, rng: Rng): Float32Array {
 /** Seconds the grain loop lasts. */
 export const VELVET_S = 4.1;
 /** The grain's roughness lives under this, Hz. */
-const GRAIN_HZ = 90;
+export const GRAIN_HZ = 90;
+/** The logistic that opens the grain: floor + span / (1 + exp(−slope (z − knee))), z in standard deviations. */
+export const GRAIN_FLOOR = 0.36;
+export const GRAIN_SPAN = 0.64;
+export const GRAIN_SLOPE = 1.6;
+export const GRAIN_KNEE = 0.3;
+
+/** Coefficient of one grain one-pole at `sampleRate`. */
+export function grainK(sampleRate: number): number {
+  return 1 - Math.exp((-2 * Math.PI * GRAIN_HZ) / sampleRate);
+}
+
+/**
+ * Standard deviation of two cascaded grain one-poles on unit Gaussian noise, from the impulse response's energy
+ * (k² √((1+q)/(1−q)³), q the squared pole). A loop measures its own samples; a grain made as it plays has none yet.
+ */
+export function grainDeviation(k: number): number {
+  const q = (1 - k) * (1 - k);
+  const d = 1 - q;
+  return k * k * Math.sqrt((1 + q) / (d * d * d));
+}
 
 /**
  * Grain: a rough, never-still gain between about 0.36 and 1, moving at up to 90 times a second. It is never heard
@@ -143,7 +163,7 @@ export function velvet(sampleRate: number, rng: Rng): Float32Array {
   const n = Math.round(VELVET_S * sampleRate);
   const x = gaussianInto(new Float32Array(n), rng);
   // Two one-pole low-passes, run round the loop twice so it joins itself.
-  const k = 1 - Math.exp((-2 * Math.PI * GRAIN_HZ) / sampleRate);
+  const k = grainK(sampleRate);
   let a = 0, b = 0;
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 0; i < n; i++) {
@@ -158,8 +178,8 @@ export function velvet(sampleRate: number, rng: Rng): Float32Array {
   // Mostly low, with knocks: the upper tail of the noise is what opens it.
   for (let i = 0; i < n; i++) {
     const z = x[i] / sd;
-    const open = 1 / (1 + Math.exp(-1.6 * (z - 0.3)));
-    x[i] = 0.36 + 0.64 * open;
+    const open = 1 / (1 + Math.exp(-GRAIN_SLOPE * (z - GRAIN_KNEE)));
+    x[i] = GRAIN_FLOOR + GRAIN_SPAN * open;
   }
   return x;
 }

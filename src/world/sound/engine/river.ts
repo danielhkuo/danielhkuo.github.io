@@ -10,24 +10,21 @@
 import { rngFor } from "../../core/rng.ts";
 import { RIVER } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, bindHz, bindPan, gain, loop, lowpass, panner, type Ctx } from "./graph.ts";
-import type { Hub } from "./hub.ts";
+import { bandpass, bind, bindHz, bindPan, gain, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import type { Voice } from "./wind.ts";
+import type { BedOpts, Voice } from "./wind.ts";
 
-export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/river/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
     v.nodes.push(n);
     return n;
   };
-  const read = (name: string, rate: number): AudioBufferSourceNode => {
+  const read = (name: string, rate: number, into: AudioNode): void => {
     const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer, rate));
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    return s;
+    const handle = opts.fresh.read(name, { at: opts.at, offset: rng.float() * buffer.duration, rate, bed: "river", into: [into] });
+    v.sources.push(handle);
   };
   const halves: GainNode[] = [];
   v.steps.push(() => {
@@ -36,8 +33,8 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: H
       const sum = keep(gain(ctx, 1));
       const rate = () => RIVER.rateLo + (RIVER.rateHi - RIVER.rateLo) * rng.float();
       const brook = keep(gain(ctx, 0)), flow = keep(gain(ctx, 0));
-      read("brook", rate()).connect(brook);
-      read("flow", rate()).connect(flow);
+      read("brook", rate(), brook);
+      read("flow", rate(), flow);
       brook.connect(sum);
       flow.connect(sum);
       brooks.push(brook.gain);
@@ -50,7 +47,12 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: H
     const band = keep(bandpass(ctx, RIVER.riffleHz, RIVER.riffleQ));
     const riffle = keep(gain(ctx, 0));
     const split = keep(ctx.createChannelSplitter(2));
-    read("pink0", 1).connect(band);
+    v.sources.push(opts.fresh.group("river", opts.at, [{
+      name: "pink0",
+      into: [band],
+      offset: rng.float() * kit.buffer("pink0").duration,
+      rate: 1,
+    }]));
     band.connect(riffle);
     riffle.connect(split);
     const merge = keep(ctx.createChannelMerger(2));

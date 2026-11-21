@@ -2,6 +2,7 @@
 // opens and closes, and Esc leaves the world.
 
 import { LESSON_KEY } from "../../src/world/controls/lesson.ts";
+import { QUEST_KEY } from "../../src/world/story/quest.ts";
 import { CRUISE } from "../../src/world/runtime/flight.ts";
 import { expect, flier, guide, hold, offline, openWorld, skipLesson, test, turned } from "../support";
 
@@ -78,6 +79,26 @@ test.describe("flight", () => {
     await page.getByRole("button", { name: "Close the options" }).click();
     await expect(panel).toBeHidden();
     expect((await flier(page)).phase).toBe("flying");
+  });
+
+  test("the quest is offered once the lesson is learned", async ({ page }) => {
+    await skipLesson(page);
+    await page.addInitScript((key) => {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // storage refused: nothing stored is the same as not yet asked
+      }
+    }, QUEST_KEY);
+    await openWorld(page);
+    const card = page.getByRole("dialog", { name: "the quest" });
+    await expect(card).toBeVisible({ timeout: 8_000 });
+    await card.getByRole("button", { name: "follow the quest" }).click();
+    await expect(card).toBeHidden();
+    const raw = await page.evaluate((key) => window.localStorage.getItem(key), QUEST_KEY);
+    expect(JSON.parse(raw ?? "").mode).toBe("on");
+    await page.keyboard.press("o");
+    await expect(page.getByRole("dialog", { name: "options" }).getByRole("button", { name: "leave the quest" })).toBeVisible();
   });
 
   test("Esc leaves the world", async ({ page }) => {

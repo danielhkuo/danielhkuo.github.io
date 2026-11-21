@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** Paths (relative to src/world) whose arithmetic must be deterministic. */
-const DETERMINISTIC = /^(core|gen|bake|pack|sites|look)\/|^[^/]+\.ts$/;
+const DETERMINISTIC = /^(core|gen|bake|pack|sites|look|story)\/|^[^/]+\.ts$/;
 const EXEMPT = /^(bench|cli|render|runtime|testing)\//;
 /** Paths that only ever run in Node (tools, test helpers): they may import node: modules. */
 const NODE_ONLY = /^(cli|testing)\//;

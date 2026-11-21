@@ -1648,3 +1648,136 @@ rattle (4.855 s and the like), the open sea's wash.
   before). The real fix is fresh noise on every pass (a noise source in an audio worklet, or the kit's worker handing
   over fresh loops), at a cost to the audio thread or the page: on the roadmap. The rain's wander (§14.2) was judged
   by waveform correlation only, and may share the limit: its loops are 7.3 s (drops) and 11.3 s (plinks).
+
+### 14.6 The lanes and the scheduler in the ear's worker (2026-11-19)
+
+Where the ear listens in a worker, a Brain (`engine/brain.ts`) steps the lanes and the scheduler there at each pass,
+ten times a second, and its answer rides home with the Hearing: no message is added (a message to a worker costs the
+frame about 0.08 ms at 4×, as much as a mix). It looks a pass further ahead than the page did, so everything is found
+as early. The mix stays on the page: its arithmetic is about 9 µs a frame at 4×, and worked elsewhere the wind would
+answer the dragon a tenth of a second late. Offline renders are untouched (seven scenes identical to 39a6303 to one
+float LSB).
+
+It moved little. In one run at load 5 to 7, sound's mean a frame at 4× was 104 µs with the brain in the worker and
+109 µs with it on the page; a low-load trace gave 105 µs and about +0.13 ms on the frame's 95th percentile. The 100 µs
+mean bar is not yet met, and the load-gated off/on pairs have not been run on this build. What is left on the page
+(µs a frame at 4×, profiled): the ear's row copy and pass post 23, the mix's first half 22, its voices 15, the
+emitters 11, cue plays 10. Next cuts, not done: one copy a block of rows, one buffer a pass, the stats probe's
+per-frame reads of the context's state.
+
+### 14.7 The owner's first listen (2026-11-19)
+
+"When it defaults to full volume, it's really loud. The wind is very, very loud." The gulls were fine; nothing else was
+noticed. So: the default volume is Half (0.5, −12 dB; it was 0.7), and every wind layer is down 4 dB (`K_WIND`). The
+recorded flights now read −24.4 and −25.4 LUFS (flight-replay was −22.1). flight-replay's true peak is −4.1 dBTP
+against §9.1's −4.5; it was −4.0 before the change, so the wind is not its cause.
+
+It is the startled gulls: at 2.50 s two birds put up 35 and 40 cells ahead send their keks within 30 ms of each other.
+`K_GULL.near` (the most a startled bird is given of a lone bird's level) swept: 0.70 −4.1, 0.66 −4.4, 0.62 −4.7 dBTP.
+Set to 0.6 (the nearest heard as one about 55 cells off): flight-replay −4.9, long-flight −5.9 dBTP, every gull scene
+as it was (none reaches the ceiling). The whole suite otherwise passes but for mist-muffle-beds, whose one "click" at
+35.74 s is a smooth noise crest (its first difference 3.6σ, no step) flagged at 6.7 against the detector's 6.5; it is
+there at 39a6303 too, sample for sample, and the fresh beds (§14.8) will change that noise.
+
+### 14.8 Fresh noise: no bed comes round (2026-11-19/20)
+
+Every continuous bed's noise is now made as it plays and never repeats; the sparse ones (the rain's drops and plinks,
+the river's brook and flow) move to a new draw of their loop before it can come round.
+
+- **First, fresh loops** (`engine/fresh.ts`, `kit.request`, `synth/make.ts remake`). Each read asks the kit's worker
+  for generation g + 1 of its buffer (the same generator on a new draw) once it has played half its wrap, and
+  crossfades to it at equal power over 0.5 s, the new source silent until its curve begins (a source started under a
+  gain of 1 leaked its first sample: a click 6 ms after each move, the limiter's delay, until fixed). Offline engines
+  make their own generations, so a render does not depend on what the bench rendered before it. A blind critic chose
+  the fresh version in all six pairs (open sea, wind, cove, rain on the sea, brook, shower), no defect. But copying
+  ~0.8 M samples a second into AudioBuffers cost the page ~30 µs a frame at 4×.
+- **So the continuous noises come from an AudioWorklet** (`engine/noise-worklet.ts`): the buffet, rush, hiss, breeze,
+  brown, pink, white and the grain, with the buffers' colour filters, levels (worked out on the main thread from each
+  filter's impulse energy), stereo mixes and fixed biquads. A Gaussian table (4096 quantiles, tails cut near 3.7σ),
+  xorshift32 per channel, block loops with local state: 1.2–5.5 ns a sample-channel in node (Box–Muller and per-sample
+  calls were 20–28). The page copies nothing for them. The module is added from a Blob of one self-contained
+  function's source. Without a worklet, or until it loads, the beds use the fresh loops; `LOOPS.<bed> = 0` renders the
+  old plain loops sample for sample.
+- **Tested** (Cursor built both stages to failing tests written first; the test-shaped "easing" it first added to pass
+  a too-narrow colour window was removed and the tests made fair): generation 0 equals the kit, later generations
+  match colour within 1.5 dB (3 dB sparse) and level within 0.5 dB, no 80 ms window above chance; the worklet's output
+  matches each buffer's level within 0.3 dB, octave bands within 1 dB, width within 0.05.
+- **Heard**: the 80 ms-window self-match (median, 200–1200 Hz) open sea 0.97 → 0.35, cove 0.96 → 0.37, surf-far
+  0.97 → 0.36, wind 0.80 → 0.35, rain on the sea 0.77 → 0.37 (chance 0.36–0.37); the rain on land and the shower at
+  chance in their own band; the brook 0.62 → 0.58 and river 0.45 → 0.40 (300–3000 Hz, chance 0.51 and 0.39: the
+  bubbles' own likeness). A second blind critic chose the worklet beds over the old loops in all six pairs, five with
+  high confidence, the brook with low; no click, colour, width, level or peak-character difference.
+- **Costs.** Audio thread (ahead, best of three): wind-cruise 0.9 → 0.95 %, coast-run 3.9 → 4.3 %, shower-pass 4.0 →
+  4.6 %, river 1.2 → 1.2 % (bar 5 %). The whole bench passes (71 scenes).
+
+**The frame budget, in load-gated pairs (load 1.5–2.9), 4×.** Sound's mean a frame is now 56–80 µs (five pairs,
+median 65; bar 100), down from 119 (§14.4): the beds' loops no longer move on the page, and the lanes and the
+scheduler ride the ear's pass (§14.6). The frame's 95th percentile is not within its bar: sound on against off adds
++0.1, +0.2, +0.4, +0.4, +0.8 ms (median +0.4; bar +0.15). Three-arm rounds (off, nofresh, on) put it in two parts:
+sound with plain loops +0.2–0.3 (as in §14.4), the worklet a further +0.1–0.3, though the worklet's own work is 0.3–
+0.6 % of a core and a worklet that computes nothing measured +0.1 ± 0.3 in the same way. At 1× sound adds nothing
+measurable (+0.0 to −0.6). What sets the tail is sound's own heavy frames (its p95 is 0.5 ms at 4×: cue plays, the
+clock's sample, the census beside the voices), which a mean budget does not reach. Next, if the bar stands: defer the
+voices' half and the census on a frame the picture has already made long (a simulation on a recorded trace gained
+only 0.03 ms), or pool the bell strokes' nodes.
+
+**Measured again on the merged world (fecdc46 + the cuts in 077dd39), 2026-11-20.** Each run gated at a 1-minute load
+of 8 or less, the arms alternating run by run.
+
+- *Audio thread* (ahead, best of three; bar 5 %): shower-pass with fresh noise 5.01, 5.17, 5.10 % (loads 7.7, 8.0,
+  5.0); with the plain loops 6.14, 5.78, 4.50 % (loads 7.7, 5.6, 6.6). coast-run 4.19–4.39 against 3.94–5.14. The
+  earlier clean pairs (§14.8 list) put fresh noise 0.6–0.75 points above the plain loops on shower-pass; the join gains
+  removed and the loops moving at three fifths of a wrap took some of that back. shower-pass is still at or just over
+  5 %: the rain's fresh loops (~0.3 points: crossfades and a fade gain a read) and the wind's and sea's worklets
+  (~0.25) are what is left to cut.
+- *Frame, 4×* (six rounds, loads 2.1–4.2), p95 medians: sound off 2.85 ms, plain loops 3.1 (+0.25), worklet 3.25
+  (+0.4). The worklet against the plain loops, round by round: +0.2, +0.2, +0.1, +0.2, +0.1, +0.1 ms, every round
+  the same way, while sound's own time on the page is the same in both (means 62–73 µs against 64–74 µs; bar 100).
+  So of the +0.4 ms, about +0.25 is sound's heavy page frames (there with the plain loops too, as in §14.4) and
+  about +0.15 the worklet, which costs the page nothing it measures: the likeliest cause is the audio thread's extra
+  work competing with the throttled main thread (4× is CPU emulation on the same cores). The +0.15 ms bar is not met.
+- *Frame, 1×*: sound adds nothing measurable (off 2.6–3.0, plain loops 2.3–2.5, worklet 2.2–2.4).
+- *The title at /*: no AudioContext before the first gesture (state "waiting"); a click on the title starts the
+  ambience behind it, at rest; Enter world as the first gesture starts it, fading in from −93 dB, no click, no
+  console error (recorded from the page's own output).
+
+### 14.9 Cheaper fresh noise, and sound's heavy page frames (2026-11-21)
+
+**The audio thread.** The criterion is now fresh noise against the plain loops world/bigmap shipped, paired round
+by round: a median excess of 0.3 points or less. Two things the bench was measuring were not what the page pays:
+- A render made ahead schedules every future generation of a fresh loop from its first sample, and a source
+  scheduled to start later is in the graph all along (a model of the rain's six reads: 0.28 % plain, 0.57 % fresh
+  made ahead, 0.31 % fresh made just in time, as the page does). Offline, a stopped source now also leaves the graph
+  on its ended event, and made generations are cached for the process so a scene rendered again for its best time
+  does not time their arithmetic.
+- So the paired rounds are rendered a second at a time (`--mode chunks --best 5`, which schedules as the page does).
+
+Cuts: a bed's worklet noises in one node (wind 4 → 1, surf bed 5 → 1, rain's sheet and fizz 2 → 1; each node costs
+a call and its outputs a quantum: twelve empty nodes measured 0.27 % against 0.05 % for twelve buffer sources), and
+the grain computed every 8th sample (a blind critic heard the two grains as equal in all three shingle pairs, the
+difference −29 to −36 dB with the rattle's own shape). Result, three paired chunked rounds at load 2–5:
+
+| scene       | fresh       | plain       | excess |
+|-------------|-------------|-------------|--------|
+| coast-run   | 3.10–3.16 % | 2.97–3.01 % | 0.16   |
+| shower-pass | 3.73–3.77 % | 3.51–3.53 % | 0.22   |
+| rain-sea    | 1.55 %      | 1.48 %      | 0.07   |
+| river       | 1.30–1.31 % | 1.22–1.23 % | 0.08   |
+
+(Two findings from Cursor's diffs, fixed in review: the fresh-loop fallback made a new drift gain at every move and
+left it on the hub; the breeze briefly shared the rush's samples, which made the wind 0.24 dB louder. The kit's two
+loops are read seconds apart, so they have always been independent: the breeze draws its own again.)
+
+**The page.** Profiled at 4× (`.cache/prof-heavy.mjs`: each frame's sound call as one run of profile samples), sound's
+runs have a median of 84 µs and a 95th percentile of 850–880 µs. The heaviest 5 % hold no single culprit: they are
+frames where several 50–90 µs stages land together — the emitters' sends (waves.update), the ear's row copy and its
+pass, the census, the mix and its sends, a wave starting, one-shots and bell strokes being made. One-shots and
+strokes not due within 60 ms now wait for a frame without the mix or the voices (each still starts at its own audio
+time, tested against making each at once); that moved them, and the tail is now the other stages meeting.
+
+Gated pairs after it (five rounds, 4×, loads 2.5–7): sound on against off +0.6, +0.3, +0.6, +0.1, +0.3 ms (median
++0.3, was +0.4); plain loops against off median +0.2; the worklet a further +0.1–0.2, while the page's own sound time
+is the same in both arms (means 61–142 µs, the high ones at load 5–6). At 1× sound adds nothing. The +0.15 ms bar is
+not met: the best reached is +0.3. To go further: the ear's copy as one block a frame with the shift done in the
+worker (a row at a time is three times the cost of one copy), the emitters' sends spread over two frames, and the
+census off the emitters' frames.

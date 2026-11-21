@@ -21,6 +21,7 @@ import {
 import { T } from "../mix.ts";
 import { CONTROL_PLAYBACK } from "../synth/controls.ts";
 import { bandpass, bind, bindHz, bindPan, gain, intoPan, kRate, loop, lowpass, panner, type Binding, type Ctx } from "./graph.ts";
+import type { Fresh } from "./fresh.ts";
 import type { Hub } from "./hub.ts";
 import type { Kit } from "./kit.ts";
 
@@ -28,14 +29,23 @@ export interface Voice {
   /** Build steps still to run, one a frame (all at once offline). */
   steps: (() => void)[];
   bindings: Binding[];
-  sources: AudioScheduledSourceNode[];
+  /** Loops to stop when the voice is let go: a source, or a fresh read (it stops every generation it has going). */
+  sources: { stop(when?: number): void }[];
   nodes: AudioNode[];
+}
+
+/** What a bed's builder is handed. `fresh` is the engine's one reader: generations are shared by every read of a name. */
+export interface BedOpts {
+  hub: Hub;
+  seed: number;
+  at: number;
+  fresh: Fresh;
 }
 
 /** Cents either side of its centre that a share `x` (0.15 for ±15 %) moves a filter. */
 const cents = (x: number) => 1200 * Math.log2(1 + x);
 
-export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/wind/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
@@ -43,18 +53,19 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
     return n;
   };
   /**
-   * A noise loop read from its own place. At its own rate exactly, unless it `wander`s: a loop played off-speed is
-   * resampled every sample. The loops are of unequal lengths and start at their own places, so they never keep step;
-   * but a loop read plainly is heard to come round (the rush and the breeze, every 5.000 s), so every layer wanders.
+   * The four layers, in the order their loops were read. Each has a unity inlet made with the group, connected to its filter in the step that builds the filter.
+   * The wander is only on the fresh-loop path (a worklet has no detune): the wire runs when that path is taken.
    */
-  const noise = (name: string, wander?: { ch: number; cents: number }): AudioBufferSourceNode => {
-    const buffer = kit.buffer(name);
-    const s = keep(loop(ctx, buffer));
-    if (wander) drive(opts.hub.drift, wander.ch, wander.cents, s.detune);
-    s.start(opts.at, rng.float() * buffer.duration);
-    v.sources.push(s);
-    return s;
-  };
+  const winds: { name: string; ch: number; cents: number }[] = [
+    { name: "buffet", ch: 1, cents: LOOP_WANDER_CENTS },
+    { name: "rush", ch: 0, cents: LOOP_WANDER_CENTS },
+    { name: "hiss", ch: 0, cents: -LOOP_WANDER_CENTS },
+    // (Its own draw, not the rush's: the kit's loops are one pink buffer, but read from places seconds apart, so the
+    // two are heard as independent noise. Filtering the rush's very samples made the wind 0.24 dB louder.)
+    { name: "breeze", ch: 1, cents: -LOOP_WANDER_CENTS },
+  ];
+  const inlet: GainNode[] = [];
+  const drifts: (GainNode | undefined)[] = [];
   /** Channel `ch` of a control, scaled by `depth`, added to `param`. */
   const drive = (split: ChannelSplitterNode, ch: number, depth: number, param: AudioParam) => {
     const g = keep(gain(ctx, depth));
@@ -68,10 +79,27 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
   // A: the ear buffet, in two steps. (Its high-pass and its bump are in the buffer.)
   let aSplit: ChannelSplitterNode, aLow: BiquadFilterNode;
   v.steps.push(() => {
-    const src = noise("buffet", { ch: 1, cents: LOOP_WANDER_CENTS });
+    for (let i = 0; i < winds.length; i++) inlet.push(keep(gain(ctx, 1)));
+    v.sources.push(opts.fresh.group("wind", opts.at, winds.map((s, i) => ({
+      name: s.name,
+      into: [inlet[i]],
+      offset: rng.float() * kit.buffer(s.name).duration,
+      wire: (src) => {
+        // One drift gain for the layer's life, made on the first generation that wants it: a new one each move would
+        // stay on the hub for good.
+        let drift = drifts[i];
+        if (!drift) {
+          drift = drifts[i] = keep(gain(ctx, s.cents));
+          opts.hub.drift.connect(drift, s.ch);
+        }
+        drift.connect(src.detune);
+        // Once this generation has faded out and stopped, the drift lets it go (or it would keep every old source).
+        return () => drift.disconnect(src.detune);
+      },
+    }))));
     aLow = keep(lowpass(ctx, A_CUT_HZ));
     aSplit = keep(ctx.createChannelSplitter(2));
-    src.connect(aLow);
+    inlet[0].connect(aLow);
     aLow.connect(aSplit);
   });
   v.steps.push(() => {
@@ -94,14 +122,13 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
   // B: the rush. The filter's own frequency sits at the bottom of the gust's reach; the gust (0 … 1) lifts it. (Its
   // shelf is in the buffer.)
   v.steps.push(() => {
-    const src = noise("rush", { ch: 0, cents: LOOP_WANDER_CENTS });
     const base = B_HZ / (1 + B_GUST);
     const band = keep(bandpass(ctx, base, B_Q));
     drive(gust, 0, 2 * cents(B_GUST), band.detune);
     const swell = keep(gain(ctx, B_SWELL[0]));
     drive(gust, 0, B_SWELL[1], swell.gain);
     const lev = keep(gain(ctx, 0));
-    src.connect(band);
+    inlet[1].connect(band);
     band.connect(swell);
     swell.connect(lev);
     lev.connect(out);
@@ -110,11 +137,10 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
 
   // C: the hiss. (Its high-pass is in the buffer.)
   v.steps.push(() => {
-    const src = noise("hiss", { ch: 0, cents: -LOOP_WANDER_CENTS });
     const base = C_LOW[0] + C_LOW[1];
     const low = keep(lowpass(ctx, base));
     const lev = keep(gain(ctx, 0));
-    src.connect(low);
+    inlet[2].connect(low);
     low.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.C_GAIN, [lev.gain]), bindHz(T.C_HZ, [low], base));
@@ -123,12 +149,11 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
   // E: the ground breeze, riding the slower drift (unrelated to the main gust). Its band and low-pass are in the
   // buffer: nothing of it is left to filter.
   v.steps.push(() => {
-    const src = noise("breeze", { ch: 1, cents: -LOOP_WANDER_CENTS });
     // The drift runs −1 … 1: the swell moves between E_GUST[0] and E_GUST[0] + E_GUST[1] about their middle.
     const swell = keep(gain(ctx, E_GUST[0] + E_GUST[1] / 2));
     drive(hub.drift, 1, E_GUST[1] / 2, swell.gain);
     const lev = keep(gain(ctx, 0));
-    src.connect(swell);
+    inlet[3].connect(swell);
     swell.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.E_GAIN, [lev.gain]));
@@ -141,7 +166,7 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; 
  * W, the turn whoosh: a voice of its own, built as a turn begins (its level is still under −54 dB then, and rises no
  * faster than the bloom lets it) and let go two seconds after the dragon levels out.
  */
-export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/whoosh/offsets");
   const keep = <N extends AudioNode>(n: N): N => {
@@ -177,7 +202,7 @@ export function buildWhoosh(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub
  * its own: the engine builds it only when the dragon is fast enough for them to be heard (they sit 26 dB under the
  * rush at cruise), and lets it go when it slows. Not on touch.
  */
-export function buildWhistles(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
+export function buildWhistles(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(opts.seed, "sound/whistles/offsets");
   const keep = <N extends AudioNode>(n: N): N => {

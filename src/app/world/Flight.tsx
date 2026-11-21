@@ -2,9 +2,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Terminal from "../../components/terminal/Terminal";
-import { registerFrom, type LandmarkSet } from "../../world/sites/landmarks";
+import type { LandmarkSet } from "../../world/sites/landmarks";
 import Codex from "./Codex";
 import FlightCard from "./FlightCard";
+import QuestCard from "./QuestCard";
 import styles from "./flight.module.css";
 import mobile from "./mobile.module.css";
 import OptionsPanel, { Corner } from "./OptionsPanel";
@@ -111,15 +112,10 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
         {panel.open || held ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} onLeave={onLeave} />}
       </div>
       <GuideLine say={flight.say} />
-      {held ? null : <DiscoveryCaption caption={flight.caption} />}
+      {/* Held by the title, or while a landmark's Codex is open (its title is already on the card), the discovery line waits. */}
+      {held || at ? null : <DiscoveryCaption caption={flight.caption} />}
       {at ? (
-        <Codex
-          landmark={at}
-          register={landmarks ? registerFrom(at, landmarks) : []}
-          onTakeOff={flight.takeOff}
-          onOpenTerminal={about.open}
-          openLabel={about.label}
-        />
+        <Codex landmark={at} onTakeOff={flight.takeOff} onOpenTerminal={about.open} openLabel={about.label} />
       ) : null}
       {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
       <OptionsPanel
@@ -136,6 +132,12 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
         }}
         onClose={panel.closed}
         onLeave={onLeave}
+      />
+      {/* Under the title the world is held: the offer waits until the visitor is flying, then its few seconds. */}
+      <QuestCard
+        px={px}
+        lessonDone={flight.lessonDone && !held}
+        covered={held === true || panel.open || shell.card !== null || drawer.open || at !== null}
       />
       <FlightCard
         card={shell.card}

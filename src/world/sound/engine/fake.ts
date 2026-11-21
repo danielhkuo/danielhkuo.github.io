@@ -1,6 +1,8 @@
 // A recording stand-in for a BaseAudioContext, for the engine's tests: it makes nodes and parameters that note every
 // call, in order, so a test can read the graph that was built and what was scheduled on it. It renders nothing.
 
+import type { Kit } from "./kit.ts";
+
 export interface Call {
   /** The order the call was made in, across the whole context. */
   seq: number;
@@ -37,6 +39,12 @@ export class FakeParam {
   cancelScheduledValues(t: number): this {
     return this.note("cancelScheduledValues", [t]);
   }
+  /** Curves set, in order (the call itself is noted with its start and duration). */
+  curves: { values: Float32Array; t: number; d: number }[] = [];
+  setValueCurveAtTime(values: Float32Array | number[], t: number, d: number): this {
+    this.curves.push({ values: Float32Array.from(values), t, d });
+    return this.note("setValueCurveAtTime", [t, d]);
+  }
 }
 
 export class FakeNode {
@@ -68,8 +76,11 @@ export class FakeNode {
     else if (to.connectedAt < 0) to.connectedAt = seq;
     this.outs.push({ to, output, input });
   }
-  disconnect(): void {
-    this.outs = [];
+  /** From everything, or from one node or parameter only. */
+  disconnect(to?: FakeNode | FakeParam): void {
+    const gone = to === undefined ? this.outs : this.outs.filter((o) => o.to === to);
+    this.outs = to === undefined ? [] : this.outs.filter((o) => o.to !== to);
+    for (const o of gone) if (o.to instanceof FakeParam) o.to.inputs = o.to.inputs.filter((n) => n !== this);
   }
   start(when = 0, offset = 0): void {
     this.started = [when, offset];
@@ -118,6 +129,11 @@ export class FakeContext {
   createDelay(): FakeNode {
     return new FakeNode(this, "delay", { delayTime: 0 });
   }
+  /** Enough of an AudioBuffer for a fresh generation: its shape, and what is copied in. */
+  createBuffer(channels: number, length: number, rate: number): AudioBuffer {
+    const data = Array.from({ length: channels }, () => new Float32Array(length));
+    return { numberOfChannels: channels, length, sampleRate: rate, duration: length / rate, data, copyToChannel: (src: Float32Array, c: number, at = 0) => data[c].set(src, at) } as unknown as AudioBuffer;
+  }
   createPeriodicWave(): object {
     return {};
   }
@@ -141,8 +157,8 @@ export class FakeContext {
   }
 }
 
-/** A kit whose every buffer is ready: enough of an AudioBuffer for the graph to be built on. */
-export function fakeKit(): { sampleRate: number; step(): boolean; heavy(): boolean; ready(): boolean; done(): boolean; buffer(name: string): AudioBuffer; bytes(name: string): Uint8Array; whenDone(): Promise<void>; dispose(): void } {
+/** A kit whose every buffer is ready: enough of an AudioBuffer for the graph to be built on. Fresh generations stay at 0. */
+export function fakeKit(): Kit {
   const channels: Record<string, number> = { brown0: 2, buffet: 2, rush: 2, hiss: 2, breeze: 2, pink1: 1, gust: 1, flutter: 2, squall: 3, drift: 2, pip: 1, tail: 1, waveA: 2, velvet: 2, pink0: 2, white0: 2 };
   return {
     sampleRate: 48000,
@@ -151,6 +167,12 @@ export function fakeKit(): { sampleRate: number; step(): boolean; heavy(): boole
     ready: () => true,
     done: () => true,
     buffer: (name) => ({ duration: name === "pip" ? 0.12 : 5, numberOfChannels: channels[name] ?? 1, sampleRate: 48000, length: 240000 }) as unknown as AudioBuffer,
+    // The real kit makes later generations. Here a read stays on the buffer it was given.
+    request() {},
+    generation() {
+      return 0;
+    },
+    pending: () => false,
     bytes: () => new Uint8Array(65536),
     whenDone: () => Promise.resolve(),
     dispose() {},

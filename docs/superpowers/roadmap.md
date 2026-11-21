@@ -13,7 +13,8 @@ Last updated 2026-11-19.
 | Terrain design (approved) | `docs/superpowers/specs/2026-11-16-dragon-world-terrain-design.md` |
 | Landing and the Codex | `docs/superpowers/specs/2026-11-18-landing-and-codex-design.md` |
 | Teaching the controls | `docs/superpowers/specs/2026-11-18-teaching-the-controls-design.md` |
-| The story: a simple one (proposed) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
+| The hall and the quest of five (built, claude/story) | `docs/superpowers/specs/2026-11-19-story-destinations-design.md` |
+| The story: a simple one (superseded) | `docs/superpowers/specs/2026-11-18-a-simple-story.md` |
 | Lore and story (set aside by the owner, 2026-11-18) | `docs/superpowers/specs/2026-11-18-lore-and-story.md` |
 | Climates and biomes, and one landmark of each kind | `docs/superpowers/specs/2026-11-18-biomes-and-climate-design.md` |
 | Plans, one per piece of work | `docs/superpowers/plans/` |
@@ -138,8 +139,9 @@ Last updated 2026-11-19.
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
   ^G Help, ^F Where Is (search), ^/ Go To Line and ^X Exit work by key and by tap (Esc closes, or exits); the rest are
-  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. The interactive shell left this
-  page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
+  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. It shows whole lines only: the
+  space between the bars is a whole number of rows and scrolls come to rest on a row (2026-11-20). The interactive
+  shell left this page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
   search field opens at the top with the keyboard up and nothing pinned above the keyboard. `/recruiter` forwards to
   it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
   `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
@@ -297,16 +299,26 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 ## Later
 
 - ~~**The dragon: what's left.**~~ Landing is built: it coils down round the landmark's building.
-- **Landmarks and projects.** Assignments, landing and the Codex are built (see Done). The projects are moving into
-  one hall by the home town (story design).
+- ~~**Landmarks and projects.**~~ Built (2026-11-20, `claude/story-0d42e5`): every project is kept in one hall beside
+  the home town's harbour, in the first frame; the other landmarks are scenery (the abbey still opens About me and the
+  terminal). The hall is a live building drawn by the story layer at `hall-0` in `src/world/story/places.json`, so no
+  world build was needed; a baked `hall` site, if one is ever built, wins over it. The assignments, their sticky file
+  and the landmark config are gone.
+- ~~**The quest of five**~~ (owner, 2026-11-19/20). Built on the same branch: opt-in after the first-flight lesson
+  (a card: "not now" / "follow the quest"; also in the options and the Codex), five odd things across five climates
+  (a tiny pine before a huge yew, a novelist's desk among stooks, a bell in a belfry, a mill-shed with sails, a basket
+  on a dead oak), each with a pennant until found, a short piece and a gold glint on landing, one line about Daniel in
+  the Codex (`INTERESTS` in `content.ts`), a pointer at the frame's edge to the next, and five quatrefoils. The clouds
+  part over a landing (`Sky.clear`). Places for the shipped world are in `places.json` (`scripts/story-places.ts`
+  finds them for another world). Follow-ups: the owner may swap any of the five (six more are written in the design);
+  a baked hall if the live one is not enough; the landscape phone Codex covers the stop.
 - ~~**Where the projects come from**~~ (owner, 2026-11-20). Built on `world/projects`: one Markdown file per project
   in `projects/`, any number of them, in the owner's `order`, read at build by `src/lib/projects.ts` (`loadProjects`,
   `Project`). The owner edits them in the browser, on github.com or in Pages CMS (`.pages.yml`; he signs in at
   app.pagescms.org and installs its GitHub App himself), and the push to `main` deploys them. A mistake in a file
   fails the build with a message naming the file and the field. With a token, one GraphQL request brings GitHub's
   stars, forks and languages; without one they are left out. `/minimal`, the terminal, the agent files, the fish and
-  the Codex read them all; the landmarks hold the first by order (six in the shipped world), keyed by slug, and the
-  rest wait for the hall. Seeded from the six pinned repos, for the owner to prune and add to. `src/lib/github.ts`
+  the Codex read them all; the hall holds every one, in order. Seeded from the six pinned repos, for the owner to prune and add to. `src/lib/github.ts`
   and its mock repos are gone; `npm run e2e` builds with fixture projects (`e2e/fixtures/projects`).
 - ~~**Title menu.**~~ Built 2026-11-20 as the site's terminal over the world (see Done); the rose-window design is
   set aside.
@@ -319,10 +331,7 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
 - **Parchment map** for fast travel between landmarks.
 - ~~**Sound**~~ (done; see Done) and a **photo mode** that saves a postcard of the view. Not in the design yet.
 - **Sound, what is left.** (The rain bed and the re-pin against the whole mix were done by Opus, spec §14.) Found on
-  the way: the noise beds' loops are heard to come round (the open sea's wash every 4.855 s, the surf bed's, the
-  wind's): a pitch wander, tried, removes only exact repetition (a blind critic, spec §14.5), so each pass needs fresh
-  noise (an audio-worklet noise source, or fresh loops from the kit's worker); the same test for the rain's drops and
-  plinks, and for the river's brook loop (9.7 s). Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
+  the way: (done, spec §14.8) fresh noise for every bed, the continuous ones from an AudioWorklet. Rain that comes and goes by density, not only level (a blind critic's ask: the drops' rate following the
   shower; spec §14.2).
   The mix frame's work spread over more frames, to win back the 4× margin of §13 (spec §14.4). Recorded flights in
   rain, mist and at night beside the clear-day ones, so the whole mix is measured in every weather. Later
@@ -330,6 +339,10 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
   small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
   and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
+  - Sound's 4× frame p95: +0.3 ms against the +0.15 bar (spec §14.9): its heavy frames are several 50–90 µs stages
+    meeting. Next: the ear's copy as one block with the shift in the worker; the emitters' sends over two frames; the
+    census off the emitters' frames. The audio thread meets its paired criterion.
+  - Owner's first listen (2026-11-19): default volume now Half, wind down 4 dB. The other voices went unnoticed: listen again with the wind down.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
 
@@ -490,7 +503,7 @@ land was decided (grow it) and is built (spec 6.7).
   programs on a phone, text size, what `clear` clears, the contact form, the LinkedIn address
   (`specs/2026-11-19-minimal-terminal-design.md`, section 11).
 - ~~**A bigger map?**~~ Built: 10240 with more islands at today's scale, shipped in regions (see Done).
-- **The story** (2026-11-18, Fable). The owner set aside the first brainstorm, a world with an order, a history and
+- ~~**The story**~~ (2026-11-18, Fable; superseded by the quest of five above). The owner set aside the first brainstorm, a world with an order, a history and
   months as places (`specs/2026-11-18-lore-and-story.md`): "I just want something simple", in the spirit of *The
   Little Prince*, about people and not world-building. `specs/2026-11-18-a-simple-story.md` proposes it: the dragon has
   never made anything, so it asks the keeper of each landmark why they do, and each page of the Codex ends with one

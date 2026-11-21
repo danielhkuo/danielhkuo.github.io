@@ -1,7 +1,9 @@
 // One-shots: the register of every prerendered slice that is playing or waiting to (design §4, §6.2, §6.7). A one-shot
 // is a buffer source through a static gain; nothing is automated on it (a rejoined long sound gets a 30 ms fade-in,
 // written once on its fresh gain before it sounds). The register is what lets a mute or a hide stop everything that
-// was started, so nothing stale can play on return. The pooled chains for point sources join this file with the surf.
+// was started, so nothing stale can play on return. On the page (`defer`), one not due within DEFER_DUE is only
+// recorded: flush makes its nodes, on a lighter frame, and it still starts at its own audio time. The pooled chains
+// for point sources join this file with the surf.
 
 import { TAU } from "../levels.ts";
 import { cutoffCents, panPair } from "../space.ts";
@@ -29,62 +31,109 @@ export interface OneShotOptions {
   detune?: AudioNode;
 }
 
+/** A one-shot this close to the context's current time, in seconds, is made at once. Further ahead, it can wait. */
+export const DEFER_DUE = 0.06;
+
 export interface OneShots {
   /** Starts one. False when it was dropped (the cap). */
   play(buffer: AudioBuffer, dest: AudioNode, o: OneShotOptions): boolean;
-  /** Stops every one-shot, started or still waiting, at audio time `at`. */
+  /** Stops every one-shot at audio time `at`. Ones still waiting are dropped and never made. */
   stopAll(at: number): void;
-  /** Forgets those that have ended by `now`. */
+  /** Forgets those that have ended by `now`, waiting as well as made. */
   prune(now: number): void;
+  /** Makes every waiting one-shot due within DEFER_DUE, then up to `max` more of the soonest. */
+  flush(now: number, max: number): void;
   readonly live: number;
   readonly started: number;
   readonly dropped: number;
 }
 
-export function createOneShots(ctx: Ctx, cap: number): OneShots {
+interface Waiting {
+  buffer: AudioBuffer;
+  dest: AudioNode;
+  o: OneShotOptions;
+  /** Audio time it ends by. */
+  end: number;
+}
+
+/** Audio time a one-shot has ended by. */
+const endAt = (buffer: AudioBuffer, o: OneShotOptions) => {
+  const rate = o.rate ?? 1;
+  return o.when + (buffer.duration - (o.offset ?? 0)) / rate + 0.05;
+};
+
+export function createOneShots(ctx: Ctx, cap: number, opts?: { defer?: boolean }): OneShots {
+  const defer = opts?.defer === true;
   const live: Live[] = [];
+  /** Accepted, not yet made: soonest first. */
+  const pending: Waiting[] = [];
   let started = 0, dropped = 0;
+
+  const spawn = (buffer: AudioBuffer, dest: AudioNode, o: OneShotOptions) => {
+    const rate = o.rate ?? 1;
+    const offset = o.offset ?? 0;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    const g = ctx.createGain();
+    if (o.fadeIn) {
+      // On a fresh gain, before it sounds: an eased rise with no corner at its end.
+      g.gain.setValueAtTime(0, o.when);
+      g.gain.setTargetAtTime(o.gain, o.when, TAU.rejoin);
+    } else {
+      g.gain.value = o.gain;
+    }
+    source.connect(g);
+    g.connect(dest);
+    const bend = o.detune;
+    if (bend) bend.connect(source.detune);
+    // Ended, both leave the graph: nothing is left for the engine to visit.
+    source.onended = () => {
+      source.disconnect();
+      g.disconnect();
+      if (bend) {
+        try {
+          bend.disconnect(source.detune);
+        } catch {
+          // already gone
+        }
+      }
+    };
+    source.start(o.when, offset);
+    live.push({ source, gain: g, end: endAt(buffer, o) });
+  };
+
   return {
     play(buffer, dest, o) {
-      if (live.length >= cap && o.low) {
+      // The cap is decided now, deferred or not: a waiting one-shot already holds its place.
+      if (live.length + pending.length >= cap && o.low) {
         dropped++;
         return false;
       }
-      const rate = o.rate ?? 1;
-      const offset = o.offset ?? 0;
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.playbackRate.value = rate;
-      const g = ctx.createGain();
-      if (o.fadeIn) {
-        // On a fresh gain, before it sounds: an eased rise with no corner at its end.
-        g.gain.setValueAtTime(0, o.when);
-        g.gain.setTargetAtTime(o.gain, o.when, TAU.rejoin);
-      } else {
-        g.gain.value = o.gain;
-      }
-      source.connect(g);
-      g.connect(dest);
-      const bend = o.detune;
-      if (bend) bend.connect(source.detune);
-      // Ended, both leave the graph: nothing is left for the engine to visit.
-      source.onended = () => {
-        source.disconnect();
-        g.disconnect();
-        if (bend) {
-          try {
-            bend.disconnect(source.detune);
-          } catch {
-            // already gone
-          }
-        }
-      };
-      source.start(o.when, offset);
-      live.push({ source, gain: g, end: o.when + (buffer.duration - offset) / rate + 0.05 });
+      if (defer && o.when - ctx.currentTime >= DEFER_DUE) {
+        const item: Waiting = { buffer, dest, o, end: endAt(buffer, o) };
+        let i = pending.length;
+        while (i > 0 && pending[i - 1].o.when > o.when) i--;
+        pending.splice(i, 0, item);
+      } else spawn(buffer, dest, o);
       started++;
       return true;
     },
+    flush(now, max) {
+      // Due ones are the soonest, and they do not count towards max.
+      let extra = 0;
+      while (pending.length > 0) {
+        const due = pending[0].o.when - now < DEFER_DUE;
+        if (!due && extra >= max) break;
+        const p = pending.shift();
+        if (!p) break;
+        spawn(p.buffer, p.dest, p.o);
+        if (!due) extra++;
+      }
+    },
     stopAll(at) {
+      // Anything still waiting starts in the future: a mute, a hide or a cut drops it unmade.
+      pending.length = 0;
       for (const l of live) {
         try {
           l.source.stop(at);
@@ -99,9 +148,10 @@ export function createOneShots(ctx: Ctx, cap: number): OneShots {
         // Forgotten, not disconnected: a timeline scheduled ahead of its render prunes long before the source plays.
         if (live[i].end < now) live.splice(i, 1);
       }
+      for (let i = pending.length - 1; i >= 0; i--) if (pending[i].end < now) pending.splice(i, 1);
     },
     get live() {
-      return live.length;
+      return live.length + pending.length;
     },
     get started() {
       return started;

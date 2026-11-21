@@ -81,6 +81,34 @@ export async function settled(page: Page): Promise<void> {
   );
 }
 
+/**
+ * The lines of the text that the title bar or the foot (the status line and the keys) cut: each line box of each run
+ * of text that is neither wholly between the two nor wholly behind one. nano shows whole lines only.
+ */
+export function cutLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const bar = document.querySelector(".nano > .nano-bar")?.getBoundingClientRect().bottom ?? NaN;
+    const foot = document.querySelector(".nano-foot")?.getBoundingClientRect().top ?? NaN;
+    const main = document.querySelector("main");
+    if (!main) throw new Error("no text");
+    const cut: string[] = [];
+    const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const text = n.textContent?.trim() ?? "";
+      if (!text) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      for (const r of range.getClientRects()) {
+        if (r.height === 0) continue;
+        const behind = r.bottom <= bar + 0.5 || r.top >= foot - 0.5;
+        const whole = r.top >= bar - 0.5 && r.bottom <= foot + 0.5;
+        if (!behind && !whole) cut.push(`"${text.slice(0, 24)}" at ${r.top.toFixed(1)} to ${r.bottom.toFixed(1)} (bar ends ${bar.toFixed(1)}, foot starts ${foot.toFixed(1)})`);
+      }
+    }
+    return cut;
+  });
+}
+
 /** Where the selection is on screen, and the space between the title bar and the foot that it should be in. */
 export function selectionPlace(page: Page): Promise<{ top: number; bottom: number; barBottom: number; footTop: number }> {
   return page.evaluate(() => {

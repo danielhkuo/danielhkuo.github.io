@@ -80,3 +80,19 @@ function Part({ section }: { section: Section }) {
     </section>
   );
 }
+
+/**
+ * The rows the page snaps to: one empty box a line tall for every row the text could take, down its left edge, so a
+ * scroll always comes to rest with a whole row under the title bar (minimal.css, "Whole lines only"). `rows` is a
+ * generous count; the rail is clipped to the text's height.
+ */
+export function Rail({ rows }: { rows: number }) {
+  return (
+    <div className="nano-rail" aria-hidden="true">
+      {Array.from({ length: rows }, (_, row) => (
+        // The rows are alike and never move: the index is the row.
+        <i key={row} />
+      ))}
+    </div>
+  );
+}

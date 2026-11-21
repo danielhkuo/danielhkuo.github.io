@@ -11,51 +11,51 @@
 import { rngFor } from "../../core/rng.ts";
 import { BED, BED_WANDER, OPEN } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, bindHz, bindPan, gain, highpass, loop, lowpass, panner, type Ctx } from "./graph.ts";
-import type { Hub } from "./hub.ts";
+import { bandpass, bind, bindHz, bindPan, gain, highpass, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import type { Voice } from "./wind.ts";
+import type { BedOpts, Voice } from "./wind.ts";
 
 interface Parts {
   v: Voice;
   keep<N extends AudioNode>(n: N): N;
-  noise(name: string): AudioBufferSourceNode;
+  /** The bed's offset stream, drawn in the order the loops used to be read. */
+  rng: { float(): number };
 }
 
-function parts(ctx: Ctx, kit: Kit, seed: number, tag: string, at: number): Parts {
+function parts(seed: number, tag: string): Parts {
   const v: Voice = { steps: [], bindings: [], sources: [], nodes: [] };
   const rng = rngFor(seed, `sound/${tag}/offsets`);
   const keep = <N extends AudioNode>(n: N): N => {
     v.nodes.push(n);
     return n;
   };
-  return {
-    v,
-    keep,
-    noise(name) {
-      const buffer = kit.buffer(name);
-      const s = keep(loop(ctx, buffer));
-      s.start(at, rng.float() * buffer.duration);
-      v.sources.push(s);
-      return s;
-    },
-  };
+  return { v, keep, rng };
 }
 
-export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
-  const p = parts(ctx, kit, opts.seed, "bed", opts.at);
+export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
+  const p = parts(opts.seed, "bed");
   const { v, keep } = p;
   let sum: GainNode;
+  // Brown, pink, the hiss's white, the grain, and the rattle's white: one node. Inlets, so the second step's filters
+  // connect when they are made. Offsets stay in the order the loops were read.
+  const surfNoise = ["brown0", "pink0", "white0", "velvet", "white0"];
+  const inlet: GainNode[] = [];
   v.steps.push(() => {
+    for (let i = 0; i < surfNoise.length; i++) inlet.push(keep(gain(ctx, 1)));
+    v.sources.push(opts.fresh.group("sea", opts.at, surfNoise.map((name, i) => ({
+      name,
+      into: [inlet[i]],
+      offset: p.rng.float() * kit.buffer(name).duration,
+    }))));
     sum = keep(gain(ctx, 1));
     const rumbleLow = keep(lowpass(ctx, BED.rumbleHz));
     const rumble = keep(gain(ctx, 0));
-    p.noise("brown0").connect(rumbleLow);
+    inlet[0].connect(rumbleLow);
     rumbleLow.connect(rumble);
     rumble.connect(sum);
     const bodyBand = keep(bandpass(ctx, BED.bodyHz, BED.bodyQ));
     const body = keep(gain(ctx, 0));
-    p.noise("pink0").connect(bodyBand);
+    inlet[1].connect(bodyBand);
     bodyBand.connect(body);
     body.connect(sum);
     v.bindings.push(bind(T.BED_RUMBLE, [rumble.gain]), bind(T.BED_BODY, [body.gain]));
@@ -64,7 +64,7 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     const high = keep(highpass(ctx, BED.hissHz));
     const air = keep(lowpass(ctx, 1000));
     const hiss = keep(gain(ctx, 0));
-    p.noise("white0").connect(high);
+    inlet[2].connect(high);
     high.connect(air);
     air.connect(hiss);
     hiss.connect(sum);
@@ -72,9 +72,9 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     const band = keep(bandpass(ctx, BED.rattleHz, BED.rattleQ));
     const rattle = keep(gain(ctx, 0));
     const grainSplit = keep(ctx.createChannelSplitter(2));
-    p.noise("velvet").connect(grainSplit);
+    inlet[3].connect(grainSplit);
     const noiseSplit = keep(ctx.createChannelSplitter(2));
-    p.noise("white0").connect(noiseSplit);
+    inlet[4].connect(noiseSplit);
     const grains = keep(ctx.createChannelMerger(2));
     for (let c = 0; c < 2; c++) {
       const g = keep(gain(ctx, 0));
@@ -112,8 +112,8 @@ export function buildSurfBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
   return v;
 }
 
-export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hub; seed: number; at: number }): Voice {
-  const p = parts(ctx, kit, opts.seed, "open", opts.at);
+export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Voice {
+  const p = parts(opts.seed, "open");
   const { v, keep } = p;
   v.steps.push(() => {
     const band = keep(bandpass(ctx, OPEN.hz, OPEN.q));
@@ -122,7 +122,11 @@ export function buildOpenSea(ctx: Ctx, kit: Kit, out: AudioNode, opts: { hub: Hu
     opts.hub.drift.connect(depth, 0);
     depth.connect(swell.gain);
     const lev = keep(gain(ctx, 0));
-    p.noise("pink0").connect(band);
+    v.sources.push(opts.fresh.group("sea", opts.at, [{
+      name: "pink0",
+      into: [band],
+      offset: p.rng.float() * kit.buffer("pink0").duration,
+    }]));
     band.connect(swell);
     swell.connect(lev);
     lev.connect(out);

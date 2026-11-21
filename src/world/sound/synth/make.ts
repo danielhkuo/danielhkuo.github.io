@@ -32,25 +32,134 @@ export type Job = (typeof JOBS)[number];
 /** Noise loop lengths, samples: unequal, so no two layers loop together. */
 const LEN = { brown0: 262144, pink7: 240007, white7: 220009, pink1: 200003, pink0: 233021, white0: 211007 };
 
+/**
+ * The buffers a bed reads as a loop. Each one is made again, from a new draw, before the loop can come round
+ * (design §14.8). The whistles, the whoosh, the falls and the moments are not here: they keep one loop.
+ */
+export const FRESH_NAMES = ["buffet", "rush", "hiss", "breeze", "brown0", "pink0", "white0", "velvet", "drops", "plinks", "brook", "flow"] as const;
+
+const FRESH = new Set<string>(FRESH_NAMES);
+
+/** Generation 0 keeps the kit's own stream tag; a later generation draws the same stream again (`sound/pink7/g3`). */
+function stream(base: string, generation: number): string {
+  return generation > 0 ? `${base}/g${generation}` : base;
+}
+
+function draw(seed: number, base: string, generation: number) {
+  return rngFor(seed, stream(base, generation));
+}
+
+/** Fixed filters of the wind's layers. The buffers have them baked in; the fresh-noise worklet runs these same ones. */
+export const BUFFET_FILTERS: readonly FilterSpec[] = [{ type: "highpass", hz: A_HIGHPASS_HZ, q: Q_FLAT_DB }, { type: "peaking", hz: A_PEAK.hz, q: A_PEAK.q, db: A_PEAK.db }];
+export const RUSH_FILTERS: readonly FilterSpec[] = [{ type: "highshelf", hz: B_SHELF.hz, db: B_SHELF.db }];
+export const HISS_FILTERS: readonly FilterSpec[] = [{ type: "highpass", hz: C_HIGHPASS_HZ, q: Q_FLAT_DB }];
+export const BREEZE_FILTERS: readonly FilterSpec[] = [{ type: "bandpass", hz: E_BAND.hz, q: E_BAND.q }, { type: "lowpass", hz: E_LOWPASS_HZ, q: Q_FLAT_DB }];
+
+/** Colour, width and fixed filters of one continuous noise. Velvet is a grain, not a levelled noise, so its filters are none. */
+export interface NoiseLayer {
+  channels: 1 | 2;
+  colour: "white" | "pink" | "brown" | "velvet";
+  /** Correlation of the two channels, as stereoNoise's rho. Velvet is left unmixed. */
+  rho: number;
+  filters: readonly FilterSpec[];
+}
+
+const NO_FILTERS: readonly FilterSpec[] = [];
+
+/**
+ * The continuous noises (design §14.8). The buffers and the worklet both read this, so a noise made as it plays is
+ * the same sound as the loop it replaces.
+ */
+export const NOISE_LAYERS = {
+  buffet: { channels: 2, colour: "brown", rho: 0, filters: BUFFET_FILTERS },
+  rush: { channels: 2, colour: "pink", rho: 0.7, filters: RUSH_FILTERS },
+  hiss: { channels: 2, colour: "white", rho: 0.7, filters: HISS_FILTERS },
+  breeze: { channels: 2, colour: "pink", rho: 0.7, filters: BREEZE_FILTERS },
+  brown0: { channels: 2, colour: "brown", rho: 0, filters: NO_FILTERS },
+  pink0: { channels: 2, colour: "pink", rho: 0, filters: NO_FILTERS },
+  white0: { channels: 2, colour: "white", rho: 0, filters: NO_FILTERS },
+  velvet: { channels: 2, colour: "velvet", rho: 0, filters: NO_FILTERS },
+} as const satisfies Record<string, NoiseLayer>;
+
+function shape(channels: Float32Array[], filters: readonly FilterSpec[], sampleRate: number): Float32Array[] {
+  return channels.map((c) => filtered(c, filters, sampleRate));
+}
+
+/** Brown, the two channels independent: the surf bed's rumble, and the buffet's source. */
+function brown(seed: number, generation: number, sampleRate: number): Float32Array[] {
+  return stereoNoise("brown", LEN.brown0, sampleRate, NOISE_LAYERS.brown0.rho, draw(seed, "sound/brown0", generation));
+}
+
+/** Pink at the rush's correlation. The rush and the breeze are this one draw, filtered two ways. */
+function pinkWide(seed: number, generation: number, sampleRate: number): Float32Array[] {
+  return stereoNoise("pink", LEN.pink7, sampleRate, NOISE_LAYERS.rush.rho, draw(seed, "sound/pink7", generation));
+}
+
+function raw(sampleRate: number, channels: Float32Array[]): Raw {
+  return { rate: sampleRate, channels };
+}
+
+/**
+ * Generation `generation` of buffer `name`: the same generator, length, filters and channel count as `make`, and a new
+ * draw when `generation` > 0. One name does not build the others.
+ */
+function drawFresh(name: string, generation: number, seed: number, sampleRate: number): Raw {
+  if (!FRESH.has(name)) throw new Error(`remake: ${name} is not made fresh`);
+  switch (name) {
+    case "brown0":
+      return raw(sampleRate, brown(seed, generation, sampleRate));
+    case "buffet":
+      return raw(sampleRate, shape(brown(seed, generation, sampleRate), NOISE_LAYERS.buffet.filters, sampleRate));
+    case "rush":
+      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), NOISE_LAYERS.rush.filters, sampleRate));
+    case "breeze":
+      return raw(sampleRate, shape(pinkWide(seed, generation, sampleRate), NOISE_LAYERS.breeze.filters, sampleRate));
+    case "hiss": {
+      const white = stereoNoise("white", LEN.white7, sampleRate, NOISE_LAYERS.hiss.rho, draw(seed, "sound/white7", generation));
+      return raw(sampleRate, shape(white, NOISE_LAYERS.hiss.filters, sampleRate));
+    }
+    case "pink0":
+      return raw(sampleRate, stereoNoise("pink", LEN.pink0, sampleRate, NOISE_LAYERS.pink0.rho, draw(seed, "sound/pink0", generation)));
+    case "white0":
+      return raw(sampleRate, stereoNoise("white", LEN.white0, sampleRate, NOISE_LAYERS.white0.rho, draw(seed, "sound/white0", generation)));
+    case "velvet":
+      return raw(sampleRate, [0, 1].map((c) => velvet(sampleRate, draw(seed, `sound/velvet/${c}`, generation))));
+    case "drops":
+      return raw(sampleRate, [drops(DROPS, sampleRate, draw(seed, "sound/drops", generation))]);
+    case "plinks":
+      return raw(sampleRate, [bubbleBed(RAIN_PLINKS, sampleRate, draw(seed, "sound/plinks", generation))]);
+    case "brook":
+      return raw(sampleRate, [bubbleBed(BROOK, sampleRate, draw(seed, "sound/brook", generation))]);
+    case "flow":
+      return raw(sampleRate, [bubbleBed(FLOW, sampleRate, draw(seed, "sound/flow", generation))]);
+    default:
+      throw new Error(`remake: ${name} is not made fresh`);
+  }
+}
+
+/**
+ * Generation `generation` of buffer `name` (design §14.8): generation 0 is the kit's own; a later one is the same
+ * generator run on a new draw, heard as the same sound but never the same stretch of it.
+ */
+export function remake(name: string, generation: number, seed: number, sampleRate: number): Raw {
+  return drawFresh(name, generation, seed, sampleRate);
+}
+
 export function make(job: Job, seed: number, sampleRate: number): Record<string, Raw> {
   if (job === "noise") {
-    const brown0 = stereoNoise("brown", LEN.brown0, sampleRate, 0, rngFor(seed, "sound/brown0"));
-    const pink7 = stereoNoise("pink", LEN.pink7, sampleRate, 0.7, rngFor(seed, "sound/pink7"));
-    const white7 = stereoNoise("white", LEN.white7, sampleRate, 0.7, rngFor(seed, "sound/white7"));
-    const through = (x: Float32Array[], filters: FilterSpec[]) => x.map((c) => filtered(c, filters, sampleRate));
     return {
       /** Brown, the two channels independent: the surf bed's rumble. */
-      brown0: { rate: sampleRate, channels: brown0 },
+      brown0: remake("brown0", 0, seed, sampleRate),
       // The wind's layers, each with its fixed filters already run (synth/filters.ts): what the audio thread is left
       // with is the one filter of each that moves.
       /** A, the ear buffet: brown through its high-pass and its bump. */
-      buffet: { rate: sampleRate, channels: through(brown0, [{ type: "highpass", hz: A_HIGHPASS_HZ, q: Q_FLAT_DB }, { type: "peaking", hz: A_PEAK.hz, q: A_PEAK.q, db: A_PEAK.db }]) },
+      buffet: remake("buffet", 0, seed, sampleRate),
       /** B, the rush: pink at correlation 0.7 (wide, but holding its centre) through its shelf. */
-      rush: { rate: sampleRate, channels: through(pink7, [{ type: "highshelf", hz: B_SHELF.hz, db: B_SHELF.db }]) },
+      rush: remake("rush", 0, seed, sampleRate),
       /** C, the hiss: white at correlation 0.7 through its high-pass. */
-      hiss: { rate: sampleRate, channels: through(white7, [{ type: "highpass", hz: C_HIGHPASS_HZ, q: Q_FLAT_DB }]) },
+      hiss: remake("hiss", 0, seed, sampleRate),
       /** E, the ground breeze: the same pink through its band and its low-pass. */
-      breeze: { rate: sampleRate, channels: through(pink7, [{ type: "bandpass", hz: E_BAND.hz, q: E_BAND.q }, { type: "lowpass", hz: E_LOWPASS_HZ, q: Q_FLAT_DB }]) },
+      breeze: remake("breeze", 0, seed, sampleRate),
       /** Pink, mono: the whistles' and the whoosh's source. */
       pink1: { rate: sampleRate, channels: [noise("pink", LEN.pink1, sampleRate, rngFor(seed, "sound/pink1"))] },
     };
@@ -71,11 +180,11 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
       warp: { rate: 0, channels: [], bytes: warpTile(seed) },
       /** The waves' fresh noise: one Gaussian loop (two channels) and four sign loops of lengths that share no factor. */
       waveA: { rate: sampleRate, channels: [0, 1].map((c) => level(gaussianInto(new Float32Array(WAVE_LOOP), rngFor(seed, `sound/waveA/${c}`)))) },
-      velvet: { rate: sampleRate, channels: [0, 1].map((c) => velvet(sampleRate, rngFor(seed, `sound/velvet/${c}`))) },
+      velvet: remake("velvet", 0, seed, sampleRate),
       plunge: { rate: sampleRate, channels: [bubbleBed(PLUNGE, sampleRate, rngFor(seed, "sound/plunge"))] },
       /** Pink and white with the two channels independent: the surf bed's two halves. */
-      pink0: { rate: sampleRate, channels: stereoNoise("pink", LEN.pink0, sampleRate, 0, rngFor(seed, "sound/pink0")) },
-      white0: { rate: sampleRate, channels: stereoNoise("white", LEN.white0, sampleRate, 0, rngFor(seed, "sound/white0")) },
+      pink0: remake("pink0", 0, seed, sampleRate),
+      white0: remake("white0", 0, seed, sampleRate),
     };
     SIGN_LOOPS.forEach((len, i) => {
       out[`sign${i}`] = { rate: sampleRate, channels: [signLoop(len, rngFor(seed, `sound/sign/${i}`))] };
@@ -87,11 +196,11 @@ export function make(job: Job, seed: number, sampleRate: number): Record<string,
   }
   if (job === "river") {
     return {
-      brook: { rate: sampleRate, channels: [bubbleBed(BROOK, sampleRate, rngFor(seed, "sound/brook"))] },
-      flow: { rate: sampleRate, channels: [bubbleBed(FLOW, sampleRate, rngFor(seed, "sound/flow"))] },
+      brook: remake("brook", 0, seed, sampleRate),
+      flow: remake("flow", 0, seed, sampleRate),
       /** Rain's drops on land and its plinks on water (made with the river's: the rain bed waits for both). */
-      drops: { rate: sampleRate, channels: [drops(DROPS, sampleRate, rngFor(seed, "sound/drops"))] },
-      plinks: { rate: sampleRate, channels: [bubbleBed(RAIN_PLINKS, sampleRate, rngFor(seed, "sound/plinks"))] },
+      drops: remake("drops", 0, seed, sampleRate),
+      plinks: remake("plinks", 0, seed, sampleRate),
     };
   }
   if (job === "gulls") {
