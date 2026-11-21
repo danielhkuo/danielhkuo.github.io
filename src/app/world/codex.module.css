@@ -34,6 +34,8 @@
   /* Below the sound toggle: top max(3.5rem, safe-area + 3rem), 44px square (sound.module.css), then a small gap. */
   --codex-clear: calc(max(3.5rem, env(safe-area-inset-top) + 3rem) + 44px + 0.75rem);
   --codex-foot: 1.25rem;
+  /* How far a scroller fades at its foot while more is below: the hall list, and the leaf itself. */
+  --list-fade: 1.35rem;
   top: var(--codex-clear);
   right: clamp(0.75rem, 3vw, 2.5rem);
   width: min(25rem, 40vw);
@@ -404,9 +406,11 @@
   margin-top: 0.45rem;
 }
 
-/* The buttons stay in reach at the foot of the leaf however far it scrolls. */
+/* The buttons stay in reach at the foot of the leaf however far it scrolls. While more is below, the same
+   bottom fade the hall list uses sits just above them: a mask on the leaf itself would fade the buttons too. */
 .actions {
   position: sticky;
+  z-index: 1;
   bottom: -1.3rem;
   display: flex;
   flex-wrap: wrap;
@@ -415,6 +419,20 @@
   padding: 0.5rem 0.4rem 0.4rem;
   background-color: var(--paper);
   background-image: var(--grain);
+}
+
+.leaf[data-more="true"] .actions::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: var(--list-fade);
+  background-color: var(--paper);
+  background-image: var(--grain);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000);
+  mask-image: linear-gradient(to bottom, transparent, #000);
 }
 
 .button {
@@ -520,7 +538,6 @@
 }
 
 .projectScroll {
-  --list-fade: 1.35rem;
   flex: 1 100 auto;
   min-height: 0;
   border-top: 1px dotted var(--ink-soft);
@@ -636,16 +653,11 @@
     line-height: 1.05;
   }
 
+  /* 1.15rem, and the initial stays 1.4em: a shorter capital was clipped under the title's ink. */
   .hallLeaf .title {
     margin-bottom: 0.12rem;
     font-size: 1.15rem;
     line-height: 1;
-  }
-
-  .hallLeaf .initial {
-    font-size: 1.12em;
-    padding: 0.02em 0.08em 0;
-    vertical-align: -0.05em;
   }
 
   .hallLeaf .register {
@@ -704,6 +716,67 @@
   }
 }
 
+/* A short window that is not the hall: the leaf is the scroller, and Take off sticks over whatever is still
+   below. Pull the spacing in, and put The five and its quatrefoils on one row, so that row sits above the
+   button on a stop at 844×390. The hall keeps the padding and the register layout set above. */
+@media (max-height: 520px) {
+  .leaf:not(.hallLeaf) {
+    padding: 0.8rem 1.15rem 0.65rem;
+  }
+
+  .leaf:not(.hallLeaf) .actions {
+    bottom: -0.65rem;
+  }
+
+  .leaf:not(.hallLeaf) .rubric {
+    margin-bottom: 0.08rem;
+  }
+
+  .leaf:not(.hallLeaf) .title {
+    margin-bottom: 0.2rem;
+  }
+
+  .leaf:not(.hallLeaf) .lede {
+    margin-bottom: 0.35rem;
+  }
+
+  .leaf:not(.hallLeaf) .keepsakeLarge {
+    width: 28px;
+    height: 28px;
+    margin: 0 0 0.3rem;
+  }
+
+  .leaf:not(.hallLeaf) .note {
+    margin: -0.2rem 0 0.45rem;
+  }
+
+  .leaf:not(.hallLeaf) .register {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.45rem;
+    margin-bottom: 0.45rem;
+    padding-top: 0.3rem;
+  }
+
+  .leaf:not(.hallLeaf) .register h3 {
+    grid-area: 1 / 1;
+    margin: 0;
+  }
+
+  .leaf:not(.hallLeaf) .foils {
+    grid-area: 1 / 2;
+    margin: 0;
+  }
+
+  .leaf:not(.hallLeaf) .register > ul,
+  .leaf:not(.hallLeaf) .register > p,
+  .leaf:not(.hallLeaf) .register > .links,
+  .leaf:not(.hallLeaf) .register > .button {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-height: 520px) and (max-width: 760px) {
   .codex {
     bottom: 0.35rem;
@@ -729,9 +802,27 @@
   }
 }
 
-/* After the touch rule, so a short phone keeps the title, three rows and Take off inside the sheet. */
+/* After the touch rule, so a short phone keeps the title, the rows and Take off inside the sheet. */
 @media (max-height: 520px) and (hover: none) and (pointer: coarse) {
   .codex {
     max-height: min(calc(var(--vvh, 100dvh) - var(--codex-clear) - 0.35rem), 46rem);
+  }
+}
+
+/* A bottom sheet, after every other height: about 62% of the visible height, and never up under the sound
+   toggle. The top of the frame stays in view. On a short phone the list may shrink to two rows; it still scrolls. */
+@media (max-width: 760px) {
+  .codex {
+    max-height: min(calc(var(--vvh, 100dvh) * 0.62), calc(var(--vvh, 100dvh) - var(--codex-clear) - 0.6rem), 46rem);
+  }
+}
+
+@media (max-width: 760px) and (max-height: 520px) {
+  .codex {
+    max-height: min(calc(var(--vvh, 100dvh) * 0.62), calc(var(--vvh, 100dvh) - var(--codex-clear) - 0.35rem), 46rem);
+  }
+
+  .projectScroll {
+    min-height: calc(44px * 2);
   }
 }

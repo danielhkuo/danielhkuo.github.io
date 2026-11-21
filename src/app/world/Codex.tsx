@@ -175,8 +175,8 @@ function readList(e: KeyboardEvent<HTMLDivElement>, el: HTMLElement | null): voi
   if (el.scrollTop !== before) e.preventDefault();
 }
 
-/** True while `node` can still scroll down, so the hall list can fade its bottom edge and clear the fade at the end. */
-function useMoreBelow(node: RefObject<HTMLElement | null>, watch: number): boolean {
+/** True while `node` can still scroll down, so a scroller can fade its bottom edge and clear the fade at the end. */
+function useMoreBelow(node: RefObject<HTMLElement | null>, watch: unknown): boolean {
   const [more, setMore] = useState(false);
   useEffect(() => {
     const el = node.current;
@@ -426,6 +426,8 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
   const kind = kindName(landmark.type);
   const projectPage = project !== null;
   const hallList = landmark.holds.kind === "hall" && !projectPage;
+  // The hall list fades on its own scroller. Everywhere else the leaf scrolls, and the same fade marks more below it.
+  const leafMore = useMoreBelow(leaf, `${landmark.id}:${openSlug ?? ""}:${quest.mode}:${quest.found.join(",")}`);
   let body: ReactNode;
   if (landmark.holds.kind === "hall") {
     body = project ? (
@@ -454,6 +456,7 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
       <div
         ref={leaf}
         className={hallList ? `${styles.leaf} ${styles.hallLeaf}` : styles.leaf}
+        data-more={!hallList && leafMore ? "true" : "false"}
         tabIndex={-1}
         onKeyDown={(e) => readList(e, listScroll.current)}
       >
