@@ -116,7 +116,7 @@
 }
 
 .lobes {
-  fill: var(--vermilion-bright);
+  fill: var(--foil, var(--vermilion-bright));
 }
 
 .empty {
@@ -253,7 +253,23 @@
   font-size: 0.95rem;
   font-weight: 400;
   font-variant: small-caps;
+  /* After the shorthand, so the count's 0 stays a figure in this old-style face. */
+  font-variant-numeric: lining-nums;
   letter-spacing: 0.05em;
+  overflow-wrap: break-word;
+}
+
+/* IM Fell's old-style zero reads as a letter o. The count uses a lining figure so "0 of 5" stays a number. */
+.figures {
+  font-family: Georgia, "Times New Roman", serif;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+}
+
+.questLine {
+  margin: 0.05rem 0 0.5rem;
+  line-height: 1.4;
+  overflow-wrap: break-word;
 }
 
 .register ul {
@@ -261,6 +277,8 @@
   padding: 0;
   list-style: none;
   line-height: 1.45;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .registerName {
@@ -355,9 +373,10 @@
 
 .foils {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.7rem;
   align-items: center;
+  max-width: 100%;
   margin: 0.2rem 0 0.55rem;
 }
 
@@ -368,20 +387,41 @@
   color: var(--ink);
 }
 
-.found {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  min-width: 0;
-  margin: 0.2rem 0;
+.register .pieces {
+  margin: 0.15rem 0 0.1rem;
 }
 
-.keepsake {
-  width: 1.05rem;
-  height: 1.05rem;
+.piece {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0.16rem 0;
+}
+
+.swatch {
   flex: none;
-  margin-top: 0.18rem;
-  color: var(--ink);
+  width: 0.85rem;
+  height: 0.85rem;
+  box-sizing: border-box;
+  border: 1px solid var(--ink);
+  background: transparent;
+}
+
+.pieceLine {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+.pieceFact,
+.pieceAside {
+  margin-left: 0.28rem;
+}
+
+.pieceAside {
+  color: var(--ink-soft);
 }
 
 .keepsakeLarge {
@@ -390,11 +430,6 @@
   height: 40px;
   margin: 0.1rem 0 0.75rem;
   color: var(--ink);
-}
-
-.found span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .closing {
@@ -671,7 +706,9 @@
 
   .hallLeaf .register h3 {
     grid-area: 1 / 1;
+    min-width: 0;
     margin: 0;
+    overflow-wrap: anywhere;
     font-size: 0.82rem;
   }
 
@@ -761,7 +798,13 @@
 
   .leaf:not(.hallLeaf) .register h3 {
     grid-area: 1 / 1;
+    min-width: 0;
     margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .leaf:not(.hallLeaf) .questLine {
+    margin-bottom: 0.25rem;
   }
 
   .leaf:not(.hallLeaf) .foils {
@@ -824,5 +867,11 @@
 
   .projectScroll {
     min-height: calc(44px * 2);
+  }
+
+  /* The count's heading is too long to share a row with the quatrefoils. Stack them so nothing runs past the sheet. */
+  .hallLeaf .register,
+  .leaf:not(.hallLeaf) .register {
+    display: block;
   }
 }

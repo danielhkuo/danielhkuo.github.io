@@ -3,9 +3,9 @@
 // terminal.
 
 import type { Page } from "@playwright/test";
-import { PROFILE } from "../../src/components/terminal/content.ts";
+import { INTERESTS, KEEPSAKE, PROFILE } from "../../src/components/terminal/content.ts";
 import { QUEST_KEY } from "../../src/world/story/quest.ts";
-import { STOPS } from "../../src/world/story/stops.ts";
+import { PIECE_RGB, STOPS } from "../../src/world/story/stops.ts";
 import { expect, flier, guide, hold, openWorld, probe, skipLesson, test, WORLD, type Probe } from "../support";
 
 /** The first landmark that holds `holds` ("hall" or "about"), read from the world's probe. */
@@ -15,6 +15,19 @@ async function landmark(page: Page, holds: string): Promise<{ id: string; name: 
   const site = (await probe(page)).landmarks?.find((l) => l.holds === holds);
   if (!site) throw new Error(`no landmark holds ${holds}`);
   return site;
+}
+
+function titled(s: string): string {
+  return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Red, green, blue of a packed RGBA pixel (red in the low byte), or of a computed CSS colour. */
+function rgbOf(color: string | number): { rgb: number[]; alpha: number } {
+  if (typeof color === "number") return { rgb: [color & 255, (color >>> 8) & 255, (color >>> 16) & 255], alpha: 1 };
+  if (color === "transparent") return { rgb: [0, 0, 0], alpha: 0 };
+  const nums = color.match(/\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 3) throw new Error(`unreadable colour ${color}`);
+  return { rgb: nums.slice(0, 3).map((n) => Math.round(Number(n))), alpha: nums.length >= 4 ? Number(nums[3]) : 1 };
 }
 
 /** Starts the flight just south of `id` and lands there once the prompt offers `offer`. */
@@ -120,7 +133,58 @@ test.describe("landing", () => {
     const codex = page.getByRole("dialog");
     await expect(codex).toBeVisible({ timeout: 20_000 });
     await expect(codex.getByText("¶ Found", { exact: true })).toBeVisible();
-    await expect(codex.getByRole("group", { name: "1 of 5 found" })).toBeVisible();
+    const many = KEEPSAKE.many;
+    await expect(codex.getByRole("heading", { level: 3, name: `${titled(many)} · 1 of 5`, exact: true })).toBeVisible();
+    await expect(codex.getByText("One is kept at each of five places. Each tells you something about Daniel.", { exact: true })).toBeVisible();
+    const foils = codex.getByRole("group", { name: `1 of 5 ${many} found`, exact: true });
+    await expect(foils).toBeVisible();
+    await expect(codex.getByRole("button", { name: "Follow the quest" })).toBeVisible();
+
+    const place = titled(stop.name);
+    const row = codex.getByRole("listitem").filter({ hasText: place });
+    await expect(row).toContainText("found here");
+    const fact = INTERESTS.find((item) => item.key === stop.interest)?.line;
+    if (!fact) throw new Error(`no line for ${stop.interest}`);
+    await expect(row).not.toContainText(fact);
+    await expect(codex.getByText(fact, { exact: true })).toBeVisible();
+    for (const item of STOPS) {
+      const line = codex.getByRole("listitem").filter({ hasText: titled(item.name) });
+      await expect(line).toBeVisible();
+      if (item.key !== stop.key) await expect(line).toContainText("not yet found");
+    }
+
+    const paper = [240, 232, 210];
+    const fills = await foils.locator("svg").evaluateAll((nodes) =>
+      nodes.map((svg) => getComputedStyle(svg.querySelector("g:last-of-type") ?? svg).fill),
+    );
+    expect(fills).toHaveLength(STOPS.length);
+    const index = STOPS.findIndex((item) => item.key === stop.key);
+    STOPS.forEach((item, i) => {
+      const got = rgbOf(fills[i]).rgb;
+      expect(got).toEqual(i === index ? rgbOf(PIECE_RGB[item.key]).rgb : paper);
+    });
+    const swatch = await row.locator("span").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(rgbOf(swatch).rgb).toEqual(rgbOf(PIECE_RGB[stop.key]).rgb);
+    const other = STOPS.find((item) => item.key !== stop.key);
+    if (!other) throw new Error("expected another stop");
+    const empty = await codex
+      .getByRole("listitem")
+      .filter({ hasText: titled(other.name) })
+      .locator("span")
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(rgbOf(empty).alpha).toBe(0);
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    const leaf = codex.locator("[tabindex='-1']");
+    await expect.poll(() => leaf.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+    const sheet = await codex.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, width: window.innerWidth };
+    });
+    expect(sheet.left).toBeGreaterThanOrEqual(-1);
+    expect(sheet.right).toBeLessThanOrEqual(sheet.width + 1);
+
     await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), QUEST_KEY)).toContain(`"${site.name}"`);
   });
 });

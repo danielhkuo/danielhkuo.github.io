@@ -3,11 +3,11 @@
 // The Codex: what is kept at the landmark the dragon has landed on, on a leaf of Ink & Glyph paper. Game layer: hand
 // drawn in CSS and SVG, not Astryx. (The prompt that offers a landing is drawn into the world: controls/guides.ts.)
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { INTERESTS, LINKS, PROFILE } from "../../components/terminal/content";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { INTERESTS, KEEPSAKE, LINKS, PROFILE } from "../../components/terminal/content";
 import { kindName, type HallProject, type Landmark } from "../../world/sites/landmarks";
 import { choose, complete, type QuestState } from "../../world/story/quest";
-import { STOPS, type StopKey } from "../../world/story/stops";
+import { PIECE_RGB, STOPS, type StopKey } from "../../world/story/stops";
 import styles from "./codex.module.css";
 import { fell } from "./fonts";
 import { Keepsake } from "./keepsakes";
@@ -27,6 +27,11 @@ function count(n: number): string {
 
 function capitalised(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** PIECE_RGB, packed RGBA with red in the low byte, as a CSS colour. */
+function pieceCss(packed: number): string {
+  return `rgb(${packed & 255} ${(packed >>> 8) & 255} ${(packed >>> 16) & 255})`;
 }
 
 /** A stop's title: drop a leading "the ", then capitalise. "the small pine" → "Small pine". */
@@ -49,8 +54,18 @@ function interestLine(key: string): string {
   return "";
 }
 
-/** Four lobes: the quatrefoil, ink round it, vermilion when found and paper when not, so an empty one stays a quatrefoil. */
-function Quatrefoil({ className, filled = true }: { className?: string; filled?: boolean }) {
+/** A row's words: the fact once found; on that stop's own page, "found here", because the lede already says the fact. */
+function pieceDetail(interest: string, found: boolean, here: boolean): { text: string; aside: boolean } {
+  if (here) return { text: "found here", aside: true };
+  if (found) return { text: interestLine(interest), aside: false };
+  return { text: "not yet found", aside: true };
+}
+
+/**
+ * Four lobes, inked round. Filled with `fill` when that piece is found (vermilion when no colour is given, as on a
+ * link), and paper when not, so an empty one stays an outlined quatrefoil.
+ */
+function Quatrefoil({ className, filled = true, fill }: { className?: string; filled?: boolean; fill?: string }) {
   const lobes = (kind: string) =>
     [
       [2.2, 0],
@@ -58,8 +73,9 @@ function Quatrefoil({ className, filled = true }: { className?: string; filled?:
       [0, 2.2],
       [0, -2.2],
     ].map(([cx, cy]) => <circle key={`${kind}${cx},${cy}`} cx={cx} cy={cy} r={2.4} />);
+  const colour = filled && fill ? ({ "--foil": fill } as CSSProperties) : undefined;
   return (
-    <svg className={className} viewBox="-6 -6 12 12" aria-hidden="true" focusable="false">
+    <svg className={className} viewBox="-6 -6 12 12" aria-hidden="true" focusable="false" style={colour}>
       <g fill="none" stroke="currentColor" strokeWidth={1.5}>
         {lobes("s")}
       </g>
@@ -317,31 +333,53 @@ function AboutLeaf({ kind }: { kind: string }) {
 }
 
 /**
- * The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. `shown` is the stop this
- * page already states, so its line is not listed again — until all five are found, when every line is listed.
+ * What the quest collects, how many are found, and one row for each place. `shown` is the stop this page already
+ * states, so its row says it was found here and does not repeat the fact.
  */
 function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => void; shown?: StopKey }) {
-  const found = STOPS.filter((stop) => quest.found.includes(stop.key));
+  const n = STOPS.filter((stop) => quest.found.includes(stop.key)).length;
   const done = complete(quest);
-  const listed = done ? found : found.filter((stop) => stop.key !== shown);
+  const many = KEEPSAKE.many;
   return (
     <section className={styles.register} aria-labelledby="codex-five">
-      <h3 id="codex-five">The five</h3>
-      <div className={styles.foils} role="group" aria-label={`${found.length} of 5 found`}>
-        {STOPS.map((stop) => (
-          <Quatrefoil key={stop.key} className={styles.foil} filled={quest.found.includes(stop.key)} />
-        ))}
+      <h3 id="codex-five">
+        {capitalised(many)}
+        {" · "}
+        <span className={styles.figures}>{n}</span>
+        {" of "}
+        <span className={styles.figures}>{STOPS.length}</span>
+      </h3>
+      {done ? null : (
+        <p className={styles.questLine}>One is kept at each of five places. Each tells you something about Daniel.</p>
+      )}
+      <div className={styles.foils} role="group" aria-label={`${n} of ${STOPS.length} ${many} found`}>
+        {STOPS.map((stop) => {
+          const found = quest.found.includes(stop.key);
+          return (
+            <Quatrefoil key={stop.key} className={styles.foil} filled={found} fill={found ? pieceCss(PIECE_RGB[stop.key]) : undefined} />
+          );
+        })}
       </div>
-      {listed.length > 0 ? (
-        <ul>
-          {listed.map((stop) => (
-            <li key={stop.key} className={styles.found}>
-              <Keepsake stop={stop.key} className={styles.keepsake} />
-              <span>{interestLine(stop.interest)}</span>
+      <ul className={styles.pieces}>
+        {STOPS.map((stop) => {
+          const found = quest.found.includes(stop.key);
+          const here = shown === stop.key;
+          const detail = pieceDetail(stop.interest, found, here);
+          return (
+            <li key={stop.key} className={styles.piece}>
+              <span
+                className={styles.swatch}
+                style={found || here ? { backgroundColor: pieceCss(PIECE_RGB[stop.key]) } : undefined}
+                aria-hidden="true"
+              />
+              <span className={styles.pieceLine}>
+                {capitalised(stop.name)}
+                <span className={detail.aside ? styles.pieceAside : styles.pieceFact}> {detail.text}</span>
+              </span>
             </li>
-          ))}
-        </ul>
-      ) : null}
+          );
+        })}
+      </ul>
       {done ? (
         <>
           <p className={styles.closing}>
