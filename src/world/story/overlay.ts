@@ -7,6 +7,7 @@ import { blit } from "../controls/blit.ts";
 import { blank, GOLD, haloed, INK, INK_SOFT, PAPER, PAPER_WASH, PIECE_SLOTS, text, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
 import { GLASS } from "../../components/terminal/content.ts";
 import { pcos, PI, psin } from "../core/psin.ts";
+import { NO_INSETS, type Insets } from "../mobile/layout.ts";
 import { ROSE_LIGHTS } from "../gen/monuments.ts";
 import type { arrowAt } from "./arrow.ts";
 import type { QuestState } from "./quest.ts";
@@ -159,26 +160,31 @@ const labelOf = (n: number): Sprite => text(`${GLASS.short} ${n}/${STOPS.length}
 const LABEL_W = labelOf(STOPS.length).w;
 const COUNT_W = FOILS_W + 4 + LABEL_W + 4;
 const PLATE = plate(COUNT_W, ROSE + 4);
-/** Each stop's lobe, its top-left as a 7-px slot in the frame (its centre is 3 px in). */
-function slotAt(i: number): { x: number; y: number } {
-  return { x: MARGIN + Math.round(LOBES[i].x) - 3, y: MARGIN + Math.round(LOBES[i].y) - 3 };
+/** Each stop's lobe, its top-left as a 7-px slot in the frame (its centre is 3 px in), from the count's corner. */
+function slotAt(i: number, cornerX: number, cornerY: number): { x: number; y: number } {
+  return { x: cornerX + Math.round(LOBES[i].x) - 3, y: cornerY + Math.round(LOBES[i].y) - 3 };
 }
 
 /**
  * Draws the quest into the fw × fh frame `out`: the count while the visitor is on the quest, and the arrow when there
- * is one. `t` in seconds bobs the floating arrow; under `reduced` motion it holds still.
+ * is one. `t` in seconds bobs the floating arrow; under `reduced` motion it holds still. `inset`, in frame pixels,
+ * moves the count in from the corner and keeps the arrow inside the safe frame.
  */
 export function drawQuest(
   out: Uint32Array, fw: number, fh: number, quest: QuestState, arrow: ReturnType<typeof arrowAt> | null, t: number, reduced: boolean,
   taking: Taking | null = null,
+  inset: Insets = NO_INSETS,
 ): void {
   // A find is shown whether or not the visitor follows the quest: the count comes up for it.
   const moment = taking !== null && taking.since < SHOW;
   if (quest.mode !== "on" && !moment) return;
+  // The count sits in the top-left of the safe frame. With no inset the corner is where it always was.
+  const cornerX = inset.left + MARGIN;
+  const cornerY = inset.top + MARGIN;
   const arrived = !moment || taking.since >= ARRIVE;
   let n = 0;
   for (const k of quest.found) if (arrived || k !== taking?.key) n++;
-  blit(out, fw, fh, PLATE, MARGIN - 2, MARGIN - 2, 0.85);
+  blit(out, fw, fh, PLATE, cornerX - 2, cornerY - 2, 0.85);
   let mask = 0, pressed = -1;
   for (let i = 0; i < STOPS.length; i++) {
     const key = STOPS[i].key;
@@ -190,8 +196,8 @@ export function drawQuest(
     }
     if (found) mask |= 1 << i;
   }
-  blit(out, fw, fh, roseFor(mask, pressed), MARGIN, MARGIN + (pressed >= 0 ? 1 : 0));
-  blit(out, fw, fh, labelOf(n), MARGIN + FOILS_W + 3, MARGIN + ((ROSE - 7) >> 1));
+  blit(out, fw, fh, roseFor(mask, pressed), cornerX, cornerY + (pressed >= 0 ? 1 : 0));
+  blit(out, fw, fh, labelOf(n), cornerX + FOILS_W + 3, cornerY + ((ROSE - 7) >> 1));
   if (moment) {
     const i = STOPS.findIndex((st) => st.key === taking.key);
     if (taking.since < ARRIVE) {
@@ -203,7 +209,7 @@ export function drawQuest(
         y = taking.from.y - Math.round(10 * k);
       } else {
         const k = Math.min(1, Math.ceil(((taking.since - LIFT) / (ARRIVE - LIFT)) * FLY_STEPS) / FLY_STEPS);
-        const to = slotAt(i);
+        const to = slotAt(i, cornerX, cornerY);
         const sx = taking.from.x, sy = taking.from.y - 10;
         x = Math.round(sx + (to.x + 3 - sx) * k);
         y = Math.round(sy + (to.y + 3 - sy) * k);
@@ -213,8 +219,8 @@ export function drawQuest(
       // The line that names it, under the count, until it has been read.
       const line = text(`${STOPS[i].name}: ${GLASS.one} ${n} of ${STOPS.length}`);
       const pad = plate(line.w + 6, line.h + 4);
-      blit(out, fw, fh, pad, MARGIN - 2, MARGIN + ROSE + 4, 0.85);
-      blit(out, fw, fh, line, MARGIN + 1, MARGIN + ROSE + 6);
+      blit(out, fw, fh, pad, cornerX - 2, cornerY + ROSE + 4, 0.85);
+      blit(out, fw, fh, line, cornerX + 1, cornerY + ROSE + 6);
     }
   }
   if (!arrow) return;
@@ -226,9 +232,10 @@ export function drawQuest(
   }
   // In the corner the count stands in, the arrow moves out of its way.
   let x = arrow.x - (BOX >> 1), y = arrow.y - (BOX >> 1) + bob;
-  if (arrow.mode === "edge" && x < MARGIN + COUNT_W && y < MARGIN + ROSE + 4) y = MARGIN + ROSE + 6;
+  if (arrow.mode === "edge" && x < cornerX + COUNT_W && y < cornerY + ROSE + 4) y = cornerY + ROSE + 6;
   void VERMILION_DARK;
-  x = Math.max(0, Math.min(fw - BOX, x));
-  y = Math.max(0, Math.min(fh - BOX, y));
+  // The sprite stays inside the safe frame, clear of a notch, the corners and the home indicator.
+  x = Math.max(inset.left, Math.min(fw - inset.right - BOX, x));
+  y = Math.max(inset.top, Math.min(fh - inset.bottom - BOX, y));
   blit(out, fw, fh, s, x, y);
 }

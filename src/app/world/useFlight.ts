@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { Device } from "../../world/controls/guides";
+import type { Insets } from "../../world/mobile/layout";
 import type { Landmark, LandmarkSet } from "../../world/sites/landmarks";
 import { getOptions } from "./optionsStore";
 import { getFrameFit } from "./useFrameScale";
@@ -43,6 +44,8 @@ export interface TouchLink {
   buzz(what: "landed" | "discovery"): void;
   /** The frame wanted, when the phone decides it (played sideways); the window's otherwise. */
   frame?(): { w: number; h: number };
+  /** The safe-area insets in frame pixels, read each frame. None on a desktop. */
+  insets?(): Insets;
 }
 
 export interface FlightView {
@@ -96,6 +99,7 @@ export function useFlight(
         touch: touch.touch,
         // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
         frame: touch.frame ?? getFrameFit,
+        insets: touch.insets,
         sound: () => sound?.current ?? null,
         held: title?.held,
         holdAt: title?.holdAt,

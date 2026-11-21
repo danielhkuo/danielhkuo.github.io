@@ -16,6 +16,41 @@ function leave() {
   window.location.assign("/");
 }
 
+/** How long a phone's keyboard is given to go before a scroll waits no longer for it, ms. */
+const KEYBOARD_GONE = 800;
+
+/**
+ * Runs `then` once a phone's keyboard has gone: at the visual viewport's next resize, or after KEYBOARD_GONE ms,
+ * whichever is first. A scroll made while the keyboard is still going is measured against the short visible area it
+ * leaves behind: in Safari it landed out by the keyboard's height and left the page panned, the title bar off the top
+ * (research/2026-11-19-minimal-terminal-mobile.md: wait for that resize, or 800 ms). Where nothing is touched there is
+ * no keyboard to wait for, and it runs at once.
+ */
+function afterKeyboard(then: () => void): void {
+  const vv = window.visualViewport;
+  let touch = false;
+  try {
+    touch = window.matchMedia("(pointer: coarse)").matches;
+  } catch {
+    // no media queries: no keyboard to wait for
+  }
+  if (!vv || !touch) {
+    then();
+    return;
+  }
+  let done = false;
+  let timer = 0;
+  const run = () => {
+    if (done) return;
+    done = true;
+    vv.removeEventListener("resize", run);
+    window.clearTimeout(timer);
+    requestAnimationFrame(then);
+  };
+  vv.addEventListener("resize", run);
+  timer = window.setTimeout(run, KEYBOARD_GONE);
+}
+
 /** The screen (Help or Go To Line) that is open, if one is. */
 function openPanel(): HTMLElement | null {
   for (const id of [HELP, GOTO]) {
@@ -109,11 +144,13 @@ export default function Footer({ lines }: { lines: number }) {
     cursor.current = match.end;
     const range = rangeOf(nodes, match.start, match.end);
     if (!range) return;
-    // nano puts its cursor on the match: here the match is selected, and brought to the middle of the screen.
+    // nano puts its cursor on the match: here the match is selected, and brought to the middle of the screen once a
+    // phone's keyboard has gone.
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    range.startContainer.parentElement?.scrollIntoView({ block: "center" });
+    const line = range.startContainer.parentElement;
+    afterKeyboard(() => line?.scrollIntoView({ block: "center" }));
   };
 
   const onKey = useEffectEvent((e: KeyboardEvent) => {

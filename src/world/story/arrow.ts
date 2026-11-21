@@ -2,6 +2,7 @@
 // off the frame. The angle is 0 east and π/2 south.
 
 import { patan2, PI } from "../core/psin.ts";
+import { NO_INSETS, type Insets } from "../mobile/layout.ts";
 
 type Arrow = { mode: "edge" | "over"; x: number; y: number; angle: number };
 
@@ -11,11 +12,12 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
-export function arrowAt(target: { x: number; y: number }, fw: number, fh: number, margin: number): Arrow {
-  const left = margin;
-  const right = fw - margin;
-  const top = margin;
-  const bottom = fh - margin;
+export function arrowAt(target: { x: number; y: number }, fw: number, fh: number, margin: number, inset: Insets = NO_INSETS): Arrow {
+  // The arrow keeps to the frame less its safe areas, less the margin.
+  const left = inset.left + margin;
+  const right = fw - inset.right - margin;
+  const top = inset.top + margin;
+  const bottom = fh - inset.bottom - margin;
   // On the inset frame, inclusive of its edge: float 14 px above the stop, pointing down.
   if (target.x >= left && target.x <= right && target.y >= top && target.y <= bottom) {
     return { mode: "over", x: target.x, y: target.y - 14, angle: PI / 2 };
@@ -31,11 +33,12 @@ export function arrowAt(target: { x: number; y: number }, fw: number, fh: number
     return { mode: "edge", x: clamp(Math.round(cx), left, right), y: top, angle };
   }
 
-  // Scale the ray from the centre by the smaller factor, so it meets the inset rectangle.
-  const hx = cx - left;
-  const hy = cy - top;
+  // The ray from the centre meets the safe rectangle on the side it heads for. The scale on an axis is that
+  // side's distance over the ray's component, and the smaller of the two axes wins.
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
+  const hx = dx < 0 ? cx - left : right - cx;
+  const hy = dy < 0 ? cy - top : bottom - cy;
   const sx = ax === 0 ? Number.POSITIVE_INFINITY : hx / ax;
   const sy = ay === 0 ? Number.POSITIVE_INFINITY : hy / ay;
   const scale = sx < sy ? sx : sy;

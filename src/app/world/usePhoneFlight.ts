@@ -57,6 +57,13 @@ export function usePhoneFlight(root: RefObject<HTMLDivElement | null>, panelOpen
       phone: () => phoneRef.current,
       buzz,
       frame: () => turnedFit.current ?? getFrameFit(),
+      // The layer's safe areas are CSS pixels; the frame counts them in its own pixels, rounded up.
+      insets: () => {
+        const css = (turnedFit.current ?? getFrameFit()).css;
+        const src = view().insets;
+        const side = (px: number) => (css > 0 ? Math.ceil(px / css) : 0);
+        return { top: side(src.top), right: side(src.right), bottom: side(src.bottom), left: side(src.left) };
+      },
       touch: (canvas, hooks) => {
         const el = root.current;
         if (!el) return null;

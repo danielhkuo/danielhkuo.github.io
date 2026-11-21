@@ -876,3 +876,37 @@
     display: block;
   }
 }
+
+/* A touch screen wide enough for the side panel, a phone held sideways among them: the panel keeps inside the safe
+   areas, clear of the Dynamic Island or notch at the side and of the home indicator at the foot. */
+@media (hover: none) and (pointer: coarse) and (min-width: 761px) {
+  .codex {
+    right: max(clamp(0.75rem, 3vw, 2.5rem), env(safe-area-inset-right));
+    max-height: min(calc(var(--vvh, 100dvh) - var(--codex-clear) - max(var(--codex-foot), env(safe-area-inset-bottom))), 46rem);
+  }
+}
+
+/* Sideways on a phone the window is short, and under the corner's column (the options plate over the sound toggle)
+   the panel was left a strip. It stands beside that column instead, from just under the options plate (three glyph
+   pixels from the top, 12 rows of up to 3 px) to the foot: on an iPhone 17 270 px of sheet where there were 206. */
+@media (hover: none) and (pointer: coarse) and (min-width: 761px) and (max-height: 520px) {
+  .codex {
+    --codex-clear: calc(max(0.5rem, env(safe-area-inset-top)) + 2.5rem);
+    right: calc(max(0.75rem, env(safe-area-inset-right)) + 44px + 0.6rem);
+  }
+}
+
+/* Every button and link in the Codex is a finger's height on a touch screen: 44 px, Apple's least. */
+@media (hover: none) and (pointer: coarse) {
+  .actions .button,
+  .back .button {
+    min-height: 44px;
+  }
+
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
