@@ -417,57 +417,50 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   }
 
   /**
-   * The window's light on the ground before the hall: a fan from the door, narrow at the wall and widening away from
-   * it, in five hard shafts of the panes' own colours whose order across matches the lights across the window, a
-   * pixel of shadow (the lead) between them. By day each shaft is a checker of its colour over the ground, so it holds
-   * in full sun, with an ink rim at its far end; by night it is light added to the dark.
+   * The window's light on the ground before the hall: the rose itself, cast long on the ground, its top lobe farthest
+   * from the wall and east kept east, so each colour lies where it sits in the window; stone spokes (nothing drawn)
+   * between the lobes, a gold boss at the heart. By day it lifts the ground toward cream and tints it, the land
+   * showing through; by night it is deeper colour added to the dark. Its far rim is dithered out.
    */
-  const FAN_H = 13, FAN_TOP = 5, FAN_SPREAD = 6;
-  const FAN_W = 2 * (FAN_TOP + FAN_SPREAD) + 1;
-  /** The shafts west to east: the window's lights by where they sit across it (gen/monuments.ts ROSE_LIGHTS). */
-  const across = (k: number): number => {
-    let sum = 0;
-    for (const l of ROSE_LIGHTS[k]) sum += l.dx;
-    return sum / ROSE_LIGHTS[k].length;
-  };
-  const ACROSS: number[] = [];
-  for (let pick = 0; pick < ROSE_LIGHTS.length; pick++) {
-    let at = ACROSS.length;
-    while (at > 0 && across(ACROSS[at - 1]) > across(pick)) at--;
-    ACROSS.splice(at, 0, pick);
-  }
-  const fans = new Map<number, LiveSprite>();
-  function fanOf(night: boolean): LiveSprite {
+  const POOL_W = 29, POOL_H = 17;
+  const pools = new Map<number, LiveSprite>();
+  function poolOf(night: boolean): LiveSprite {
     const key = night ? 1 : 0;
-    let sp = fans.get(key);
+    let sp = pools.get(key);
     if (sp) return sp;
-    const cx = FAN_TOP + FAN_SPREAD;
-    sp = { w: FAN_W, h: FAN_H, rgba: new Uint32Array(FAN_W * FAN_H), alpha: new Uint8Array(FAN_W * FAN_H), ax: cx, ay: FAN_H - 1 };
-    const ink = 0xff20262b;
-    for (let y = 0; y < FAN_H; y++) {
-      const hw = FAN_TOP + (FAN_SPREAD * y) / (FAN_H - 1);
-      for (let x = 0; x < FAN_W; x++) {
-        const u = (x - cx) / hw;
-        if (u < -1 || u > 1) continue;
-        const i = y * FAN_W + x;
-        const at = ((u + 1) / 2) * 5;
-        const band = Math.min(4, Math.floor(at));
-        // The lead between two shafts: the pixel nearest each boundary is shadow.
-        const toEdge = Math.min(at - band, band + 1 - at) * 2 * hw / 5;
-        if (band > 0 && at - band < 0.5 && toEdge < 0.5) continue;
-        if (band < 4 && band + 1 - at < 0.5 && toEdge < 0.5) continue;
-        if (!night && y === FAN_H - 1) {
-          sp.rgba[i] = ink;
-          sp.alpha[i] = 200;
-          continue;
+    const cx = (POOL_W - 1) / 2, cy = (POOL_H - 1) / 2;
+    sp = { w: POOL_W, h: POOL_H, rgba: new Uint32Array(POOL_W * POOL_H), alpha: new Uint8Array(POOL_W * POOL_H), ax: Math.round(cx), ay: POOL_H - 1 };
+    const lobes = STOPS.map((_, i) => {
+      const a = -PI_STORY / 2 + (i * 2 * PI_STORY) / STOPS.length;
+      // The window's up falls farthest out: down the screen.
+      return { x: cx + 9.2 * Math.cos(a), y: cy - 5 * Math.sin(a) };
+    });
+    const cream = 0xffd8ecf4;
+    for (let y = 0; y < POOL_H; y++) for (let x = 0; x < POOL_W; x++) {
+      const i = y * POOL_W + x;
+      const bx = (x - cx) / 1.6, by = y - cy;
+      let c = 0;
+      if (bx * bx + by * by <= 2.2) c = 0xff58c8f0;
+      else {
+        for (let k = 0; k < lobes.length; k++) {
+          const ux = (x - lobes[k].x) / 4.4, uy = (y - lobes[k].y) / 3.1;
+          if (ux * ux + uy * uy <= 1) { c = PIECE_RGB[STOPS[k].key]; break; }
         }
-        if (!night && ((x + y) & 1) === 1) continue;
-        const c = PIECE_RGB[STOPS[ACROSS[band]].key];
-        sp.rgba[i] = night ? tint(c, 0.85) : c;
+      }
+      if (c === 0) continue;
+      // The far rim, the bottom rows, dithered out; by day a sparse dither so the ground shows through.
+      const far = y >= POOL_H - 2;
+      if (far && ((x + y) & 1) === 1) continue;
+      if (night) {
+        sp.rgba[i] = tint(c, 0.6);
         sp.alpha[i] = 255;
+      } else {
+        const m = (v: number, w: number): number => Math.round(v * 0.65 + w * 0.35);
+        sp.rgba[i] = (0xff000000 | (m((c >>> 16) & 255, (cream >>> 16) & 255) << 16) | (m((c >>> 8) & 255, (cream >>> 8) & 255) << 8) | m(c & 255, cream & 255)) >>> 0;
+        sp.alpha[i] = 200;
       }
     }
-    fans.set(key, sp);
+    pools.set(key, sp);
     return sp;
   }
   const lightSprites = new Map<StopKey, LiveSprite>();
@@ -486,7 +479,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     const night = air.night > 0.5;
     if (whole) {
       // Its near edge on the first row before the gable, never on the wall: stood on the row its height reaches to.
-      put(f, fanOf(night), h.x + HALL_YARD.dx, h.y + HALL_ROSE.dy + 1 + Math.ceil(FAN_H / 0.8), 0, false, night ? BLEND_ADD : BLEND_OVER);
+      put(f, poolOf(night), h.x + HALL_YARD.dx, h.y + HALL_ROSE.dy + 1 + Math.ceil(POOL_H / 0.8), 0, false, night ? BLEND_ADD : BLEND_OVER);
     }
     for (let i = 0; i < STOPS.length; i++) {
       const key = STOPS[i].key;

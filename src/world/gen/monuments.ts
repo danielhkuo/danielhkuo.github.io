@@ -6,7 +6,7 @@
 //
 // Local coordinates: x east, y south; row h − 1 is the southmost (see gen/structures.ts).
 
-import { patan2, pcos, PI, psin } from "../core/psin.ts";
+import { pcos, PI, psin } from "../core/psin.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
 import { drum, house, mark, paint, put, sculpt, T_EAST, T_FLAT, T_NORTH, T_RIDGE, T_WALL, T_WEST, tower } from "./structures.ts";
@@ -30,23 +30,24 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
 export const HALL_ROSE = { dx: 0, dy: 0, z: 10 } as const;
 export const ROSE_R = 4;
 /**
- * Each light's cells: the ring's inside cut into five sectors, the first at the top and the rest clockwise as seen,
- * with lead (left as stone) along the sector edges and round a gilt boss at the heart.
+ * Each light's cells: five round lobes about a gilt boss, the first at the top and the rest clockwise as seen, as the
+ * HUD's rose has them; the stone between them is the tracery.
  */
 export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = (() => {
-  const lights: { dx: number; dz: number }[][] = [[], [], [], [], []];
-  for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
-    const d = Math.sqrt(dx * dx + dz * dz);
-    if (d < 1.4 || d > ROSE_R - 0.55) continue;
-    // Degrees clockwise from the top, as seen from the south.
-    const turn = (((90 - (patan2(dz, dx) * 180) / PI) % 360) + 360 + 36) % 360;
-    const into = turn % 72;
-    if (into < 9 || into > 63) continue;
-    lights[Math.floor(turn / 72) % 5].push({ dx, dz });
+  const lights: { dx: number; dz: number }[][] = [];
+  for (let i = 0; i < 5; i++) {
+    // Clockwise from the top as seen: up is +dz.
+    const a = PI / 2 - (i * 2 * PI) / 5;
+    const lx = 2.3 * pcos(a), lz = 2.3 * psin(a);
+    const cells: { dx: number; dz: number }[] = [];
+    for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
+      // Clear of the boss by a ring of stone.
+      if (dx * dx + dz * dz >= 2 && (dx - lx) * (dx - lx) + (dz - lz) * (dz - lz) <= 1.05 * 1.05) cells.push({ dx, dz });
+    }
+    lights.push(cells);
   }
   return lights;
 })();
-
 /** The paved yard before the hall, where the window's light falls once it is whole: its centre and half-sizes, cells. */
 export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 4 } as const;
 

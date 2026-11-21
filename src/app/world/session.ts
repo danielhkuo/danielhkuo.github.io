@@ -455,10 +455,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!bakedHall || !complete(getQuest())) return;
       const t = targets.find((x) => x.id === bakedHall!.id);
       if (!t) return;
-      t.x = bakedHall.x + HALL_YARD.dx;
-      // The middle of the light on the ground (live/story.ts, a fan 13 px deep from the gable), ringed once: the
-      // dragon lies in one loop round it, head to tail, and the window's colours show inside and either side.
-      t.y = bakedHall.y + HALL_ROSE.dy + 9;
+      // Across the east side of the light on the ground (live/story.ts: the rose cast 29 px wide, 17 deep from the
+      // gable), ringed once: the dragon lies in it, and most of the window's colours show beside it.
+      t.x = bakedHall.x + HALL_YARD.dx + 10;
+      t.y = bakedHall.y + HALL_ROSE.dy + 12;
       t.radius = HALL_YARD.rx;
     };
     toYard();
