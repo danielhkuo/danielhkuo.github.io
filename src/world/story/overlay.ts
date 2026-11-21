@@ -165,15 +165,25 @@ function slotAt(i: number, cornerX: number, cornerY: number): { x: number; y: nu
   return { x: cornerX + Math.round(LOBES[i].x) - 3, y: cornerY + Math.round(LOBES[i].y) - 3 };
 }
 
+/** A rectangle of the frame the page covers, in frame pixels. x1 and y1 are exclusive. */
+export interface KeepClear {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 /**
  * Draws the quest into the fw × fh frame `out`: the count while the visitor is on the quest, and the arrow when there
  * is one. `t` in seconds bobs the floating arrow; under `reduced` motion it holds still. `inset`, in frame pixels,
- * moves the count in from the corner and keeps the arrow inside the safe frame.
+ * moves the count in from the corner and keeps the arrow inside the safe frame. `keep` lists rectangles the page
+ * covers; on an edge the arrow steps clear of each one it would cover.
  */
 export function drawQuest(
   out: Uint32Array, fw: number, fh: number, quest: QuestState, arrow: ReturnType<typeof arrowAt> | null, t: number, reduced: boolean,
   taking: Taking | null = null,
   inset: Insets = NO_INSETS,
+  keep: readonly KeepClear[] = [],
 ): void {
   // A find is shown whether or not the visitor follows the quest: the count comes up for it.
   const moment = taking !== null && taking.since < SHOW;
@@ -233,6 +243,22 @@ export function drawQuest(
   // In the corner the count stands in, the arrow moves out of its way.
   let x = arrow.x - (BOX >> 1), y = arrow.y - (BOX >> 1) + bob;
   if (arrow.mode === "edge" && x < cornerX + COUNT_W && y < cornerY + ROSE + 4) y = cornerY + ROSE + 6;
+  // On an edge the arrow steps clear of each rectangle the page covers: left along the top, down along a side.
+  // A move for a later rectangle can set the sprite onto an earlier one, so the pass repeats until one moves
+  // nothing, at most one more pass than there are rectangles. Each move only lowers x or raises y, so it settles.
+  if (arrow.mode === "edge") {
+    const angle = arrow.angle;
+    const vertical = Math.abs(psin(angle)) > Math.abs(pcos(angle));
+    for (let pass = 0; pass < keep.length + 1; pass++) {
+      const wasX = x, wasY = y;
+      for (const rect of keep) {
+        if (x >= rect.x1 || y >= rect.y1 || x + BOX <= rect.x0 || y + BOX <= rect.y0) continue;
+        if (y < rect.y1 - 2 && vertical) x = rect.x0 - BOX - 2;
+        else y = rect.y1 + 2;
+      }
+      if (x === wasX && y === wasY) break;
+    }
+  }
   void VERMILION_DARK;
   // The sprite stays inside the safe frame, clear of a notch, the corners and the home indicator.
   x = Math.max(inset.left, Math.min(fw - inset.right - BOX, x));

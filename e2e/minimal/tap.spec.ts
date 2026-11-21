@@ -3,7 +3,7 @@
 
 import { PROFILE } from "../../src/components/terminal/content.ts";
 import { expect, offline, test } from "../support";
-import { goTo, help, isOpen, key, openMinimal, searchField, selected, status } from "./minimal";
+import { goTo, help, isOpen, key, openMinimal, searchField, selected, selectionPlace, status } from "./minimal";
 
 test.describe("the keys by tap", () => {
   test("Help opens on a tap and closes on its own ^X Close", async ({ page }) => {
@@ -41,6 +41,22 @@ test.describe("the keys by tap", () => {
     await expect(page.locator(".nano-keys")).toHaveCSS("visibility", "visible");
     // A finger is not handed the keyboard again: focus is back on the key, not in a field.
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("INPUT");
+  });
+
+  test("a search found on a tap is brought on screen once the keyboard has gone, the title bar still at the top", async ({ page }) => {
+    await openMinimal(page);
+    await key(page, "Where Is").tap();
+    // The last section's first word: far enough down that the page has to scroll to it.
+    await page.keyboard.type("ELSEWHERE");
+    await page.keyboard.press("Enter");
+    await expect(searchField(page)).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const place = await selectionPlace(page);
+        return place.top >= place.barBottom && place.bottom <= place.footTop;
+      }, { message: "the match between the title bar and the foot" })
+      .toBe(true);
+    expect(await page.locator(".nano > .nano-bar").evaluate((el) => el.getBoundingClientRect().top), "the title bar stays at the top").toBe(0);
   });
 
   test("putting the keyboard away cancels the search quietly", async ({ page }) => {

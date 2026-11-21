@@ -26,7 +26,7 @@ import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, FOCUS_RATE, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
-import { drawQuest, SHOW } from "../../world/story/overlay";
+import { drawQuest, SHOW, type KeepClear } from "../../world/story/overlay";
 import { HALL_ROSE, HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
 import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
@@ -136,6 +136,11 @@ export interface FlightSetup {
    * its home indicator. None on a desktop.
    */
   insets?(): Insets;
+  /**
+   * Rectangles of the frame, in frame pixels, that the page covers with its own controls (the corner's options and the
+   * sound toggle): the quest's arrow keeps out of them. Read each frame.
+   */
+  keepClear?(): readonly KeepClear[];
   /** The world's sound, if the page has it: its ear joins the live layers, and it is given each frame. */
   sound?(): SoundControl | null;
 }
@@ -690,7 +695,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
           : null;
         if (took && took.since > SHOW) taking = null;
         if (probe) probe.quest = { arrow, next: next?.key ?? null, nextAt: next ? { x: next.x, y: next.y } : null, found: quest.found.slice(), offer: offer?.id ?? null };
-        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took, inset);
+        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took, inset, setup.keepClear?.() ?? []);
       }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";

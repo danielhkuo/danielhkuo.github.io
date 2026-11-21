@@ -343,7 +343,7 @@ export function Corner({ px, device, phase, shown, onOpen, onLeave }: CornerProp
   const touch = device === "touch";
   const pad = device === "gamepad";
   return (
-    <nav className={`${styles.corner} ${shown || touch ? styles.cornerShown : ""}`} style={pxVar(px)} aria-label="Leave or open the options">
+    <nav data-keep-clear="" className={`${styles.corner} ${shown || touch ? styles.cornerShown : ""}`} style={pxVar(px)} aria-label="Leave or open the options">
       {touch || phase !== "flying" ? null : (
         <Link className={styles.cornerItem} href="/" aria-keyshortcuts="Escape" onClick={onLeave && ((e) => {
           e.preventDefault();

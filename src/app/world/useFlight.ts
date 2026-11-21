@@ -9,6 +9,7 @@ import { getFrameFit } from "./useFrameScale";
 import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
 import type { SoundControl } from "../../world/sound/control";
 import type { HoldAt } from "../../world/runtime/hold";
+import type { KeepClear } from "../../world/story/overlay";
 import type { TerminalLink } from "./useTerminalDrawer";
 
 export interface Caption {
@@ -46,6 +47,8 @@ export interface TouchLink {
   frame?(): { w: number; h: number };
   /** The safe-area insets in frame pixels, read each frame. None on a desktop. */
   insets?(): Insets;
+  /** Rectangles of the frame the page's own controls cover, in frame pixels, read each frame. */
+  keepClear?(): readonly KeepClear[];
 }
 
 export interface FlightView {
@@ -100,6 +103,7 @@ export function useFlight(
         // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
         frame: touch.frame ?? getFrameFit,
         insets: touch.insets,
+        keepClear: touch.keepClear,
         sound: () => sound?.current ?? null,
         held: title?.held,
         holdAt: title?.holdAt,
