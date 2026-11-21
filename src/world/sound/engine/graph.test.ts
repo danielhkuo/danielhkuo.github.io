@@ -8,6 +8,7 @@ import { createEngine, type Engine } from "./engine.ts";
 import { FakeContext, fakeKit, FakeNode, FakeParam } from "./fake.ts";
 import { buildMaster, clipCurve, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
+import { createFresh } from "./fresh.ts";
 import { buildHub } from "./hub.ts";
 import { buildWhistles, buildWhoosh, buildWind } from "./wind.ts";
 
@@ -102,11 +103,13 @@ test("every persistent voice starts at gain 0, and every wind source is a starte
   const out = ctx.createGain();
   const kit = fakeKit() as unknown as Kit;
   const hub = buildHub(ctx as unknown as Ctx, kit, 3, 0);
-  const v = buildWind(ctx as unknown as Ctx, kit, out as unknown as AudioNode, { hub, seed: 3, at: 0 });
+  const fresh = createFresh(ctx as unknown as Ctx, kit, { offline: true, seed: 3 });
+  const built = { hub, seed: 3, at: 0, fresh };
+  const v = buildWind(ctx as unknown as Ctx, kit, out as unknown as AudioNode, built);
   for (const step of v.steps) step();
-  const d = buildWhistles(ctx as unknown as Ctx, kit, out as unknown as AudioNode, { hub, seed: 3, at: 0 });
+  const d = buildWhistles(ctx as unknown as Ctx, kit, out as unknown as AudioNode, built);
   for (const step of d.steps) step();
-  const w = buildWhoosh(ctx as unknown as Ctx, kit, out as unknown as AudioNode, { hub, seed: 3, at: 0 });
+  const w = buildWhoosh(ctx as unknown as Ctx, kit, out as unknown as AudioNode, built);
   for (const step of w.steps) step();
   const gains = [T.A_L, T.A_R, T.B_GAIN, T.C_GAIN, T.D_GAIN, T.E_GAIN, T.W_GAIN];
   for (const i of gains) {
@@ -114,9 +117,8 @@ test("every persistent voice starts at gain 0, and every wind source is a starte
     assert.ok(b, `target ${i} is bound`);
     for (const p of b.params) assert.equal((p as unknown as FakeParam).value, 0);
   }
-  for (const s of [...v.sources, ...d.sources, ...w.sources, ...hub.sources] as unknown as FakeNode[]) {
-    assert.ok(s.loop && s.started, "looping and started");
-  }
+  // The wind's reads are handles (they move on). Every buffer source these voices started is a loop.
+  for (const s of ctx.nodes) if (s.kind === "bufferSource") assert.ok(s.loop && s.started, "looping and started");
   // The control signals are played once, in the hub: the wind itself starts only noise.
   assert.equal(hub.sources.length, 3);
   assert.ok(!v.bindings.some((b) => b.i === T.D_GAIN), "the whistles are a voice of their own");
@@ -181,7 +183,8 @@ test("no parameter gets setValueAtTime while it is sounding: values are set outr
   assert.deepEqual(outright.map((c) => `${c.param.owner.kind}.${c.param.name}`), []);
   // Three whistles; and the whoosh, built once for the two turns: its band and its two pan gains.
   assert.equal(during.filter((c) => c.method === "setValueAtTime" && whistle(c)).length, 3 + 3);
-  assert.ok(during.every((c) => c.method === "setTargetAtTime" || whistle(c)));
+  // (A fresh loop's crossfade is a curve from where its gain stands, not a jump: design §14.8.)
+  assert.ok(during.every((c) => c.method === "setTargetAtTime" || c.method === "setValueCurveAtTime" || whistle(c)));
 });
 
 test("a still scene sends nothing after its first frame", () => {

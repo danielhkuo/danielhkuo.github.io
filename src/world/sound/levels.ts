@@ -44,20 +44,21 @@ export const LIMITER_IDLE_DB = -0.5;
 
 // ── Wind (§3.3, §4.1) ────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Layer gains at cruise (linear). Calibrated: wind alone reads −34 / −27 / −21 LUFS at brake / cruise / boost. */
+/** Layer gains at cruise (linear). Calibrated at −34 / −27 / −21 LUFS (wind alone, at brake / cruise / boost), then
+ * all taken down 4 dB on the owner's ear (2026-11-19: "the wind is very, very loud"; nothing else was noticed under it). */
 export const K_WIND = {
   /** A, the ear buffet (per ear). */
-  a: 0.36,
+  a: 0.227,
   /** B, the rush. */
-  b: 0.32,
+  b: 0.202,
   /** C, the hiss. */
-  c: 0.117,
+  c: 0.074,
   /** D, the whistles (their sum, at full squall). */
-  d: 0.6,
+  d: 0.379,
   /** E, the ground breeze. */
-  e: 0.038,
+  e: 0.024,
   /** The turn whoosh at its fullest. */
-  w: 0.25,
+  w: 0.158,
 };
 
 /**
@@ -192,6 +193,12 @@ export const OPEN = { hz: 700, q: 0.4 };
  * plainly still (§14.5).
  */
 export const LOOP_WANDER_CENTS = 30;
+/**
+ * Fresh loops (§14.8). 1: that bed's reads move to a new generation of each noise before the one playing can come
+ * round. 0: they stay on the first loop, as they did before. Generations are per buffer and shared by every bed that
+ * reads it, so turning one bed off only holds that bed's own reads.
+ */
+export const LOOPS = { wind: 1, sea: 1, rain: 1, river: 1 };
 /** A bed is stopped when every gain has been under BED_OFF for BED_OFF_S seconds, and built again when one passes BED_ON. */
 export const BED_OFF = 1e-3;
 export const BED_ON = 2e-3;
@@ -282,10 +289,11 @@ export const BELL_DUCK_EDGES_DB: [number, number] = [-16, -6];
  * A call's notes, a startled bird's keks and its wingbeats, linear (their buffers peak at 0.5), and the reverb
  * send's level. Calibrated: a call 40 cells off peaks at −30 LUFS momentary.
  * `near`: the most a startled bird is given of a lone bird's level (1 within the small class's reference distance),
- * so the nearest are heard as one about 51 cells off. Without it, birds put up close ahead of a boosting flier, two
+ * so the nearest are heard as one about 55 cells off (0.7 at first; with the wind
+ * down 4 dB the recorded flight still peaked at −4.1 dBTP on two birds' keks landing together, and 0.62 gave −4.7). Without it, birds put up close ahead of a boosting flier, two
  * at once, peaked at −3.8 dBTP in the recorded flights (§9.1's bar is −4.5); the bench's beach pass is unchanged (§13).
  */
-export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.7 };
+export const K_GULL = { call: 0.18, kek: 1.15, flap: 0.1, send: 0.158, near: 0.6 };
 
 // ── The clock and the moments (§4.8–4.10) ────────────────────────────────────────────────────────────────────────────
 
