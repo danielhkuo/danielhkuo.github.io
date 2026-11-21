@@ -27,44 +27,35 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
  * height over its base), and the five lights round it in the order the quest's count fills them, top first and then
  * clockwise as seen: each a petal of two cells (cells east, units up). The baked window is dark; the live layer glazes a light as its pane is found.
  */
-export const HALL_ROSE = { dx: 0, dy: 0, z: 10 } as const;
+export const HALL_ROSE = { dx: 0, dy: -1, z: 10 } as const;
 export const ROSE_R = 4;
 /**
- * Each light's cells: five round lobes about a gilt boss, the first at the top and the rest clockwise as seen, as the
- * HUD's rose has them; the stone between them is the tracery.
+ * Each light's cells: five lobes about a gilt boss, the first at the top and the rest clockwise as seen, as the HUD's
+ * rose has them, mirrored about the upright; the stone between them is the tracery.
  */
-export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = (() => {
-  const lights: { dx: number; dz: number }[][] = [];
-  for (let i = 0; i < 5; i++) {
-    // Clockwise from the top as seen: up is +dz.
-    const a = PI / 2 - (i * 2 * PI) / 5;
-    const lx = 2.3 * pcos(a), lz = 2.3 * psin(a);
-    const cells: { dx: number; dz: number }[] = [];
-    for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
-      // Clear of the boss by a ring of stone.
-      if (dx * dx + dz * dz >= 2 && (dx - lx) * (dx - lx) + (dz - lz) * (dz - lz) <= 1.05 * 1.05) cells.push({ dx, dz });
-    }
-    lights.push(cells);
-  }
-  return lights;
-})();
+export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = [
+  [{ dx: -1, dz: 2 }, { dx: 0, dz: 2 }, { dx: 1, dz: 2 }, { dx: 0, dz: 3 }],
+  [{ dx: 2, dz: 0 }, { dx: 3, dz: 0 }, { dx: 2, dz: 1 }, { dx: 3, dz: 1 }],
+  [{ dx: 1, dz: -3 }, { dx: 2, dz: -3 }, { dx: 1, dz: -2 }, { dx: 2, dz: -2 }],
+  [{ dx: -2, dz: -3 }, { dx: -1, dz: -3 }, { dx: -2, dz: -2 }, { dx: -1, dz: -2 }],
+  [{ dx: -3, dz: 0 }, { dx: -2, dz: 0 }, { dx: -3, dz: 1 }, { dx: -2, dz: 1 }],
+];
 /** The paved yard before the hall, where the window's light falls once it is whole: its centre and half-sizes, cells. */
-export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 4 } as const;
+export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 5 } as const;
 
 /**
- * The projects hall (15 × 20, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
- * door and, over it, a rose window of five lights; before it a paved yard inside a low wall, a yew at each front
- * corner.
+ * The projects hall (15 × 22, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
+ * door and, over it, a rose window of five lights; before it a paved yard inside a low wall, where the window's light
+ * falls.
  */
 export function projectsHall(): Structure {
-  const W = 15, H = 20;
+  const W = 15, H = 22;
   const s = sculpt(W, H);
-  const cx = 7, cy = 10;
-  // The yard: paving, a low wall round it with a gap on the south, a clipped yew either side of the gap.
+  const cx = 7, cy = 11;
+  // The yard: paving, where the window's light falls, a low wall round it with a gap on the south.
   paint(s, 1, 11, W - 2, H - 12, M.path);
   for (let y = 11; y < H; y++) { put(s, 0, y, 1.2, M.stone, T_WEST); put(s, W - 1, y, 1.2, M.stone, T_EAST); }
   for (let x = 1; x < W - 1; x++) if (Math.abs(x - cx) > 1) put(s, x, H - 1, 1.2, M.stone, T_WALL);
-  for (const x of [cx - 3, cx + 3]) { put(s, x, H - 2, 3.4, M.yew, 130); put(s, x, H - 3, 3.0, M.yew, 110); }
   // The hall, buttressed down its sides.
   house(s, 1, 0, 13, 11, 8, 6, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
   for (const y of [2, 5, 8]) { put(s, 0, y, 5, M.stoneDark, T_WEST); put(s, W - 1, y, 5, M.stoneDark, T_EAST); }

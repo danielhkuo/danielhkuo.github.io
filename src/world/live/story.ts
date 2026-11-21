@@ -417,12 +417,14 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   }
 
   /**
-   * The window's light on the ground before the hall: the rose itself, cast long on the ground, its top lobe farthest
-   * from the wall and east kept east, so each colour lies where it sits in the window; stone spokes (nothing drawn)
-   * between the lobes, a gold boss at the heart. By day it lifts the ground toward cream and tints it, the land
-   * showing through; by night it is deeper colour added to the dark. Its far rim is dithered out.
+   * The window's light on the ground before the hall: one copy of the window, cast on the yard's paving from the door
+   * step, stretched across and flipped (the window's top falls farthest out): its lobes in their panes' colours, its
+   * ring and tracery as lines of shadow between them, the gilt boss at the heart. By day the lobes lift the paving
+   * toward cream and tint it; by night they are deeper colour added to the dark.
    */
-  const POOL_W = 29, POOL_H = 17;
+  const POOL_W = 13, POOL_H = 9;
+  /** The window's reach from its heart, cells: its ring (gen/monuments.ts ROSE_R) and half a cell more. */
+  const POOL_REACH = 4.5;
   const pools = new Map<number, LiveSprite>();
   function poolOf(night: boolean): LiveSprite {
     const key = night ? 1 : 0;
@@ -430,34 +432,37 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     if (sp) return sp;
     const cx = (POOL_W - 1) / 2, cy = (POOL_H - 1) / 2;
     sp = { w: POOL_W, h: POOL_H, rgba: new Uint32Array(POOL_W * POOL_H), alpha: new Uint8Array(POOL_W * POOL_H), ax: Math.round(cx), ay: POOL_H - 1 };
-    const lobes = STOPS.map((_, i) => {
-      const a = -PI_STORY / 2 + (i * 2 * PI_STORY) / STOPS.length;
-      // The window's up falls farthest out: down the screen.
-      return { x: cx + 9.2 * Math.cos(a), y: cy - 5 * Math.sin(a) };
-    });
-    const cream = 0xffd8ecf4;
+    const cream = 0xffd8ecf4, shade = 0xff283038;
+    const lobeAt = new Map<string, number>();
+    ROSE_LIGHTS.forEach((cells, k) => { for (const c of cells) lobeAt.set(`${c.dx},${c.dz}`, k); });
     for (let y = 0; y < POOL_H; y++) for (let x = 0; x < POOL_W; x++) {
       const i = y * POOL_W + x;
-      const bx = (x - cx) / 1.6, by = y - cy;
-      let c = 0;
-      if (bx * bx + by * by <= 2.2) c = 0xff58c8f0;
-      else {
-        for (let k = 0; k < lobes.length; k++) {
-          const ux = (x - lobes[k].x) / 4.4, uy = (y - lobes[k].y) / 3.1;
-          if (ux * ux + uy * uy <= 1) { c = PIECE_RGB[STOPS[k].key]; break; }
+      // Window cells: east kept east; down the screen (away from the wall) is up the window.
+      const wx = ((x - cx) / (cx + 0.5)) * POOL_REACH, wz = ((y - cy) / (cy + 0.5)) * POOL_REACH;
+      const r = Math.sqrt(wx * wx + wz * wz);
+      if (r > POOL_REACH) continue;
+      const cell = `${Math.round(wx)},${Math.round(wz)}`;
+      const k = r <= POOL_REACH - 0.9 ? lobeAt.get(cell) : undefined;
+      if (k === undefined) {
+        if (cell === "0,0") {
+          sp.rgba[i] = night ? 0xff3c8cb4 : 0xff70d4f0;
+          sp.alpha[i] = night ? 255 : 210;
+        } else {
+          // The ring and the tracery: shadow, by day only (by night the dark is shadow enough).
+          if (night) continue;
+          sp.rgba[i] = shade;
+          sp.alpha[i] = 70;
         }
+        continue;
       }
-      if (c === 0) continue;
-      // The far rim, the bottom rows, dithered out; by day a sparse dither so the ground shows through.
-      const far = y >= POOL_H - 2;
-      if (far && ((x + y) & 1) === 1) continue;
+      const c = PIECE_RGB[STOPS[k].key];
       if (night) {
         sp.rgba[i] = tint(c, 0.6);
         sp.alpha[i] = 255;
       } else {
         const m = (v: number, w: number): number => Math.round(v * 0.65 + w * 0.35);
         sp.rgba[i] = (0xff000000 | (m((c >>> 16) & 255, (cream >>> 16) & 255) << 16) | (m((c >>> 8) & 255, (cream >>> 8) & 255) << 8) | m(c & 255, cream & 255)) >>> 0;
-        sp.alpha[i] = 200;
+        sp.alpha[i] = 210;
       }
     }
     pools.set(key, sp);
