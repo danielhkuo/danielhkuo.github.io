@@ -27,12 +27,12 @@ is drawn while it is held, and no key reaches it.
 
 | Way in | What happens |
 |---|---|
-| ⏎, the Enter world button, the yellow light | The window minimizes into the bottom of the screen with a macOS genie; the dragon sets off at once and the camera eases back onto it. The address becomes `/world` (`history.pushState`), in place. |
-| Back, Esc in flight, the Leave links | The genie runs backwards out of the bottom of the screen into the window; the dragon glides to a stop and the camera eases down again. The address is `/` again. |
+| ⏎ (on an empty prompt), `./world`, the Enter world button, the yellow light | The window minimizes into the bottom of the screen with a macOS genie; the dragon sets off at once and the camera eases back onto it. The address becomes `/world` (`history.pushState`), in place. |
+| Back, Esc in flight, the Leave links, the abbey's "Open the terminal" | The genie runs backwards out of the bottom of the screen into the window, with its scrollback; the dragon glides to a stop where it is and the camera eases down again. The address is `/` again. Leaving again flies on from there. From the abbey, the prompt has the focus. |
 | Minimal version, the green light | The window grows to fill the screen, keeping its font and colours, and lands on `/minimal` (nano viewing `daniel.txt`). ^X or Esc there comes back to `/`. |
 | agents.md | The agent file. |
 | Settings | The world's options panel. |
-| A click on the window's body | The live shell, as before. The corner terminal button is gone. |
+| A click on the window, a printable key, ⌘K or \` | The prompt under `./world` goes live in place (2026-11-21): the site's shell, with its commands and files, runs in the window, which keeps its size and scrolls within itself, so the neofetch scrolls up and out. Esc clears a typed line; on an empty one it does what it did before. There is no second terminal window on a desktop. |
 
 Shift held as the genie starts plays it ten times slower, as on a Mac. Any key during the opening skips it: the world
 then shows as soon as it is ready. Under reduced motion there is no intro, no genie and no grow: everything cuts.
@@ -67,7 +67,14 @@ A phone gets its own title (`src/components/title/phone/`), with the minimal ver
 - **The window's projects** (`src/components/headerProjects.ts`): the first six by order. A project GitHub has no stats
   for (a build without a token, or no repository) shows its name and one-line summary, never "n/a" and zero counts.
 - **The title** (`src/components/title/Title.tsx`): one mode, `title` → `leaving` → `flying` → `returning` → `title`,
-  shown as `data-title` for the tests. The terminal's launcher stays for the shell, without its corner button.
+  shown as `data-title` for the tests.
+- **The live window** (2026-11-21): `titleKeys.ts` (pure, tested) routes the title's keys: what goes live, what types,
+  what enters. `TitleTerminal.tsx` runs one shell for the page's life (`useShell`, without the greeting) in the
+  window's body through `ShellLog` and `PromptRow`, set in the type of the window's command rows; ⏎ on an empty line
+  enters, and `./world` is a hidden command that does the same (`TerminalApi.enterWorld`). `useLiveBody.ts` fixes the
+  body at its resting height and keeps its last row in view; `useHoldPlace.ts` measures the held dragon's place. The
+  flight's `onTerminal` brings the title back from the abbey instead of opening the world's terminal drawer, which stays
+  only for `/world` opened on its own. The pop-up launcher is gone.
 
 ## Decisions
 
@@ -77,6 +84,7 @@ A phone gets its own title (`src/components/title/phone/`), with the minimal ver
 
 ## Tests
 
-`e2e/site/title.spec.ts` covers the opening, Esc, ⏎, the button, the lights, Back, Esc in flight, the shell keeping its
-keys, the options, the links and a phone's own title. The motion (the opening, the arrival, the genie, the grow) is
+`e2e/site/title.spec.ts` covers the opening, Esc, ⏎, the button, the lights, Back, Esc in flight, the live window (a
+click, a key, ⌘K and \`, commands scrolling in a window that keeps its size, `./world`, ⏎ on an empty line, Esc), the
+abbey bringing the window back and leaving again from there, the options, the links and a phone's own title. The motion (the opening, the arrival, the genie, the grow) is
 judged on frame strips at 120 Hz and through a long idle, and audited by fresh critics before the owner sees it.

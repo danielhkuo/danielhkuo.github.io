@@ -855,40 +855,6 @@ iframe[src*="hcaptcha"] {
   box-shadow: inset 0 0 0 1px var(--term-cursor);
 }
 
-/* Floating launcher button */
-.term-launch {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 11px 18px;
-  font-family: var(--font-mono-family);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  box-shadow: var(--elev-ring);
-  cursor: pointer;
-  z-index: 900;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow var(--motion-base) var(--ease-standard);
-}
-.term-launch:hover { color: var(--fg); border-color: var(--accent); box-shadow: var(--elev-raised); }
-.term-launch .glyph { font-weight: 700; color: var(--accent); }
-.term-launch .kbd {
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 1px 6px;
-  font-size: 10px;
-  color: var(--meta);
-}
-
 /* Full-screen programs (cbonsai). The body becomes a fixed character grid:
    one block per row, sized from a measured cell so nothing wraps or scrolls,
    the way an ncurses program owns the whole terminal until it exits. Colours
@@ -1001,11 +967,72 @@ iframe[src*="hcaptcha"] {
   font-family: var(--font-mono-family);
   font-size: 13.5px;
   line-height: 1.7;
-  cursor: pointer;
+  /* A terminal: a click anywhere in it is a click to type. */
+  cursor: text;
+  /* The live shell's own styles (the .term-* rules, written for the pop-up
+     window) read these: here they take the window's type and colours, so
+     what a command prints is set like the neofetch above it. */
+  --term-line: 1lh;
+  --term-cell: 1ch;
+  --bg: var(--panel-ink);
+  --fg: var(--panel-on);
+  --muted: var(--panel-on);
+  --meta: var(--term-ansi-8);
+  --accent: var(--panel-on);
+  --success: var(--term-ansi-2);
+  --danger: var(--term-ansi-1);
+  --border: var(--term-ansi-8);
+  --term-cursor: var(--panel-on);
+  --term-selection: #3f638b;
+  --ansi-0: var(--term-ansi-0);
+  --ansi-1: var(--term-ansi-1);
+  --ansi-2: var(--term-ansi-2);
+  --ansi-3: var(--term-ansi-3);
+  --ansi-4: var(--term-ansi-4);
+  --ansi-5: var(--term-ansi-5);
+  --ansi-6: var(--term-ansi-6);
+  --ansi-7: var(--term-ansi-7);
+  --ansi-8: var(--term-ansi-8);
+  --ansi-9: var(--term-ansi-9);
+  --ansi-10: var(--term-ansi-10);
+  --ansi-11: var(--term-ansi-11);
+  --ansi-12: var(--term-ansi-12);
+  --ansi-13: var(--term-ansi-13);
+  --ansi-14: var(--term-ansi-14);
+  --ansi-15: var(--term-ansi-15);
+}
+/* Live, the window keeps its size and scrolls within itself, as Terminal
+   does: what a command prints pushes the neofetch up and out. */
+.nf-body.nf-live {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--panel-ink-2) transparent;
+}
+/* The live prompt blinks as the idle one did, in hard steps; away from it,
+   it is the hollow block an inactive Terminal window draws. */
+.nf-body .term-cursor { animation: nf-blink 1.06s steps(1) infinite; }
+.nf-body .term-inputwrap:not(:focus-within) .term-cursor {
+  animation: none;
+  background: transparent;
+  color: inherit;
+  box-shadow: inset 0 0 0 1px var(--term-cursor);
 }
 .nf-body p { text-wrap: initial; }
 .nf-cmd { color: var(--panel-on); }
 .nf-cmd.nf-idle { margin-top: 26px; }
+/* Live, the shell's rows start where the idle prompt stood, so going live
+   moves nothing; after `clear` (no rows above them) they start at the top. */
+.nf-body > .term-log { margin-top: 26px; }
+.nf-body > .term-log:first-child { margin-top: 0; }
+/* The shell's rows take the type of the window's command rows (<p>, set by
+   the reset's body tokens), not the body's: the live prompt is the idle one's
+   height, and output lines up with what ./world printed. */
+.nf-body > .term-log,
+.nf-body > .term-inputrow {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-leading);
+}
 /* The title runs ./world after the colour blocks, as a shell would: the command, then its lines. */
 .nf-cmd.nf-world { margin: 18px 0 0; }
 .nf-out { margin: 0; color: var(--panel-on); }
@@ -1367,20 +1394,6 @@ iframe[src*="hcaptcha"] {
 }
 
 @media (max-width: 760px) {
-  /* A 52pt square showing only >_ — the desktop pill is 33pt tall, under the
-     touch minimum. Lifted off the home indicator by the safe-area inset. */
-  .term-launch {
-    width: 52px;
-    height: 52px;
-    padding: 0;
-    justify-content: center;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    font-size: 17px;
-    box-shadow: var(--elev-raised);
-  }
-  .term-launch .kbd,
-  .term-launch .label { display: none; }
-
   /* Full-screen on phones (no dragging/resizing). The window covers the
      ENTIRE layout viewport, in chrome grey: iOS Safari does not shrink the
      layout viewport for the keyboard, it shrinks the visual viewport and lets
@@ -1514,23 +1527,6 @@ iframe[src*="hcaptcha"] {
        it. */
     .reveal:focus-within { animation-name: none; }
 
-    /* The launcher is fixed, so it reads the page's scroll instead: absent on
-       the first screen, in by the time a third of it has gone past. Faded,
-       never hidden — it stays in the tab order and the accessibility tree,
-       where it is the only terminal control a wide screen has, and it has to
-       be able to take focus back when the terminal closes at the top. So
-       keyboard focus shows it wherever the page is, and until it is half in
-       it is not a click target. The gate has its own keyframes so the fade
-       can stay on the compositor. */
-    .term-launch {
-      animation-name: reveal-fade, launch-gate;
-      animation-duration: 1ms;
-      animation-timing-function: linear;
-      animation-fill-mode: backwards;
-      animation-timeline: scroll(root);
-      animation-range: 0 30vh;
-    }
-    .term-launch:focus-visible { animation-name: none; }
   }
 }
 /* Half the header's spare height, upwards: (100svh − padding − window) / 2,
@@ -1544,9 +1540,7 @@ iframe[src*="hcaptcha"] {
 @keyframes reveal-fade {
   from { opacity: 0; }
 }
-@keyframes launch-gate {
-  from { pointer-events: none; }
-}
+
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

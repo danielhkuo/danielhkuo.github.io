@@ -38,7 +38,8 @@ await page.setViewport({ width: 1280, height: 900 });
 await page.goto(url, { waitUntil: "networkidle0" });
 
 async function openTerminal() {
-  await page.click(".term-launch");
+  // The title's window is the terminal: a click on its body makes the prompt live.
+  await page.click("header#about .nf-face-path");
   await page.waitForSelector(".term-input");
 }
 

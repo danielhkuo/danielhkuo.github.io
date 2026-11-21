@@ -31,9 +31,16 @@ export interface NeofetchHeaderProps {
   onMinimize?: () => void;
   /** The window's green light. */
   onZoom?: () => void;
+  /**
+   * The live prompt, in place of the idle `./` row. The title's window is the
+   * terminal; a page without this still asks the launcher to open one over it.
+   */
+  terminal?: ReactNode;
+  /** The static rows above the prompt are gone: `clear`, or a full-screen program. */
+  bare?: boolean;
 }
 
-/** Ask the TerminalLauncher to open the live shell, returning focus to `trigger` on close. */
+/** Ask for the live shell: on the title, the window's own prompt. */
 function openShell(trigger: HTMLElement | null) {
   window.dispatchEvent(
     new CustomEvent("terminal:open", { detail: { trigger } }),
@@ -74,11 +81,19 @@ function Cursor({ intro = false, world = false }: { intro?: boolean; world?: boo
  * block goes above the table and every Label / value pair stacks. The Contact
  * row becomes three 44pt prompt lines at the bottom so they are tappable.
  *
- * Any click on the body that is not on a link opens the live shell over it.
+ * Any click on the body that is not on a link asks for the live shell.
  * On the title, `world` adds the `./world` lines and the yellow and green
  * lights are the ways in; the page's own CSS takes the full-screen height off.
+ * With `terminal`, that shell is this window's own prompt.
  */
-export default function NeofetchHeader({ projects, world = false, onMinimize, onZoom }: NeofetchHeaderProps) {
+export default function NeofetchHeader({
+  projects,
+  world = false,
+  onMinimize,
+  onZoom,
+  terminal,
+  bare = false,
+}: NeofetchHeaderProps) {
   // A build where no project has GitHub stats prints names and summaries. Counts, and the column that holds
   // them, appear only when at least one row actually has them.
   const anyStats = projects.some((p) => p.stats !== null);
@@ -105,7 +120,13 @@ export default function NeofetchHeader({ projects, world = false, onMinimize, on
           {/* role=presentation: the body is not itself a control. The launcher
               button, the mobile `./shell` row and ⌘K are the accessible
               triggers; a click here is a pointer shortcut. */}
-          <div className="nf-body ink-panel" role="presentation" onClick={onBodyClick}>
+          <div
+            className={`nf-body ink-panel${terminal ? " nf-live" : ""}`}
+            role="presentation"
+            onClick={onBodyClick}
+          >
+            {bare ? null : (
+              <>
             <p className="nf-cmd">
               <Prompt />
               <span className="nf-typed">neofetch</span>
@@ -236,11 +257,15 @@ export default function NeofetchHeader({ projects, world = false, onMinimize, on
                 ))}
               </>
             ) : null}
+              </>
+            )}
 
-            <p className="nf-cmd nf-idle">
-              <Prompt />
-              <Cursor />
-            </p>
+            {terminal ?? (
+              <p className="nf-cmd nf-idle">
+                <Prompt />
+                <Cursor />
+              </p>
+            )}
 
             <div className="nf-actions">
               <a className="nf-action nf-link" href={LINKS.email}>

@@ -171,4 +171,9 @@ export interface TerminalApi {
   setTheme(mode: ThemeMode | "toggle" | "auto"): ThemeMode;
   close(): void;
   site: SiteInfo;
+  /**
+   * Go into the world. Only the title's window has one to go into: elsewhere
+   * the command is absent, and `./world` is simply not found.
+   */
+  enterWorld?(): void;
 }

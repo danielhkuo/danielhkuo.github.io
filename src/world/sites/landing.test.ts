@@ -202,6 +202,8 @@ test("the camera eases from the flier to the landmark and back", () => {
   assert.equal(easeFocus(0, true, 0.1), 0.1 * FOCUS_RATE);
   assert.equal(easeFocus(1, true, 0.1), 1);
   assert.equal(easeFocus(0.05, false, 0.1), 0);
+  // At another rate (the title's hold, leaving a landmark as its window comes back).
+  assert.ok(Math.abs(easeFocus(1, false, 0.1, 2) - 0.8) < 1e-12);
 });
 
 test("the dragon calms as the coil closes, and rests only once it has landed", () => {

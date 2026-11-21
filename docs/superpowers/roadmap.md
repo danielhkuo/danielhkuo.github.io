@@ -135,6 +135,12 @@ Last updated 2026-11-19.
   stats, a name and its summary). ⏎ is the world's pixel key cap; the window's macOS chrome stays as on a Mac (the
   owner, "Keep them"). Checks: `e2e/site/title.spec.ts`, `npm run a11y` now holds `/` too. Design:
   `specs/2026-11-20-title-terminal-design.md`.
+- **The title's window is the terminal** (2026-11-21, Opus with Cursor, on the owner's "Yes, title and abbey"). On a
+  desktop the window's prompt under `./world` goes live on a click, a printable key, ⌘K or \`, and runs the site's shell
+  in place: output prints in the window, which keeps its size and scrolls within itself. ⏎ on an empty line or
+  `./world` enters the world; Esc clears a typed line. The abbey's "Open the terminal" brings this window back with its
+  scrollback, the prompt focused and the world held, and leaving again flies on from the abbey. The separate pop-up
+  window is gone on a desktop; the world's drawer stays only for `/world` opened on its own. Phones are unchanged.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.

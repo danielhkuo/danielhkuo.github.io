@@ -4,36 +4,30 @@
 // then the genie back. The world arrives behind the window pixel by pixel (ArrivalPaper.tsx) once the intro has finished and
 // the world has drawn its first view, and the ways in come up while it does. A phone never mounts the world.
 
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Flight, { type FlightProps } from "../../app/world/Flight";
 import { fell } from "../../app/world/fonts";
+import { getTheme, setTheme } from "../../lib/theme";
 import NeofetchHeader, { type HeaderProject } from "../NeofetchHeader";
-import TerminalLauncher from "../terminal/TerminalLauncher";
-import type { SiteInfo } from "../terminal/types";
+import type { SiteInfo, TerminalApi } from "../terminal/types";
 import type { Project } from "../../lib/projects";
 import { useFrameFit } from "../../app/world/useFrameScale";
-import { HOLD_AT, type HoldAt } from "../../world/runtime/hold";
 import ArrivalPaper, { type ArrivalStart } from "./ArrivalPaper";
 import { runGenie } from "./genieRun";
 import { growToScreen } from "./grow";
 import { MINIMAL_PAGE } from "./phone/copy";
 import { PHONE_QUERY } from "./phone/phone";
 import ReturnKey from "./ReturnKey";
+import TitleTerminal from "./TitleTerminal";
+import { useHoldPlace } from "./useHoldPlace";
+import { useLiveBody } from "./useLiveBody";
+import { titleKey } from "./titleKeys";
 import styles from "./title.module.css";
 
 type Mode = "title" | "leaving" | "flying" | "returning";
 
-/**
- * The held dragon's head is drawn this many CSS pixels left of the ways in, level with the Enter world button: it
- * faces them, and its body trails off into the open, clear of the window, the button and the links.
- */
-const HEAD_LEFT = 44;
-/** Frame pixels kept between the window's bottom edge and the held head, whose crest stands above its anchor. */
-const HEAD_CLEAR = 7;
-/** Frame pixels kept under the held head for the body that trails down behind it, where the window allows. */
-const TAIL_ROOM = 18;
 
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
@@ -90,6 +84,12 @@ function fieldOrControl(target: EventTarget | null): "field" | "control" | null 
   return null;
 }
 
+/** The title's own prompt, not a program's input and not a field elsewhere on the page. */
+function promptIsFocused(): boolean {
+  const el = document.activeElement;
+  return el instanceof HTMLElement && el.getAttribute("aria-label") === "terminal input" && el.closest("#about") !== null;
+}
+
 export default function Title({ world, header, shell }: TitleProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -114,8 +114,17 @@ export default function Title({ world, header, shell }: TitleProps) {
   // The ways in come up once the world has arrived, all of it.
   const [arrived, setArrived] = useState(false);
   const waysShown = arrived;
-  const [holdAt, setHoldAt] = useState<HoldAt>(HOLD_AT);
+  // The prompt stays live once it has been: the shell is mounted for the page, and the scrollback survives a flight.
+  const [live, setLive] = useState(false);
+  const [focusN, setFocusN] = useState(0);
+  const [insert, setInsert] = useState("");
+  // `clear`, or a full-screen program: the neofetch rows above the prompt go.
+  const [bare, setBare] = useState(false);
+  const liveRef = useRef(false);
   const fit = useFrameFit();
+  // Once live, the window keeps its height and scrolls within itself; `lockBody` fixes the height as it goes live.
+  const lockBody = useLiveBody(rootRef, live);
+
   const reduced = useSyncExternalStore(subscribeReduced, reducedNow, () => false);
   const phone = useSyncExternalStore(subscribePhone, phoneNow, phoneAtFirstPaint);
   const introDone = useSyncExternalStore(subscribeIntro, introFinished, () => false);
@@ -125,6 +134,21 @@ export default function Title({ world, header, shell }: TitleProps) {
   const frame = (): HTMLElement | null => {
     const el = rootRef.current?.querySelector(".nf-frame");
     return el instanceof HTMLElement ? el : null;
+  };
+
+  // The held dragon waits beside the ways in, facing them.
+  const holdAt = useHoldPlace(
+    { frame, ways: waysEl, button: enterRef, steady: () => modeRef.current === "title" && !grew.current },
+    desk,
+    fit,
+  );
+
+  const makeLive = (text: string) => {
+    lockBody();
+    liveRef.current = true;
+    setLive(true);
+    setInsert(text);
+    setFocusN((n) => n + 1);
   };
 
   // Enter pushes /world and lets the dragon go. Forward, already on /world, enters again without pushing.
@@ -142,6 +166,10 @@ export default function Title({ world, header, shell }: TitleProps) {
     modeRef.current = "leaving";
     setMode("leaving");
   };
+  const enterLive = useRef(enter);
+  useLayoutEffect(() => {
+    enterLive.current = enter;
+  });
 
   // Esc in flight and Leave. Back through the entry this page pushed; otherwise the address is simply /.
   // modeRef moves before history.back(), whose popstate runs in this same turn.
@@ -158,6 +186,33 @@ export default function Title({ world, header, shell }: TitleProps) {
       window.history.replaceState(null, "", "/" + window.location.search);
     }
   };
+
+  // The abbey's "Open the terminal": this window is the terminal, so come back to it the way Leave does.
+  // The prompt takes focus once the window is back (the return below), not while the genie is still playing.
+  const onTerminal = () => {
+    lockBody();
+    liveRef.current = true;
+    setLive(true);
+    leave();
+  };
+
+  const api = useMemo<TerminalApi>(
+    () => ({
+      openUrl: (url) => {
+        window.open(url, "_blank", "noopener");
+      },
+      getProjects: () => shell.projects,
+      getTheme,
+      setTheme,
+      close: () => {
+        const el = document.querySelector("#about input.term-input");
+        if (el instanceof HTMLElement) el.blur();
+      },
+      site: shell.site,
+      enterWorld: () => enterLive.current(true, false),
+    }),
+    [shell.projects, shell.site],
+  );
 
   const grow = () => {
     if (grew.current) return;
@@ -193,32 +248,6 @@ export default function Title({ world, header, shell }: TitleProps) {
     return () => window.removeEventListener("keydown", onSkip, true);
   }, []);
 
-  // The held dragon's place follows the ways in, which keep their place in the layout while they wait (hidden, not
-  // gone): measured whenever the window or the ways change size (the observer reports once as it starts), as shares of
-  // the world's frame. Not while the window is leaving or growing: the dragon stays put.
-  useLayoutEffect(() => {
-    const el = desk ? frame() : null;
-    const ways = waysEl.current;
-    const button = enterRef.current;
-    if (!el || !ways || !button) return;
-    const observer = new ResizeObserver(() => {
-      if (modeRef.current !== "title" || grew.current) return;
-      const w = fit.w * fit.css;
-      const h = fit.h * fit.css;
-      if (!w || !h) return;
-      const r = ways.getBoundingClientRect();
-      const b = button.getBoundingClientRect();
-      // Level with the button, but not so low that the body, trailing down behind the head, runs off the screen; and
-      // never so high that the window hides the head. On a short screen the head wins: a clipped tail reads, a
-      // clipped head does not.
-      const level = Math.min(b.top + b.height / 2, h - TAIL_ROOM * fit.css);
-      const y = Math.max(el.getBoundingClientRect().bottom + HEAD_CLEAR * fit.css, level);
-      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min(0.97, y / h) });
-    });
-    observer.observe(el);
-    observer.observe(ways);
-    return () => observer.disconnect();
-  }, [desk, fit.w, fit.h, fit.css]);
 
   useLayoutEffect(() => {
     if (mode !== "leaving" && mode !== "returning") return;
@@ -243,11 +272,15 @@ export default function Title({ world, header, shell }: TitleProps) {
     return runGenie(el, { reverse, slow: slowRef.current, onDone: done });
   }, [mode]);
 
+  // Back, Esc in flight, and the abbey: the prompt when the terminal is live, otherwise Enter world as before.
+  const focusBack = useEffectEvent(() => {
+    if (!focusEnter.current) return;
+    focusEnter.current = false;
+    if (liveRef.current) makeLive("");
+    else enterRef.current?.focus({ preventScroll: true });
+  });
   useEffect(() => {
-    if (mode === "title" && focusEnter.current) {
-      focusEnter.current = false;
-      enterRef.current?.focus({ preventScroll: true });
-    }
+    if (mode === "title") focusBack();
   }, [mode]);
 
   useEffect(() => () => growCancel.current?.(), []);
@@ -255,18 +288,32 @@ export default function Title({ world, header, shell }: TitleProps) {
   // Subscribed once. Effect events, so they call the enter of the latest render; the decision itself is the refs.
   const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === "Shift") shiftRef.current = true;
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    if (document.querySelector("dialog[open]")) return;
-    const kind = fieldOrControl(e.target);
-    if (kind === "field") return;
-    // A button or a link acts on its own Enter. Before the world has arrived, a key only skips the opening,
-    // which the layout's script already does.
-    if (kind === "control" && e.key === "Enter") return;
-    if (modeRef.current !== "title" || (!waysRef.current && !arrivingRef.current)) return;
-    if (e.key === "Enter") {
+    // A phone shows its own title. This one is display:none there, and must not take the keys.
+    if (phone) return;
+    const action = titleKey(
+      {
+        mode: modeRef.current,
+        opening: document.documentElement.getAttribute("data-intro") === "play",
+        ready: waysRef.current || arrivingRef.current,
+        dialogOpen: document.querySelector("dialog[open]") !== null,
+        promptFocused: promptIsFocused(),
+        target: fieldOrControl(e.target) ?? "other",
+      },
+      e,
+    );
+    if (action.kind === "focus") {
+      e.preventDefault();
+      makeLive(action.insert);
+    } else if (action.kind === "enter") {
       e.preventDefault();
       enter(true, e.shiftKey);
     }
+  });
+  // A click on the window body, or its ./shell button: the same as focusing the prompt and typing nothing.
+  const onOpen = useEffectEvent(() => {
+    if (phone || modeRef.current !== "title") return;
+    if (document.querySelector("dialog[open]")) return;
+    makeLive("");
   });
   const onKeyUp = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === "Shift") shiftRef.current = false;
@@ -293,11 +340,13 @@ export default function Title({ world, header, shell }: TitleProps) {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     window.addEventListener("popstate", onPop);
+    window.addEventListener("terminal:open", onOpen);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("terminal:open", onOpen);
     };
   }, []);
 
@@ -322,6 +371,7 @@ export default function Title({ world, header, shell }: TitleProps) {
             holdAt={holdAt}
             onLeave={leave}
             onReady={() => setWorldReady(true)}
+            onTerminal={onTerminal}
           />
         </main>
       ) : null}
@@ -329,7 +379,24 @@ export default function Title({ world, header, shell }: TitleProps) {
         {desk ? <ArrivalPaper start={start} at={holdAt} onArrived={() => setArrived(true)} /> : null}
       </div>
       <div className={styles.front} hidden={mode === "flying"}>
-        <NeofetchHeader projects={header} world onMinimize={() => enter(true, shiftRef.current)} onZoom={grow} />
+        <NeofetchHeader
+          projects={header}
+          world
+          onMinimize={() => enter(true, shiftRef.current)}
+          onZoom={grow}
+          bare={bare}
+          terminal={
+            live ? (
+              <TitleTerminal
+                api={api}
+                onEnterWorld={(slow) => enter(true, slow)}
+                focusRequest={focusN}
+                insert={insert}
+                onBare={setBare}
+              />
+            ) : undefined
+          }
+        />
         <nav ref={waysEl} className={styles.ways} aria-label="Ways in" hidden={!waysShown || mode !== "title" || covering}>
           <button ref={enterRef} type="button" className={styles.enter} onClick={(e) => enter(true, e.shiftKey)}>
             Enter world <ReturnKey decorative />
@@ -352,7 +419,6 @@ export default function Title({ world, header, shell }: TitleProps) {
           </ul>
         </nav>
       </div>
-      <TerminalLauncher projects={shell.projects} site={shell.site} button={false} enabled={mode === "title"} />
     </div>
   );
 }

@@ -420,9 +420,9 @@ export function restShare(phase: Phase): number {
   return 0.5 * smooth((a.swept / a.sweep - REST_FROM) / (1 - REST_FROM));
 }
 
-/** The camera's share of the way from the flier to the landmark, moved on by dt toward 1 (`on`) or 0. */
-export function easeFocus(focus: number, on: boolean, dt: number): number {
-  const step = Math.max(0, dt) * FOCUS_RATE;
+/** The camera's share of the way from the flier to the landmark, moved on by dt toward 1 (`on`) or 0, at `rate` a second. */
+export function easeFocus(focus: number, on: boolean, dt: number, rate = FOCUS_RATE): number {
+  const step = Math.max(0, dt) * rate;
   return on ? Math.min(1, focus + step) : Math.max(0, focus - step);
 }
 

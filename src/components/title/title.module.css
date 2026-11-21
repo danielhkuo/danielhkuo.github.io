@@ -213,7 +213,8 @@
   }
 
   .front :global(.nf-cmd.nf-idle),
-  .front :global(.nf-cmd.nf-world) {
+  .front :global(.nf-cmd.nf-world),
+  .front :global(.nf-body > .term-log:not(:first-child)) {
     margin-top: 10px;
   }
 
@@ -256,7 +257,8 @@
   }
 
   .front :global(.nf-cmd.nf-idle),
-  .front :global(.nf-cmd.nf-world) {
+  .front :global(.nf-cmd.nf-world),
+  .front :global(.nf-body > .term-log:not(:first-child)) {
     margin-top: 6px;
   }
 
