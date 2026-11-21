@@ -31,10 +31,10 @@ test.describe("with JavaScript off", () => {
     for (const other of otherPages(TEXT_PAGE)) expect(hrefs, other.path).toContain(other.path);
   });
 
-  test("the projects are there, or the pointer to GitHub that stands in for them", async ({ page }) => {
+  test("the projects are there, linked to GitHub, or the pointer to GitHub that stands in for them", async ({ page }) => {
     await openMinimal(page, { live: false });
     const projects = page.locator("section[aria-labelledby=projects]");
-    expect(await projects.locator(`a[href^="${LINKS.github}"]`).count()).toBeGreaterThanOrEqual(1);
+    expect(await projects.locator(`a[href^="https://github.com/"]`).count()).toBeGreaterThanOrEqual(1);
   });
 
   test("it is dressed as nano: the title bar names the file, the status line counts its lines", async ({ page }) => {

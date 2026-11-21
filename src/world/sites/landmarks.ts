@@ -1,22 +1,24 @@
-// The landmarks the flight page offers to land at, worked out at build time: which site holds which pinned project,
+// The landmarks the flight page offers to land at, worked out at build time: which site holds which project,
 // kept sticky by a committed file (design 5.6), and the register that points from any landmark to the others.
 
+import type { Project } from "../../lib/projects.ts";
 import { patan2, PI } from "../core/psin.ts";
 import { torusDelta } from "../core/torus.ts";
 import { CRUISE } from "../runtime/flight.ts";
 import { assignSites, type Assignments, type LandmarkType } from "./assign.ts";
 
-/** A pinned project as the Codex shows it. */
+/** What the Codex shows of a Project. Stats are null when the build had none. */
 export interface ProjectEntry {
+  slug: string;
   name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
+  summary: string;
+  repoUrl: string | null;
+  link: string | null;
   language: string | null;
-  stars: number;
-  forks: number;
-  /** ISO 8601. */
-  updatedAt: string;
+  stars: number | null;
+  forks: number | null;
+  /** ISO 8601, or null when the build had no GitHub stats. */
+  updatedAt: string | null;
 }
 
 /** What a landmark holds: About Me (the abbey), a project, or nothing yet. */
@@ -37,18 +39,6 @@ export interface LandmarkSet {
   worldId: string;
   n: number;
   landmarks: Landmark[];
-}
-
-/** The fields of a pinned repository (lib/github.ts) the Codex reads. */
-export interface RepoLike {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  primaryLanguage: { name: string } | null;
-  stargazerCount: number;
-  forkCount: number;
-  updatedAt: string;
 }
 
 const TYPES: readonly LandmarkType[] = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"];
@@ -72,17 +62,18 @@ function sortedBy<T>(items: readonly T[], order: (a: T, b: T) => number): T[] {
   return out;
 }
 
-/** A repository as the Codex shows it. GitHub reports "no homepage" as an empty string as well as null. */
-export function entryOf(r: RepoLike): ProjectEntry {
+/** A project as the Codex shows it. */
+export function entryOf(p: Project): ProjectEntry {
   return {
-    name: r.name,
-    description: r.description,
-    url: r.url,
-    homepageUrl: r.homepageUrl ? r.homepageUrl : null,
-    language: r.primaryLanguage?.name ?? null,
-    stars: r.stargazerCount,
-    forks: r.forkCount,
-    updatedAt: r.updatedAt,
+    slug: p.slug,
+    name: p.name,
+    summary: p.summary,
+    repoUrl: p.repoUrl,
+    link: p.link,
+    language: p.github?.language?.name ?? null,
+    stars: p.github ? p.github.stars : null,
+    forks: p.github ? p.github.forks : null,
+    updatedAt: p.github ? p.github.updatedAt : null,
   };
 }
 
@@ -113,8 +104,9 @@ function sameAssignments(a: Readonly<Record<string, string>>, b: Readonly<Record
 }
 
 /**
- * Matches `projects` to the manifest's sites (assign.ts), with the sticky file as the previous assignment when it
- * belongs to this world. `changed` is true when the file should be rewritten to the new `bySite`.
+ * Matches `projects` to the manifest's sites (assign.ts), in the order they are given. Only as many as there are
+ * landmark sites besides the abbey stand at landmarks; the rest are left unassigned. The sticky file is the previous
+ * assignment when it belongs to this world. `changed` is true when the file should be rewritten to the new `bySite`.
  */
 export function landmarksFor(
   manifest: { worldId: string; n: number; sites: readonly { id: string; type: string; x: number; y: number }[] },
@@ -124,11 +116,13 @@ export function landmarksFor(
 ): { set: LandmarkSet; bySite: Record<string, string>; changed: boolean } {
   const sites = manifest.sites.flatMap((s) => (isLandmarkType(s.type) ? [{ id: s.id, type: s.type, x: s.x, y: s.y }] : []));
   const previous = stickyFrom(sticky, manifest.worldId);
-  const { bySite } = assignSites(sites, projects.map((p) => p.name), config, previous, manifest.n);
-  const byName = new Map(projects.map((p) => [p.name, p]));
+  const room = sites.filter((s) => s.type !== "abbey").length;
+  const standing = projects.slice(0, room);
+  const { bySite } = assignSites(sites, standing.map((p) => p.slug), config, previous, manifest.n);
+  const bySlug = new Map(projects.map((p) => [p.slug, p]));
   const landmarks: Landmark[] = sites.map((s) => {
-    const name = bySite[s.id];
-    const project = name === undefined ? undefined : byName.get(name);
+    const slug = bySite[s.id];
+    const project = slug === undefined ? undefined : bySlug.get(slug);
     const holds: Holding = s.type === "abbey" ? { kind: "about" } : project ? { kind: "project", project } : { kind: "none" };
     return { ...s, holds };
   });
@@ -155,11 +149,12 @@ export function kindName(type: LandmarkType): string {
 }
 
 /**
- * The discovery a landing logs. A project is keyed by its repository (design 5.4), so a new world keeps it; the abbey
- * and an empty landmark by their own names.
+ * The discovery a landing logs. A project is keyed by its slug (design 5.4), so a new world keeps it; for the projects
+ * seeded from the pinned repos the slug is the repository's name, so discoveries logged before carry over. The abbey
+ * and an empty landmark are keyed by their own names.
  */
 export function discoveryOf(l: Landmark): { id: string; label: string } {
-  if (l.holds.kind === "project") return { id: `landmark:repo:${l.holds.project.name}`, label: `${l.holds.project.name}, at the ${kindName(l.type)}` };
+  if (l.holds.kind === "project") return { id: `landmark:repo:${l.holds.project.slug}`, label: `${l.holds.project.name}, at the ${kindName(l.type)}` };
   if (l.holds.kind === "about") return { id: "landmark:abbey", label: "The abbey: About me" };
   return { id: `landmark:site:${l.id}`, label: `The ${kindName(l.type)}` };
 }

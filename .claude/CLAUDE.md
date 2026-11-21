@@ -22,7 +22,8 @@ Specs and plans live in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
 ## One source of content
 
 - **Profile and links:** `src/components/terminal/content.ts`.
-- **Projects:** the six pinned GitHub repos, fetched at build time by `src/lib/github.ts`.
+- **Projects:** one Markdown file per project in `projects/`, read at build time by `src/lib/projects.ts`. The owner
+  edits them in the browser, on github.com or with Pages CMS (`.pages.yml`).
 
 `/minimal`, the terminal's filesystem, the agent files and the world's Codex are all generated from these two sources. Never hand-copy content into any one of them.
 

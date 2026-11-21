@@ -4,9 +4,9 @@ import { CAP, characters, eachDot, glyph, ROWS, textWidth, TRACK, X_HEIGHT } fro
 
 const PRINTABLE = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i));
 
-test("the font draws every printable ASCII character, and the arrows, dot and pilcrow the guides use", () => {
+test("the font draws every printable ASCII character, the arrows, dot and pilcrow the guides use, and the title's return key", () => {
   const have = new Set(characters());
-  for (const ch of [...PRINTABLE, "←", "→", "↑", "↓", "·", "¶", "…"]) assert.ok(have.has(ch), `missing ${JSON.stringify(ch)}`);
+  for (const ch of [...PRINTABLE, "←", "→", "↑", "↓", "·", "¶", "…", "⏎"]) assert.ok(have.has(ch), `missing ${JSON.stringify(ch)}`);
 });
 
 test("every glyph but the space has ink, and none is wider than five columns", () => {

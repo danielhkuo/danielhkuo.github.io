@@ -1,11 +1,12 @@
 // daniel.txt: the minimal version as the one plain text file it is dressed as, open in nano.
 //
-// Built from content.ts and the pinned repos, never copied. The page sets this model as HTML (one h1, a heading per
+// Built from content.ts and the projects, never copied. The page sets this model as HTML (one h1, a heading per
 // section, real links); plainText() lays the same model out as the file itself, which is what nano's counts count:
 // "[ Read N lines ]" and the line numbers in Go To Line.
 
+import type { Project } from "../../lib/projects.ts";
+import { bareUrl, contactLinks, profileFacts, type SitePage } from "../../lib/site-content.ts";
 import { PROFILE } from "../terminal/content.ts";
-import { bareUrl, contactLinks, profileFacts, withScheme, type Project, type SitePage } from "../../lib/site-content.ts";
 
 /** The file nano has open. */
 export const FILE_NAME = "daniel.txt";
@@ -27,12 +28,15 @@ export interface Fact {
   value: string | Link;
 }
 
-/** A named entry: its name (a link), a note beside the name, and lines indented under it. */
+/** A named entry: its name, a note beside it, and lines indented under it. `key` is unique in the section. */
 export interface Entry {
-  link: Link;
-  /** Beside the name: a repo's language. */
+  /** A project's slug, or a page's path. */
+  key: string;
+  /** The name, or a link when there is somewhere to go. */
+  name: string | Link;
+  /** Beside the name: a project's language. */
   note?: string;
-  /** Under the name: a description, a homepage. */
+  /** Under the name: a summary, a description's paragraphs, a link. */
   lines: (string | Link)[];
 }
 
@@ -57,14 +61,22 @@ export interface Daniel {
 /** The pages listed under ELSEWHERE: the site's other pages. */
 export type PageLink = Pick<SitePage, "title" | "path" | "summary">;
 
-/** Text on one line: GitHub allows line breaks in a description, and a text file's entry keeps to its lines. */
+/** Text on one line: a summary or a paragraph may break, and a text file's entry keeps to its lines. */
 function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** The body's paragraphs, each on one line. A blank line separates them; empty ones are dropped. */
+function paragraphs(body: string): string[] {
+  return body
+    .split(/\n\s*\n/)
+    .map(oneLine)
+    .filter((line) => line.length > 0);
+}
+
 /**
- * The file's content: the profile from content.ts, the pinned repos, the ways to get in touch and the site's other
- * pages. `projects` are the published ones; with none (a build without a token), PROJECTS points at GitHub.
+ * The file's content: the profile from content.ts, the projects, the ways to get in touch and the site's other
+ * pages. With no projects, PROJECTS points at GitHub.
  */
 export function danielTxt(projects: readonly Project[], pages: readonly PageLink[]): Daniel {
   const github = contactLinks().find((c) => c.label === "GitHub");
@@ -72,13 +84,19 @@ export function danielTxt(projects: readonly Project[], pages: readonly PageLink
   if (projects.length) {
     repos.entries = projects.map((p) => {
       const lines: (string | Link)[] = [];
-      const description = oneLine(p.description);
-      if (description) lines.push(description);
-      if (p.homepageUrl) lines.push({ text: bareUrl(withScheme(p.homepageUrl)), href: withScheme(p.homepageUrl) });
-      return { link: { text: p.name, href: p.url }, note: p.primaryLanguage?.name, lines };
+      const summary = oneLine(p.summary);
+      if (summary) lines.push(summary);
+      lines.push(...paragraphs(p.body));
+      // The name is already the link, unless the repository and the link are two different places.
+      if (p.repoUrl && p.link) lines.push({ text: bareUrl(p.link), href: p.link });
+      const href = p.repoUrl ?? p.link;
+      const entry: Entry = { key: p.slug, name: href ? { text: p.name, href } : p.name, lines };
+      const language = p.github?.language?.name;
+      if (language) entry.note = language;
+      return entry;
     });
   } else if (github) {
-    repos.note = ["The projects are pinned on ", { text: github.text, href: github.href }, "."];
+    repos.note = ["The code is on ", { text: github.text, href: github.href }, "."];
   }
   return {
     name: PROFILE.name,
@@ -94,7 +112,7 @@ export function danielTxt(projects: readonly Project[], pages: readonly PageLink
       {
         id: "elsewhere",
         heading: "ELSEWHERE",
-        entries: pages.map((p) => ({ link: { text: p.title, href: p.path }, lines: [p.summary] })),
+        entries: pages.map((p) => ({ key: p.path, name: { text: p.title, href: p.path }, lines: [p.summary] })),
       },
     ],
   };
@@ -106,12 +124,12 @@ export function labelWidth(doc: Daniel): number {
   return Math.max(0, ...labels) + 3;
 }
 
+const text = (piece: string | Link): string => (typeof piece === "string" ? piece : piece.text);
+
 /** The name column of a section's entries: wide enough for its longest name and four spaces, and 20 at the least. */
 export function nameWidth(section: Section): number {
-  return Math.max(20, ...(section.entries ?? []).map((e) => e.link.text.length + INDENT));
+  return Math.max(20, ...(section.entries ?? []).map((e) => text(e.name).length + INDENT));
 }
-
-const text = (piece: string | Link): string => (typeof piece === "string" ? piece : piece.text);
 
 /** `words` wrapped to `width` columns, each line after the first indented as the first is. */
 function wrap(words: string, width: number, indent: string): string[] {
@@ -154,7 +172,8 @@ function layout(doc: Daniel): { lines: string[]; marks: Mark[] } {
     const width = nameWidth(section);
     (section.entries ?? []).forEach((entry, i) => {
       if (i) lines.push("");
-      lines.push(entry.note ? entry.link.text.padEnd(width) + entry.note : entry.link.text);
+      const name = text(entry.name);
+      lines.push(entry.note ? name.padEnd(width) + entry.note : name);
       for (const line of entry.lines) lines.push(...wrap(text(line), COLUMNS, " ".repeat(INDENT)));
     });
   }

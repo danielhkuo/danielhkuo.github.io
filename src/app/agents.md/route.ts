@@ -1,13 +1,11 @@
 import { agentsMd } from "@/lib/agent-docs";
-import { loadPinnedRepos } from "@/lib/github";
-import { publishedProjects } from "@/lib/site-content";
+import { loadProjects } from "@/lib/projects";
 
 // Written once at build time: the static export saves the response as out/agents.md.
 export const dynamic = "force-static";
 
 export async function GET() {
-  const projects = publishedProjects(await loadPinnedRepos());
-  return new Response(agentsMd(projects), {
+  return new Response(agentsMd(await loadProjects()), {
     headers: { "Content-Type": "text/markdown; charset=utf-8" },
   });
 }

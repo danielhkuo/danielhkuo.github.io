@@ -23,6 +23,8 @@ export interface FlierState {
   phase: string;
   /** Held still: behind a card on a phone, or while the options are open there. */
   paused: boolean;
+  /** The world waits behind the title. */
+  held?: boolean;
 }
 
 /** The world at noon in clear weather, so a run does not depend on the hour it is run at. */
