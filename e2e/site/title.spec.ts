@@ -154,6 +154,21 @@ test.describe("the title", () => {
     await expect(title(page)).toHaveAttribute("data-title", "title");
   });
 
+  test("projects without GitHub stats show their name and summary, never n/a or zero counts", async ({ page }) => {
+    // npm run e2e builds without GITHUB_TOKEN, so no project has stats: the rows are the first six fixtures by order.
+    await page.goto(TITLE);
+    const list = page.locator("header#about .nf-pins");
+    await expect(list.locator(".nf-pin")).toHaveCount(6);
+    await expect(list).not.toContainText("n/a");
+    await expect(list).not.toContainText("★");
+    await expect(list).not.toContainText("⑂");
+    await expect(list.locator(".nf-pin-dot")).toHaveCount(0);
+    const first = list.locator(".nf-pin").first();
+    await expect(first).toContainText("Alpha");
+    await expect(first).toContainText("The first fixture, with a repository and a live site.");
+    await expect(first.getByRole("link", { name: "Alpha" })).toHaveAttribute("href", "https://github.com/example/alpha");
+  });
+
   test("a phone opens its own title, with the minimal version first and preselected", { tag: "@phone" }, async ({ page }) => {
     const size = page.viewportSize();
     test.skip(!size || size.width >= 700, "phones only");

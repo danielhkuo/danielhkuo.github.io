@@ -1079,10 +1079,15 @@ iframe[src*="hcaptcha"] {
 }
 .nf-link:hover { color: var(--term-ansi-7); }
 
-/* Projects: language · name · stars/forks, as three aligned columns. */
+/* Projects: language · name · stars/forks, as three aligned columns. A
+   project GitHub has no stats for (no token at build, or no repository)
+   keeps its name and puts its one-line summary where the counts would be,
+   with an empty language cell to keep the columns; when none has stats the
+   language column goes (.nf-pins-plain). The last column takes the room
+   that is left, so a long summary is cut, never pushing the window wider. */
 .nf-pins {
   display: grid;
-  grid-template-columns: max-content max-content max-content;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
   gap: 1px 22px;
   margin: 0;
   padding: 0;
@@ -1098,6 +1103,14 @@ iframe[src*="hcaptcha"] {
   font-variant-numeric: tabular-nums;
 }
 .nf-pin-stats .nf-stat { min-width: 4ch; }
+.nf-pins-plain { grid-template-columns: max-content minmax(0, 1fr); }
+.nf-pin-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--panel-meta);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 /* neofetch's colour blocks: two rows of eight. */
 .nf-swatches { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
@@ -1314,6 +1327,9 @@ iframe[src*="hcaptcha"] {
   .nf-pin-lang::after,
   .nf-pin-stats .nf-stat:first-child::after { content: " · "; white-space: pre; }
   .nf-pin-stats .nf-stat { min-width: 0; }
+  /* No stats: the summary is the meta row, and the empty language cell goes. */
+  .nf-pin-lang:empty { display: none; }
+  .nf-pin-summary { flex-basis: 100%; font-size: 12px; }
 
   .nf-swatches span { flex: 1; width: auto; height: 14px; }
 
