@@ -7,6 +7,14 @@ with dialogue, at `2334b58`).
 
 Sketches: `2026-11-19-story-destinations-options.html`, beside this file.
 
+**Built** (2026-11-20, `claude/story-0d42e5`), with two changes from this text, both at the coordinator's word:
+
+- The hall is a live building, drawn by the story layer at `hall-0` in `src/world/story/places.json`, beside the home
+  town's harbour, in the first frame. The world files, the start frame and the generator are unchanged. A baked
+  `hall` site would win over it, if one is ever needed.
+- The five stand at the points in `places.json`, chosen on renders; the next world build can carry them as `curio-*`
+  sites (`scripts/story-places.ts`). Nothing is baked for them.
+
 ## 1. Summary
 
 - All projects move to one hall next to the home town.
