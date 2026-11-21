@@ -12,7 +12,7 @@ import { NOON_AIR, type Air } from "../sky/air.ts";
 import { PIECE_AT } from "../gen/monuments.ts";
 import { gradeRgb } from "../render/palette.ts";
 import { PIECE_RGB, type StopKey } from "../story/stops.ts";
-import { frameX, groundRow, type Ink } from "./art.ts";
+import { frameX, groundRow, ringDelta, type Ink } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import { drawSprite, type LiveSprite } from "./sprites.ts";
 
@@ -37,6 +37,8 @@ const PI_STORY = 3.141592653589793;
 
 /** How long a stop's piece plays once it is found, seconds. */
 export const PIECE = 4.5;
+/** A piece shows within this many cells of the flier: the land prompt's reach (sites/landing.ts NEAR), and a little more. */
+const GLINT_NEAR = 130;
 /** A stop is drawn while its place is within this many pixels of the frame. */
 const REACH = 40;
 
@@ -554,7 +556,10 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         const since = at === undefined ? -1 : at === Number.NEGATIVE_INFINITY ? PIECE + 1 : Math.max(0, t - at);
         if (p.baked) {
           // The monument is the world's; only its piece is ours, set in its niche until it is taken.
-          if (at === undefined) {
+          // The glint shows only near, where the visitor could land: from afar the monument stands alone.
+          const fl = f.flier;
+          const near = fl ? Math.hypot(ringDelta(fl.x, p.x, f.n), ringDelta(fl.y, p.y, f.n)) < GLINT_NEAR : true;
+          if (at === undefined && near) {
             const o = PIECE_AT[p.key];
             put(f, pieceOf(p.key, f.air ?? NOON_AIR), p.x + o.dx, p.y + o.dy, o.z);
           }

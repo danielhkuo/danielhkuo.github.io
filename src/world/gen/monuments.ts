@@ -19,7 +19,7 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
   desk: { dx: 0, dy: 4, z: 9 },
   bell: { dx: 2, dy: 4, z: 15 },
   mill: { dx: -3, dy: 4, z: 11 },
-  basket: { dx: 0, dy: -3, z: 13 },
+  basket: { dx: 0, dy: -3, z: 10 },
 };
 
 /** Every monument, built fresh. */
@@ -210,17 +210,17 @@ function courtPost(): Structure {
   // The stand along the north side: a long low roof on posts.
   house(s, 0, 0, 18, 3, 4, 3, { gable: 0, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
   for (let x = 1; x <= 16; x += 3) for (let z = 1; z <= 3; z++) mark(s, x, 2, z, M.opening, 70);
-  // The post at the north end, its shaft standing clear of the wall, the backboard on top and the ring hung toward
-  // the court.
-  for (let y = 1; y <= 2; y++) for (let x = 7; x <= 10; x++) put(s, x, y, 12, M.stoneDark, x < 9 ? T_WEST : T_EAST);
-  for (let x = 7; x <= 10; x++) put(s, x, 3, 12, M.stone, T_WALL);
-  for (let z = 12; z <= 17; z++) for (let x = 5; x <= 12; x++) {
-    const rim = z === 12 || z === 17 || x === 5 || x === 12;
-    mark(s, x, 3, z, rim ? M.stoneDark : M.plaster, rim ? 100 : 160);
+  // The post, standing from the court's north edge, the backboard and the ring hung on its own face so nothing
+  // floats: a stone post four cells wide, the board across its top, the ring and its net below the board.
+  for (let y = 3; y <= 4; y++) for (let x = 7; x <= 10; x++) put(s, x, y, 15, M.stoneDark, y === 4 ? T_WALL : x < 9 ? T_WEST : T_EAST);
+  for (let z = 11; z <= 15; z++) for (let x = 6; x <= 11; x++) {
+    const rim = z === 11 || z === 15 || x === 6 || x === 11;
+    mark(s, x, 4, z, rim ? M.stoneDark : M.plaster, rim ? 100 : 165);
   }
-  for (let x = 7; x <= 10; x++) { mark(s, x, 4, 11, M.brick, 150); mark(s, x, 5, 11, M.brick, 120); }
-  for (const x of [7, 10]) mark(s, x, 5, 10, M.plaster, 150);
-  for (const x of [8, 9]) { mark(s, x, 5, 9, M.plaster, 140); mark(s, x, 5, 10, M.plaster, 160); }
+  for (let z = 12; z <= 13; z++) for (let x = 8; x <= 9; x++) mark(s, x, 4, z, M.stoneDark, 120);
+  for (let x = 7; x <= 10; x++) mark(s, x, 4, 10, M.brick, 150);
+  for (const x of [7, 10]) mark(s, x, 4, 9, M.plaster, 150);
+  for (const x of [8, 9]) { mark(s, x, 4, 8, M.plaster, 140); mark(s, x, 4, 9, M.plaster, 160); }
   void T_NORTH; void T_RIDGE;
   return s;
 }

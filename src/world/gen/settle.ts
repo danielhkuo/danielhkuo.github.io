@@ -215,6 +215,31 @@ function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: s
   const level = padLevel(w, x, y, rx, ry);
   addConform(w, flat(x, y, rx + 1, ry + 1, true, level, 10));
   block(w, x, y, rx + 4, ry + 4);
+  // Its setting first, as the abbey's grove and orchard are, so nothing overgrows it: trees, a cottage on its own
+  // small pad, and where the land is farmed, fields.
+  const seed = hash2(Math.floor(x), Math.floor(y), w.seed);
+  const half = st.h / 2;
+  const cottageAt = (cx: number, cy: number): void => {
+    if (!dry(w, cx, cy) || Math.abs(groundAt(w, cx, cy) - level) > 3) return;
+    addConform(w, flat(cx, cy, 4, 3.5, false, groundAt(w, cx, cy), 3, 1.5));
+    w.structures.push(S.standAt(S.cottage(seed >>> 2), cx, cy, footing(w, cx, cy, 3, 2.5)));
+  };
+  if (key === "pine") {
+    w.structures.push(S.standAt(S.grove(46, 14, seed), x - 2, y - half - 10, 0));
+    w.structures.push(S.standAt(S.orchard(30, 13, seed), x + 22, y + 12, 0));
+    cornBy(w, x, y, seed);
+  } else if (key === "desk") {
+    w.structures.push(S.standAt(S.copse(52, 40, 17, 12, seed), x, y, 0));
+    w.structures.push(S.standAt(S.gardenPlot(12, 8, seed), x - 16, y + 6, 0));
+    cottageAt(x + 15, y + 4);
+  } else if (key === "mill") {
+    w.structures.push(S.standAt(S.oliveGrove(34, 14, seed), x - 20, y + 12, 0));
+    cottageAt(x - 15, y - 2);
+  } else if (key === "basket") {
+    w.structures.push(S.standAt(S.copse(56, 44, 19, 14, seed), x, y, 0));
+    w.structures.push(S.standAt(S.gardenPlot(12, 8, seed), x + 17, y - 6, 0));
+    cottageAt(x - 16, y + 3);
+  }
   w.structures.push(S.standAt(st, x, y, level));
   return { id: `curio-${key}`, key, x, y };
 }
