@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FILE_NAME, danielTxt, lineNumbers, plainText } from "@/components/minimal/daniel";
 import Footer from "@/components/minimal/Footer";
 import { GoTo, Help } from "@/components/minimal/Panels";
-import Text from "@/components/minimal/Text";
+import Text, { Rail } from "@/components/minimal/Text";
 import { PROFILE } from "@/components/terminal/content";
 import { loadProjects } from "@/lib/projects";
 import { SITE_URL, TEXT_PAGE, otherPages, personJsonLd, profileSummary } from "@/lib/site-content";
@@ -29,6 +29,7 @@ export const metadata: Metadata = {
 export default async function MinimalVersion() {
   const projects = await loadProjects();
   const doc = danielTxt(projects, otherPages(TEXT_PAGE));
+  const lines = plainText(doc).length;
 
   return (
     <div className="nano">
@@ -38,9 +39,11 @@ export default async function MinimalVersion() {
         <span />
       </div>
       <main className="nano-text">
+        {/* Six screen rows for every line of the file: room for the narrowest phone's wrapping. */}
+        <Rail rows={Math.max(400, lines * 6)} />
         <Text doc={doc} />
       </main>
-      <Footer lines={plainText(doc).length} />
+      <Footer lines={lines} />
       <Help />
       <GoTo marks={lineNumbers(doc)} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(personJsonLd()) }} />

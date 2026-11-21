@@ -23,6 +23,44 @@
   color-scheme: dark;
 }
 
+/* Whole lines only. nano draws a terminal's rows, so no line is ever half
+   under the title bar or the status line. Three things make that so:
+   - everything in the text is a whole number of lines tall (one size, one
+     line height, blank lines as margins of whole lines, no other padding);
+   - the foot takes up the remainder of the window below the last whole row,
+     so the space between the bars is always a whole number of lines;
+   - the page snaps to rows (the rail in Text.tsx), so wherever a scroll comes
+     to rest a row starts just under the title bar.
+   The sizes are set here, on the root, where the snap is, in pixels rather
+   than lh, which would be the root's own line. */
+:root:has(.nano) {
+  /* 16px on phones and anything with a coarse pointer: easy to read, and no
+     zoom when the search field takes focus. A desktop with a mouse gets the
+     mock's 15px. One size throughout: nano has no other. */
+  --nano-size: 16px;
+  --nano-line: calc(var(--nano-size) * 1.5);
+  /* The dark strip under the title bar, part of the bar. */
+  --nano-gap: 8px;
+  --nano-bar-h: calc(var(--nano-line) + var(--nano-gap) + env(safe-area-inset-top));
+  --nano-key-row: var(--nano-line);
+  /* The status line, the two rows of keys and their padding. */
+  --nano-foot-base: calc(var(--nano-line) + 2px + 2 * var(--nano-key-row) + 6px + env(safe-area-inset-bottom));
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--nano-bar-h);
+}
+@media (min-width: 640px) and (hover: hover) and (pointer: fine) {
+  :root:has(.nano) {
+    --nano-size: 15px;
+  }
+}
+/* A finger gets 44pt for each key: on a touch screen, and wherever the rows
+   are the phone's two of two. */
+@media (pointer: coarse), (max-width: 719px) {
+  :root:has(.nano) {
+    --nano-key-row: 44px;
+  }
+}
+
 .nano {
   display: flex;
   flex-direction: column;
@@ -31,18 +69,10 @@
   background: var(--panel-ink);
   color: var(--panel-on);
   font-family: var(--font-mono-family);
-  /* 16px on phones and anything with a coarse pointer: easy to read, and no
-     zoom when the search field takes focus. A desktop with a mouse gets the
-     mock's 15px. One size throughout: nano has no other. */
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: var(--nano-size);
+  line-height: var(--nano-line);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-}
-@media (min-width: 640px) and (hover: hover) and (pointer: fine) {
-  .nano {
-    font-size: 15px;
-  }
 }
 /* The site's own type stops at the door: everything in nano is the one face,
    the one size and the two colours, wrapping as a terminal wraps, with no
@@ -75,7 +105,10 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 2ch;
+  box-sizing: border-box;
+  height: var(--nano-bar-h);
   padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  border-bottom: var(--nano-gap) solid var(--panel-ink);
   background: var(--panel-on);
   color: var(--panel-ink);
   white-space: nowrap;
@@ -84,16 +117,21 @@
   text-align: center;
 }
 
+/* The foot is its rows and the rest of the window below the last whole row
+   of text, which it leaves blank under the keys, as a terminal leaves the
+   pixels below its last row. Without mod(), the foot is only its rows. */
 .nano-foot {
   position: sticky;
   bottom: 0;
   z-index: 2;
+  box-sizing: border-box;
+  min-height: calc(var(--nano-foot-base) + mod(100dvh - var(--nano-bar-h) - var(--nano-foot-base), var(--nano-line)));
   padding: 0 max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
   background: var(--panel-ink);
 }
 .nano-status {
-  min-height: 1lh;
+  height: var(--nano-line);
   margin: 0;
   text-align: center;
 }
@@ -108,6 +146,7 @@
 .nano-keys {
   display: grid;
   grid-template-columns: repeat(6, max-content);
+  grid-auto-rows: var(--nano-key-row);
   gap: 0 28px;
   padding-top: 2px;
 }
@@ -156,13 +195,6 @@
     display: none;
   }
 }
-/* A finger gets 44pt for each key: on a touch screen, and wherever the rows
-   are the phone's two of two. */
-@media (pointer: coarse), (max-width: 719px) {
-  .nano-key {
-    min-height: 44px;
-  }
-}
 
 /* ---- The search prompt (^F) --------------------------------------------- */
 
@@ -170,6 +202,8 @@
   display: flex;
   gap: 1ch;
   align-items: center;
+  /* In the status line's place, and as tall. */
+  height: var(--nano-line);
   margin: 0;
   background: var(--panel-on);
   color: var(--panel-ink);
@@ -208,6 +242,7 @@
    the same, which costs it nothing. */
 @media (pointer: coarse), (max-width: 719px) {
   .nano-find {
+    height: auto;
     position: fixed;
     top: 0;
     right: 0;
@@ -223,9 +258,29 @@
 
 /* ---- The text ------------------------------------------------------------ */
 
+/* No padding at the top (the bar's strip is the gap) and a blank line at the
+   end: the text starts on the row under the bar and ends on a row. */
 .nano-text {
+  position: relative;
   flex: 1;
-  padding: 8px max(12px, env(safe-area-inset-right)) 18px max(12px, env(safe-area-inset-left));
+  padding: 0 max(12px, env(safe-area-inset-right)) var(--nano-line) max(12px, env(safe-area-inset-left));
+}
+/* The rail: one snap point every row, down the text's left edge. It is as
+   long as the text and no longer; its extra rows are clipped, and add no
+   scroll. */
+.nano-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  overflow: clip;
+  pointer-events: none;
+}
+.nano-rail i {
+  display: block;
+  height: var(--nano-line);
+  scroll-snap-align: start;
 }
 .nano-doc {
   max-width: 100ch;
@@ -237,8 +292,9 @@
 }
 .nano-doc :where(h1, h2) {
   font-weight: 700;
-  /* Clear of the title bar when a link or Go To Line jumps here. */
-  scroll-margin-top: calc(2lh + env(safe-area-inset-top));
+  /* A blank row above a heading that a link or Go To Line jumps to (the
+     root's scroll padding keeps it clear of the title bar). */
+  scroll-margin-top: var(--nano-line);
 }
 .nano-doc :where(h1, h2):focus {
   outline: none;
