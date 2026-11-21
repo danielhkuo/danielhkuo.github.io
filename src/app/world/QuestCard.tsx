@@ -66,11 +66,11 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
 
   const pick = (mode: "on" | "off") => setQuest(choose(getQuest(), mode));
   return (
-    <div
+    // Non-modal, as the Codex is: the flight keeps its keys.
+    <dialog
+      open
       className={`${styles.card} ${styles.quest}`}
       style={{ "--px": `${px}px` } as CSSProperties}
-      role="dialog"
-      aria-modal="false"
       aria-labelledby="quest-title"
       aria-live="polite"
       data-touch-skip=""
@@ -94,6 +94,6 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
           <span className={styles.sr}>follow the quest</span>
         </button>
       </p>
-    </div>
+    </dialog>
   );
 }
