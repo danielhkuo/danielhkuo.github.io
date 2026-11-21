@@ -3,7 +3,7 @@
 // The Codex: what is kept at the landmark the dragon has landed on, on a leaf of Ink & Glyph paper. Game layer: hand
 // drawn in CSS and SVG, not Astryx. (The prompt that offers a landing is drawn into the world: controls/guides.ts.)
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { INTERESTS, LINKS, PROFILE } from "../../components/terminal/content";
 import { kindName, type HallProject, type Landmark } from "../../world/sites/landmarks";
 import { choose, complete, type QuestState } from "../../world/story/quest";
@@ -154,34 +154,89 @@ function ledgerOf(project: HallProject): [string, ReactNode][] {
   return rows;
 }
 
+/** How far an arrow key reads down the hall list, about one short row. */
+const LIST_LINE = 48;
+
+/** Arrow keys read the hall list while the leaf itself has focus. A row button keeps its own keys. */
+function readList(e: KeyboardEvent<HTMLDivElement>, el: HTMLElement | null): void {
+  if (!el || e.target !== e.currentTarget) return;
+  const page = Math.max(LIST_LINE, el.clientHeight - LIST_LINE);
+  let delta = 0;
+  if (e.key === "ArrowDown") delta = LIST_LINE;
+  else if (e.key === "ArrowUp") delta = -LIST_LINE;
+  else if (e.key === "PageDown") delta = page;
+  else if (e.key === "PageUp") delta = -page;
+  else if (e.key === "Home") delta = -el.scrollHeight;
+  else if (e.key === "End") delta = el.scrollHeight;
+  else return;
+  if (el.scrollHeight <= el.clientHeight + 1) return;
+  const before = el.scrollTop;
+  el.scrollBy({ top: delta });
+  if (el.scrollTop !== before) e.preventDefault();
+}
+
+/** True while `node` can still scroll down, so the hall list can fade its bottom edge and clear the fade at the end. */
+function useMoreBelow(node: RefObject<HTMLElement | null>, watch: number): boolean {
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = node.current;
+    if (!el) return;
+    let alive = true;
+    const update = () => {
+      if (!alive) return;
+      const next = el.scrollHeight - el.scrollTop - el.clientHeight > 2;
+      setMore((prev) => (prev === next ? prev : next));
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observed = new ResizeObserver(update);
+    observed.observe(el);
+    for (const child of el.children) observed.observe(child);
+    void document.fonts?.ready.then(update);
+    return () => {
+      alive = false;
+      el.removeEventListener("scroll", update);
+      observed.disconnect();
+    };
+  }, [node, watch]);
+  return more;
+}
+
 function HallList({
   projects,
   onOpen,
   bindRow,
+  scrollRef,
 }: {
   projects: readonly HallProject[];
   onOpen: (slug: string) => void;
   bindRow: (el: HTMLButtonElement | null) => void;
+  scrollRef: RefObject<HTMLDivElement | null>;
 }) {
+  const more = useMoreBelow(scrollRef, projects.length);
   return (
     <>
-      <Rubric>The hall</Rubric>
-      <Illuminated text="Projects" />
-      {projects.length === 0 ? (
-        <p className={styles.lede}>No projects are listed yet.</p>
-      ) : (
-        <ul className={styles.projects}>
-          {projects.map((project) => (
-            <li key={project.slug}>
-              <button type="button" className={styles.project} data-slug={project.slug} ref={bindRow} onClick={() => onOpen(project.slug)}>
-                <span className={styles.projectName}>{project.name}</span>
-                {project.summary ? <span className={styles.projectSummary}>{project.summary}</span> : null}
-                {project.github?.language ? <span className={styles.projectLang}>{project.github.language.name}</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className={styles.hallHead}>
+        <Rubric>The hall</Rubric>
+        <Illuminated text="Projects" />
+      </div>
+      <div ref={scrollRef} className={styles.projectScroll} data-more={more ? "true" : "false"}>
+        {projects.length === 0 ? (
+          <p className={styles.lede}>No projects are listed yet.</p>
+        ) : (
+          <ul className={styles.projects}>
+            {projects.map((project) => (
+              <li key={project.slug}>
+                <button type="button" className={styles.project} data-slug={project.slug} ref={bindRow} onClick={() => onOpen(project.slug)}>
+                  <span className={styles.projectName}>{project.name}</span>
+                  {project.summary ? <span className={styles.projectSummary}>{project.summary}</span> : null}
+                  {project.github?.language ? <span className={styles.projectLang}>{project.github.language.name}</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </>
   );
 }
@@ -261,11 +316,14 @@ function AboutLeaf({ kind }: { kind: string }) {
   );
 }
 
-/** The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. `shown` is the stop this page already states, so its line is not listed again. */
+/**
+ * The five quatrefoils, the lines of the ones found, and the way onto the quest or past it. `shown` is the stop this
+ * page already states, so its line is not listed again — until all five are found, when every line is listed.
+ */
 function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => void; shown?: StopKey }) {
   const found = STOPS.filter((stop) => quest.found.includes(stop.key));
-  const listed = found.filter((stop) => stop.key !== shown);
   const done = complete(quest);
+  const listed = done ? found : found.filter((stop) => stop.key !== shown);
   return (
     <section className={styles.register} aria-labelledby="codex-five">
       <h3 id="codex-five">The five</h3>
@@ -286,7 +344,6 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
       ) : null}
       {done ? (
         <>
-          <p className={styles.allFive}>That is all five.</p>
           <p className={styles.closing}>
             {"Those are five of the things Daniel cares about. If you'd like to tell him yours:"}
           </p>
@@ -316,6 +373,7 @@ export interface CodexProps {
 /** The Codex for the landmark the dragon rests at: a labelled, non-modal dialog that takes focus when it opens. */
 export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }: CodexProps) {
   const leaf = useRef<HTMLDivElement>(null);
+  const listScroll = useRef<HTMLDivElement>(null);
   const rows = useRef(new Map<string, HTMLButtonElement>());
   const restore = useRef<string | null>(null);
   const [pick, setPick] = useState<{ id: string; slug: string } | null>(null);
@@ -366,12 +424,14 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
   };
 
   const kind = kindName(landmark.type);
+  const projectPage = project !== null;
+  const hallList = landmark.holds.kind === "hall" && !projectPage;
   let body: ReactNode;
   if (landmark.holds.kind === "hall") {
     body = project ? (
       <ProjectLeaf project={project} onBack={backToHall} />
     ) : (
-      <HallList projects={landmark.holds.projects} onOpen={openProject} bindRow={bindRow} />
+      <HallList projects={landmark.holds.projects} onOpen={openProject} bindRow={bindRow} scrollRef={listScroll} />
     );
   } else if (landmark.holds.kind === "about") {
     body = <AboutLeaf kind={kind} />;
@@ -381,15 +441,26 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
 
   return (
     // Non-modal: the scene stays live round it, and the page's keys still reach the dragon.
-    <dialog open className={`${styles.codex} ${fell.variable}`} aria-labelledby="codex-title">
+    <dialog
+      open
+      className={hallList ? `${styles.codex} ${styles.hallCodex} ${fell.variable}` : `${styles.codex} ${fell.variable}`}
+      aria-labelledby="codex-title"
+    >
       <Corner className={styles.tl} />
       <Corner className={styles.tr} />
       <Corner className={styles.br} />
       <Corner className={styles.bl} />
-      {/* The leaf scrolls and takes focus, so arrow keys read down it. */}
-      <div ref={leaf} className={styles.leaf} tabIndex={-1}>
+      {/* The leaf takes focus, so arrow keys read down it. The hall's list scrolls inside the leaf. */}
+      <div
+        ref={leaf}
+        className={hallList ? `${styles.leaf} ${styles.hallLeaf}` : styles.leaf}
+        tabIndex={-1}
+        onKeyDown={(e) => readList(e, listScroll.current)}
+      >
         {body}
-        <Five quest={quest} onFollow={follow} shown={landmark.holds.kind === "stop" ? landmark.holds.stop : undefined} />
+        {projectPage ? null : (
+          <Five quest={quest} onFollow={follow} shown={landmark.holds.kind === "stop" ? landmark.holds.stop : undefined} />
+        )}
         <p className={styles.actions}>
           {landmark.holds.kind === "about" ? (
             <button type="button" className={styles.button} data-terminal-trigger="" onClick={(e) => onOpenTerminal(e.currentTarget)}>
