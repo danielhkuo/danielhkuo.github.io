@@ -6,6 +6,9 @@ import { EMAIL, LINKS, PROFILE, WORLD_COMMAND, WORLD_LINES } from "@/components/
 import { promptFor } from "@/components/terminal/shell";
 import { Lights, ProxyIcon } from "@/components/terminal/WindowChrome";
 import ReturnKey from "@/components/title/ReturnKey";
+import type { HeaderProject } from "./headerProjects.ts";
+
+export type { HeaderProject };
 
 /** A ⏎ in a printed line becomes the pixel key cap; the rest of the line is text. */
 function withReturns(line: string): ReactNode {
@@ -18,15 +21,6 @@ function withReturns(line: string): ReactNode {
       {withReturns(line.slice(at + 1))}
     </>
   );
-}
-
-/** The slice of a pinned repo the header prints. Serializable — comes from the server page. */
-export interface HeaderProject {
-  name: string;
-  url: string;
-  language: { name: string; color: string } | null;
-  stars: number;
-  forks: number;
 }
 
 export interface NeofetchHeaderProps {
@@ -85,6 +79,9 @@ function Cursor({ intro = false, world = false }: { intro?: boolean; world?: boo
  * lights are the ways in; the page's own CSS takes the full-screen height off.
  */
 export default function NeofetchHeader({ projects, world = false, onMinimize, onZoom }: NeofetchHeaderProps) {
+  // A build where no project has GitHub stats prints names and summaries. Counts, and the column that holds
+  // them, appear only when at least one row actually has them.
+  const anyStats = projects.some((p) => p.stats !== null);
   const onBodyClick = (e: MouseEvent<HTMLDivElement>) => {
     const target = e.target as Element;
     if (target.closest("a, button")) return;
@@ -149,31 +146,48 @@ export default function NeofetchHeader({ projects, world = false, onMinimize, on
                     <>
                       <dt>Projects</dt>
                       <dd>
-                        <ul className="nf-pins">
+                        <ul className={anyStats ? "nf-pins" : "nf-pins nf-pins-plain"}>
                           {projects.map((p) => (
                             <li key={p.name} className="nf-pin">
-                              <span className="nf-pin-lang">
-                                <span
-                                  className="nf-pin-dot"
-                                  style={
-                                    p.language ? { backgroundColor: p.language.color } : undefined
-                                  }
-                                  aria-hidden
-                                />
-                                {p.language?.name ?? "n/a"}
-                              </span>
-                              <a
-                                className="nf-link nf-pin-name"
-                                href={p.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {p.name}
-                              </a>
-                              <span className="nf-pin-stats">
-                                <span className="nf-stat">★ {p.stars}</span>
-                                <span className="nf-stat">⑂ {p.forks}</span>
-                              </span>
+                              {anyStats ? (
+                                p.stats ? (
+                                  <span className="nf-pin-lang">
+                                    <span
+                                      className="nf-pin-dot"
+                                      style={
+                                        p.stats.language
+                                          ? { backgroundColor: p.stats.language.color }
+                                          : undefined
+                                      }
+                                      aria-hidden
+                                    />
+                                    {p.stats.language?.name ?? "n/a"}
+                                  </span>
+                                ) : (
+                                  // Keeps the name and the counts in their columns when a neighbour has stats.
+                                  <span className="nf-pin-lang" aria-hidden="true" />
+                                )
+                              ) : null}
+                              {p.url ? (
+                                <a
+                                  className="nf-link nf-pin-name"
+                                  href={p.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {p.name}
+                                </a>
+                              ) : (
+                                <span className="nf-pin-name">{p.name}</span>
+                              )}
+                              {p.stats ? (
+                                <span className="nf-pin-stats">
+                                  <span className="nf-stat">★ {p.stats.stars}</span>
+                                  <span className="nf-stat">⑂ {p.stats.forks}</span>
+                                </span>
+                              ) : (
+                                <span className="nf-pin-summary">{p.summary}</span>
+                              )}
                             </li>
                           ))}
                         </ul>
