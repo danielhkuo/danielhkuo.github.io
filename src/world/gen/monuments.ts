@@ -16,7 +16,7 @@ export type MonumentKey = "pine" | "desk" | "bell" | "mill" | "basket";
 /** Where each monument's piece sits, from its raster's centre: cells east, cells south, and height over its base. */
 export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z: number }>> = {
   pine: { dx: 0, dy: 5, z: 3 },
-  desk: { dx: -1, dy: 2, z: 3 },
+  desk: { dx: 0, dy: 4, z: 9 },
   bell: { dx: 2, dy: 4, z: 15 },
   mill: { dx: -3, dy: 4, z: 11 },
   basket: { dx: 0, dy: -3, z: 13 },
@@ -44,7 +44,8 @@ function knotGarden(): Structure {
   // The side and south walls, low, a gate in the south.
   for (let y = 4; y < H; y++) for (let x = 0; x < W; x++) {
     const edge = x === 0 || x === W - 1 || y === H - 1;
-    if (edge && !(y === H - 1 && x >= 8 && x <= 10)) put(s, x, y, 3.5, M.stoneDark, y === H - 1 ? T_WALL : T_FLAT);
+    if (edge && !(y === H - 1 && x >= 8 && x <= 10)) put(s, x, y, 4.5, M.stoneDark, y === H - 1 ? T_WALL : T_FLAT);
+    if (y === H - 1 && (x === 7 || x === 11)) put(s, x, y, 6, M.stone, T_WALL);
   }
   // The north wall: high, coped, its south face the espalier's ground.
   const face = 3;
@@ -76,6 +77,8 @@ function knotGarden(): Structure {
     put(s, (x0 + x1) >> 1, 9, 2.4, M.hedge, 120);
     put(s, ((x0 + x1) >> 1) + 1, 9, 2.4, M.hedge, 110);
   }
+  // The gardener's cottage against the wall's east end, its windows lit.
+  house(s, 14, 4, 5, 5, 5, 3, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 1, chimney: true });
   // The pedestal before the gate, where the piece is set.
   put(s, cx, H - 3, 2.4, M.stone, T_WALL);
   mark(s, cx, H - 3, 2, M.opening);
@@ -83,38 +86,28 @@ function knotGarden(): Structure {
 }
 
 /**
- * Reading: a book of stone lying open on a lectern of the same stone (17 × 12, 12 tall), its two pages bowed up from
- * the spine and lined with text, a gilt ribbon hanging from the spine down the lectern's face. The piece is set in the
- * lectern's front.
+ * Reading: a small library of stone (15 × 11, 17 tall), its long hall's tall windows lit, its gable to the camera
+ * holding a rose window over a porch, and under the porch's pointed arch a lectern with an open book. The piece is the
+ * glass at the rose window's heart.
  */
 function stoneBook(): Structure {
-  const W = 13, H = 10;
-  const s = sculpt(W, H);
-  // A single worn step under the lectern.
-  for (let y = 4; y <= 8; y++) for (let x = 3; x <= 9; x++) put(s, x, y, 1, M.stone, y === 8 ? T_WALL : T_FLAT);
-  // The lectern: a dark stone post, and its desk whose top rises to the north, so the book tilts to the south.
-  for (let y = 5; y <= 7; y++) for (let x = 5; x <= 7; x++) put(s, x, y, 5, M.stoneDark, y === 7 ? T_WALL : T_FLAT);
-  for (let y = 1; y <= 6; y++) for (let x = 1; x <= 11; x++) {
-    const top = 7 + (6 - y) * 0.5;
-    put(s, x, y, top, M.stoneDark, y === 6 ? T_WALL : T_SOUTH);
-  }
-  // The book: its covers a cell proud of the pages, the pages humped up from a dark gutter, rows of text across them.
-  for (let y = 1; y <= 5; y++) for (let x = 1; x <= 11; x++) {
-    const lectern = 7 + (6 - y) * 0.5;
-    const edge = x === 1 || x === 11 || y === 1 || y === 5;
-    if (edge) {
-      put(s, x, y, lectern + 0.8, M.timber, y === 5 ? T_WALL : T_EAST);
-      continue;
-    }
-    const fromSpine = Math.abs(x - 6);
-    const hump = fromSpine === 0 ? 0.4 : 1.2 + 1.2 * psin((fromSpine / 5) * PI);
-    const text = (y & 1) === 0 && fromSpine >= 2 && fromSpine <= 4;
-    const tone = x === 6 ? 80 : text ? 112 : x < 6 ? T_WEST : 150;
-    put(s, x, y, lectern + hump, x === 6 ? M.stoneDark : M.plaster, tone);
-  }
-  // The ribbon from the spine down the desk's face, and the niche the piece sits in on the post.
-  for (let z = 4; z <= 7; z++) mark(s, 6, 6, z, M.gilt, 150);
-  mark(s, 5, 7, 3, M.opening);
+  const s = sculpt(15, 11);
+  // The hall behind, its ridge east to west, tall lancets along its south wall.
+  house(s, 1, 0, 13, 6, 8, 5, { gable: 0, wallMat: M.stone, roofMat: M.roofLead, openings: 0, chimney: false });
+  for (const x of [2, 4, 10, 12]) for (let z = 3; z <= 6; z++) mark(s, x, 5, z, z === 6 ? M.opening : M.lantern, 140);
+  // The porch: a gabled bay to the camera, a pointed arch in it, and the rose window above.
+  house(s, 5, 4, 5, 6, 10, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofLead, openings: 0, chimney: false });
+  const face = 9;
+  for (let z = 1; z <= 5; z++) for (let x = 6; x <= 8; x++) if (!(z === 5 && x !== 7)) mark(s, x, face, z, M.opening, 70);
+  // The lectern and its open book, within the arch.
+  mark(s, 7, face, 2, M.stoneDark, 120);
+  mark(s, 6, face, 3, M.plaster, 175);
+  mark(s, 7, face, 3, M.stoneDark, 110);
+  mark(s, 8, face, 3, M.plaster, 160);
+  // The rose window: a ring of stone round coloured light.
+  for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) mark(s, 7 + dx, face, 9 + dz, M.lantern, 150);
+  mark(s, 7, face, 9, M.gilt, 160);
+  for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) mark(s, 7 + dx, face, 9 + dz, M.stoneDark, 100);
   return s;
 }
 
@@ -224,6 +217,9 @@ function courtPost(): Structure {
   for (let x = 1; x <= 16; x++) s.paint[12 * 18 + x] = M.plaster;
   // Benches along the east and west walls.
   for (let y = 4; y <= 9; y++) { put(s, 1, y, 1.8, M.stone, T_FLAT); put(s, 16, y, 1.8, M.stone, T_FLAT); }
+  // The stand along the north side: a long low roof on posts.
+  house(s, 1, 0, 16, 3, 3, 2, { gable: 0, wallMat: M.timber, roofMat: M.roofTile, openings: 0, chimney: false });
+  for (let x = 2; x <= 15; x += 3) for (let z = 1; z <= 2; z++) mark(s, x, 2, z, M.opening, 70);
   // The post at the north end, its shaft standing clear of the wall, the backboard on top and the ring hung toward
   // the court.
   for (let y = 1; y <= 2; y++) for (let x = 7; x <= 10; x++) put(s, x, y, 12, M.stoneDark, x < 9 ? T_WEST : T_EAST);
