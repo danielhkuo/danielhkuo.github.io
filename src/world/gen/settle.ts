@@ -17,6 +17,7 @@ import { ARCHETYPE, lengthScale } from "./params.ts";
 import { type RoadParams, roadNetwork } from "./roads.ts";
 import type { Terrain } from "./pipeline.ts";
 import { builtRules, coverAtNode, heightAt, isFarmable, type PlacedSite, placeSitesOn, type PlaceOptions, type SiteContext, siteContext, type SiteFields, type SiteRules, aridAt, tempAt } from "./sites.ts";
+import { monument, type MonumentKey } from "./monuments.ts";
 import * as S from "./structures.ts";
 import { type PlacedWonder, placeWonders, standWonder, type WonderLand, type WonderRules, type WonderType } from "./wonders.ts";
 
@@ -58,6 +59,8 @@ export interface Settlement {
   /** The wonders that found their land, and one line for each that did not. */
   wonders: PlacedWonder[];
   wonderSkips: string[];
+  /** The quest's monuments that stand, each where its option put it (gen/monuments.ts). */
+  monuments: { id: string; key: MonumentKey; x: number; y: number }[];
 }
 
 export interface SettleOptions extends PlaceOptions {
@@ -69,6 +72,8 @@ export interface SettleOptions extends PlaceOptions {
   /** Site the wonders (default), none of them, or only the types listed. */
   wonders?: boolean | readonly WonderType[];
   wonderRules?: WonderRules;
+  /** The quest's monuments, each stood on a levelled pad at its point (cells). Absent: none. */
+  monuments?: readonly { key: MonumentKey; x: number; y: number }[];
 }
 
 const MATS = { path: M.path, road: M.road, retaining: M.stone, yard: M.pastureWarm, vine: M.vine };
@@ -199,6 +204,20 @@ export function bridge(ax: number, ay: number, bx: number, by: number, water: nu
 
 // ---------------------------------------------------------------------------
 // The sites.
+
+/**
+ * One of the quest's monuments, on a pad levelled to the ground's mean under it and kept clear of roads and
+ * hamlets, as a landmark's is.
+ */
+function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: string; key: MonumentKey; x: number; y: number } {
+  const st = monument(key);
+  const rx = st.w / 2 + 2, ry = st.h / 2 + 2;
+  const level = padLevel(w, x, y, rx, ry);
+  addConform(w, flat(x, y, rx + 1, ry + 1, false, level, 8));
+  block(w, x, y, rx + 4, ry + 4);
+  w.structures.push(S.standAt(st, x, y, level));
+  return { id: `curio-${key}`, key, x, y };
+}
 
 /** Mean ground over a pad of half-sizes (rx, ry): the level that cuts as much as it fills. */
 function padLevel(w: Work, x: number, y: number, rx: number, ry: number): number {
@@ -1369,6 +1388,8 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
     blocked: new Uint8Array(c.gN * c.gN), laid: new Map(), spurs: [], town: null,
   };
   for (const site of placed.sites) standLandmark(w, site, !opts.occupied || opts.occupied.has(site.id) || site.type === "abbey");
+  const monuments: Settlement["monuments"] = [];
+  for (const m of opts.monuments ?? []) monuments.push(standMonument(w, m.key, m.x, m.y));
 
   // Hamlets: one at the abbey's river crossing, the rest where the land is level and near water.
   const hamlets = pickHamlets(w, placed.sites);
@@ -1442,7 +1463,7 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),
-    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips,
+    built: { structures: w.structures, conforms: w.conforms, roads, mats: MATS }, ground: w.g, wonders, wonderSkips, monuments,
   };
 }
 

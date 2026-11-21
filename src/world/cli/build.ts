@@ -6,6 +6,7 @@
 // Output: <out>/<worldId>/core.bin, <out>/<worldId>/regions/<rx>-<ry>.bin,
 // <out>/<worldId>/manifest.json, <out>/current.json.
 
+import { storyMonuments } from "./story.ts";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBakeWorld, type BakeWorld } from "../bake/world.ts";
@@ -90,7 +91,9 @@ export async function buildWorld(opts: BuildOptions): Promise<Manifest> {
   const regions = await Promise.all(tiled.regions.map(async (r) => ({
     rx: r.rx, ry: r.ry, bytes: r.bin.length, sha256: await sha256(r.bin),
   })));
-  const sites = world.settlement.sites.map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y }));
+  const sites: { id: string; type: string; x: number; y: number }[] = world.settlement.sites.map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y }));
+  // The quest's monuments, when the world stands them: the flight lands at them as curio sites.
+  for (const m of world.settlement.monuments ?? []) sites.push({ id: m.id, type: "curio", x: m.x, y: m.y });
   const manifest: Manifest = {
     format: 2,
     worldId,
@@ -154,12 +157,15 @@ export async function main(argv: readonly string[]): Promise<number> {
   let n = 6400;
   let cache = false;
   let out = join(process.cwd(), "public", "world");
+  // --story stands the quest's monuments where src/world/story/places.json puts them, as curio-* sites.
+  let story = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--seed") seed = Number(argv[++i]);
     else if (a === "--n") n = Number(argv[++i]);
     else if (a === "--cache") cache = true;
     else if (a === "--out") out = argv[++i];
+    else if (a === "--story") story = true;
     else {
       console.error(`unknown argument ${a}`);
       return 1;
@@ -175,7 +181,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   const params = paramsFor(n);
-  const world = cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
+  const settleOpts = story ? { monuments: storyMonuments(n, seed) } : {};
+  const world = cache ? settleWorld(cachedTerrain(params, seed), settleOpts) : makeWorld(params, seed, settleOpts);
   let manifest: Manifest;
   try {
     manifest = await buildWorld({ n, seed, out, cache, world, maxBytes: n === 6400 ? BUDGET_BYTES : undefined });

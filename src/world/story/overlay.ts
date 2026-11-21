@@ -1,13 +1,15 @@
-// The quest drawn over the frame: five quatrefoils in the top-left corner (filled vermilion as each thing is found),
+// The quest drawn over the frame: five quatrefoils in the top-left corner with the count in words (each filled with its
+// piece's colour as it is found), the moment of a find (its piece flies from its place to its slot),
 // and the arrow to the next thing, at the frame's edge or floating over it (arrow.ts says where). In the guides'
 // pixel colours (controls/glyphs.ts), drawn after the dragon and the guide.
 
 import { blit } from "../controls/blit.ts";
-import { blank, GOLD, INK, PAPER, PAPER_WASH, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
+import { blank, GOLD, haloed, INK, PAPER, PAPER_WASH, PIECE_SLOTS, text, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
+import { KEEPSAKE } from "../../components/terminal/content.ts";
 import { pcos, PI, psin } from "../core/psin.ts";
 import type { arrowAt } from "./arrow.ts";
 import type { QuestState } from "./quest.ts";
-import { STOPS } from "./stops.ts";
+import { STOPS, type StopKey } from "./stops.ts";
 
 /** Directions the arrow is drawn in: one sprite each, made once. */
 const TURNS = 16;
@@ -45,7 +47,39 @@ function quatrefoil(fill: number): Sprite {
 }
 
 const EMPTY = quatrefoil(PAPER);
-const FULL = quatrefoil(VERMILION);
+/** Each slot filled with its own piece's colour. */
+const FULL = STOPS.map((_, i) => quatrefoil(PIECE_SLOTS[i]));
+/** A slot as its piece lands in it: one frame of gold. */
+const PRESSED = quatrefoil(GOLD);
+
+/** A piece in flight: a cut glass in its colour, inked round and haloed in paper so it reads over any land, 9 px. */
+function gem(slot: number): Sprite {
+  const rows = ["...k...", "..kck..", ".kcLck.", "kcLLcck", ".kccck.", "..kck..", "...k..."];
+  const s = blank(7, 7);
+  for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) {
+    const c = rows[y][x];
+    if (c === "k") s.px[y * 7 + x] = INK;
+    else if (c === "c") s.px[y * 7 + x] = slot;
+    else if (c === "L") s.px[y * 7 + x] = PAPER;
+  }
+  return haloed(s);
+}
+const GEMS = STOPS.map((_, i) => gem(PIECE_SLOTS[i]));
+
+/** A find being taken: which, where its piece sat on the frame this frame, and seconds since the landing. */
+export interface Taking {
+  key: StopKey;
+  from: { x: number; y: number };
+  since: number;
+}
+
+/** The piece rises out of its place over LIFT s, flies to its slot by ARRIVE s, and the line names it until SHOW s. */
+export const LIFT = 0.4;
+export const ARRIVE = 1.1;
+export const SHOW = 4.5;
+/** Steps of the lift and of the flight: the piece moves by whole hops, never glides. */
+const LIFT_STEPS = 4;
+const FLY_STEPS = 8;
 
 /**
  * The arrow pointing east, as a shape: a notched pointer, vermilion inside, inked round. Sampled turned to each of
@@ -103,8 +137,16 @@ function plate(w: number, h: number): Sprite {
   return s;
 }
 
-const COUNT_W = STOPS.length * FOIL + (STOPS.length - 1) * FOIL_GAP + 4;
+const FOILS_W = STOPS.length * FOIL + (STOPS.length - 1) * FOIL_GAP;
+/** The plate under the count: the quatrefoils, then the count in words, "keepsakes 2/5". */
+const labelOf = (n: number): Sprite => text(`${KEEPSAKE.many} ${n}/${STOPS.length}`);
+const LABEL_W = labelOf(STOPS.length).w;
+const COUNT_W = FOILS_W + 4 + LABEL_W + 4;
 const PLATE = plate(COUNT_W, FOIL + 4);
+/** The slot of each stop, its top-left in the frame. */
+function slotAt(i: number): { x: number; y: number } {
+  return { x: MARGIN + i * (FOIL + FOIL_GAP), y: MARGIN };
+}
 
 /**
  * Draws the quest into the fw × fh frame `out`: the count while the visitor is on the quest, and the arrow when there
@@ -112,12 +154,52 @@ const PLATE = plate(COUNT_W, FOIL + 4);
  */
 export function drawQuest(
   out: Uint32Array, fw: number, fh: number, quest: QuestState, arrow: ReturnType<typeof arrowAt> | null, t: number, reduced: boolean,
+  taking: Taking | null = null,
 ): void {
-  if (quest.mode !== "on") return;
+  // A find is shown whether or not the visitor follows the quest: the count comes up for it.
+  const moment = taking !== null && taking.since < SHOW;
+  if (quest.mode !== "on" && !moment) return;
+  const arrived = !moment || taking.since >= ARRIVE;
+  let n = 0;
+  for (const k of quest.found) if (arrived || k !== taking?.key) n++;
   blit(out, fw, fh, PLATE, MARGIN - 2, MARGIN - 2, 0.85);
   for (let i = 0; i < STOPS.length; i++) {
-    const found = quest.found.includes(STOPS[i].key);
-    blit(out, fw, fh, found ? FULL : EMPTY, MARGIN + i * (FOIL + FOIL_GAP), MARGIN);
+    const key = STOPS[i].key;
+    let found = quest.found.includes(key);
+    let sprite = found ? FULL[i] : EMPTY;
+    if (moment && key === taking.key) {
+      found = taking.since >= ARRIVE;
+      // The frame it lands, the slot shows gold; after, its own colour.
+      sprite = !found ? EMPTY : taking.since < ARRIVE + 0.12 ? PRESSED : FULL[i];
+    }
+    const at = slotAt(i);
+    blit(out, fw, fh, sprite, at.x, at.y);
+  }
+  blit(out, fw, fh, labelOf(n), MARGIN + FOILS_W + 3, MARGIN);
+  if (moment) {
+    const i = STOPS.findIndex((st) => st.key === taking.key);
+    if (taking.since < ARRIVE) {
+      // Out of its place by hops, then across the frame to its slot by hops.
+      let x: number, y: number;
+      if (taking.since < LIFT) {
+        const k = Math.floor((taking.since / LIFT) * LIFT_STEPS) / LIFT_STEPS;
+        x = taking.from.x;
+        y = taking.from.y - Math.round(10 * k);
+      } else {
+        const k = Math.min(1, Math.ceil(((taking.since - LIFT) / (ARRIVE - LIFT)) * FLY_STEPS) / FLY_STEPS);
+        const to = slotAt(i);
+        const sx = taking.from.x, sy = taking.from.y - 10;
+        x = Math.round(sx + (to.x + 3 - sx) * k);
+        y = Math.round(sy + (to.y + 3 - sy) * k);
+      }
+      blit(out, fw, fh, GEMS[i], x - 4, y - 4);
+    } else {
+      // The line that names it, under the count, until it has been read.
+      const line = text(`${STOPS[i].name}: ${KEEPSAKE.one} ${n} of ${STOPS.length}`);
+      const pad = plate(line.w + 6, line.h + 4);
+      blit(out, fw, fh, pad, MARGIN - 2, MARGIN + FOIL + 4, 0.85);
+      blit(out, fw, fh, line, MARGIN + 1, MARGIN + FOIL + 6);
+    }
   }
   if (!arrow) return;
   const s = arrowFor(arrow.angle);
@@ -129,6 +211,7 @@ export function drawQuest(
   // In the corner the count stands in, the arrow moves out of its way.
   let x = arrow.x - (BOX >> 1), y = arrow.y - (BOX >> 1) + bob;
   if (arrow.mode === "edge" && x < MARGIN + COUNT_W && y < MARGIN + FOIL + 4) y = MARGIN + FOIL + 6;
+  void VERMILION_DARK;
   x = Math.max(0, Math.min(fw - BOX, x));
   y = Math.max(0, Math.min(fh - BOX, y));
   blit(out, fw, fh, s, x, y);

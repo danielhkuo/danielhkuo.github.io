@@ -14,3 +14,15 @@ export const STOPS: readonly { key: StopKey; interest: string; name: string; ico
 export function isStopKey(v: unknown): v is StopKey {
   return typeof v === "string" && STOPS.some((stop) => stop.key === v);
 }
+
+/**
+ * The colour of each stop's piece, the thing the quest collects: a glass of its own colour set in the monument, and
+ * the colour its slot in the count fills with. Packed RGBA, as the frame is (red in the low byte).
+ */
+export const PIECE_RGB: Readonly<Record<StopKey, number>> = {
+  pine: 0xff4aa85a,
+  desk: 0xffd0703c,
+  bell: 0xff3cb4e8,
+  mill: 0xffa0a62e,
+  basket: 0xff2c6ae2,
+};

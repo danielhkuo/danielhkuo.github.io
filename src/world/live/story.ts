@@ -9,7 +9,9 @@ import { lookIn } from "../dragon/index.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Palette } from "../look/contract.ts";
 import { NOON_AIR, type Air } from "../sky/air.ts";
-import type { StopKey } from "../story/stops.ts";
+import { PIECE_AT } from "../gen/monuments.ts";
+import { gradeRgb } from "../render/palette.ts";
+import { PIECE_RGB, type StopKey } from "../story/stops.ts";
 import { frameX, groundRow, type Ink } from "./art.ts";
 import type { LiveFrame, LiveLayer } from "./live.ts";
 import { drawSprite, type LiveSprite } from "./sprites.ts";
@@ -19,6 +21,8 @@ export interface StoryPlace {
   key: StopKey;
   x: number;
   y: number;
+  /** Its monument is in the baked world (gen/monuments.ts): only its piece is drawn here. */
+  baked?: boolean;
 }
 
 export interface StoryContext {
@@ -378,6 +382,36 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     "..............cCcCcCcCcC................",
   ], 19, 17, hallInk);
 
+  // The pieces: a small cut glass in each stop's own colour, inked round, lit on its upper left, set in the monument.
+  const pieceRows = ["..k..", ".kLk.", "kLcCk", ".kCk.", "..k.."];
+  const pieces = new Map<StopKey, LiveSprite>();
+  let piecesAir: Air | null = null;
+  const tint = (c: number, f: number): number => {
+    const r = Math.min(255, Math.round((c & 255) * f)), g = Math.min(255, Math.round(((c >>> 8) & 255) * f)), b = Math.min(255, Math.round(((c >>> 16) & 255) * f));
+    return (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+  };
+  /** The piece of `key` in this air: graded as the dragon is, so it takes the hour's light without being greyed. */
+  function pieceOf(key: StopKey, air: Air): LiveSprite {
+    if (air !== piecesAir) {
+      pieces.clear();
+      piecesAir = air;
+    }
+    let sp = pieces.get(key);
+    if (sp) return sp;
+    const o = { time: air.time, season: air.season, overcast: air.overcast * 0.6, mist: air.mist * 0.5 };
+    const base = PIECE_RGB[key];
+    const ink = { k: gradeRgb(0xff1d2228, o, 0.35), c: gradeRgb(base, o, 0.75), L: gradeRgb(tint(base, 1.45), o, 1), C: gradeRgb(tint(base, 0.6), o, 0.35) } as Record<string, number>;
+    sp = { w: 5, h: 5, rgba: new Uint32Array(25), alpha: new Uint8Array(25), ax: 2, ay: 4 };
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+      const ch = pieceRows[y][x];
+      if (ch === ".") continue;
+      sp.rgba[y * 5 + x] = ink[ch];
+      sp.alpha[y * 5 + x] = 255;
+    }
+    pieces.set(key, sp);
+    return sp;
+  }
+
   const foundAt = new Map<StopKey, number>();
   const seen = new Set<StopKey>();
   let primed = false;
@@ -518,6 +552,14 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         const at = foundAt.get(p.key);
         // Seconds since it was found; −1 while it is not. Found on another visit: long past its piece.
         const since = at === undefined ? -1 : at === Number.NEGATIVE_INFINITY ? PIECE + 1 : Math.max(0, t - at);
+        if (p.baked) {
+          // The monument is the world's; only its piece is ours, set in its niche until it is taken.
+          if (at === undefined) {
+            const o = PIECE_AT[p.key];
+            put(f, pieceOf(p.key, f.air ?? NOON_AIR), p.x + o.dx, p.y + o.dy, o.z);
+          }
+          continue;
+        }
         if (p.key === "pine") drawPine(f, p, since);
         else if (p.key === "desk") drawDesk(f, p, t, since);
         else if (p.key === "bell") drawBell(f, p, since);

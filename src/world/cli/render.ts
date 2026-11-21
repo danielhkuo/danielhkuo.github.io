@@ -20,6 +20,8 @@ import { createView } from "../runtime/view.ts";
 import { bakeWindow, tileCache } from "../bake/chunk.ts";
 import { gridScore, inkShare, repeatScore, toneExtremes, toneImage } from "./gates.ts";
 import { encodePng } from "./png.ts";
+import type { MonumentKey } from "../gen/monuments.ts";
+import { storyMonuments } from "./story.ts";
 
 export const VIEW_W = 400;
 export const VIEW_H = 225;
@@ -175,6 +177,8 @@ export interface RenderOptions {
   hamlets?: number;
   /** Read the land from .cache/world-gen/ (and write it there) instead of generating it every run. */
   cache?: boolean;
+  /** Stand the quest's monuments (gen/monuments.ts) where these points put them, and view each. */
+  monuments?: readonly { key: MonumentKey; x: number; y: number }[];
   log?: (line: string) => void;
 }
 
@@ -192,7 +196,8 @@ export function renderWorld(opts: RenderOptions): RenderResult {
   const base = paramsFor(n);
   const params = opts.temperate ? { ...base, climate: { ...base.climate, zones: undefined } } : base;
   // A wild world is its terrain alone; the bake draws no settlement where there is none.
-  const made = opts.wild ? (cachedTerrain(params, seed) as World) : opts.cache ? settleWorld(cachedTerrain(params, seed)) : makeWorld(params, seed);
+  const settleOpts = opts.monuments ? { monuments: opts.monuments } : {};
+  const made = opts.wild ? (cachedTerrain(params, seed) as World) : opts.cache ? settleWorld(cachedTerrain(params, seed), settleOpts) : makeWorld(params, seed, settleOpts);
   if (!opts.wild) {
     for (const line of made.settlement.shortfall) log(`siting shortfall: ${line}`);
     for (const line of made.settlement.displaced) log(`siting out of climate: ${line}`);
@@ -213,6 +218,8 @@ export function renderWorld(opts: RenderOptions): RenderResult {
     ...(views === "auto" || views === "all" ? autoViewpoints(world, plan, seed) : []),
     ...((views === "sites" || views === "all") && !opts.wild ? siteViewpoints(made.settlement, opts.hamlets ?? 0) : []),
     ...(opts.extra ?? []),
+    // Each monument centred on its pad: the ground there lifts it on screen.
+    ...(opts.monuments ?? []).map((m) => ({ name: `monument-${m.key}`, x: m.x, y: m.y, e: world.ground[wrapIndex(Math.round(m.x / 4), Math.round(m.y / 4), world.gN)] })),
   ];
   const frames: Uint32Array[] = [];
   const gateTiles = tileCache(world, look, mask, 24);
@@ -268,6 +275,7 @@ export function main(argv: string[]): void {
   const extra: Viewpoint[] = [];
   let outDir: string | undefined;
   let views: RenderOptions["views"], hamlets = 0, cache = false, wild = false, noGates = false, temperate = false;
+  let monuments: RenderOptions["monuments"];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--n") n = Number(argv[++i]);
@@ -279,11 +287,12 @@ export function main(argv: string[]): void {
     else if (a === "--wild") wild = true;
     else if (a === "--no-gates") noGates = true;
     else if (a === "--temperate") temperate = true;
+    else if (a === "--story") monuments = storyMonuments(n, seed);
     else if (a === "--at") {
       const [name, x, y] = argv[++i].split(":");
       extra.push({ name, x: Number(x), y: Number(y), e: 0 });
     }
   }
-  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, wild, noGates, temperate, log: (l) => console.log(l) });
+  const res = renderWorld({ n, seed, outDir, extra, views, hamlets, cache, wild, noGates, temperate, monuments, log: (l) => console.log(l) });
   console.log(res.dir);
 }

@@ -25,7 +25,8 @@ import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
-import { drawQuest } from "../../world/story/overlay";
+import { drawQuest, SHOW } from "../../world/story/overlay";
+import { PIECE_AT } from "../../world/gen/monuments";
 import { find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
@@ -176,6 +177,8 @@ interface FlightProbe {
   workerErrors: string[];
   /** Where the flight is, for the tests: position, heading, speed, phase, whether a pause holds it still, and whether the title holds it. */
   state?: () => { x: number; y: number; heading: number; speed: number; phase: string; paused: boolean; workers: number; rate: number; held: boolean };
+  /** The quest's arrow this frame (null when none shows), the stop it points to, and the stops found: for the tests. */
+  quest?: { arrow: { mode: string; x: number; y: number; angle: number } | null; next: string | null; nextAt: { x: number; y: number } | null; found: string[]; offer: string | null };
   /** The landmarks the build placed, and what each holds, for the end-to-end tests. */
   landmarks?: { id: string; holds: string; name: string | null }[];
 }
@@ -391,11 +394,18 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     // The stops, read into byId with the other landmarks. The live layer is fixed with the view below, so this is
     // before that; the landing places are filled once the world size is known.
     const stops: StopPlace[] = [];
+    // A find being taken: its key, where its piece sat (cells, and height over the ground), and when.
+    let taking: { key: StopPlace["key"]; x: number; y: number; z: number; t0: number } | null = null;
+    const drawnStops: { key: StopPlace["key"]; x: number; y: number; baked: boolean }[] = [];
     let liveHall: { x: number; y: number } | undefined;
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
       for (const l of landmarks.landmarks) {
         byId.set(l.id, l);
-        if (l.holds.kind === "stop") stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+        if (l.holds.kind === "stop") {
+          stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+          // From the manifest, its monument is baked into the world; from places.json, the layer draws it whole.
+          drawnStops.push({ key: l.holds.stop, x: l.x, y: l.y, baked: !l.live });
+        }
         if (l.holds.kind === "hall" && l.live) liveHall = { x: l.x, y: l.y };
       }
     }
@@ -411,7 +421,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // ?sights=all shows every rare sight at once, to look them over without waiting for them.
       forceSights: params.get("sights") === "all",
       structures: loaded.core.world.built?.built.structures,
-      ...(stops.length > 0 || liveHall ? { story: { stops, hall: liveHall, found: () => getQuest().found } } : {}),
+      ...(stops.length > 0 || liveHall ? { story: { stops: drawnStops, hall: liveHall, found: () => getQuest().found } } : {}),
     };
     const sound = setup.sound?.() ?? null;
     if (probe) probe.soundLog = sound?.log() ?? null;
@@ -543,7 +553,15 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         if (l) {
           const d = discoveryOf(l);
           discoveries.discover(d.id, d.label);
-          if (l.holds.kind === "stop") setQuest(find(getQuest(), l.holds.stop));
+          if (l.holds.kind === "stop") {
+            const key = l.holds.stop;
+            // The first time only, its piece is taken: it flies from its place on the monument to its slot.
+            if (!getQuest().found.includes(key)) {
+              const o = PIECE_AT[key];
+              taking = { key, x: l.x + o.dx, y: l.y + o.dy, z: o.z, t0: t / 1000 };
+            }
+            setQuest(find(getQuest(), key));
+          }
         }
         events.phase("landed", l);
         events.buzz?.("landed");
@@ -632,7 +650,12 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         const arrow = next && ground
           ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12)
           : null;
-        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced);
+        const took = taking && ground
+          ? { key: taking.key, since: t / 1000 - taking.t0, from: guideAnchor({ x: taking.x, y: taking.y, alt: ground(taking.x, taking.y) + taking.z }, camera, fw, fh, worldN) }
+          : null;
+        if (took && took.since > SHOW) taking = null;
+        if (probe) probe.quest = { arrow, next: next?.key ?? null, nextAt: next ? { x: next.x, y: next.y } : null, found: quest.found.slice(), offer: offer?.id ?? null };
+        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took);
       }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";

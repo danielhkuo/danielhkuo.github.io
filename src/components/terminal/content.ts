@@ -36,3 +36,9 @@ export const INTERESTS: readonly { key: string; line: string }[] = [
 export const WORLD_COMMAND = "./world";
 
 export const WORLD_LINES = ["A world to fly over.", "Press ⏎ or choose Enter world."] as const;
+
+/**
+ * What the quest collects, as the world's words name it: one at each of the five stops. The owner names them; this
+ * is the one place to change it.
+ */
+export const KEEPSAKE = { one: "keepsake", many: "keepsakes" } as const;
