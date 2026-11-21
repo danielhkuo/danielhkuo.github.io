@@ -8,6 +8,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { PROFILE } from "../../src/components/terminal/content.ts";
 import { QUEST_KEY } from "../../src/world/story/quest.ts";
+import { STOPS } from "../../src/world/story/stops.ts";
 import { expect, flier, openWorld, probe, skipLesson, takeWing, test, WORLD, type Probe } from "../support";
 
 /** Safari on an iPhone 17 held sideways, one tab. */
@@ -37,6 +38,60 @@ async function questAnswered(page: Page): Promise<void> {
       // storage refused: the offer shows
     }
   }, QUEST_KEY);
+}
+
+/** All five panes found before the page opens: the hall shows the quest's ending. */
+async function questDone(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ key, found }) => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify({ mode: "on", found }));
+      } catch {
+        // storage refused: the quest is not begun
+      }
+    },
+    { key: QUEST_KEY, found: STOPS.map((s) => s.key) },
+  );
+}
+
+/** Starts just south of the hall, lands there, and returns its Codex. */
+async function landAtHall(page: Page): Promise<Locator> {
+  await openWorld(page);
+  const hall = (await probe(page)).landmarks?.find((l) => l.holds === "hall");
+  if (!hall) throw new Error("no hall in the world");
+  await page.goto(`${WORLD}&at=${hall.id}`);
+  await page.waitForFunction(() => (window as unknown as { __flight?: Probe }).__flight?.readyAt != null, null, { timeout: 30_000 });
+  await takeWing(page);
+  await expect
+    .poll(
+      async () => {
+        await page.keyboard.press(" ");
+        return (await flier(page)).phase;
+      },
+      { timeout: 20_000, message: "landing at the hall" },
+    )
+    .not.toBe("flying");
+  const codex = page.getByRole("dialog", { name: "Projects", exact: true });
+  await expect(codex).toBeVisible({ timeout: 20_000 });
+  return codex;
+}
+
+/** Checks each of `els` lies whole inside the sheet `codex`: none is hidden under its foot or cut off by it. */
+async function expectInSheet(codex: Locator, els: Locator, label: string): Promise<void> {
+  const box = await codex.boundingBox();
+  if (!box) throw new Error("no Codex box");
+  for (const el of await els.all()) {
+    const r = await el.boundingBox();
+    if (!r) throw new Error(`${label}: no box`);
+    expect(r.y, `${label}: top inside the sheet`).toBeGreaterThanOrEqual(box.y - 0.5);
+    expect(r.y + r.height, `${label}: foot inside the sheet`).toBeLessThanOrEqual(box.y + box.height + 0.5);
+  }
+}
+
+/** Checks the register's heading is whole: on a short sheet its count gives way, not its words. */
+async function expectWholeHeading(codex: Locator): Promise<void> {
+  const heading = codex.getByRole("heading", { level: 3, name: /^Glass for the rose window/ });
+  expect(await heading.evaluate((h) => h.scrollWidth - h.clientWidth), "the register's heading is cut short").toBeLessThanOrEqual(0);
 }
 
 /** Waits for `el` and everything in it to finish arriving: a sheet steps in by a transform, which a box would catch. */
@@ -145,34 +200,30 @@ test.describe("a phone held sideways", { tag: "@phone" }, () => {
       await page.setViewportSize({ width: SIDEWAYS.width, height });
       await skipLesson(page);
       await questAnswered(page);
-      await openWorld(page);
-      const hall = (await probe(page)).landmarks?.find((l) => l.holds === "hall");
-      if (!hall) throw new Error("no hall in the world");
-      await page.goto(`${WORLD}&at=${hall.id}`);
-      await page.waitForFunction(() => (window as unknown as { __flight?: Probe }).__flight?.readyAt != null, null, { timeout: 30_000 });
-      await takeWing(page);
-      await expect
-        .poll(
-          async () => {
-            await page.keyboard.press(" ");
-            return (await flier(page)).phase;
-          },
-          { timeout: 20_000, message: "landing at the hall" },
-        )
-        .not.toBe("flying");
-      const codex = page.getByRole("dialog", { name: "Projects", exact: true });
-      await expect(codex).toBeVisible({ timeout: 20_000 });
+      const codex = await landAtHall(page);
       await expectInside(page, codex, insets, "the hall");
-      const box = await codex.boundingBox();
-      if (!box) throw new Error("no Codex box");
       const buttons = codex.getByRole("button", { name: /^(Take off|Look for the glass)/ });
       await expect(buttons).toHaveCount(2);
       await expectFingers(buttons, "the hall's buttons");
-      for (const b of await buttons.all()) {
-        const r = await b.boundingBox();
-        if (!r) throw new Error("no button box");
-        expect(r.y + r.height, "a button's foot inside the sheet").toBeLessThanOrEqual(box.y + box.height + 0.5);
-      }
+      await expectInSheet(codex, buttons, "a button");
+      await expectWholeHeading(codex);
+    });
+
+    test(`the hall with all five panes found keeps Take off and Write to Daniel whole at ${height} px tall`, async ({ page, browserName }) => {
+      const insets = await sideways(page, browserName);
+      await page.setViewportSize({ width: SIDEWAYS.width, height });
+      await skipLesson(page);
+      await questDone(page);
+      const codex = await landAtHall(page);
+      await expectInside(page, codex, insets, "the hall");
+      // The ending's one link, in reach: not behind a scroll, and not twice for a reader.
+      const write = codex.getByRole("link", { name: "Write to Daniel" });
+      await expect(write).toHaveCount(1);
+      const shown = codex.getByRole("button", { name: /^Take off/ }).or(write);
+      await expect(shown).toHaveCount(2);
+      await expectFingers(shown, "the hall's ending");
+      await expectInSheet(codex, shown, "Take off or Write to Daniel");
+      await expectWholeHeading(codex);
     });
   }
 });

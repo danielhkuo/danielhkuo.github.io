@@ -918,26 +918,37 @@
   display: none;
 }
 
+/* The same for the ending's Write to Daniel, once all five are found. */
+.writeAction {
+  display: none;
+  text-decoration: none;
+}
+
 @media (max-height: 520px) {
-  .hallLeaf .register > .follow {
+  .hallLeaf .register > .follow,
+  .hallLeaf .register > .links {
     display: none;
   }
 
-  .hallLeaf .followAction {
+  .hallLeaf .followAction,
+  .hallLeaf .writeAction {
     display: inline-flex;
   }
 
-  /* One line, so the register keeps the quatrefoils whole when the sheet is short: the heading gives way to them, as
-     they show the count too, and keeps its words for a reader. */
+  /* One line, so the register keeps the quatrefoils whole when the sheet is short. The count gives way to them, as
+     they show it too, and keeps its figures for a reader; the heading's words stay whole. */
   .hallLeaf .register h3 {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
-  /* The register is then its one row. The quest's line and the five places under it (which every stop and the abbey
-     show in full) are kept for a reader, not cut to a sliver of type under the row. */
+  /* The register is then its one row. The quest's line, the five places under it (which every stop and the abbey
+     show in full) and the ending's lines (the five lit quatrefoils say it) are kept for a reader, not cut to a sliver
+     of type under the row. */
+  .hallLeaf .register h3 .count,
   .hallLeaf .register > .questLine,
+  .hallLeaf .register > .closing,
   .hallLeaf .register > .pieces {
     position: absolute;
     width: 1px;

@@ -150,9 +150,10 @@ Last updated 2026-11-21.
   hall's Look for the glass stands beside Take off (it was squeezed to a sliver, and Take off was cut off with Safari's
   tab bar). The quest's count and arrow keep inside the safe areas, and the arrow out from under the corner's controls.
   `/minimal`'s Where Is waits for the keyboard to go before it scrolls to the match (Safari was left panned, the title
-  bar off the top). The phone title is 16 px throughout. Left: with all five found, the hall's ending lines sit behind
-  its one-row register on a phone held sideways (they show in full at the fifth stop). Checks: `e2e/site/phone.spec.ts`
-  (inside the safe areas, 44 px targets, 16 px text, the hall at 338 and 292 px tall), `e2e/minimal/tap.spec.ts`.
+  bar off the top). The phone title is 16 px throughout. With all five found, the short sheet keeps the ending's Write
+  to Daniel beside Take off (it was behind a scroll), and the register's count gives way to the quatrefoils rather than
+  cutting its heading short. Checks: `e2e/site/phone.spec.ts` (inside the safe areas, 44 px targets, 16 px text, the
+  hall at 338 and 292 px tall, before and after the quest), `e2e/minimal/tap.spec.ts`.
   Issue list and before-and-after shots: the coordinator's side-session notes, `ios-pass/`.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
@@ -424,6 +425,14 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 
 - The world's landmark caption fades in and out (`.caption { transition: opacity 400ms }` in `flight.module.css`),
   against the owner's "nothing fades": arrive by a step or a slide instead. Found by the title's critic, 2026-11-21.
+- With all five panes found, the hall's register on a desktop (1280 × 720) shows the five places and the ending in full
+  and leaves the project list about one row. Below 520 px tall it is already one row (the quatrefoils, then Write to
+  Daniel beside Take off); the same in the hall at any height would give the projects their room back, since each stop
+  and the abbey show the five in full. Found in the iPhone pass's review, 2026-11-21.
+- WebKit's "the abbey's Codex reads down by keyboard" (`e2e/site/landing.spec.ts`) fails now and then: its second
+  `page.goto` cancels the first page's region fetch, and WebKit logs that as "Fetch API cannot load … due to access
+  control checks", which the error check counts. Passes alone. Fix: let the check skip that message for this site's own
+  URLs (a same-origin request has no access control to fail).
 
 From the clouds and water (2026-11-18):
 - Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
