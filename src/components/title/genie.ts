@@ -35,7 +35,7 @@ export const GENIE_MS = 620;
 export const GENIE_SLOW = 10;
 
 /** The first part of the minimize draws the bottom down into the neck. The rest of the window follows after it. */
-export const GENIE_SPLIT = 0.42;
+export const GENIE_SPLIT = 0.4;
 
 /** The top starts down this far in, a little before the bottom lands, so the two parts overlap as on a Mac. */
 export const GENIE_TOP_START = 0.32;
@@ -52,9 +52,11 @@ function drawn(u: number): number {
   return 0.5 - 0.5 * Math.cos(Math.PI * u);
 }
 
-// The rest starts down gently while the bottom is still landing, and gathers speed through the neck.
+// The rest starts down at a walk while the bottom is still landing, and gathers speed through the neck. (Tuned on the
+// window's visible area over time: the shape forms fast, then the window slides through the neck at a steady rate,
+// and this hands one to the other with the least drop in between.)
 function follow(u: number): number {
-  return u * u * (1.4 - 0.4 * u);
+  return u * (0.35 + 0.65 * u);
 }
 
 // Zero slope at both ends: a side leaves its corner gently and meets the neck gently, which makes the S.
