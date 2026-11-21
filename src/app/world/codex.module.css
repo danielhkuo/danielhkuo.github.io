@@ -934,6 +934,18 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+
+  /* The register is then its one row. The quest's line and the five places under it (which every stop and the abbey
+     show in full) are kept for a reader, not cut to a sliver of type under the row. */
+  .hallLeaf .register > .questLine,
+  .hallLeaf .register > .pieces {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
 }
 
 /* Sideways in Safari with its tab bar showing (292 px), the hall keeps two rows of its list, so Take off stays in the
