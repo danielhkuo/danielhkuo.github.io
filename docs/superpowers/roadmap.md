@@ -131,15 +131,17 @@ Last updated 2026-11-19.
   and the row of Minimal version, agents.md and Settings. Enter world (⏎, the button, the yellow light) minimizes the
   window with a macOS genie and the dragon sets off, at `/world` in place; Back or Esc in flight bring the title back.
   Minimal version (and the green light) grows the window into `/minimal`. A phone gets its own title, the minimal
-  version first, and never loads the world. The window lists the projects (the first six by order). ⏎ is the world's
-  pixel key cap. Checks: `e2e/site/title.spec.ts`, `npm run a11y` now holds `/` too. Design:
+  version first, and never loads the world. The window lists the projects (the first six by order; without GitHub
+  stats, a name and its summary). ⏎ is the world's pixel key cap; the window's macOS chrome stays as on a Mac (the
+  owner, "Keep them"). Checks: `e2e/site/title.spec.ts`, `npm run a11y` now holds `/` too. Design:
   `specs/2026-11-20-title-terminal-design.md`.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
   ^G Help, ^F Where Is (search), ^/ Go To Line and ^X Exit work by key and by tap (Esc closes, or exits); the rest are
-  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. The interactive shell left this
-  page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
+  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. It shows whole lines only: the
+  space between the bars is a whole number of rows and scrolls come to rest on a row (2026-11-20). The interactive
+  shell left this page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
   search field opens at the top with the keyboard up and nothing pinned above the keyboard. `/recruiter` forwards to
   it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
   `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
