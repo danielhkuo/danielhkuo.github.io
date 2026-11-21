@@ -559,7 +559,10 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
           // The glint shows only near, where the visitor could land: from afar the monument stands alone.
           const fl = f.flier;
           const near = fl ? Math.hypot(ringDelta(fl.x, p.x, f.n), ringDelta(fl.y, p.y, f.n)) < GLINT_NEAR : true;
-          if (at === undefined && near) {
+          // A glint, as light catches the glass: a third of a second in every three, offset by place, so it reads as a
+          // flash on the building, never as a marker hung over it.
+          const twinkle = ((t + p.x * 0.013) % 3 + 3) % 3 < 0.35;
+          if (at === undefined && near && twinkle) {
             const o = PIECE_AT[p.key];
             put(f, pieceOf(p.key, f.air ?? NOON_AIR), p.x + o.dx, p.y + o.dy, o.z);
           }

@@ -222,7 +222,7 @@ function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: s
   const cottageAt = (cx: number, cy: number): void => {
     if (!dry(w, cx, cy) || Math.abs(groundAt(w, cx, cy) - level) > 3) return;
     addConform(w, flat(cx, cy, 4, 3.5, false, groundAt(w, cx, cy), 3, 1.5));
-    w.structures.push(S.standAt(S.cottage(seed >>> 2), cx, cy, footing(w, cx, cy, 3, 2.5)));
+    w.structures.push(S.standAt(S.countryHouse(seed >>> 2, isSlate(w.c, node(w.c, cx, cy)), houseStyle(w.c, cx, cy)), cx, cy, footing(w, cx, cy, 3, 2.5)));
   };
   if (key === "pine") {
     w.structures.push(S.standAt(S.grove(46, 14, seed), x - 2, y - half - 10, 0));

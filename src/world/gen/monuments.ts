@@ -19,7 +19,7 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
   desk: { dx: 0, dy: 4, z: 9 },
   bell: { dx: 2, dy: 4, z: 15 },
   mill: { dx: -3, dy: 4, z: 11 },
-  basket: { dx: 0, dy: -3, z: 10 },
+  basket: { dx: 0, dy: -3, z: 9 },
 };
 
 /** Every monument, built fresh. */
@@ -43,7 +43,7 @@ function knotGarden(): Structure {
   for (let y = 5; y < H - 2; y++) s.paint[y * W + 9] = M.path;
   // The north wall: high, coped, its south face the espalier's ground.
   const face = 3;
-  for (let x = 0; x < W; x++) { put(s, x, face, 13, M.stoneDark, T_WALL); put(s, x, face - 1, 13.5, M.stoneDark, T_RIDGE); }
+  for (let x = 2; x < W - 2; x++) { put(s, x, face, 11, M.stone, T_WALL); put(s, x, face - 1, 11.5, M.stoneDark, T_RIDGE); }
   // The tree on the wall's face: an old, leaning trunk and three tiers of branches of uneven reach, each turned up at
   // its ends, clumps of leaves along them, and pears.
   const cx = 9;
@@ -166,8 +166,8 @@ function engineHouse(): Structure {
   mark(s, 4, face, 11, M.opening);
   mark(s, 5, face, 11, M.opening);
   // The chimney at the north-west corner, banded in brick.
-  drum(s, 2, 2, 1.6, 28, M.stoneDark);
-  for (const z of [10, 18, 26]) for (let x = 1; x <= 3; x++) mark(s, x, 3, z, M.brick, 110);
+  drum(s, 2, 2, 1.8, 19, M.brick);
+  for (const z of [8, 13, 18]) for (let x = 1; x <= 3; x++) mark(s, x, 3, z, M.stoneDark, 110);
   // The water wheel, broadside to the camera at the house's south-east corner: a rim of timber, spokes and a hub.
   const hub = 5, wx = 12, wy = 10;
   for (let a = 0; a < 24; a++) {
@@ -177,11 +177,6 @@ function engineHouse(): Structure {
   for (let z = hub - 3; z <= hub + 3; z++) mark(s, wx, wy, z, M.timber, 92);
   for (let x = wx - 2; x <= wx + 2; x++) mark(s, x, wy, hub, M.timber, 92);
   mark(s, wx, wy, hub, M.stoneDark, 80);
-  // The mast: a lattice of timber on the roof's ridge, cross-arms at its head, and a gilt finial.
-  const mx = 5, my = 6;
-  for (let z = 15; z <= 20; z++) mark(s, mx, my, z, M.stone, 150);
-  for (let x = mx - 1; x <= mx + 1; x++) mark(s, x, my, 19, M.stone, 150);
-  mark(s, mx, my, 21, M.gilt, 160);
   return s;
 }
 
@@ -208,19 +203,14 @@ function courtPost(): Structure {
   // Benches along the east and west walls.
   for (let y = 4; y <= 9; y++) { put(s, 1, y, 1.8, M.stone, T_FLAT); put(s, 16, y, 1.8, M.stone, T_FLAT); }
   // The stand along the north side: a long low roof on posts.
-  house(s, 0, 0, 18, 3, 4, 3, { gable: 0, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
-  for (let x = 1; x <= 16; x += 3) for (let z = 1; z <= 3; z++) mark(s, x, 2, z, M.opening, 70);
-  // The post, standing from the court's north edge, the backboard and the ring hung on its own face so nothing
-  // floats: a stone post four cells wide, the board across its top, the ring and its net below the board.
-  for (let y = 3; y <= 4; y++) for (let x = 7; x <= 10; x++) put(s, x, y, 15, M.stoneDark, y === 4 ? T_WALL : x < 9 ? T_WEST : T_EAST);
-  for (let z = 11; z <= 15; z++) for (let x = 6; x <= 11; x++) {
-    const rim = z === 11 || z === 15 || x === 6 || x === 11;
-    mark(s, x, 4, z, rim ? M.stoneDark : M.plaster, rim ? 100 : 165);
-  }
-  for (let z = 12; z <= 13; z++) for (let x = 8; x <= 9; x++) mark(s, x, 4, z, M.stoneDark, 120);
-  for (let x = 7; x <= 10; x++) mark(s, x, 4, 10, M.brick, 150);
-  for (const x of [7, 10]) mark(s, x, 4, 9, M.plaster, 150);
-  for (const x of [8, 9]) { mark(s, x, 4, 8, M.plaster, 140); mark(s, x, 4, 9, M.plaster, 160); }
+  // Tiered stone seats along the north side, stepping up away from the court.
+  for (let x = 0; x < 18; x++) { put(s, x, 2, 1.5, M.stone, T_WALL); put(s, x, 1, 3, M.stone, T_WALL); put(s, x, 0, 4.5, M.stoneDark, T_WALL); }
+  // The post at the court's north end, the ring on its face, a net below.
+  for (let x = 8; x <= 9; x++) put(s, x, 3, 12, M.stoneDark, x === 8 ? T_WEST : T_EAST);
+  for (let z = 9; z <= 12; z++) for (let x = 7; x <= 10; x++) if (z === 12 || x === 7 || x === 10) mark(s, x, 3, z, M.plaster, 160);
+  for (let x = 7; x <= 10; x++) mark(s, x, 4, 9, M.brick, 160);
+  for (const x of [7, 10]) mark(s, x, 4, 8, M.plaster, 150);
+  for (const x of [8, 9]) mark(s, x, 4, 7, M.plaster, 150);
   void T_NORTH; void T_RIDGE;
   return s;
 }
