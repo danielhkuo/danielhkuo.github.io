@@ -37,6 +37,9 @@ export const GENIE_SLOW = 10;
 /** The first part of the minimize draws the bottom down into the neck. The rest of the window follows after it. */
 export const GENIE_SPLIT = 0.42;
 
+/** The top starts down this far in, a little before the bottom lands, so the two parts overlap as on a Mac. */
+export const GENIE_TOP_START = 0.32;
+
 /**
  * Where the sides bend, as shares of the way from the window's top to the floor: straight down from the top corners
  * first (the square shoulders macOS keeps), an S between, then the long thin neck straight down into the floor.
@@ -44,15 +47,14 @@ export const GENIE_SPLIT = 0.42;
 const SHOULDER = 0.12;
 const BEND = 0.55;
 
-// Gentle as the bottom leaves the window, then quicker as it is drawn into the neck: it does not slow to a halt there,
-// so the motion runs on into the second part without a pause.
+// Slow at both ends: the bottom leaves the window gently and settles into the neck, by which time the rest is moving.
 function drawn(u: number): number {
-  return u * u;
+  return 0.5 - 0.5 * Math.cos(Math.PI * u);
 }
 
-// The rest follows at once: the top starts down at a walk and gathers speed through the neck.
+// The rest starts down gently while the bottom is still landing, and gathers speed through the neck.
 function follow(u: number): number {
-  return u * (0.25 + 0.75 * u);
+  return u * u * (1.4 - 0.4 * u);
 }
 
 // Zero slope at both ends: a side leaves its corner gently and meets the neck gently, which makes the S.
@@ -70,7 +72,7 @@ export function genieBands(s: GenieSetup, t: number, bands: number): Band[] {
   const y1 = win.y + win.h;
   const u = t <= 0 ? 0 : t >= 1 ? 1 : t;
   const p1 = drawn(Math.min(1, u / GENIE_SPLIT));
-  const p2 = u <= GENIE_SPLIT ? 0 : follow((u - GENIE_SPLIT) / (1 - GENIE_SPLIT));
+  const p2 = u <= GENIE_TOP_START ? 0 : follow((u - GENIE_TOP_START) / (1 - GENIE_TOP_START));
   const top = y0 + (floorY - y0) * p2;
   const bottom = y1 + (floorY - y1) * p1;
   // How far this row has been gathered into the neck. The whole curve runs from the window's top

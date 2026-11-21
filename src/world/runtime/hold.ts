@@ -32,8 +32,11 @@ export const HOLD_RATE = 0.8;
  */
 export const HOLD_IN_RATE = 1.6;
 
-/** Held, the dragon reins in at this rate per second on top of its own easing: stopped within about a second. */
-export const HOLD_BRAKE = 2;
+/**
+ * Held, the dragon reins in at this rate per second on top of its own easing: stopped within about the window's return,
+ * so the world is still when the title is back.
+ */
+export const HOLD_BRAKE = 6;
 
 /**
  * Held, the dragon reins in over `dt` seconds, and slower than HOLD_STOP it is stopped outright. Not held, the state

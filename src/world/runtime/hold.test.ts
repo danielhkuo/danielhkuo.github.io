@@ -40,16 +40,16 @@ test("held from the start, it does not move at all", () => {
   assert.equal(s.heading, s0.heading);
 });
 
-test("held in flight, it reins in to a stop: slowing every frame, and stopped outright within a second and a half", () => {
+test("held in flight, it reins in to a stop: slowing every frame, and stopped outright as the window comes back", () => {
   let last = CRUISE;
-  let at05 = -1;
-  const s = run(state(CRUISE), true, 1.5, (f, t) => {
+  let at01 = -1;
+  const s = run(state(CRUISE), true, 0.7, (f, t) => {
     assert.ok(f.speed <= last + 1e-9, `t=${t.toFixed(3)} it never speeds up`);
     last = f.speed;
-    if (at05 < 0 && t >= 0.5) at05 = f.speed;
+    if (at01 < 0 && t >= 0.1) at01 = f.speed;
   });
-  assert.ok(at05 > 0.1 * CRUISE, `a glide, not a halt: ${at05.toFixed(1)} cells/s after half a second`);
-  assert.equal(s.speed, 0, "stopped outright");
+  assert.ok(at01 > 0.3 * CRUISE, `a glide, not a halt: ${at01.toFixed(1)} cells/s after a tenth of a second`);
+  assert.equal(s.speed, 0, "stopped outright within 0.7 s");
   const x = s.x, y = s.y;
   const still = run(s, true, 2);
   assert.equal(still.x, x);

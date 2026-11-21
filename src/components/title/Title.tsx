@@ -30,8 +30,10 @@ type Mode = "title" | "leaving" | "flying" | "returning";
  * faces them, and its body trails off into the open, clear of the window, the button and the links.
  */
 const HEAD_LEFT = 44;
-/** Frame pixels kept under the held head for the body that trails down behind it. */
-const TAIL_ROOM = 30;
+/** Frame pixels kept between the window's bottom edge and the held head, whose crest stands above its anchor. */
+const HEAD_CLEAR = 7;
+/** Frame pixels kept under the held head for the body that trails down behind it, where the window allows. */
+const TAIL_ROOM = 18;
 
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
@@ -206,8 +208,12 @@ export default function Title({ world, header, shell }: TitleProps) {
       if (!w || !h) return;
       const r = ways.getBoundingClientRect();
       const b = button.getBoundingClientRect();
-      // Level with the button, but never so low that the body, trailing down behind the head, runs off the screen.
-      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min((fit.h - TAIL_ROOM) / fit.h, (b.top + b.height / 2) / h) });
+      // Level with the button, but not so low that the body, trailing down behind the head, runs off the screen; and
+      // never so high that the window hides the head. On a short screen the head wins: a clipped tail reads, a
+      // clipped head does not.
+      const level = Math.min(b.top + b.height / 2, h - TAIL_ROOM * fit.css);
+      const y = Math.max(el.getBoundingClientRect().bottom + HEAD_CLEAR * fit.css, level);
+      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min(0.97, y / h) });
     });
     observer.observe(el);
     observer.observe(ways);

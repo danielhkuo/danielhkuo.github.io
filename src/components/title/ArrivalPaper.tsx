@@ -65,8 +65,9 @@ export default function ArrivalPaper({ start, at = HOLD_AT, onArrived }: {
     const tick = (t: number) => {
       if (t0 < 0) t0 = t;
       const share = (t - t0) / ARRIVAL_MS;
-      // The reach grows as the root of time, so the world's area comes in at an even rate: not a trickle at first.
-      draw(Math.sqrt(Math.min(1, share)));
+      // The reach grows a little faster than time at first, so the world does not trickle in, and does not drag at the
+      // far corners at the end either.
+      draw(Math.pow(Math.min(1, share), 0.7));
       if (share >= 1) {
         arrived.current();
         return;

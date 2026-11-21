@@ -2,7 +2,7 @@
 // outward from the dragon; an ordered dither breaks the ring into hard steps, so the world never fades.
 
 /** Slow enough to watch the world arrive, one pixel step at a time; short enough that the ways in are not kept waiting. */
-export const ARRIVAL_MS = 2200;
+export const ARRIVAL_MS = 2000;
 
 // The standard 8x8 Bayer matrix, values 0..63, read at (y & 7) * 8 + (x & 7). The same tile everywhere,
 // so pixels at one distance do not all switch on together.
@@ -23,8 +23,8 @@ const BAYER8 = [
  */
 const DITHER = 0.06;
 
-/** Frame pixels round the dragon that arrive in the first frame, so it is there whole before the world spreads out. */
-const DRAGON_R = 20;
+/** Frame pixels round the dragon that arrive in the first frame: the dragon's head and fore-body, no more, so the start is the dragon and not a disc. */
+const DRAGON_R = 10;
 
 /** One threshold in [0, 1] per pixel, row-major. A smaller value arrives sooner. */
 export function arrivalOrder(w: number, h: number, cx: number, cy: number): Float32Array {

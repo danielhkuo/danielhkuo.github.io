@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GENIE_MS, GENIE_SLOW, GENIE_SPLIT, genieBands, quadMatrix, type Band, type GenieSetup, type Point } from "./genie.ts";
+import { GENIE_MS, GENIE_SLOW, GENIE_SPLIT, GENIE_TOP_START, genieBands, quadMatrix, type Band, type GenieSetup, type Point } from "./genie.ts";
 
 const WIN = { x: 272, y: 80, w: 896, h: 548 };
 const SETUP: GenieSetup = { win: WIN, neckX: 720, neckHalf: 22, floorY: 930 };
@@ -46,8 +46,9 @@ test("the bands stay contiguous and cover the whole window, in order, at every m
   }
 });
 
-test("while the bottom is drawn down, the top edge holds its place and its width", () => {
-  for (const t of samples.filter((s) => s < GENIE_SPLIT)) {
+test("while the bottom is drawn down, the top edge holds its place and its width, until just before the bottom lands", () => {
+  assert.ok(GENIE_TOP_START < GENIE_SPLIT && GENIE_TOP_START > GENIE_SPLIT - 0.15, "the parts overlap a little, not much");
+  for (const t of samples.filter((s) => s < GENIE_TOP_START)) {
     const top = genieBands(SETUP, t, N)[0];
     assert.ok(Math.abs(top.quad[0].x - WIN.x) < EPS && Math.abs(top.quad[0].y - WIN.y) < EPS, `t=${t} top-left`);
     assert.ok(Math.abs(top.quad[1].x - (WIN.x + WIN.w)) < EPS && Math.abs(top.quad[1].y - WIN.y) < EPS, `t=${t} top-right`);
