@@ -6,7 +6,7 @@ import { createEngine } from "./engine.ts";
 import { FakeContext, fakeKit, type FakeNode } from "./fake.ts";
 import type { Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
-import { NOISE_NAMES, NOISE_SOURCE, noiseOptions } from "./noise-worklet.ts";
+import { NOISE_NAMES, NOISE_SOURCE, noiseGroupOptions, noiseOptions } from "./noise-worklet.ts";
 
 // Noise made as it plays (design §14.8): the continuous beds' noises come from an AudioWorklet that never repeats,
 // instead of from loops the page must copy in. Each is the kit's buffer of the same name as a sound: the same colour,
@@ -173,6 +173,37 @@ test("told to end at a time, a noise is silent from then and lets the audio thre
   assert.ok(block[0].every((v) => v === 0) && block[1].every((v) => v === 0));
 });
 
+/** `seconds` of a grouped processor's outputs: one array of channels an output. */
+function playGroup(layers: { name: string; seed: number; share?: number }[], seconds: number): Float32Array[][] {
+  const Cls = processorClass();
+  const o = noiseGroupOptions(layers, RATE);
+  const counts = o.layers.map((l) => l.channels);
+  const p = new Cls({ processorOptions: o, outputChannelCount: counts });
+  const n = Math.floor((seconds * RATE) / 128) * 128;
+  const out = counts.map((ch) => Array.from({ length: ch }, () => new Float32Array(n)));
+  const blocks = counts.map((ch) => Array.from({ length: ch }, () => new Float32Array(128)));
+  for (let at = 0; at < n; at += 128) {
+    assert.ok(p.process([], blocks, {}));
+    blocks.forEach((b, k) => b.forEach((ch, c) => out[k][c].set(ch, at)));
+  }
+  return out;
+}
+
+test("a group is its noises in one node: each output sample for sample the noise it would be alone", () => {
+  const group = playGroup([{ name: "brown0", seed: 4 }, { name: "pink0", seed: 5 }, { name: "velvet", seed: 6 }, { name: "white0", seed: 7 }], 1);
+  const alone = [play("brown0", 4, 1), play("pink0", 5, 1), play("velvet", 6, 1), play("white0", 7, 1)];
+  group.forEach((chs, k) => chs.forEach((ch, c) => assert.deepEqual(ch, alone[k][c], `output ${k} channel ${c}`)));
+});
+
+test("the breeze shares the rush's draw, as the kit's buffers do: one pink noise, filtered two ways", () => {
+  const [rush, breeze] = playGroup([{ name: "rush", seed: 5 }, { name: "breeze", seed: 99, share: 0 }], 1);
+  assert.deepEqual(rush[0], play("rush", 5, 1)[0]);
+  // Shared, the breeze is the breeze of the rush's seed (its own seed is not drawn).
+  assert.deepEqual(breeze[0], play("breeze", 5, 1)[0]);
+  assert.deepEqual(breeze[1], play("breeze", 5, 1)[1]);
+  assert.throws(() => noiseGroupOptions([{ name: "rush", seed: 1 }, { name: "hiss", seed: 2, share: 0 }], RATE), "only noises of one colour and width share");
+});
+
 // ── In the engine ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 const PREFS: Prefs = { volume: 0.7, headphones: false, calm: false, touch: false };
@@ -212,7 +243,12 @@ test("in the engine, with the worklet loaded: the continuous beds play worklet n
     };
     fly(10, 10, 1);
     const worklets = ctx.nodes.filter((n) => n.kind === "worklet");
-    const names = new Set(worklets.map((n) => (n.options as { processorOptions: { name: string } }).processorOptions.name));
+    // One node a bed's noises (§14.8: a node costs the audio thread for each call and each output), each noise an output.
+    const layers = worklets.flatMap((n) => (n.options as { processorOptions: { layers: { name: string }[] } }).processorOptions.layers);
+    const names = new Set(layers.map((l) => l.name));
+    assert.ok(worklets.length <= 5, `${worklets.length} worklet nodes`);
+    assert.equal(layers.length, 13, "the wind's four, the surf bed's five, the open sea, the rain's two, the riffle");
+    for (const n of worklets) assert.equal((n.options as { outputChannelCount: number[] }).outputChannelCount.length, (n.options as { processorOptions: { layers: unknown[] } }).processorOptions.layers.length);
     for (const name of ["buffet", "rush", "hiss", "breeze", "brown0", "pink0", "white0", "velvet"]) assert.ok(names.has(name), `${name} is worklet noise`);
     // No loop is read of those names (the falls, the moments and the waves' own velvet keep theirs: none here).
     const loops = ctx.nodes.filter((n) => n.kind === "bufferSource" && n.buffer && ["buffet", "rush", "hiss", "breeze"].includes(String((n.buffer as { name?: string }).name ?? "")));
