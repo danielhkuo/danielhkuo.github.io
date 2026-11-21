@@ -27,6 +27,12 @@ export interface Fresh {
    * one bed can be held on its first loop while another that shares the buffer moves on.
    */
   read(name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string; into?: AudioNode[] }): { out?: AudioNode; stop(when?: number): void };
+  /**
+   * Several continuous noises as one worklet, output `k` into `reads[k].into`. When the worklet is on for every name
+   * (and each is a noise made as it plays), one node; `share` is the earlier layer whose mixed noise this one filters.
+   * Otherwise one fresh read each, at the offset, rate and wander the bed passed, and the handle stops them all.
+   */
+  group(bed: string | undefined, at: number, reads: { name: string; into: AudioNode[]; share?: number; offset?: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void }[]): { stop(when?: number): void };
   /** Requests, moves and cleanups that fall due at `now`. True when it did any of that. */
   frame(now: number): boolean;
   /** How many reads have moved onto a new generation. */
@@ -316,7 +322,7 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     if (isNoiseName(name) && opts.worklet?.(name, o.bed) === true) {
       // The node is the read's output itself: a gain after it would be one more node the audio thread visits.
       // Given `into`, it connects straight there and is not handed back.
-      const node = noiseNode(ctx, name, noiseSeed(opts.seed, name, nextIndex(name)));
+      const node = noiseNode(ctx, [{ name, seed: noiseSeed(opts.seed, name, nextIndex(name)) }]);
       if (o.into) for (let i = 0; i < o.into.length; i++) node.connect(o.into[i]);
       return {
         out: o.into ? undefined : node,
@@ -343,6 +349,40 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     };
   };
 
+  const group = (bed: string | undefined, at: number, reads: { name: string; into: AudioNode[]; share?: number; offset?: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void }[]) => {
+    // One node only when every layer would have been worklet noise. A bed held on its loops, or a name that stays a
+    // loop, takes the reads it used to: the same offset, rate and wander, so a plain-loop render does not move.
+    const spun = reads.length > 0 && reads.every((r) => isNoiseName(r.name) && opts.worklet?.(r.name, bed) === true);
+    if (spun) {
+      const node = noiseNode(ctx, reads.map((r) => {
+        const layer: { name: string; seed: number; share?: number } = { name: r.name, seed: noiseSeed(opts.seed, r.name, nextIndex(r.name)) };
+        if (r.share !== undefined) layer.share = r.share;
+        return layer;
+      }));
+      for (let k = 0; k < reads.length; k++) {
+        const into = reads[k].into;
+        for (let i = 0; i < into.length; i++) node.connect(into[i], k);
+      }
+      return {
+        stop(when?: number) {
+          // Each layer is told the end time on the shared port. The processor keeps one time; a repeat sets it again.
+          const at = when ?? 0;
+          for (let i = 0; i < reads.length; i++) endNoise(node, at);
+        },
+      };
+    }
+    const handles: { stop(when?: number): void }[] = [];
+    for (let i = 0; i < reads.length; i++) {
+      const r = reads[i];
+      handles.push(read(r.name, { at, offset: r.offset ?? 0, rate: r.rate, wire: r.wire, bed, into: r.into }));
+    }
+    return {
+      stop(when?: number) {
+        for (let i = 0; i < handles.length; i++) handles[i].stop(when);
+      },
+    };
+  };
+
   const frame = (now: number): boolean => {
     let did = false;
     for (let i = 0; i < names.length; i++) if (sweep(names[i], now)) did = true;
@@ -354,7 +394,7 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     return did;
   };
 
-  return { read, frame, get swaps() { return swaps; } };
+  return { read, group, frame, get swaps() { return swaps; } };
 }
 
 /**

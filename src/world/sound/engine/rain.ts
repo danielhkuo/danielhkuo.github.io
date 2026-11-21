@@ -64,11 +64,16 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     patter.connect(out);
     v.bindings.push(bind(T.RAIN_PATTER, [patter.gain]));
   });
+  // The sheet and the fizz are one worklet. The sheet's offset is drawn here, where it always was; the node itself
+  // waits until the fizz's offset has been drawn after the plinks, so the loop path's places stay in order.
+  let sheetBand: AudioNode;
+  let sheetOffset = 0;
   v.steps.push(() => {
     const band = keep(bandpass(ctx, RAIN.sheetHz, RAIN.sheetQ));
     const top = keep(lowpass(ctx, RAIN.sheetTopHz));
     const sheet = keep(gain(ctx, 0));
-    read("pink0", 1, 0, -RAIN.wanderCents, [band]);
+    sheetBand = band;
+    sheetOffset = rng.float() * kit.buffer("pink0").duration;
     band.connect(top);
     top.connect(sheet);
     sheet.connect(out);
@@ -81,7 +86,25 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     const fizzBand = keep(highpass(ctx, RAIN.fizzHz));
     const fizzTop = keep(highshelf(ctx, RAIN.topHz, RAIN.topDb));
     const fizzLevel = keep(gain(ctx, RAIN.fizzShare));
-    read("white0", 1, 1, RAIN.wanderCents, [fizzBand]);
+    const fizzOffset = rng.float() * kit.buffer("white0").duration;
+    // Wander only on the fresh-loop path: a worklet has no detune, and the wire is what applies it.
+    // One wander gain a layer, made on the first generation that wants it (a new one each move would stay on the hub).
+    const wander = (drift: number, cents: number) => {
+      let g: GainNode | null = null;
+      return (src: AudioBufferSourceNode) => {
+        if (!g) {
+          g = keep(gain(ctx, cents));
+          opts.hub.drift.connect(g, drift);
+        }
+        const mine = g;
+        mine.connect(src.detune);
+        return () => mine.disconnect(src.detune);
+      };
+    };
+    v.sources.push(opts.fresh.group("rain", opts.at, [
+      { name: "pink0", into: [sheetBand], offset: sheetOffset, rate: 1, wire: wander(0, -RAIN.wanderCents) },
+      { name: "white0", into: [fizzBand], offset: fizzOffset, rate: 1, wire: wander(1, RAIN.wanderCents) },
+    ]));
     fizzBand.connect(fizzTop);
     fizzTop.connect(fizzLevel);
     const water = keep(gain(ctx, 0));

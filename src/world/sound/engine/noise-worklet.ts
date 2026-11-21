@@ -1,6 +1,8 @@
-// Continuous noise, made as it plays (design §14.8). The wind's four layers and the beds' plain noises come from an
-// AudioWorklet that never repeats, so the page does not copy a new loop into an AudioBuffer a few times a second.
-// The bubbles and the drops stay loops: they are sparse events, and copying them is cheap.
+// Continuous noise, made as it plays (design §14.8). A bed's noises are one AudioWorkletNode, one output each, so the
+// audio thread is entered once for the bed rather than once a noise. A layer may skip its own draw and filter an
+// earlier layer's coloured, mixed noise (the breeze and the rush are one pink). The grain, a slow gain, is stepped
+// every few samples and filled in between. The bubbles and the drops stay loops: they are sparse events, and copying
+// them is cheap.
 //
 // The processor is a function turned into source. The audio thread cannot see this module, so the function names
 // nothing from it: the sample rate and the clock are the worklet's own globals, and every coefficient arrives in
@@ -53,6 +55,15 @@ export interface NoiseOptions {
   leak: number;
   /** Velvet's one-pole coefficient. Unused otherwise. */
   grainK: number;
+  /**
+   * Velvet is computed every this many samples (its roughness lives under 90 Hz) and linearly filled between.
+   * The one-poles then use grainK8 = 1 − (1 − grainK)^grainStep, and one Gaussian draw scaled by grainScale so the
+   * stepped filter keeps the full-rate variance. Unused for the other colours, and still sent so the thread builds
+   * nothing of its own.
+   */
+  grainStep: number;
+  grainK8: number;
+  grainScale: number;
   floor: number;
   span: number;
   slope: number;
@@ -67,6 +78,12 @@ export interface NoiseOptions {
   biquads: Coefficients[];
 }
 
+/**
+ * The grain is stepped this many samples at a time. Eight keeps the velvet within the buffer's level and bands; the
+ * one-poles use the coefficient of an 8-sample hold, and the draw is scaled so their variance does not change.
+ */
+const VELVET_STEP = 8;
+
 export function noiseOptions(name: string, seed: number, sampleRate: number): NoiseOptions {
   if (!isNoiseName(name)) throw new Error(`noise: ${name} is not made as it plays`);
   const layer = NOISE_LAYERS[name];
@@ -74,7 +91,12 @@ export function noiseOptions(name: string, seed: number, sampleRate: number): No
   const velvet = layer.colour === "velvet";
   // The coloured noise is brought to NOISE_RMS here, on the main thread, the way level() does it for a buffer.
   // Velvet is a gain, not a noise: the same two one-poles, divided by the deviation their impulse response has.
-  const gain = velvet ? 1 / grainDeviation(grainK(sampleRate)) : colourGain(layer.colour, sampleRate);
+  const gk = velvet ? grainK(sampleRate) : 0;
+  const gain = velvet ? 1 / grainDeviation(gk) : colourGain(layer.colour, sampleRate);
+  // k8 = 1 − (1 − k)^step, the one-pole after `step` held samples. The draw is scaled so two such poles still have
+  // the full-rate deviation (the logistic's knee is in those units).
+  const grainK8 = velvet ? 1 - Math.pow(1 - gk, VELVET_STEP) : 0;
+  const grainScale = velvet ? grainDeviation(gk) / grainDeviation(grainK8) : 1;
   return {
     name,
     channels: layer.channels,
@@ -82,7 +104,10 @@ export function noiseOptions(name: string, seed: number, sampleRate: number): No
     colour: layer.colour,
     gain,
     leak: layer.colour === "brown" ? brownLeak(sampleRate) : 0,
-    grainK: velvet ? grainK(sampleRate) : 0,
+    grainK: gk,
+    grainStep: VELVET_STEP,
+    grainK8,
+    grainScale,
     floor: GRAIN_FLOOR,
     span: GRAIN_SPAN,
     slope: GRAIN_SLOPE,
@@ -95,6 +120,33 @@ export function noiseOptions(name: string, seed: number, sampleRate: number): No
     pinkDelay: PINK_DELAY,
     biquads: layer.filters.map((f) => coefficients(f, sampleRate)),
   };
+}
+
+/** One layer of a group: the noise's options, and which earlier layer's mixed noise it filters instead of drawing. */
+export interface GroupedNoise extends NoiseOptions {
+  /** -1 draws its own coloured noise. Otherwise an earlier layer of the same colour, width and channel count. */
+  share: number;
+}
+
+/**
+ * What a grouped node is given. `share` is -1 when the layer draws its own noise. A shared layer takes that earlier
+ * layer's coloured samples after the stereo mix and before the fixed filters (the rush and the breeze are one levelled
+ * pink, filtered two ways), and runs only its own biquads. The gain is the source's; a layer whose gain differs scales
+ * the block. The shared layer has to come earlier, and it has to be the same colour, correlation and channel count.
+ */
+export function noiseGroupOptions(layers: { name: string; seed: number; share?: number }[], sampleRate: number): { layers: GroupedNoise[] } {
+  const built = layers.map((l) => ({ ...noiseOptions(l.name, l.seed, sampleRate), share: l.share === undefined ? -1 : l.share }));
+  for (let i = 0; i < built.length; i++) {
+    const k = built[i].share;
+    if (k === -1) continue;
+    if (!Number.isInteger(k) || k < 0 || k >= i) throw new Error(`noise: share ${k} does not come earlier`);
+    const here = NOISE_LAYERS[layers[i].name as NoiseName];
+    const there = NOISE_LAYERS[layers[k].name as NoiseName];
+    if (here.colour !== there.colour || here.rho !== there.rho || here.channels !== there.channels) {
+      throw new Error("noise: shared layers differ in colour, width or channels");
+    }
+  }
+  return { layers: built };
 }
 
 /**
@@ -195,6 +247,33 @@ function installFreshNoise(): void {
   /** The render quantum. A longer block is coloured in chunks of this, still with no allocation. */
   const BLOCK = 128;
 
+  /** One output of the node. The processor holds these and points its fields at the one it is rendering. */
+  interface Layer {
+    channels: number;
+    /** 0 white, 1 pink, 2 brown, 3 velvet. */
+    kind: number;
+    nf: number;
+    /** -1 draws its own coloured noise. Otherwise an earlier layer's mixed block, before that layer's biquads. */
+    share: number;
+    u: Float64Array;
+    rng: Uint32Array;
+    pinkS: Float64Array;
+    poles: Float64Array;
+    weights: Float64Array;
+    brown: Float64Array;
+    grain: Float64Array;
+    coef: Float64Array;
+    mem: Float64Array;
+    pre0: Float32Array;
+    pre1: Float32Array;
+    step: number;
+    k8: number;
+    scale: number;
+    phase: number;
+    y0: Float64Array;
+    y1: Float64Array;
+  }
+
   class FreshNoise extends AudioWorkletProcessor {
     /** Context time from which the output is silence and process returns false, so the node can be collected. */
     endAt = Infinity;
@@ -202,6 +281,17 @@ function installFreshNoise(): void {
     /** 0 white, 1 pink, 2 brown, 3 velvet. */
     kind = 0;
     nf = 0;
+    /** The outputs. A single noise is a group of one, so there is one render path. */
+    layers: Layer[] = [];
+    /** The layer `use` last pointed the fields at. Velvet writes its phase back here. */
+    layer!: Layer;
+    share = -1;
+    step = 8;
+    k8 = 0;
+    scale = 1;
+    phase = 0;
+    y0!: Float64Array;
+    y1!: Float64Array;
     /** gain, leak, grainK, floor, span, slope, knee, a, b, feed, delay. */
     u!: Float64Array;
     /** xorshift32 state, one word per channel. */
@@ -220,13 +310,12 @@ function installFreshNoise(): void {
     pre0!: Float32Array;
     pre1!: Float32Array;
 
-    constructor(options: AudioWorkletNodeOptions) {
-      super(options);
-      const raw = options.processorOptions;
-      if (typeof raw !== "object" || raw === null) throw new Error("fresh-noise: no options");
-      const colour = (raw as Record<string, unknown>).colour;
-      this.channels = num(raw, "channels") === 1 ? 1 : 2;
-      this.kind = colour === "pink" ? 1 : colour === "brown" ? 2 : colour === "velvet" ? 3 : 0;
+    /** One layer, seeded as a node of its own would be. A bare options object (no `layers`) is a group of one. */
+    makeLayer(raw: object): Layer {
+      const bag = raw as Record<string, unknown>;
+      const colour = bag.colour;
+      const channels = num(raw, "channels") === 1 ? 1 : 2;
+      const kind = colour === "pink" ? 1 : colour === "brown" ? 2 : colour === "velvet" ? 3 : 0;
       const u = new Float64Array(11);
       u[U_GAIN] = num(raw, "gain");
       u[U_LEAK] = num(raw, "leak");
@@ -239,18 +328,14 @@ function installFreshNoise(): void {
       u[U_B] = num(raw, "b");
       u[U_FEED] = num(raw, "pinkFeed");
       u[U_DELAY] = num(raw, "pinkDelay");
-      this.u = u;
-      this.poles = nums(raw, "pinkPoles");
-      this.weights = nums(raw, "pinkWeights");
-      this.coef = biquadsOf(raw);
-      this.nf = this.coef.length / 5;
-      const ch = this.channels;
+      const coef = biquadsOf(raw);
+      const nf = coef.length / 5;
       // xorshift32, one word per channel, from the same mix as the old four-word seed:
       // mix32(seed ^ (c + 1) * 0x9e3779b1). A zero word would stick, so that one mix is replaced.
       // Warmed so the first sample is not the raw seed. The period is 2^32 − 1 draws, two samples each.
-      this.rng = new Uint32Array(ch);
+      const rng = new Uint32Array(channels);
       const seed = num(raw, "seed") >>> 0;
-      for (let c = 0; c < ch; c++) {
+      for (let c = 0; c < channels; c++) {
         let s = mix32((seed ^ Math.imul(c + 1, 0x9e3779b1)) >>> 0);
         if (s === 0) s = (0x6d2b79f5 ^ (c + 1)) >>> 0;
         for (let k = 0; k < 12; k++) {
@@ -258,14 +343,75 @@ function installFreshNoise(): void {
           s ^= s >>> 17;
           s ^= s << 5;
         }
-        this.rng[c] = s >>> 0;
+        rng[c] = s >>> 0;
       }
-      this.pinkS = new Float64Array(ch * 7);
-      this.brown = new Float64Array(ch);
-      this.grain = new Float64Array(ch * 2);
-      this.mem = new Float64Array(ch * this.nf * 4);
-      this.pre0 = new Float32Array(BLOCK);
-      this.pre1 = new Float32Array(BLOCK);
+      const share = typeof bag.share === "number" ? bag.share : -1;
+      let step = num(raw, "grainStep");
+      if (!(step >= 1)) step = 1;
+      // The grain starts at rest (both poles zero). The first knot ramps away from that gain.
+      const rest = u[U_FLOOR] + u[U_SPAN] / (1 + Math.exp(u[U_SLOPE] * u[U_KNEE]));
+      const y0 = new Float64Array(channels);
+      const y1 = new Float64Array(channels);
+      for (let c = 0; c < channels; c++) {
+        y0[c] = rest;
+        y1[c] = rest;
+      }
+      return {
+        channels, kind, nf, share, u, rng,
+        pinkS: new Float64Array(channels * 7),
+        poles: nums(raw, "pinkPoles"),
+        weights: nums(raw, "pinkWeights"),
+        brown: new Float64Array(channels),
+        grain: new Float64Array(channels * 2),
+        coef, mem: new Float64Array(channels * nf * 4),
+        pre0: new Float32Array(BLOCK),
+        pre1: new Float32Array(BLOCK),
+        step, k8: num(raw, "grainK8"), scale: num(raw, "grainScale"),
+        phase: 0, y0, y1,
+      };
+    }
+
+    /** Point the sample loops at `L`. They write through these references, so the layer keeps the state. */
+    use(L: Layer): void {
+      this.layer = L;
+      this.channels = L.channels;
+      this.kind = L.kind;
+      this.nf = L.nf;
+      this.share = L.share;
+      this.u = L.u;
+      this.rng = L.rng;
+      this.pinkS = L.pinkS;
+      this.poles = L.poles;
+      this.weights = L.weights;
+      this.brown = L.brown;
+      this.grain = L.grain;
+      this.coef = L.coef;
+      this.mem = L.mem;
+      this.pre0 = L.pre0;
+      this.pre1 = L.pre1;
+      this.step = L.step;
+      this.k8 = L.k8;
+      this.scale = L.scale;
+      this.phase = L.phase;
+      this.y0 = L.y0;
+      this.y1 = L.y1;
+    }
+
+    constructor(options: AudioWorkletNodeOptions) {
+      super(options);
+      const raw = options.processorOptions;
+      if (typeof raw !== "object" || raw === null) throw new Error("fresh-noise: no options");
+      const bag = raw as Record<string, unknown>;
+      // A group is `{ layers }`. One noise, passed as its options alone, is a group of one: the same render path.
+      const specs = Array.isArray(bag.layers) ? bag.layers : [raw];
+      if (specs.length === 0) throw new Error("fresh-noise: no layers");
+      const layers: Layer[] = [];
+      for (let i = 0; i < specs.length; i++) {
+        const spec = specs[i];
+        if (typeof spec !== "object" || spec === null) throw new Error("fresh-noise: layers");
+        layers.push(this.makeLayer(spec));
+      }
+      this.layers = layers;
       // The end is a context time, posted from the main thread. Before it arrives the noise runs on.
       this.port.onmessage = (e: MessageEvent) => {
         const data = e.data;
@@ -385,11 +531,16 @@ function installFreshNoise(): void {
       }
     }
 
-    /** Two one-poles, then gain, then the logistic grain. The exp is the grain's knee, not a noise sample. */
+    /**
+     * The grain, stepped. Every `step` samples one scaled Gaussian drives both one-poles with k8 (the coefficient of
+     * that many held samples), the logistic is taken once, and the samples between the knots are a straight line.
+     * The phase is the layer's, so a block that ends mid-step continues in the next one.
+     */
     fillVelvet(n: number): void {
       const g = GAUSS;
       const u = this.u;
-      const k = u[U_GRAIN];
+      const k8 = this.k8;
+      const scale = this.scale;
       const gain = u[U_GAIN];
       const floor = u[U_FLOOR];
       const span = u[U_SPAN];
@@ -397,40 +548,48 @@ function installFreshNoise(): void {
       const knee = u[U_KNEE];
       const st = this.grain;
       const rng = this.rng;
-      const n2 = n - (n & 1);
+      const step = this.step;
+      const inv = 1 / step;
+      const y0s = this.y0;
+      const y1s = this.y1;
+      const phase0 = this.phase;
       const ch = this.channels;
+      let end = phase0;
       for (let c = 0; c < ch; c++) {
         const o = c === 0 ? this.pre0 : this.pre1;
         let s = rng[c];
         const base = c * 2;
         let a = st[base];
         let b = st[base + 1];
-        for (let i = 0; i < n2; i += 2) {
-          s ^= s << 13;
-          s ^= s >>> 17;
-          s ^= s << 5;
-          let w = g[s & GAUSS_MASK];
-          a += k * (w - a);
-          b += k * (a - b);
-          o[i] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
-          w = g[(s >>> GAUSS_SHIFT) & GAUSS_MASK];
-          a += k * (w - a);
-          b += k * (a - b);
-          o[i + 1] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
-        }
-        if (n !== n2) {
-          s ^= s << 13;
-          s ^= s >>> 17;
-          s ^= s << 5;
-          const w = g[s & GAUSS_MASK];
-          a += k * (w - a);
-          b += k * (a - b);
-          o[n2] = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
+        let y0 = y0s[c];
+        let y1 = y1s[c];
+        let phase = phase0;
+        for (let i = 0; i < n; i++) {
+          if (phase === 0) {
+            s ^= s << 13;
+            s ^= s >>> 17;
+            s ^= s << 5;
+            const w = g[s & GAUSS_MASK] * scale;
+            a += k8 * (w - a);
+            b += k8 * (a - b);
+            y1 = floor + span / (1 + Math.exp(-slope * (b * gain - knee)));
+          }
+          o[i] = y0 + (y1 - y0) * ((phase + 1) * inv);
+          phase += 1;
+          if (phase === step) {
+            y0 = y1;
+            phase = 0;
+          }
         }
         rng[c] = s >>> 0;
         st[base] = a;
         st[base + 1] = b;
+        y0s[c] = y0;
+        y1s[c] = y1;
+        end = phase;
       }
+      this.phase = end;
+      this.layer.phase = end;
     }
 
     /** Direct form I over one chunk, the same sum filters.ts runs. State is local for the chunk and written back at the end. */
@@ -455,24 +614,51 @@ function installFreshNoise(): void {
     }
 
     /**
-     * Stereo mix, then the fixed biquads. L = a·n0 + b·n1 and R = b·n0 + a·n1; an unmixed pair (a = 1, b = 0) is copied.
-     * A mono noise is the one channel, unmixed. Filters run per channel on the mixed block.
+     * Stereo mix into the pre-filter block. L = a·n0 + b·n1 and R = b·n0 + a·n1; an unmixed pair (a = 1, b = 0) is
+     * left as filled. A shared layer copies this block and does not mix again.
      */
-    shapeBlock(out: Float32Array[], at: number, n: number): void {
+    mixBlock(n: number): void {
       const ch = this.channels;
-      const pre0 = this.pre0;
-      const pre1 = this.pre1;
+      if (ch !== 2) return;
       const u = this.u;
       const a = u[U_A];
       const b = u[U_B];
-      if (ch === 2 && (a !== 1 || b !== 0)) {
-        for (let i = 0; i < n; i++) {
-          const x = pre0[i];
-          const y = pre1[i];
-          pre0[i] = a * x + b * y;
-          pre1[i] = b * x + a * y;
-        }
+      if (a === 1 && b === 0) return;
+      const pre0 = this.pre0;
+      const pre1 = this.pre1;
+      for (let i = 0; i < n; i++) {
+        const x = pre0[i];
+        const y = pre1[i];
+        pre0[i] = a * x + b * y;
+        pre1[i] = b * x + a * y;
       }
+    }
+
+    /**
+     * Take `src`'s mixed, pre-filter block. The gain is already in those samples; a layer whose gain differs scales.
+     * Called before either layer's biquads, so the source's block is still the coloured noise.
+     */
+    copyShared(src: Layer, n: number): void {
+      const g = this.u[U_GAIN];
+      const gs = src.u[U_GAIN];
+      const s = g === gs ? 1 : g / gs;
+      const a0 = this.pre0;
+      const b0 = src.pre0;
+      if (s === 1) for (let i = 0; i < n; i++) a0[i] = b0[i];
+      else for (let i = 0; i < n; i++) a0[i] = b0[i] * s;
+      if (this.channels === 2) {
+        const a1 = this.pre1;
+        const b1 = src.pre1;
+        if (s === 1) for (let i = 0; i < n; i++) a1[i] = b1[i];
+        else for (let i = 0; i < n; i++) a1[i] = b1[i] * s;
+      }
+    }
+
+    /** The fixed biquads, then the output. Filters run per channel on the mixed block. */
+    finishBlock(out: Float32Array[], at: number, n: number): void {
+      const ch = this.channels;
+      const pre0 = this.pre0;
+      const pre1 = this.pre1;
       const nf = this.nf;
       if (nf !== 0) {
         for (let c = 0; c < ch; c++) {
@@ -488,21 +674,22 @@ function installFreshNoise(): void {
       }
     }
 
-    quiet(out: Float32Array[], from: number, to: number): void {
-      const ch = this.channels;
-      for (let c = 0; c < ch; c++) {
-        const o = out[c];
-        for (let i = from; i < to; i++) o[i] = 0;
+    quietAll(outputs: Float32Array[][], from: number, to: number): void {
+      for (let k = 0; k < outputs.length; k++) {
+        const out = outputs[k];
+        for (let c = 0; c < out.length; c++) {
+          const o = out[c];
+          for (let i = from; i < to; i++) o[i] = 0;
+        }
       }
     }
 
     process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
-      const out = outputs[0];
-      const n = out[0].length;
+      const n = outputs[0][0].length;
       const start = currentTime;
-      // From the posted context time on, the block is silence and the processor stops, so nothing keeps the node.
+      // From the posted context time on, every output is silence and the processor stops, so nothing keeps the node.
       if (!(start < this.endAt)) {
-        this.quiet(out, 0, n);
+        this.quietAll(outputs, 0, n);
         return false;
       }
       const rate = sampleRate;
@@ -512,20 +699,36 @@ function installFreshNoise(): void {
         if (live < 0) live = 0;
         else if (live > n) live = n;
       }
-      const kind = this.kind;
-      const cap = this.pre0.length;
+      const ls = this.layers;
+      const cap = BLOCK;
       let at = 0;
       while (at < live) {
         let len = live - at;
         if (len > cap) len = cap;
-        if (kind === 1) this.fillPink(len);
-        else if (kind === 2) this.fillBrown(len);
-        else if (kind === 3) this.fillVelvet(len);
-        else this.fillWhite(len);
-        this.shapeBlock(out, at, len);
+        // Draw and mix first, so a shared layer can copy the block before anyone's biquads rewrite it.
+        for (let i = 0; i < ls.length; i++) {
+          const L = ls[i];
+          if (L.share >= 0) continue;
+          this.use(L);
+          if (L.kind === 1) this.fillPink(len);
+          else if (L.kind === 2) this.fillBrown(len);
+          else if (L.kind === 3) this.fillVelvet(len);
+          else this.fillWhite(len);
+          this.mixBlock(len);
+        }
+        for (let i = 0; i < ls.length; i++) {
+          const L = ls[i];
+          if (L.share < 0) continue;
+          this.use(L);
+          this.copyShared(ls[L.share], len);
+        }
+        for (let i = 0; i < ls.length; i++) {
+          this.use(ls[i]);
+          this.finishBlock(outputs[i], at, len);
+        }
         at += len;
       }
-      if (live < n) this.quiet(out, live, n);
+      if (live < n) this.quietAll(outputs, live, n);
       return live === n;
     }
   }
@@ -562,13 +765,13 @@ export function loadNoise(ctx: BaseAudioContext): Promise<boolean> {
   return pending;
 }
 
-/** A noise that plays until endNoise. The module must already be loaded on `ctx`. */
-export function noiseNode(ctx: BaseAudioContext, name: string, seed: number): AudioWorkletNode {
-  const options = noiseOptions(name, seed, ctx.sampleRate);
+/** A group of noises that play until endNoise, one output each. One noise is a group of one. The module must already be loaded on `ctx`. */
+export function noiseNode(ctx: BaseAudioContext, layers: { name: string; seed: number; share?: number }[]): AudioWorkletNode {
+  const options = noiseGroupOptions(layers, ctx.sampleRate);
   return new AudioWorkletNode(ctx, "fresh-noise", {
     numberOfInputs: 0,
-    numberOfOutputs: 1,
-    outputChannelCount: [options.channels],
+    numberOfOutputs: layers.length,
+    outputChannelCount: options.layers.map((l) => l.channels),
     processorOptions: options,
   });
 }

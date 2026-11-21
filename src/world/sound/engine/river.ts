@@ -47,7 +47,12 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts)
     const band = keep(bandpass(ctx, RIVER.riffleHz, RIVER.riffleQ));
     const riffle = keep(gain(ctx, 0));
     const split = keep(ctx.createChannelSplitter(2));
-    read("pink0", 1, band);
+    v.sources.push(opts.fresh.group("river", opts.at, [{
+      name: "pink0",
+      into: [band],
+      offset: rng.float() * kit.buffer("pink0").duration,
+      rate: 1,
+    }]));
     band.connect(riffle);
     riffle.connect(split);
     const merge = keep(ctx.createChannelMerger(2));
