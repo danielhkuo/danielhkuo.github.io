@@ -30,6 +30,8 @@ type Mode = "title" | "leaving" | "flying" | "returning";
  * faces them, and its body trails off into the open, clear of the window, the button and the links.
  */
 const HEAD_LEFT = 44;
+/** Frame pixels kept under the held head for the body that trails down behind it. */
+const TAIL_ROOM = 30;
 
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
@@ -95,6 +97,8 @@ export default function Title({ world, header, shell }: TitleProps) {
   const modeRef = useRef<Mode>("title");
   // True once the ways in are up: until then a key only skips the opening.
   const waysRef = useRef(false);
+  // True while the world arrives after the opening: ⏎ then cuts it short and goes in, as the terminal has just said.
+  const arrivingRef = useRef(false);
   const atWorld = useRef(false);
   const slowRef = useRef(false);
   const shiftRef = useRef(false);
@@ -126,7 +130,8 @@ export default function Title({ world, header, shell }: TitleProps) {
   const enter = (push: boolean, slow: boolean) => {
     const current = modeRef.current;
     if (current === "leaving" || current === "flying") return;
-    if (!waysRef.current) return;
+    if (!waysRef.current && !arrivingRef.current) return;
+    if (arrivingRef.current) setSkipped(true);
     slowRef.current = slow;
     if (push && pathNow() !== "/world") {
       window.history.pushState(null, "", "/world" + window.location.search);
@@ -173,7 +178,8 @@ export default function Title({ world, header, shell }: TitleProps) {
   useLayoutEffect(() => {
     modeRef.current = mode;
     waysRef.current = waysShown;
-  }, [mode, waysShown]);
+    arrivingRef.current = start === "play" && !arrived;
+  }, [mode, waysShown, start, arrived]);
 
   // A key in the intro skips the opening. This listens in the capture phase on the window, which runs before the
   // layout's own listener on the root element takes the intro away.
@@ -200,7 +206,8 @@ export default function Title({ world, header, shell }: TitleProps) {
       if (!w || !h) return;
       const r = ways.getBoundingClientRect();
       const b = button.getBoundingClientRect();
-      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min(0.94, (b.top + b.height / 2) / h) });
+      // Level with the button, but never so low that the body, trailing down behind the head, runs off the screen.
+      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min((fit.h - TAIL_ROOM) / fit.h, (b.top + b.height / 2) / h) });
     });
     observer.observe(el);
     observer.observe(ways);
@@ -249,7 +256,7 @@ export default function Title({ world, header, shell }: TitleProps) {
     // A button or a link acts on its own Enter. Before the world has arrived, a key only skips the opening,
     // which the layout's script already does.
     if (kind === "control" && e.key === "Enter") return;
-    if (modeRef.current !== "title" || !waysRef.current) return;
+    if (modeRef.current !== "title" || (!waysRef.current && !arrivingRef.current)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       enter(true, e.shiftKey);

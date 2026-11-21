@@ -54,6 +54,8 @@ const WHERE_EVERY = 2;
 const AIR_EVERY = 200;
 /** The palette is built again at most this often, ms, however fast the light moves. */
 const PALETTE_EVERY = 400;
+/** Let go by the title, the dragon is offered no landing for this long, ms: it has just set off, not come to land. */
+const RELEASE_QUIET = 1500;
 
 export type PhaseKind = Phase["kind"];
 
@@ -444,6 +446,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     };
     const clock = {
       last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "", where: 0, wasPaused: true,
+      // When the title last let the dragon go (never, on /world).
+      wasHeld: heldAtStart, released: -Infinity,
       // The camera's share of the way down to the title's framing. It starts there when the world opens held.
       hold: heldAtStart ? 1 : 0,
     };
@@ -468,6 +472,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const dt = paused || clock.wasPaused ? 0 : gap;
       if (!paused && !clock.wasPaused && setup.touch && gap > STALL && document.visibilityState === "visible") events.stall?.();
       clock.wasPaused = paused;
+      if (clock.wasHeld && !held) clock.released = t;
+      clock.wasHeld = held;
       clock.last = t;
       touchDt = dt;
       // Touch counts only while flying with touch the last device used: a desktop never pays for the layout.
@@ -542,7 +548,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
 
       // The guide by the dragon: a prompt when there is something to press, else the lesson while it is taught.
       const guideStart = performance.now();
-      const offer = offered(phase, flight.x, flight.y, targets, worldN);
+      const offer = t - clock.released < RELEASE_QUIET ? null : offered(phase, flight.x, flight.y, targets, worldN);
       touchLayer?.setLand(offer !== null);
       const prompting = phase.kind !== "flying" || offer !== null;
       const teachable = readyFrame && !paused && !held && (asked.device !== "touch" || touchLayer !== null) && !setup.optionsOpen();

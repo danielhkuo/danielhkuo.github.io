@@ -1,8 +1,8 @@
 // The order the world's pixels switch on behind the title. The frame starts as blank paper and fills
 // outward from the dragon; an ordered dither breaks the ring into hard steps, so the world never fades.
 
-/** Slow enough to watch the world arrive, one pixel step at a time. */
-export const ARRIVAL_MS = 2800;
+/** Slow enough to watch the world arrive, one pixel step at a time; short enough that the ways in are not kept waiting. */
+export const ARRIVAL_MS = 2200;
 
 // The standard 8x8 Bayer matrix, values 0..63, read at (y & 7) * 8 + (x & 7). The same tile everywhere,
 // so pixels at one distance do not all switch on together.

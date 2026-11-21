@@ -41,12 +41,19 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
 
   // One clone per band, built once. Only the quad moves. cloneNode keeps each image's src, so nothing refetches.
   const sample = genieBands(setup, 0, BANDS);
+  // What the live window shows now that a copy would lose: its shadow, and where its cursor is in its blink.
+  const shadow = dropShadows(getComputedStyle(el).boxShadow);
+  const blink = el.querySelector(".nf-idle .nf-cursor");
+  const cursorOpacity = blink ? getComputedStyle(blink).opacity : "1";
   layer = document.createElement("div");
   layer.style.position = "fixed";
   layer.style.inset = "0";
   layer.style.overflow = "hidden";
   layer.style.pointerEvents = "none";
   layer.style.zIndex = "30";
+  // The window's shadow, cast by the whole funnel: it goes on falling where the window is, so nothing under it flashes
+  // lighter as the copies take over.
+  if (shadow) layer.style.filter = shadow;
   const wraps: HTMLDivElement[] = [];
   for (let k = 0; k < BANDS; k++) {
     const from = sample[k].from;
@@ -56,12 +63,14 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
     wrap.style.left = "0";
     wrap.style.top = "0";
     wrap.style.width = `${setup.win.w}px`;
-    wrap.style.height = `${height}px`;
+    // A row taller than its band, so it laps the next one: no hairline of world shows between them at a fractional edge.
+    wrap.style.height = `${height + 1}px`;
     wrap.style.overflow = "hidden";
     wrap.style.transformOrigin = "0 0";
     wrap.style.pointerEvents = "none";
     const copy = el.cloneNode(true) as HTMLElement;
     quiet(copy);
+    for (const c of copy.querySelectorAll<HTMLElement>(".nf-cursor")) c.style.opacity = cursorOpacity;
     copy.style.position = "absolute";
     copy.style.left = "0";
     copy.style.top = `${-from}px`;
@@ -103,6 +112,22 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
   };
   raf = requestAnimationFrame(frame);
   return () => end(false);
+}
+
+/**
+ * A box-shadow as CSS drop-shadow filters, which follow the shape of what they are on rather than its box. A box
+ * shadow's blur is twice a drop shadow's; a spread has no drop-shadow form, so a bare ring becomes a half-pixel blur.
+ */
+function dropShadows(box: string): string {
+  if (!box || box === "none") return "";
+  const out: string[] = [];
+  const shadow = /((?:rgba?|hsla?)\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px(?:\s+(-?[\d.]+)px)?(?:\s+(-?[\d.]+)px)?(\s+inset)?/gi;
+  for (const m of box.matchAll(shadow)) {
+    if (m[6]) continue;
+    const blur = Number(m[4] ?? 0), spread = Number(m[5] ?? 0);
+    out.push(`drop-shadow(${m[2]}px ${m[3]}px ${blur > 0 ? blur / 2 : spread > 0 ? 0.5 : 0}px ${m[1]})`);
+  }
+  return out.join(" ");
 }
 
 /** The copy is not a second window: no ids to clash, no focus, and no blink (that blink is an opacity animation). */

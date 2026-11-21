@@ -44,14 +44,15 @@ export const GENIE_SPLIT = 0.42;
 const SHOULDER = 0.12;
 const BEND = 0.55;
 
-// Slow at both ends, so the bottom leaves the window gently and settles into the neck gently.
-function inOut(u: number): number {
-  return 0.5 - 0.5 * Math.cos(Math.PI * u);
+// Gentle as the bottom leaves the window, then quicker as it is drawn into the neck: it does not slow to a halt there,
+// so the motion runs on into the second part without a pause.
+function drawn(u: number): number {
+  return u * u;
 }
 
-// Flat at the start, so the top stays put until the bottom has reached the neck, then follows it down.
-function inQuad(u: number): number {
-  return u * u * (1.6 - 0.6 * u);
+// The rest follows at once: the top starts down at a walk and gathers speed through the neck.
+function follow(u: number): number {
+  return u * (0.25 + 0.75 * u);
 }
 
 // Zero slope at both ends: a side leaves its corner gently and meets the neck gently, which makes the S.
@@ -68,8 +69,8 @@ export function genieBands(s: GenieSetup, t: number, bands: number): Band[] {
   const y0 = win.y;
   const y1 = win.y + win.h;
   const u = t <= 0 ? 0 : t >= 1 ? 1 : t;
-  const p1 = inOut(Math.min(1, u / GENIE_SPLIT));
-  const p2 = u <= GENIE_SPLIT ? 0 : inQuad((u - GENIE_SPLIT) / (1 - GENIE_SPLIT));
+  const p1 = drawn(Math.min(1, u / GENIE_SPLIT));
+  const p2 = u <= GENIE_SPLIT ? 0 : follow((u - GENIE_SPLIT) / (1 - GENIE_SPLIT));
   const top = y0 + (floorY - y0) * p2;
   const bottom = y1 + (floorY - y1) * p1;
   // How far this row has been gathered into the neck. The whole curve runs from the window's top

@@ -48,7 +48,7 @@ export function growToScreen(el: HTMLElement, onDone: () => void): () => void {
   el.style.width = `${rect.width}px`;
   el.style.height = `${rect.height}px`;
   el.style.borderRadius = radius;
-  el.style.boxShadow = "none";
+  // The shadow stays: it goes off the screen's edges as the window fills it, rather than vanishing in the first frame.
   el.style.background = "var(--panel-ink)";
   el.style.overflow = "hidden";
   el.style.boxSizing = "border-box";
