@@ -6,10 +6,10 @@ Project-specific guidance for AI coding agents.
 
 danielhkuo.github.io is being rebuilt, on `feat/dragon-world`, as a world you explore on dragonback.
 
-The title screen at `/` is the site's own terminal (`src/components/terminal/`), floating over the live world. Below it are an "Enter world" button and small links to the other ways in. It is being designed with the owner in rounds and is not built yet. The four ways in:
+The title screen at `/` is the site's own terminal (`src/components/terminal/`), floating over the live world. Below it are an "Enter world" button and small links to the other ways in. It is built (`src/components/title/`, design `docs/superpowers/specs/2026-11-20-title-terminal-design.md`). The four ways in:
 
 - **Minimal version**: `/minimal`, the whole site as one plain page dressed as nano viewing `daniel.txt`. It is text only, complete without JavaScript, quick on phones, and readable by screen readers and search engines. `/recruiter` forwards to it, and phones default to it.
-- **Enter world**: fly a dragon over a procedural realm. The projects are moving out of the landmarks into one projects hall beside the home town, and the landmarks become stops on a short "get to know Daniel" quest. That design (`docs/superpowers/specs/2026-11-19-story-destinations-design.md`) awaits the owner's approval. The abbey in the world also opens the terminal.
+- **Enter world**: fly a dragon over a procedural realm. The projects are kept in one projects hall beside the home town. After the first-flight lesson the visitor may join an opt-in "get to know Daniel" quest to five things across the world, led by an arrow at the screen's edge (`docs/superpowers/specs/2026-11-19-story-destinations-design.md`). The other landmarks are scenery; the abbey also opens the terminal.
 - **agents.md**: `agents.md` and `llms.txt` at the site root, for AI agents.
 - **Settings**: the world's options.
 
@@ -84,7 +84,7 @@ They do not govern the game layer or the terminal-styled pages: the renderer, ti
 - `npm run dev`: dev server (Turbopack). If CSS looks stale, check the served file and clear `.next/dev`.
 - `npm test`: unit tests (`node --test`, `src/**/*.test.ts`).
 - `npm run lint`, `npm run a11y`, `npm run doctor`: lint, axe accessibility check, React Doctor.
-- `npm run build`: static export to `out/`. Needs `GITHUB_TOKEN` for real pinned repos.
+- `npm run build`: static export to `out/`. Reads `projects/`; with `GITHUB_TOKEN` it adds each repo's stars and languages.
 - `npm run e2e`: builds, then runs the Playwright suite (`e2e/`) in Chromium and WebKit. It must pass without
   `GITHUB_TOKEN`. `npm run test:minimal` runs only the `/minimal` projects, against the `out/` already built.
 - `npm run test:mobile`: phone flight tests (Puppeteer, touch emulation).

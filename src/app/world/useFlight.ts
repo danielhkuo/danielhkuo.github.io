@@ -58,6 +58,8 @@ export interface FlightView {
   stats: FlightStats | null;
   /** The paper's colour in the light of the moment, as CSS, for the page round the frame. */
   paper: string;
+  /** The lesson is done this visit, or was already learned. False until then. */
+  lessonDone: boolean;
   takeOff(): void;
   teachAgain(): void;
 }
@@ -75,6 +77,7 @@ export function useFlight(
   const [device, setDevice] = useState<Device>("keyboard");
   const [stats, setStats] = useState<FlightStats | null>(null);
   const [paper, setPaper] = useState("");
+  const [lessonDone, setLessonDone] = useState(false);
   const session = useRef<FlightSession | null>(null);
 
   useEffect(() => {
@@ -113,6 +116,7 @@ export function useFlight(
         paper: setPaper,
         stall: touch.stall,
         buzz: touch.buzz,
+        lessonDone: () => setLessonDone(true),
         ready: title?.ready,
       },
     );
@@ -126,5 +130,5 @@ export function useFlight(
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);
-  return { failed, phase, caption, say, device, stats, paper, takeOff, teachAgain };
+  return { failed, phase, caption, say, device, stats, paper, lessonDone, takeOff, teachAgain };
 }

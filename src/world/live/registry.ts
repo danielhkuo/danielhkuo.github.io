@@ -11,6 +11,7 @@ import { splashLayer } from "../sky/rain.ts";
 import { rareLayer, wakeLayer } from "./rare.ts";
 import type { Land } from "./routes.ts";
 import { sightsLayer } from "./sights.ts";
+import { storyLayer, type StoryContext } from "./story.ts";
 import { waterLayer } from "./water.ts";
 import { windLayer } from "./wind.ts";
 
@@ -28,6 +29,8 @@ export interface LayerContext {
   forceSights?: boolean;
   /** What people built (the core's structures): their windows and lamps light at night. Without them, only the stars. */
   structures?: readonly Structure[];
+  /** The quest's five things and which are found. Without it, none is drawn. */
+  story?: StoryContext;
 }
 
 /** Every live layer, in drawing order. Add new layers here; the page and `npm run world:live` both use this list. */
@@ -35,6 +38,7 @@ export function makeLayers(ctx: LayerContext): LiveLayer[] {
   return [
     waterLayer(ctx.seed), windLayer(ctx.seed), splashLayer(ctx.seed), lifeLayer(ctx), sightsLayer(ctx), momentsLayer(ctx), rareLayer(ctx),
     wakeLayer(),
+    ...(ctx.story ? [storyLayer(ctx.story)] : []),
     // The mist's banks lie over what lives on the land, and the lamps shine through them.
     mistLayer(ctx.seed),
     nightLayer(ctx.seed, ctx.structures ? nightLights(ctx.structures, ctx.n) : undefined),

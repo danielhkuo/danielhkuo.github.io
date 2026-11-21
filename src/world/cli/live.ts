@@ -26,6 +26,8 @@ import type { BakeWorld } from "../bake/world.ts";
 import { torusDist2, wrap } from "../core/torus.ts";
 import type { LiveLayer } from "../live/live.ts";
 import { makeLayers } from "../live/registry.ts";
+import type { StoryContext } from "../live/story.ts";
+import type { StopKey } from "../story/stops.ts";
 import { wondersOf, type Manifest } from "../pack/manifest.ts";
 import { readShipped } from "../pack/shipped.ts";
 import { decodeFlightData, decodeWorld, type FlightData } from "../pack/world.ts";
@@ -305,6 +307,31 @@ function parseClouds(argv: readonly string[]): CloudStyle | null {
   return styleFrom(null);
 }
 
+/**
+ * --story draws the quest's five things where src/world/story/places.json puts them (when it is for this world);
+ * --found pine,desk counts those as found from the strip's first frame, so their pieces play through it.
+ */
+function storyFrom(argv: readonly string[], worldId: string): StoryContext | undefined {
+  if (!argv.includes("--story")) return undefined;
+  const file = JSON.parse(readFileSync(fileURLToPath(new URL("../story/places.json", import.meta.url)), "utf8")) as {
+    worldId: string;
+    hall?: { x: number; y: number };
+    stops: Record<string, { x: number; y: number }>;
+  };
+  if (file.worldId !== worldId) return undefined;
+  const stops = Object.entries(file.stops).map(([key, p]) => ({ key: key as StopKey, x: p.x, y: p.y }));
+  const found = (readFlag(argv, "--found") ?? "").split(",").filter((k) => k !== "") as StopKey[];
+  // Found from the strip's second frame, so the first shows the pennant and the piece starts then.
+  const from = readNumber(argv, "--t", 0) + 0.5 * readNumber(argv, "--dt", 0.25);
+  return { stops, hall: readFlag(argv, "--hall") ? parseHall(readFlag(argv, "--hall")!) : file.hall, found: (t) => (t < from ? [] : found) };
+}
+
+/** --hall x,y tries the hall at another place than places.json's. */
+function parseHall(raw: string): { x: number; y: number } | undefined {
+  const [x, y] = raw.split(",").map(Number);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+}
+
 function parseAt(argv: readonly string[]): { x: number; y: number } | null {
   const raw = readFlag(argv, "--at");
   if (!raw) return null;
@@ -426,6 +453,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     wonders: wondersOf(manifest),
     forceSights,
     structures: shipped.world.built?.built.structures,
+    story: storyFrom(argv, manifest.worldId),
   });
 
   const dir = readFlag(argv, "--out") ?? join(process.cwd(), ".cache", "world-live");
