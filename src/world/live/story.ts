@@ -417,52 +417,59 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   }
 
   /**
-   * The window's light on the ground before the hall: one copy of the window, cast on the yard's paving from the door
-   * step, stretched across and flipped (the window's top falls farthest out): its lobes in their panes' colours, its
-   * ring and tracery as lines of shadow between them, the gilt boss at the heart. By day the lobes lift the paving
-   * toward cream and tint it; by night they are deeper colour added to the dark.
+   * The window's light on the ground before the hall: the window cast on the open paving from the foot of the wall,
+   * widening as it goes out (a squat trapezoid, the window's width at the wall and twice it at the far end). Inside, the
+   * window's own five sectors in their places (its top falls farthest out, east kept east), with gaps for its tracery
+   * and a pale heart for its boss. By day each sector is a light tint over the paving, a paler rim along the wall; by
+   * night deeper colour added to the dark. The far edge is dithered out.
    */
-  const POOL_W = 13, POOL_H = 9;
-  /** The window's reach from its heart, cells: its ring (gen/monuments.ts ROSE_R) and half a cell more. */
-  const POOL_REACH = 4.5;
+  const POOL_TOP = 9, POOL_BOTTOM = 17, POOL_H = 10;
+  const POOL_W = POOL_BOTTOM;
   const pools = new Map<number, LiveSprite>();
   function poolOf(night: boolean): LiveSprite {
     const key = night ? 1 : 0;
     let sp = pools.get(key);
     if (sp) return sp;
-    const cx = (POOL_W - 1) / 2, cy = (POOL_H - 1) / 2;
+    const cx = (POOL_W - 1) / 2;
     sp = { w: POOL_W, h: POOL_H, rgba: new Uint32Array(POOL_W * POOL_H), alpha: new Uint8Array(POOL_W * POOL_H), ax: Math.round(cx), ay: POOL_H - 1 };
-    const cream = 0xffd8ecf4, shade = 0xff283038;
-    const lobeAt = new Map<string, number>();
-    ROSE_LIGHTS.forEach((cells, k) => { for (const c of cells) lobeAt.set(`${c.dx},${c.dz}`, k); });
-    for (let y = 0; y < POOL_H; y++) for (let x = 0; x < POOL_W; x++) {
-      const i = y * POOL_W + x;
-      // Window cells: east kept east; down the screen (away from the wall) is up the window.
-      const wx = ((x - cx) / (cx + 0.5)) * POOL_REACH, wz = ((y - cy) / (cy + 0.5)) * POOL_REACH;
-      const r = Math.sqrt(wx * wx + wz * wz);
-      if (r > POOL_REACH) continue;
-      const cell = `${Math.round(wx)},${Math.round(wz)}`;
-      const k = r <= POOL_REACH - 0.9 ? lobeAt.get(cell) : undefined;
-      if (k === undefined) {
-        if (cell === "0,0") {
-          sp.rgba[i] = night ? 0xff3c8cb4 : 0xff70d4f0;
-          sp.alpha[i] = night ? 255 : 210;
-        } else {
-          // The ring and the tracery: shadow, by day only (by night the dark is shadow enough).
-          if (night) continue;
-          sp.rgba[i] = shade;
-          sp.alpha[i] = 70;
+    const cream = 0xffd8ecf4;
+    const mixed = (c: number, w: number, f: number): number => {
+      const m = (s0: number): number => Math.round(((c >>> s0) & 255) * f + ((w >>> s0) & 255) * (1 - f));
+      return (0xff000000 | (m(16) << 16) | (m(8) << 8) | m(0)) >>> 0;
+    };
+    for (let y = 0; y < POOL_H; y++) {
+      const v = (y + 0.5) / POOL_H;
+      const half = (POOL_TOP + (POOL_BOTTOM - POOL_TOP) * v) / 2;
+      for (let x = 0; x < POOL_W; x++) {
+        const u = (x - cx) / half;
+        if (u < -1 || u > 1) continue;
+        // Back to the window: across is across; out from the wall is up the window.
+        const wx = u, wz = 2 * v - 1;
+        const r = Math.sqrt(wx * wx + wz * wz);
+        if (r > 1.05) continue;
+        const i = y * POOL_W + x;
+        // The far edge dithered out.
+        if (y >= POOL_H - 2 && ((x + y) & 1) === 1) continue;
+        if (r < 0.24) {
+          sp.rgba[i] = night ? 0xff3c8cb4 : mixed(0xff70d4f0, cream, 0.6);
+          sp.alpha[i] = night ? 255 : 150;
+          continue;
         }
-        continue;
-      }
-      const c = PIECE_RGB[STOPS[k].key];
-      if (night) {
-        sp.rgba[i] = tint(c, 0.6);
-        sp.alpha[i] = 255;
-      } else {
-        const m = (v: number, w: number): number => Math.round(v * 0.65 + w * 0.35);
-        sp.rgba[i] = (0xff000000 | (m((c >>> 16) & 255, (cream >>> 16) & 255) << 16) | (m((c >>> 8) & 255, (cream >>> 8) & 255) << 8) | m(c & 255, cream & 255)) >>> 0;
-        sp.alpha[i] = 210;
+        // Degrees clockwise from the window's top, as seen; each light centred on its own fifth.
+        const turn = ((((Math.atan2(wx, wz) * 180) / PI_STORY) % 360) + 360) % 360;
+        const k = Math.round(turn / 72) % 5;
+        const off = Math.abs(turn - Math.round(turn / 72) * 72);
+        // The tracery between the lights, and the ring at the rim: no light.
+        if (off > 26 || r > 0.92) continue;
+        const c = PIECE_RGB[STOPS[k].key];
+        if (night) {
+          sp.rgba[i] = tint(c, 0.6);
+          sp.alpha[i] = 255;
+        } else {
+          // Along the wall the light is strongest: paler there.
+          sp.rgba[i] = mixed(c, cream, y === 0 ? 0.35 : 0.55);
+          sp.alpha[i] = 165;
+        }
       }
     }
     pools.set(key, sp);

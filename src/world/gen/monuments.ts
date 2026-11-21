@@ -45,17 +45,15 @@ export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 5 } as const;
 
 /**
  * The projects hall (15 × 22, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
- * door and, over it, a rose window of five lights; before it a paved yard inside a low wall, where the window's light
+ * door and, over it, a rose window of five lights; before it an open paved yard, where the window's light
  * falls.
  */
 export function projectsHall(): Structure {
   const W = 15, H = 22;
   const s = sculpt(W, H);
   const cx = 7, cy = 11;
-  // The yard: paving, where the window's light falls, a low wall round it with a gap on the south.
-  paint(s, 1, 11, W - 2, H - 12, M.path);
-  for (let y = 11; y < H; y++) { put(s, 0, y, 1.2, M.stone, T_WEST); put(s, W - 1, y, 1.2, M.stone, T_EAST); }
-  for (let x = 1; x < W - 1; x++) if (Math.abs(x - cx) > 1) put(s, x, H - 1, 1.2, M.stone, T_WALL);
+  // The yard: open paving, where the window's light falls; no wall, so it is ground, not part of the hall.
+  paint(s, 0, 11, W, H - 11, M.path);
   // The hall, buttressed down its sides.
   house(s, 1, 0, 13, 11, 8, 6, { gable: 1, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
   for (const y of [2, 5, 8]) { put(s, 0, y, 5, M.stoneDark, T_WEST); put(s, W - 1, y, 5, M.stoneDark, T_EAST); }
@@ -69,7 +67,9 @@ export function projectsHall(): Structure {
   for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d > ROSE_R + 0.45) continue;
-    mark(s, rx + dx, face, rz + dz, M.stoneDark, d > ROSE_R - 0.55 ? 70 : 120);
+    // A dark ring; pale stone tracery within it, so the lights read as glass set in stone.
+    if (d > ROSE_R - 0.55) mark(s, rx + dx, face, rz + dz, M.stoneDark, 50);
+    else mark(s, rx + dx, face, rz + dz, M.stone, 175);
   }
   mark(s, rx, face, rz, M.gilt, 150);
   // Unglazed, the lights are dark stone, never lit at night: the panes, drawn live, are the window's only colour.

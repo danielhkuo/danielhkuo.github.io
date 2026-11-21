@@ -457,7 +457,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!t) return;
       // Beside the light on the yard (live/story.ts), east of it, on a ring wider than the body is long: the dragon
       // lies in an open curl, its head free, never a closed ring, and the window's light shows whole beside it.
-      t.x = bakedHall.x + HALL_YARD.dx + 15;
+      t.x = bakedHall.x + HALL_YARD.dx + 16;
       t.y = bakedHall.y + HALL_YARD.dy;
       t.radius = 8;
     };
