@@ -309,3 +309,22 @@ test("offline, nothing is let go: a render made ahead runs every frame first, an
   for (const s of all) assert.equal(s.outs.length, 1, "every source still reaches its fade");
   for (const s of all) assert.equal((s.outs[0].to as FakeNode).outs.length, 1, "and every fade still reaches the read's out");
 });
+
+test("a read feeds its sources' fades straight into the nodes it is given: no gain of its own between", () => {
+  const ctx = new FakeContext();
+  const kit = genKit(0);
+  const fresh = createFresh(ctx as unknown as Ctx, kit, { offline: false, seed: 3 });
+  const left = ctx.createGain(), right = ctx.createGain();
+  const before = ctx.nodes.length;
+  fresh.read("drops", { at: 0, offset: 0, into: [left as unknown as AudioNode, right as unknown as AudioNode] });
+  // One source and its fade: nothing else.
+  assert.deepEqual(ctx.nodes.slice(before).map((n) => n.kind).sort(), ["bufferSource", "gain"]);
+  run(ctx, kit, fresh, 60, 8);
+  // A finished fade is let go. Every fade still in the graph reaches both, including one a move started.
+  const held = sources(ctx).filter((s) => (s.outs[0].to as FakeNode).outs.length > 0);
+  assert.ok(held.some((s) => genOf(s).g > 0), "a later generation is still connected");
+  for (const s of held) {
+    const fade = s.outs[0].to as FakeNode;
+    assert.deepEqual(fade.outs.map((o) => o.to).sort(), [left, right].sort(), "each fade reaches both");
+  }
+});

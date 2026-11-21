@@ -21,11 +21,10 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts)
     v.nodes.push(n);
     return n;
   };
-  const read = (name: string, rate: number): AudioNode => {
+  const read = (name: string, rate: number, into: AudioNode): void => {
     const buffer = kit.buffer(name);
-    const handle = opts.fresh.read(name, { at: opts.at, offset: rng.float() * buffer.duration, rate, bed: "river" });
+    const handle = opts.fresh.read(name, { at: opts.at, offset: rng.float() * buffer.duration, rate, bed: "river", into: [into] });
     v.sources.push(handle);
-    return handle.out;
   };
   const halves: GainNode[] = [];
   v.steps.push(() => {
@@ -34,8 +33,8 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts)
       const sum = keep(gain(ctx, 1));
       const rate = () => RIVER.rateLo + (RIVER.rateHi - RIVER.rateLo) * rng.float();
       const brook = keep(gain(ctx, 0)), flow = keep(gain(ctx, 0));
-      read("brook", rate()).connect(brook);
-      read("flow", rate()).connect(flow);
+      read("brook", rate(), brook);
+      read("flow", rate(), flow);
       brook.connect(sum);
       flow.connect(sum);
       brooks.push(brook.gain);
@@ -48,7 +47,7 @@ export function buildRiverBed(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts)
     const band = keep(bandpass(ctx, RIVER.riffleHz, RIVER.riffleQ));
     const riffle = keep(gain(ctx, 0));
     const split = keep(ctx.createChannelSplitter(2));
-    read("pink0", 1).connect(band);
+    read("pink0", 1, band);
     band.connect(riffle);
     riffle.connect(split);
     const merge = keep(ctx.createChannelMerger(2));

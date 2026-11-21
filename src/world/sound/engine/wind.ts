@@ -53,10 +53,11 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     return n;
   };
   /**
-   * A noise loop read from its own place, moved onto a new generation before it can come round. One wander gain for
-   * the life of the layer: every generation is bent by the same drift, and letting one go only disconnects that source.
+   * A noise loop read from its own place, moved onto a new generation before it can come round, its fade straight
+   * into `into`. One wander gain for the life of the layer: every generation is bent by the same drift, and letting
+   * one go only disconnects that source.
    */
-  const noise = (name: string, wander: { ch: number; cents: number }): AudioNode => {
+  const noise = (name: string, wander: { ch: number; cents: number }, into: AudioNode): void => {
     const buffer = kit.buffer(name);
     const drift = keep(gain(ctx, wander.cents));
     opts.hub.drift.connect(drift, wander.ch);
@@ -64,6 +65,7 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
       at: opts.at,
       offset: rng.float() * buffer.duration,
       bed: "wind",
+      into: [into],
       wire: (src) => {
         drift.connect(src.detune);
         // Once this generation has faded out and stopped, the drift lets it go (or it would keep every old source).
@@ -71,7 +73,6 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
       },
     });
     v.sources.push(read);
-    return read.out;
   };
   /** Channel `ch` of a control, scaled by `depth`, added to `param`. */
   const drive = (split: ChannelSplitterNode, ch: number, depth: number, param: AudioParam) => {
@@ -86,10 +87,9 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
   // A: the ear buffet, in two steps. (Its high-pass and its bump are in the buffer.)
   let aSplit: ChannelSplitterNode, aLow: BiquadFilterNode;
   v.steps.push(() => {
-    const src = noise("buffet", { ch: 1, cents: LOOP_WANDER_CENTS });
     aLow = keep(lowpass(ctx, A_CUT_HZ));
     aSplit = keep(ctx.createChannelSplitter(2));
-    src.connect(aLow);
+    noise("buffet", { ch: 1, cents: LOOP_WANDER_CENTS }, aLow);
     aLow.connect(aSplit);
   });
   v.steps.push(() => {
@@ -112,14 +112,13 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
   // B: the rush. The filter's own frequency sits at the bottom of the gust's reach; the gust (0 … 1) lifts it. (Its
   // shelf is in the buffer.)
   v.steps.push(() => {
-    const src = noise("rush", { ch: 0, cents: LOOP_WANDER_CENTS });
     const base = B_HZ / (1 + B_GUST);
     const band = keep(bandpass(ctx, base, B_Q));
     drive(gust, 0, 2 * cents(B_GUST), band.detune);
     const swell = keep(gain(ctx, B_SWELL[0]));
     drive(gust, 0, B_SWELL[1], swell.gain);
     const lev = keep(gain(ctx, 0));
-    src.connect(band);
+    noise("rush", { ch: 0, cents: LOOP_WANDER_CENTS }, band);
     band.connect(swell);
     swell.connect(lev);
     lev.connect(out);
@@ -128,11 +127,10 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
 
   // C: the hiss. (Its high-pass is in the buffer.)
   v.steps.push(() => {
-    const src = noise("hiss", { ch: 0, cents: -LOOP_WANDER_CENTS });
     const base = C_LOW[0] + C_LOW[1];
     const low = keep(lowpass(ctx, base));
     const lev = keep(gain(ctx, 0));
-    src.connect(low);
+    noise("hiss", { ch: 0, cents: -LOOP_WANDER_CENTS }, low);
     low.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.C_GAIN, [lev.gain]), bindHz(T.C_HZ, [low], base));
@@ -141,12 +139,11 @@ export function buildWind(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
   // E: the ground breeze, riding the slower drift (unrelated to the main gust). Its band and low-pass are in the
   // buffer: nothing of it is left to filter.
   v.steps.push(() => {
-    const src = noise("breeze", { ch: 1, cents: -LOOP_WANDER_CENTS });
     // The drift runs −1 … 1: the swell moves between E_GUST[0] and E_GUST[0] + E_GUST[1] about their middle.
     const swell = keep(gain(ctx, E_GUST[0] + E_GUST[1] / 2));
     drive(hub.drift, 1, E_GUST[1] / 2, swell.gain);
     const lev = keep(gain(ctx, 0));
-    src.connect(swell);
+    noise("breeze", { ch: 1, cents: -LOOP_WANDER_CENTS }, swell);
     swell.connect(lev);
     lev.connect(out);
     v.bindings.push(bind(T.E_GAIN, [lev.gain]));

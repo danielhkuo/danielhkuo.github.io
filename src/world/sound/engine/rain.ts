@@ -14,7 +14,7 @@
 import { rngFor } from "../../core/rng.ts";
 import { RAIN } from "../levels.ts";
 import { T } from "../mix.ts";
-import { bandpass, bind, gain, highpass, highshelf, intoPan, lowpass, panner, type Ctx } from "./graph.ts";
+import { bandpass, bind, gain, highpass, highshelf, lowpass, panner, type Ctx } from "./graph.ts";
 import type { Kit } from "./kit.ts";
 import type { BedOpts, Voice } from "./wind.ts";
 
@@ -26,10 +26,11 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     return n;
   };
   /**
-   * A loop of `name` from a seeded place at `rate`, its pitch wandering on drift channel `drift` by up to `cents`.
-   * One wander gain for the read: each new generation is driven by it, and unwire only disconnects that source.
+   * A loop of `name` from a seeded place at `rate`, its pitch wandering on drift channel `drift` by up to `cents`,
+   * each generation's fade straight into `into`. One wander gain for the read: each new generation is driven by it,
+   * and unwire only disconnects that source.
    */
-  const read = (name: string, rate: number, drift: number, cents: number): AudioNode => {
+  const read = (name: string, rate: number, drift: number, cents: number, into: AudioNode[]): void => {
     const buffer = kit.buffer(name);
     const wander = keep(gain(ctx, cents));
     opts.hub.drift.connect(wander, drift);
@@ -38,13 +39,13 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
       offset: rng.float() * buffer.duration,
       rate,
       bed: "rain",
+      into,
       wire: (src) => {
         wander.connect(src.detune);
         return () => wander.disconnect(src.detune);
       },
     });
     v.sources.push(handle);
-    return handle.out;
   };
   /** Three reads of a mono loop, at RAIN.across's places and `rates`, wandering by up to `cents`, in one stereo merger. */
   const across = (name: string, rate: number, rates: readonly number[], cents: number): ChannelMergerNode => {
@@ -53,7 +54,7 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
       const p = panner(ctx, r.pan, merger);
       keep(p.left);
       keep(p.right);
-      intoPan(read(name, rate * rates[i], r.drift, r.cents * cents), p);
+      read(name, rate * rates[i], r.drift, r.cents * cents, [p.left, p.right]);
     });
     return merger;
   };
@@ -67,7 +68,7 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     const band = keep(bandpass(ctx, RAIN.sheetHz, RAIN.sheetQ));
     const top = keep(lowpass(ctx, RAIN.sheetTopHz));
     const sheet = keep(gain(ctx, 0));
-    read("pink0", 1, 0, -RAIN.wanderCents).connect(band);
+    read("pink0", 1, 0, -RAIN.wanderCents, [band]);
     band.connect(top);
     top.connect(sheet);
     sheet.connect(out);
@@ -80,7 +81,7 @@ export function buildRain(ctx: Ctx, kit: Kit, out: AudioNode, opts: BedOpts): Vo
     const fizzBand = keep(highpass(ctx, RAIN.fizzHz));
     const fizzTop = keep(highshelf(ctx, RAIN.topHz, RAIN.topDb));
     const fizzLevel = keep(gain(ctx, RAIN.fizzShare));
-    read("white0", 1, 1, RAIN.wanderCents).connect(fizzBand);
+    read("white0", 1, 1, RAIN.wanderCents, [fizzBand]);
     fizzBand.connect(fizzTop);
     fizzTop.connect(fizzLevel);
     const water = keep(gain(ctx, 0));

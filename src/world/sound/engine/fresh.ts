@@ -14,18 +14,19 @@ import type { Kit } from "./kit.ts";
  * fast, so the margin is the room that wander needs). The move is scheduled `lead` seconds ahead of now, and the two
  * reads crossfade for `fade` seconds.
  */
-export const FRESH = { requestAt: 0.5, lead: 0.05, fade: 0.5, margin: 1.04 };
+export const FRESH = { requestAt: 0.6, lead: 0.05, fade: 0.5, margin: 1.04 };
 
 /** The slice of a kit a fresh reader uses. */
 export type FreshKit = Pick<Kit, "buffer" | "generation" | "request" | "pending">;
 
 export interface Fresh {
   /**
-   * A looping read of `name` on the newest generation, through its own fade, into `out` (callers connect `out`).
-   * `bed` is which bed the read belongs to, so one bed can be held on its first loop while another that shares the
-   * buffer moves on.
+   * A looping read of `name` on the newest generation, through its own fade. Given `into`, each generation's fade
+   * connects straight into those nodes (a worklet read's node does too) and `out` is undefined: no gain is made for
+   * the read. Otherwise the fade feeds `out` and callers connect `out`. `bed` is which bed the read belongs to, so
+   * one bed can be held on its first loop while another that shares the buffer moves on.
    */
-  read(name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string }): { out: AudioNode; stop(when?: number): void };
+  read(name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string; into?: AudioNode[] }): { out?: AudioNode; stop(when?: number): void };
   /** Requests, moves and cleanups that fall due at `now`. True when it did any of that. */
   frame(now: number): boolean;
   /** How many reads have moved onto a new generation. */
@@ -76,7 +77,8 @@ interface Read {
   bed?: string;
   /** Stable among reads of this name, including ones already let go. */
   index: number;
-  out: GainNode;
+  /** Where every generation's fade connects. Without `into`, this is the read's own unity gain. */
+  into: AudioNode[];
   rate: number;
   wire?: (src: AudioBufferSourceNode) => () => void;
   sources: Playing[];
@@ -202,7 +204,7 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     const node = loop(ctx, buffer, read.rate);
     const fade = gain(ctx, from);
     node.connect(fade);
-    fade.connect(read.out);
+    for (let i = 0; i < read.into.length; i++) fade.connect(read.into[i]);
     const unwire = read.wire?.(node) ?? noop;
     node.start(at, offset);
     const playing: Playing = { node, fade, generation, at, rate: read.rate, duration: buffer.duration, stopAt: NaN, unwire, gone: false };
@@ -280,7 +282,7 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     return did;
   };
 
-  /** Asks for the next generation when some live read of the name has played half a wrap of the one it is on. */
+  /** Asks for the next generation when some live read of the name has played FRESH.requestAt of a wrap on the one it is on (three fifths, which leaves the kit over a second to answer before the fade must begin: each move costs the audio thread a crossfade, and the kit a copy). */
   const requestNext = (ns: NameState, now: number): boolean => {
     const newest = kit.generation(ns.name);
     if (ns.asked > newest) return false;
@@ -299,14 +301,16 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     return true;
   };
 
-  const read = (name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string }) => {
+  const read = (name: string, o: { at: number; offset: number; rate?: number; wire?: (src: AudioBufferSourceNode) => () => void; bed?: string; into?: AudioNode[] }) => {
     // Made as it plays: there is no loop, so the wander (wire) and the playback rate do not apply, and the kit is
     // not asked for a generation. The node starts as it is connected; beds read at the frame's now.
     if (isNoiseName(name) && opts.worklet?.(name, o.bed) === true) {
       // The node is the read's output itself: a gain after it would be one more node the audio thread visits.
+      // Given `into`, it connects straight there and is not handed back.
       const node = noiseNode(ctx, name, noiseSeed(opts.seed, name, nextIndex(name)));
+      if (o.into) for (let i = 0; i < o.into.length; i++) node.connect(o.into[i]);
       return {
-        out: node,
+        out: o.into ? undefined : node,
         stop(when?: number) {
           endNoise(node, when ?? 0);
         },
@@ -315,11 +319,13 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
     const ns = stateFor(name);
     const g = kit.generation(name);
     const buffer = kit.buffer(name, g);
-    const rec: Read = { name, bed: o.bed, index: ns.made++, out: gain(ctx, 1), rate: o.rate ?? 1, wire: o.wire, sources: [], stopped: false };
+    // No gain of the read's own when the fade has somewhere to go: one less node every render quantum.
+    const into = o.into ?? [gain(ctx, 1)];
+    const rec: Read = { name, bed: o.bed, index: ns.made++, into, rate: o.rate ?? 1, wire: o.wire, sources: [], stopped: false };
     ns.reads.push(rec);
     start(rec, buffer, g, o.at, o.offset);
     return {
-      out: rec.out,
+      out: o.into ? undefined : into[0],
       stop(when?: number) {
         rec.stopped = true;
         const at = when ?? 0;
