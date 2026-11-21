@@ -7,12 +7,26 @@ test.describe("pages", () => {
     await offline(page);
     const res = await page.goto("/");
     expect(res?.status()).toBe(200);
-    await expect(page.getByText("Daniel Kuo").first()).toBeVisible();
+    // Both titles are in the document; CSS shows one. The name that is on screen is the one this checks.
+    await expect(page.getByText("Daniel Kuo").filter({ visible: true }).first()).toBeVisible();
+    // Desktop text is the terminal's own mono. The phone title is set in IM Fell. Adventor is the other pages'
+    // display face, so it stays unloaded here; Libron is only the body rule, which an engine may or may not fetch.
     const fonts = await page.evaluate(async () => {
       await document.fonts.ready;
-      return Object.fromEntries([...document.fonts].filter((f) => !/Fallback/.test(f.family)).map((f) => [f.family, f.status]));
+      const status: Record<string, string> = {};
+      for (const face of document.fonts) {
+        if (/Fallback/.test(face.family)) continue;
+        if (status[face.family] === "loaded") continue;
+        status[face.family] = face.status;
+      }
+      return status;
     });
-    expect(fonts).toMatchObject({ adventor: "loaded", libron: "loaded" });
+    for (const status of Object.values(fonts)) expect(status).not.toBe("error");
+    const phone = await page.evaluate(
+      () => window.matchMedia("(max-width: 699px), (pointer: coarse) and (max-height: 499px)").matches,
+    );
+    if (phone) expect(fonts["IM Fell English"]).toBe("loaded");
+    else expect(fonts.adventor).toBe("unloaded");
   });
 
   test("the world bench starts its workers", async ({ page }) => {

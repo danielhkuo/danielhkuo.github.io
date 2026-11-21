@@ -119,6 +119,8 @@ const SOURCE: Record<string, string> = {
   "→": "1:..#../...#./#####/...#./..#..",
   "↑": "1:..#../.###./#.#.#/..#../..#..",
   "↓": "1:..#../..#../#.#.#/.###./..#..",
+  // The return key, as the title's terminal prints it: down the right side, then back along the bottom to its head.
+  "⏎": "1:....#/....#/.#..#/#####/.#...",
   "·": "3:#",
   "¶": ".####/###.#/###.#/.##.#/..#.#/..#.#",
   "…": "5:#.#.#",

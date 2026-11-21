@@ -3,6 +3,7 @@
 
 import type { FlightState } from "../../world/runtime/flight";
 import { startState } from "../../world/runtime/flight";
+import { easeHold, HELD_INPUT, holdCamera, holdStep, type HoldAt } from "../../world/runtime/hold";
 import { makeLayers, type LayerContext } from "../../world/live/registry";
 import type { SoundControl, SoundLog } from "../../world/sound/control";
 import type { SoundState } from "../../world/sound/types";
@@ -10,7 +11,7 @@ import { wondersOf } from "../../world/pack/manifest";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createRegionLand } from "../../world/runtime/regionLand";
-import { createDragon } from "../../world/dragon/index";
+import { createDragon, flownDragon } from "../../world/dragon/index";
 import { RIVER_LENGTH } from "../../world/dragon/river";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
@@ -58,6 +59,8 @@ const WHERE_EVERY = 2;
 const AIR_EVERY = 200;
 /** The palette is built again at most this often, ms, however fast the light moves. */
 const PALETTE_EVERY = 400;
+/** Let go by the title, the dragon is offered no landing for this long, ms: it has just set off, not come to land. */
+const RELEASE_QUIET = 1500;
 
 export type PhaseKind = Phase["kind"];
 
@@ -91,6 +94,8 @@ export interface FlightEvents {
   buzz?(what: "landed" | "discovery"): void;
   /** The lesson is done this visit, once: it just finished, or it was already learned when the world loaded. */
   lessonDone?(): void;
+  /** The first full view of the land has been drawn (once): the title starts the world's arrival then. */
+  ready?(): void;
 }
 
 export interface FlightSetup {
@@ -105,6 +110,18 @@ export interface FlightSetup {
   options(): Options;
   /** True while the flight is held still: the first card, a pause, the phone upright. The world still loads. */
   paused?(): boolean;
+  /**
+   * True while the world waits behind the title: the dragon holds still, low in the frame, with no guide, caption or
+   * lesson by it, and no key, pad or touch reaches the flight. The world still loads, lives and draws.
+   */
+  held?(): boolean;
+  /** Where the held head is drawn, as shares of the frame from its top-left corner: by the title's button. */
+  holdAt?(): HoldAt;
+  /**
+   * Where Esc (flying) and the corner's Leave take the visitor: the title, on the home page. Without it the page goes
+   * to "/" as now.
+   */
+  leave?(): void;
   /** A phone (read when the world has loaded): two bake workers, and a frame rate that steps down to 30. */
   phone?(): boolean;
   /** The touch controls, made once the canvas is in the page; null without touch flight. */
@@ -157,8 +174,8 @@ interface FlightProbe {
   baked: () => number;
   error: string | null;
   workerErrors: string[];
-  /** Where the flight is, for the tests: position, heading, speed, phase, and whether it is held still. */
-  state?: () => { x: number; y: number; heading: number; speed: number; phase: string; paused: boolean; workers: number; rate: number };
+  /** Where the flight is, for the tests: position, heading, speed, phase, whether a pause holds it still, and whether the title holds it. */
+  state?: () => { x: number; y: number; heading: number; speed: number; phase: string; paused: boolean; workers: number; rate: number; held: boolean };
   /** The landmarks the build placed, and what each holds, for the end-to-end tests. */
   landmarks?: { id: string; holds: string; name: string | null }[];
 }
@@ -218,6 +235,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       paused: isPaused(),
       workers: pool?.stats().workers ?? 0,
       rate: pacerRate(),
+      held: setup.held?.() ?? false,
     });
     probe.landmarks = (landmarks?.landmarks ?? []).map((l) => ({
       id: l.id,
@@ -288,7 +306,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
   };
 
   const controls = createControls(canvas, {
-    busy: () => (setup.optionsOpen() ? "options" : setup.terminalOpen() ? "terminal" : null),
+    busy: () => (setup.optionsOpen() ? "options" : setup.terminalOpen() ? "terminal" : setup.held?.() ? "held" : null),
     closeTerminal: setup.closeTerminal,
     phase: () => phase.kind,
     options: setup.options,
@@ -296,7 +314,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     takeOff: doTakeOff,
     pullUp: doPullUp,
     leave: () => {
-      window.location.href = "/";
+      if (setup.leave) setup.leave();
+      else window.location.href = "/";
     },
     toggleOptions: events.toggleOptions,
     device: events.device,
@@ -338,6 +357,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     );
     pool = workers;
     let readyFrame = false;
+    // The title is told once, on the first frame the land is fully drawn.
+    let readySent = false;
     workers.onError = (message) => {
       if (probe) probe.workerErrors.push(message);
       // Before the first full view any failure is fatal; after it, only losing every worker is, since the land would
@@ -423,9 +444,13 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     const where = !atSite && !atMark && setup.touch ? savedWhere(worldN) : null;
     const southOf = (x: number, y: number) => ({ x, y: (y + AT_SOUTH) % worldN, dx: 0, dy: -1 });
     const start = atSite ? southOf(atSite.x, atSite.y) : atMark ? southOf(atMark.x, atMark.y) : where ?? loaded.manifest.start;
+    // Held from the start, it is already stopped, and its body lies behind its head: with no path the body would trail
+    // due west.
+    const heldAtStart = setup.held?.() ?? false;
     flight = startState(start, view);
+    if (heldAtStart) flight = { ...flight, speed: 0 };
     const sky = createSky(loaded.manifest.seed, regions.n, styleFrom(params.get("clouds")), loaded.manifest.start);
-    const dragon = createDragon(worldN);
+    const dragon = heldAtStart ? flownDragon(worldN, flight) : createDragon(worldN);
     const rain = createRain(seed);
 
     canvas.width = fw;
@@ -446,7 +471,13 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       frame = new Uint32Array(w * h);
       view.resize(w, h);
     };
-    const clock = { last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "", where: 0, wasPaused: true };
+    const clock = {
+      last: 0, focus: 0, fpsFrames: 0, fpsLast: 0, captionPoll: 0, caption: undefined as string | null | undefined, say: "", where: 0, wasPaused: true,
+      // When the title last let the dragon go (never, on /world).
+      wasHeld: heldAtStart, released: -Infinity,
+      // The camera's share of the way down to the title's framing. It starts there when the world opens held.
+      hold: heldAtStart ? 1 : 0,
+    };
     const pacer = isPhone ? createPacer() : null;
     if (pacer) pacerRate = () => pacer.rate();
     // Where the guide stands: its slot round the head, where it was drawn, and what is left of a glide between slots.
@@ -462,15 +493,18 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const want = setup.frame();
       if (want.w !== fw || want.h !== fh) resize(want.w, want.h);
       const paused = isPaused();
+      const held = setup.held?.() ?? false;
       const gap = clock.last ? (t - clock.last) / 1000 : 0;
       // Held still, the flight does not move; coming back, it starts from now, not from the pause.
       const dt = paused || clock.wasPaused ? 0 : gap;
       if (!paused && !clock.wasPaused && setup.touch && gap > STALL && document.visibilityState === "visible") events.stall?.();
       clock.wasPaused = paused;
+      if (clock.wasHeld && !held) clock.released = t;
+      clock.wasHeld = held;
       clock.last = t;
       touchDt = dt;
       // Touch counts only while flying with touch the last device used: a desktop never pays for the layout.
-      touchLive = touchLayer !== null && !paused && phase.kind === "flying" && controls.device() === "touch";
+      touchLive = touchLayer !== null && !paused && !held && phase.kind === "flying" && controls.device() === "touch";
       touchLayer?.setLive(touchLive);
       const options = setup.options();
       const reduced = options.motion === "reduced";
@@ -498,9 +532,12 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const asked = controls.frame();
       const controlsMs = performance.now() - controlsStart;
 
-      const stepped = advance(phase, flight, asked.input, dt, view, worldN, targets);
+      // Behind the title the dragon is always flying, then glides to a stop: a landing pulls up, a rest takes off.
+      if (held && phase.kind === "landing") doPullUp();
+      else if (held && phase.kind === "landed") doTakeOff();
+      const stepped = advance(phase, flight, held ? HELD_INPUT : asked.input, dt, view, worldN, targets);
       phase = stepped.phase;
-      flight = stepped.s;
+      flight = holdStep(stepped.s, held, dt);
       if (stepped.landed) {
         const l = byId.get(stepped.landed) ?? null;
         if (l) {
@@ -518,7 +555,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const settling = phase.kind !== "flying";
       // Under reduced motion the camera cuts to the landmark and back instead of swooping.
       clock.focus = reduced ? (settling ? 1 : 0) : easeFocus(clock.focus, settling, dt);
-      const camera = cameraAt(flight, focusSite, clock.focus, worldN);
+      // The camera eases down while the title holds the world, and back up once it is let go.
+      clock.hold = easeHold(clock.hold, held, dt, reduced);
+      const camera = holdCamera(cameraAt(flight, focusSite, clock.focus, worldN), clock.hold, fw, fh, setup.holdAt?.());
       view.setCamera(camera.x, camera.y);
       const moving = phase.kind === "landed" ? 0 : flight.speed;
       view.update(Math.cos(flight.heading) * moving, Math.sin(flight.heading) * moving);
@@ -541,10 +580,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
 
       // The guide by the dragon: a prompt when there is something to press, else the lesson while it is taught.
       const guideStart = performance.now();
-      const offer = offered(phase, flight.x, flight.y, targets, worldN);
+      const offer = t - clock.released < RELEASE_QUIET ? null : offered(phase, flight.x, flight.y, targets, worldN);
       touchLayer?.setLand(offer !== null);
       const prompting = phase.kind !== "flying" || offer !== null;
-      const teachable = readyFrame && !paused && (asked.device !== "touch" || touchLayer !== null) && !setup.optionsOpen();
+      const teachable = readyFrame && !paused && !held && (asked.device !== "touch" || touchLayer !== null) && !setup.optionsOpen();
       lesson = stepLesson(lesson, dt, asked.held, teachable && !prompting, reduced);
       if (lesson.stage === "done" && !lessonStored) {
         lessonStored = true;
@@ -555,7 +594,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         }
         noteLesson();
       }
-      const guide = paused ? null : guideFor({
+      const guide = paused || held ? null : guideFor({
         device: asked.device,
         phase: phase.kind,
         offer: offer ? offerName(byId.get(offer.id)) : null,
@@ -622,6 +661,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // Already learned before this visit: the page hears it once the land is up.
       if (ready && !readyFrame && lesson.stage === "done") noteLesson();
       if (ready) readyFrame = true;
+      if (ready && !readySent) {
+        readySent = true;
+        events.ready?.();
+      }
       if (probe) {
         probe.frameMs.push(performance.now() - work);
         probe.frames += 1;
@@ -629,7 +672,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         else if (probe.readyAt === null) probe.readyAt = performance.now();
       }
 
-      if (t - clock.captionPoll >= 250) {
+      // No caption while the title holds the world: the poll picks up again when it is let go.
+      if (!held && t - clock.captionPoll >= 250) {
         clock.captionPoll = t;
         const cap = discoveries.caption();
         if (cap !== clock.caption) {

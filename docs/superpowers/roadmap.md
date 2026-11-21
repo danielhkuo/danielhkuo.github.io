@@ -124,6 +124,16 @@ Last updated 2026-11-19.
   thumb, vibration and tilt are options. Tests: unit modules plus `npm run test:mobile` (15 flows, real multi-touch in
   phone emulation). The phone's own title screen (a rose-window contents page, the minimal version first) is built at the
   noindex bench `/phone-title`, to be mounted on `/` together with the desktop title.
+- **The title** (2026-11-20, Opus with Cursor, on the owner's "Yes, build it"). `/` is the title and nothing else: the
+  site's terminal window over the live world, which waits behind it, held (the dragon still beside the Enter world
+  button, no guides or prompts, no key reaching the flight). It opens on blank paper: the terminal's intro, then
+  `./world` and its two lines (`content.ts`), then the world arriving pixel by pixel from the dragon, then Enter world
+  and the row of Minimal version, agents.md and Settings. Enter world (⏎, the button, the yellow light) minimizes the
+  window with a macOS genie and the dragon sets off, at `/world` in place; Back or Esc in flight bring the title back.
+  Minimal version (and the green light) grows the window into `/minimal`. A phone gets its own title, the minimal
+  version first, and never loads the world. The window lists the projects (the first six by order). ⏎ is the world's
+  pixel key cap. Checks: `e2e/site/title.spec.ts`, `npm run a11y` now holds `/` too. Design:
+  `specs/2026-11-20-title-terminal-design.md`.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
@@ -308,13 +318,12 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   stars, forks and languages; without one they are left out. `/minimal`, the terminal, the agent files, the fish and
   the Codex read them all; the hall holds every one, in order. Seeded from the six pinned repos, for the owner to prune and add to. `src/lib/github.ts`
   and its mock repos are gone; `npm run e2e` builds with fixture projects (`e2e/fixtures/projects`).
-- **Title menu.** The rose-window design stays (the owner likes it). Rewrite the wording: role taglines like "the
-  scriptorium" and "a record of things made by hand" read oddly.
-- **Minimal version: what's left.** The desktop title menu's link to it, and its window growing into the page (the
-  title session's); the phone title and the flight card's short version open it already. On a phone the abbey's
-  "Open the terminal" also lands here, where there is no shell now: point it elsewhere or rename it (`Flight.tsx`,
-  and the name of the mobile suite's test). Removing the old pop-up terminal and home page once the title menu takes
-  `/`. A pass on a real iPhone and on iOS 27.
+- ~~**Title menu.**~~ Built 2026-11-20 as the site's terminal over the world (see Done); the rose-window design is
+  set aside.
+- **Minimal version: what's left.** On a phone the abbey's "Open the terminal" lands here, where there is no shell
+  now: point it elsewhere or rename it (`Flight.tsx`, and the name of the mobile suite's test). A pass on a real
+  iPhone and on iOS 27. (The title's link and the window growing into it are built, and the old home page is gone.
+  `ContactForm.tsx` and `ProjectCard.tsx` are no longer on any page.)
 - **Seasons**: not from the clock (settled 2026-11-18), and the lore that laid the months out as places is set aside.
   If they come back, the palette already carries the four, and `world:live --season` previews them.
 - **Parchment map** for fast travel between landmarks.
@@ -339,8 +348,7 @@ locked down, its own test suite, researched first); clearer interactivity with s
 minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see Done); what is left is listed below.
 
 **Mobile (optional; phones get the minimal page by default)**
-- Left: mounting the phone title on `/` with the desktop title (`PhoneSwitch` is ready), when the phone title gains
-  Settings from the desktop title's `settings.ts`; trimming the workers after a long hide; a real-phone pass (feel,
+- Left: the phone title's Settings (it is mounted on `/` with the desktop title since 2026-11-20); trimming the workers after a long hide; a real-phone pass (feel,
   heat, memory, the edge swipe); sound unlocked on Take wing once there is sound; one copy list for the phone and
   desktop titles when the desktop title lands.
 - ~~A "Fly anyway" opt-in from the text page; a separate, simpler mobile title screen.~~
@@ -378,7 +386,7 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 - A pixel loading scene while the core loads (1.5 MB); a clear fallback to the text page if the world fails.
 - OpenGraph postcards per tower; Continue where you left off.
 - ~~An end-to-end suite: world → land → Codex → back, on desktop and mobile emulation.~~ Done (`npm run e2e`). Left:
-  the title menu, once it is merged.
+  the title, once it is merged (it has its own spec, `e2e/site/title.spec.ts`).
 - ~~Split the flight page component into hooks before the controls and mobile work lands.~~ Done: `session.ts` and hooks.
 
 ## Backlog: cosmetic and look
@@ -485,8 +493,8 @@ land was decided (grow it) and is built (spec 6.7).
 - ~~**Merge `world/perf`?**~~ Merged 2026-11-18. The water layer reuses its shore-distance work between frames (4×
   throttle: 6.1 → 5.6 ms p95 with the dragon on).
 - **The rare-sights list.** Six candidates are built; the owner's references can replace or add to them.
-- **Title menu: parked by the owner** (2026-11-18 evening). The `title-menu` session explored twenty directions (A–T)
-  in its browser pane; none is picked or built. Mobile gets a separate title screen (see Ideas).
+- ~~**Title menu: parked by the owner**~~ (2026-11-18 evening). Decided 2026-11-20: the site's terminal over the
+  world, built (see Done).
 - **The minimal version** (2026-11-19). Eight decisions, each built to its recommended option: where the page lives
   (`/minimal`, `/recruiter` or `/` under the title menu), what happens to `/recruiter`, the old pop-up terminal,
   programs on a phone, text size, what `clear` clears, the contact form, the LinkedIn address

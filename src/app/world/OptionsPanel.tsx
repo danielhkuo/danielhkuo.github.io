@@ -31,6 +31,8 @@ export interface OptionsPanelProps {
   /** Shows the first-flight lesson again (and closes the panel). */
   onTeach(): void;
   onClose(): void;
+  /** Leave goes back to the title instead of to "/". */
+  onLeave?: () => void;
 }
 
 /** Tilt steering needs the motion permission on iOS, asked from the tap that turns it on. */
@@ -169,7 +171,7 @@ function pxVar(px: number): CSSProperties {
   return { "--px": `${px}px` } as CSSProperties;
 }
 
-export default function OptionsPanel({ open, px, options, device, platform, onChange, sound, onTeach, onClose }: OptionsPanelProps) {
+export default function OptionsPanel({ open, px, options, device, platform, onChange, sound, onTeach, onClose, onLeave }: OptionsPanelProps) {
   const quest = useQuest();
   const touch = device === "touch";
   const canBuzz = platform === "android" && typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
@@ -302,7 +304,10 @@ export default function OptionsPanel({ open, px, options, device, platform, onCh
         >
           <Words px={px}>{quest.mode === "on" ? "leave the quest" : "follow the quest"}</Words>
         </Action>
-        <Link className={styles.action} href="/">
+        <Link className={styles.action} href="/" onClick={onLeave && ((e) => {
+          e.preventDefault();
+          onLeave();
+        })}>
           <Mark px={px} />
           <Words px={px}>leave the world</Words>
         </Link>
@@ -326,19 +331,24 @@ export interface CornerProps {
   /** Shown while the pointer moves, for a while after the page opens, and always on a touch screen. */
   shown: boolean;
   onOpen(): void;
+  /** Leave goes back to the title instead of to "/". */
+  onLeave?: () => void;
 }
 
 /**
  * The ways out of the flight from the corner of the world: "[esc] leave" (while flying) and "[O] options" by keyboard,
  * the pad's own buttons by gamepad, and on a touch screen one plate that opens the options (where Leave is).
  */
-export function Corner({ px, device, phase, shown, onOpen }: CornerProps) {
+export function Corner({ px, device, phase, shown, onOpen, onLeave }: CornerProps) {
   const touch = device === "touch";
   const pad = device === "gamepad";
   return (
     <nav className={`${styles.corner} ${shown || touch ? styles.cornerShown : ""}`} style={pxVar(px)} aria-label="Leave or open the options">
       {touch || phase !== "flying" ? null : (
-        <Link className={styles.cornerItem} href="/" aria-keyshortcuts="Escape">
+        <Link className={styles.cornerItem} href="/" aria-keyshortcuts="Escape" onClick={onLeave && ((e) => {
+          e.preventDefault();
+          onLeave();
+        })}>
           <PixelGlyph sprite={pad ? plate("view") : keyCap("Escape")} px={px} />
           <PixelGlyph sprite={slip("leave")} px={px} />
           <span className={styles.sr}>Leave the world</span>

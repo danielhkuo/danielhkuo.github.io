@@ -28,3 +28,11 @@ export const INTERESTS: readonly { key: string; line: string }[] = [
   { key: "homelab", line: "Daniel runs a home lab on Unraid." },
   { key: "basketball", line: "Daniel plays basketball and follows the Houston Rockets." },
 ];
+
+/**
+ * What the title's terminal runs after neofetch, and the lines it prints under it.
+ * A ⏎ in a line is drawn as a key cap, not left as the character alone.
+ */
+export const WORLD_COMMAND = "./world";
+
+export const WORLD_LINES = ["A world to fly over.", "Press ⏎ or choose Enter world."] as const;

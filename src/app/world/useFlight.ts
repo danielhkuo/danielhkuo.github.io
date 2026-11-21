@@ -7,6 +7,7 @@ import { getOptions } from "./optionsStore";
 import { getFrameFit } from "./useFrameScale";
 import { startFlight, type FlightSession, type FlightSetup, type FlightStats, type PhaseKind } from "./session";
 import type { SoundControl } from "../../world/sound/control";
+import type { HoldAt } from "../../world/runtime/hold";
 import type { TerminalLink } from "./useTerminalDrawer";
 
 export interface Caption {
@@ -19,6 +20,18 @@ export interface Caption {
 export interface PanelLink {
   isOpen(): boolean;
   toggle(): void;
+}
+
+/** The home page's title, when this flight waits behind it. The page builds one object and keeps it. */
+export interface TitleLink {
+  /** True while the world waits behind the title. */
+  held(): boolean;
+  /** Where the held head is drawn, as shares of the frame: beside the title's button. */
+  holdAt(): HoldAt;
+  /** Esc and Leave go back to the title. */
+  leave(): void;
+  /** The first full view of the land has been drawn. */
+  ready(): void;
 }
 
 /** What a touch flight adds: the shell's pause, the phone's budgets, the touch controls and the ticks. */
@@ -55,6 +68,7 @@ export interface FlightView {
 export function useFlight(
   canvas: RefObject<HTMLCanvasElement | null>, landmarks: LandmarkSet | null, terminal: TerminalLink, panel: PanelLink, touch: TouchLink,
   sound?: RefObject<SoundControl | null>,
+  title?: TitleLink,
 ): FlightView {
   const [failed, setFailed] = useState(false);
   const [phase, setPhase] = useState<FlightView["phase"]>({ kind: "flying", at: null });
@@ -83,6 +97,9 @@ export function useFlight(
         // Played sideways, the frame is fitted to the turned layer; otherwise to the window, as everywhere.
         frame: touch.frame ?? getFrameFit,
         sound: () => sound?.current ?? null,
+        held: title?.held,
+        holdAt: title?.holdAt,
+        leave: title?.leave,
       },
       {
         failed: () => setFailed(true),
@@ -100,6 +117,7 @@ export function useFlight(
         stall: touch.stall,
         buzz: touch.buzz,
         lessonDone: () => setLessonDone(true),
+        ready: title?.ready,
       },
     );
     session.current = s;
@@ -107,8 +125,8 @@ export function useFlight(
       s.dispose();
       session.current = null;
     };
-    // `landmarks` is a build-time prop and the links are stable: the flight runs once per page.
-  }, [canvas, landmarks, terminal, panel, touch, sound]);
+    // `landmarks` is a build-time prop and the links are stable (the title's is built once): the flight runs once per page.
+  }, [canvas, landmarks, terminal, panel, touch, sound, title]);
 
   const takeOff = useCallback(() => session.current?.takeOff(), []);
   const teachAgain = useCallback(() => session.current?.teachAgain(), []);

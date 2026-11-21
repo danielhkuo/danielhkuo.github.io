@@ -12,8 +12,8 @@ import type { PhaseKind } from "./session";
 import type { TouchFrame } from "./touchLayer";
 
 export interface ControlsHooks {
-  /** What holds the keys instead of the flight: the abbey's terminal, the options panel, or nothing. */
-  busy(): "terminal" | "options" | null;
+  /** What holds the keys instead of the flight: the options panel, the abbey's terminal, the title, or nothing. */
+  busy(): "terminal" | "options" | "held" | null;
   closeTerminal(): void;
   phase(): PhaseKind;
   options(): Options;
@@ -118,8 +118,12 @@ export function createControls(canvas: HTMLCanvasElement, hooks: ControlsHooks):
       e.preventDefault();
       return;
     }
+    // A key another part of the page has taken is not the flight's: the title's Enter, which lets the dragon go, must
+    // not also land it.
+    if (e.defaultPrevented) return;
     const busy = hooks.busy();
-    if (busy === "options") return;
+    // The options panel and the title take every key. Esc included, so the title's Esc never leaves the world.
+    if (busy === "options" || busy === "held") return;
     // The terminal takes every key while it is open; Esc closes it.
     if (busy === "terminal") {
       if (e.key === "Escape") {
@@ -205,7 +209,7 @@ export function createControls(canvas: HTMLCanvasElement, hooks: ControlsHooks):
   canvas.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerdown", onAnyPointer, true);
 
-  /** The pad this frame: presses act, the reading steers. Null with no pad. */
+  /** The pad this frame: presses act, the reading steers. Null with no pad, or while the title, the terminal or the options hold the controls. */
   const pollPad = (): PadRead | null => {
     if (pads === 0 || typeof navigator.getGamepads !== "function") return null;
     const p = firstPad(navigator.getGamepads());
@@ -216,6 +220,7 @@ export function createControls(canvas: HTMLCanvasElement, hooks: ControlsHooks):
     const pressed = presses(read.down, padBefore);
     padBefore = read.down;
     const busy = hooks.busy();
+    // Options closes itself. Held, the title has the pad: presses do nothing, and the reading is not asked of the flight.
     if (busy === "options") {
       if (pressed.options || pressed.back) hooks.toggleOptions();
     } else if (busy === null) {
