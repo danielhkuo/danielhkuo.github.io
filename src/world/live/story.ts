@@ -29,6 +29,8 @@ export interface StoryContext {
   found(t: number): readonly StopKey[];
 }
 
+const PI_STORY = 3.141592653589793;
+
 /** How long a stop's piece plays once it is found, seconds. */
 export const PIECE = 4.5;
 /** A stop is drawn while its place is within this many pixels of the frame. */
@@ -105,80 +107,96 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   // 1. The small pine under the very large yew. The yew, twice a forest tree, is what is seen from the air; the pine,
   // a dark cone in a terracotta pot on the grass beside it, is the thing. Shears lie by it; once found they snip and a
   // cone drops.
-  const yewInk = { Y: [M.yew, 2], y: [M.yew, 6], u: [M.yew, 10], b: [M.timber, 3], B: [M.timber, 6] } as const;
+  const yewInk = { k: [M.timber, 1], Y: [M.yew, 2], m: [M.yew, 5], y: [M.yew, 8], u: [M.yew, 12], b: [M.timber, 3], B: [M.timber, 6] } as const;
   const yew = paint.add([
-    "..........YYYYYYYYYYYY........",
-    ".......YYYYuuYuyuuYYYY........",
-    "......YYYYuyuuyuyuuyuyY.......",
-    "....YYuyuuyuyuuyuyuyyuyYYYY...",
-    "..YYYuyuyuuyuyuyyuyuyyuyyyY...",
-    "..YYyuuyuyuuyuyuyyuyuyyyyyYY..",
-    ".YYYuyuuyuyuyyuyuyyuyyyyyyyY..",
-    "YyuuyuyuuyuyuyyuyuyyyyyyyyyyYY",
-    "YuyuuyuyuyyuyuyyyyyyyyyyyyyyYY",
-    "YYuyuuyuyuyyuyyyyyyyyyyyyyyYYY",
-    "YuyuyuyyuyuyyyyyyyyyyyyyyYYyYY",
-    "YuyyuyuyyuyyyyyyyyyyyyYyYyYYYY",
-    "YyuyyuyuyyyyyyyyyyyyYyYYyYyYYY",
-    ".YyuyyuyyyyyyyyyyyYYyYyYYyYYY.",
-    ".YuyuyyyyyyyyyyyyYyYYyYyYYyY..",
-    ".YYYyyyyyyyyyyyYYyYyYYyYyYYY..",
-    "...YYyyyyyyyYyYyYYyYyYYyYyY...",
-    ".....YyyyyYyYYyYyYYyYyYYYY....",
-    ".....YYyyYyYyYYyYyYYyYYYYY....",
-    "......YYYYYyYyYYyYYYYYY.......",
-    ".............bBBb.............",
-    ".............bBBb.............",
-    ".............bBBb.............",
-    ".............bBBb.............",
-    "............bbBBbb............",
+    "............kkkuuuukk.........",
+    "..........kkkuuuuyyyyk........",
+    "......kkkkkuuuuyyyyyyyk.......",
+    "...kkkuuuuuuuuyyyyyyyymk......",
+    ".kkuuuuuuuuuyyyyyyyymmmmkk....",
+    "kkuuuuuuuuuyyyyyyyymmmmmmkkk..",
+    "kkuuuuuuuyyyyyyyymmmmmmmmmmkk.",
+    "kuuuuuuyyyyyyyymmmmmmmmmmmmmYk",
+    "kkuuuuyyyyyyyymmmmmmmmmmmmYYYk",
+    ".kuuyyyyyyyymmmmmmmmmmmmmYYYYY",
+    ".kkyyyyyyymmmmmmmmmmmmmYYYYYYY",
+    ".kkyyyyyymmmmmmmmmmmmYYYYYYYYk",
+    "..kyyyymmmmmmmmmmmmmYYYYYYYYkk",
+    ".kkyymmmmmmmmmmmmmYYYYYYYYYkk.",
+    ".kkymmmmmmmmmmmmYYYYYYYYYYkk..",
+    ".kkmmmmmmmmmmmmYYYYYYYYYYkk...",
+    "..kmmmmmmmmmmYYYYYYYYYYYYk....",
+    "..kkmmmmmmmmYYYYYYYYYYYYkk....",
+    "...kkkmmmmYYYYYYYYYYYYYkk.....",
+    "......kkkkkkkkkYYYYYYYkk......",
+    "............kbBk..............",
+    "............kbBk..............",
+    "............kbBk..............",
+    "............kbBk..............",
+    "...........kbbBBk.............",
   ], 15, 24, yewInk);
-  const pineInk = { p: [M.hedge, 12], P: [M.hedge, 7], t: [M.timber, 4], k: [M.timber, 2], o: [M.roofTile, 10], O: [M.roofTile, 6] } as const;
+  const pineInk = {
+    p: [M.pastureWarm, 15], P: [M.pastureWarm, 11], t: [M.timber, 6], T: [M.timber, 3], k: [M.yew, 1],
+    o: [M.roofTile, 11], O: [M.roofTile, 7], s: [M.stone, 13], S: [M.stone, 8], z: [M.stone, 5],
+  } as const;
   const pineRest = paint.add([
-    "...p...",
-    "..pPp..",
-    "..PpP..",
-    ".pPpPp.",
-    ".PpPpP.",
-    "pPpPpPp",
-    "...t...",
-    "kkkkkkk",
-    "kooooOk",
-    ".kOOOk.",
-    ".kOOOk.",
-    "..kkk..",
-  ], 3, 11, pineInk);
+    "...kkkkk.......",
+    "..kpppppk......",
+    "..kpPpPpk......",
+    "...kkkkTk......",
+    "......tT..kkkk.",
+    ".......tTkppppk",
+    ".kkkk..TtkpPPpk",
+    "kppppk.tT.kkkk.",
+    "kpPPpkTt.......",
+    ".kkkkTt........",
+    ".....tT........",
+    "..kkkkkkkkkk...",
+    "..koooooooOk...",
+    "...kOOOOOOk....",
+    ".sssssssssssss.",
+    ".sSSSSSSSSSSSs.",
+    ".zS.........Sz.",
+    ".zz.........zz.",
+  ], 7, 17, pineInk);
   const shearsInk = { x: [M.roofLead, 2], X: [M.roofLead, 9] } as const;
   const shears = paint.add(["x...", ".X..", "..xx", "..x."], 1, 3, shearsInk);
-  const shearsOpen = paint.add(["x..x", ".xx.", ".XX.", "x..x"], 2, 3, shearsInk);
-  const cone = paint.add([".c.", "cCc", "cCc", ".C."], 1, 3, { c: [M.timber, 7], C: [M.timber, 3] });
+  const shearsOpen = paint.add(["g.g", ".L.", "g.g"], 1, 2, { g: "mane", L: "maneLight" });
+  const cone = paint.add([".kk.", "kcCk", "kCck", ".kk."], 1, 3, { c: [M.timber, 8], C: [M.timber, 4], k: [M.timber, 1] });
 
-  // 2. The novelist at her desk in a hay field, with stooks round her. She writes; once found she turns a page and it
-  // flies up.
+  // 2. The novelist at her desk in a hay field, with stooks round her: a chair, a dark dress, a stack of books at the
+  // desk's end. She writes; once found she turns a page and it flies up.
   const deskInk = {
-    d: [M.timber, 7], D: [M.timber, 3], w: [M.whitewash, 15], W: [M.whitewash, 10], h: [M.timber, 1], f: [M.plaster, 11],
-    k: [M.roofSlate, 2], g: [M.sandPale, 13], G: [M.sand, 9],
+    d: [M.timber, 8], D: [M.timber, 3], C: [M.timber, 4], w: [M.whitewash, 15], W: [M.whitewash, 10], h: [M.timber, 1],
+    f: [M.plaster, 11], k: [M.roofSlate, 2], K: [M.roofSlate, 5], b: [M.roofTile, 7], r: [M.copper, 7], c: [M.sailcloth, 12],
+    g: "bellyDark", G: "maneDark", t: [M.timber, 3],
   } as const;
   const deskA = paint.add([
-    ".hh.........",
-    ".hf.........",
-    "kkkk..ww....",
-    "kkkkdwwwdddd",
-    ".kk.dddddddd",
-    ".kk.D......D",
-    ".k..D......D",
-  ], 6, 6, deskInk);
+    "..hh..............",
+    ".hhff.............",
+    ".hfff........bb...",
+    "..kkK.......rrrr..",
+    "C.kkkkK.ww..cccc..",
+    "C.kkkkdwwwwddddddd",
+    "CCkkkkdddddddddddd",
+    "C.kk..D..........D",
+    "C.kk..D..........D",
+    "C.k.k.D..........D",
+  ], 8, 9, deskInk);
   const deskB = paint.add([
-    ".hh.........",
-    ".hfk........",
-    "kkk..ww.....",
-    "kkkkdwwwdddd",
-    ".kk.dddddddd",
-    ".kk.D......D",
-    ".k..D......D",
-  ], 6, 6, deskInk);
+    "...hh.............",
+    "..hhff............",
+    "..hfff.......bb...",
+    "..kkK.......rrrr..",
+    "C.kkkKKwww..cccc..",
+    "C.kkkkdwwwwddddddd",
+    "CCkkkkdddddddddddd",
+    "C.kk..D..........D",
+    "C.kk..D..........D",
+    "C.k.k.D..........D",
+  ], 8, 9, deskInk);
   const page = paint.add(["www", "wwW", "wWW"], 1, 2, deskInk);
-  const stook = paint.add([".g.", "ggg", "gGg", "GgG"], 1, 3, deskInk);
+  const stook = paint.add(["..g..", ".ggg.", ".gGg.", "gGtGg", "gggGg", "GgGgG"], 2, 5, deskInk);
 
   // 3. The bell on a bare hill, hung in a gabled belfry with a cross on its ridge, and a wooden figure with a hammer
   // raised. Once found the figure strikes, the bell swings, and its ring goes out.
@@ -284,26 +302,31 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   // throws, misses, throws again and scores.
   const oakInk = { b: [M.timber, 6], B: [M.timber, 3], g: [M.stoneDark, 6], k: [M.roofTile, 11], K: [M.roofTile, 7], n: [M.whitewash, 15] } as const;
   const oak = paint.add([
-    "g.....g...g.",
-    ".g...g...g..",
-    "..g.g...g...",
-    "g..gg..g..g.",
-    ".g..bgg..g..",
-    "..g.bB.gg...",
-    "...gbB......",
-    "....bBkkkkk.",
-    "....bBKkkkK.",
-    "....bB.nKn..",
-    "....bB......",
-    "....bB......",
-    "....bB......",
-    "....bB......",
-    "...bbBB.....",
-  ], 5, 14, oakInk);
+    "g.......g.....g...",
+    ".g.....g.....g....",
+    "..g...g.....g..g..",
+    "g..g.g.....g..g...",
+    ".g..gg....g..g....",
+    "..g..bg..g..g.....",
+    "...g.bBggg.g......",
+    "....gbBg..g.......",
+    ".....bB...........",
+    ".....bBnnnnn......",
+    ".....bBkKkKk......",
+    ".....bB.nnn.......",
+    ".....bB.n.n.......",
+    ".....bB..n........",
+    ".....bB...........",
+    ".....bB...........",
+    ".....bB...........",
+    ".....bB...........",
+    "....bbBB..........",
+    "...bb.BBb.........",
+  ], 6, 19, oakInk);
   const boyInk = { h: [M.timber, 1], f: [M.plaster, 11], s: [M.whitewash, 14], S: [M.whitewash, 9], l: [M.roofSlate, 3] } as const;
-  const boy = paint.add([".h.", ".f.", "sss", "sSs", ".l.", "l.l"], 1, 5, boyInk);
-  const boyThrow = paint.add([".h.s", ".fs.", "sss.", "sSs.", ".l..", "l.l."], 1, 5, boyInk);
-  const ball = paint.add([".o.", "ooO", ".O."], 1, 2, { o: [M.roofTile, 11], O: [M.roofTile, 6] });
+  const boy = paint.add([".hh.", ".ff.", "ssss", "sSss", ".ss.", ".ll.", ".l.l", ".l.l"], 1, 7, boyInk);
+  const boyThrow = paint.add(["shh.", "sff.", "ssss", "sSss", ".ss.", ".ll.", ".l.l", ".l.l"], 1, 7, boyInk);
+  const ball = paint.add([".kk.", "kook", "koOk", ".kk."], 1, 3, { o: [M.roofTile, 12], O: [M.roofTile, 8], k: [M.timber, 1] });
 
   // The pennant, in the dragon's vermilion, on a pole: two frames of the wind.
   const pennant = [
@@ -370,30 +393,31 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
 
   function drawPine(f: LiveFrame, p: StoryPlace, since: number): void {
     put(f, yew, p.x - 8, p.y - 4);
-    // The pot stands on the open grass in front of the yew, the shears beside it.
-    put(f, pineRest, p.x + 2, p.y + 7);
+    // The bonsai stands on its bench on the open grass, clear of the yew's shade, the shears beside it.
+    put(f, pineRest, p.x + 10, p.y + 8);
     if (since < 0) {
-      put(f, shears, p.x + 7, p.y + 8);
+      put(f, shears, p.x + 19, p.y + 9);
       return;
     }
-    const snip = since < 2 ? Math.floor(since * 4) % 2 : 1;
-    if (since < 2) put(f, snip ? shearsOpen : shears, p.x + 6, p.y + 7, 8);
-    else put(f, shears, p.x + 7, p.y + 8);
-    // The cone falls from the pine's top and stays at its foot.
-    const fall = since < 2 ? 0 : Math.min(1, (since - 2) / 0.6);
-    put(f, cone, p.x + 5, p.y + 8, Math.round(10 * (1 - fall)));
+    // Two gold snips over the pads, then the shears are laid down again.
+    const snip = since < 1.6 && Math.floor(since * 3) % 2 === 0;
+    put(f, snip ? shearsOpen : shears, snip ? p.x + 15 : p.x + 19, snip ? p.y + 8 : p.y + 9, snip ? 14 : 0);
+    // The cone falls from the top pad, bounces once on the bench, and lies there.
+    const k = since < 1.6 ? 0 : Math.min(1, (since - 1.6) / 0.8);
+    const drop = k < 0.7 ? 1 - (k / 0.7) * (k / 0.7) : 0.25 * Math.sin(((k - 0.7) / 0.3) * PI_STORY);
+    put(f, cone, p.x + 13, p.y + 8, 5 + Math.round(9 * drop));
   }
 
   function drawDesk(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
-    put(f, stook, p.x - 12, p.y - 6);
-    put(f, stook, p.x + 12, p.y - 7);
-    put(f, stook, p.x - 9, p.y + 6);
-    put(f, stook, p.x + 14, p.y + 5);
+    put(f, stook, p.x - 17, p.y - 7);
+    put(f, stook, p.x + 16, p.y - 9);
+    put(f, stook, p.x - 14, p.y + 7);
+    put(f, stook, p.x + 19, p.y + 6);
     const writing = since < 0 || since > PIECE ? cycle(t, 1.2, 2) : 1;
     put(f, writing ? deskB : deskA, p.x, p.y);
     if (since >= 0.6 && since < PIECE) {
       const k = (since - 0.6) / (PIECE - 0.6);
-      put(f, page, p.x + 1 + Math.round(5 * k), p.y, 7 + Math.round(18 * k));
+      put(f, page, p.x + 1 + Math.round(6 * k), p.y, 9 + Math.round(20 * k));
     }
   }
 
@@ -443,30 +467,32 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
 
   function drawBasket(f: LiveFrame, p: StoryPlace, t: number, since: number): void {
     put(f, oak, p.x, p.y);
-    const bx = p.x + 10, by = p.y + 4;
+    const bx = p.x + 12, by = p.y + 4;
     if (since < 0 || since > PIECE) {
       // Bouncing the ball.
       const k = ((t % 0.8) + 0.8) % 0.8 / 0.8;
-      const h = Math.round(5 * Math.abs(1 - 2 * k));
+      const h = Math.round(6 * Math.abs(1 - 2 * k));
       put(f, boy, bx, by);
-      put(f, ball, bx + 2, by, h);
+      put(f, ball, bx + 3, by, h);
       return;
     }
-    // Two throws: the first hits the trunk and drops; the second goes in.
+    // Two throws: the first hits the trunk and drops; the second goes in. The basket's mouth is 3 cells east of the
+    // trunk and 10 px up.
     const first = since < 2;
     const s = first ? since : since - 2;
     put(f, s < 0.25 ? boyThrow : boy, bx, by, 0, true);
-    // The basket's rim is 6 px left of the boy's hand and 10 px up from the ground under him.
     if (s < 1.2) {
       const k = Math.min(1, s / 1.2);
-      const x = bx - 1 - Math.round(7 * k);
-      const up = 5 + Math.round((first ? 3 : 6) * k + 12 * k * (1 - k));
-      put(f, ball, x, by, up);
+      const tx = first ? p.x + 1 : p.x + 3;
+      const x = Math.round(bx - 1 + (tx - (bx - 1)) * k);
+      const y = Math.round(by + (p.y - by) * k);
+      const up = Math.round(7 + (first ? 1 : 3) * k + 14 * k * (1 - k));
+      put(f, ball, x, y, up);
     } else if (first) {
       const k = Math.min(1, (s - 1.2) / 0.5);
-      put(f, ball, bx - 7, by, Math.round(8 * (1 - k)));
+      put(f, ball, p.x + 1, p.y, Math.round(8 * (1 - k)));
     } else {
-      put(f, ball, bx - 8, by - 4, 11);
+      put(f, ball, p.x + 3, p.y, 9);
     }
   }
 
@@ -498,7 +524,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         else if (p.key === "mill") drawMill(f, p, t, since);
         else drawBasket(f, p, t, since);
         glint(f, p, since, 10);
-        if (at === undefined) put(f, pennant[cycle(t + p.x, 0.9, 2)], p.x + 12, p.y + 6);
+        // The pennant stands beside the thing, clear of it: the bonsai's bench reaches further east than the others.
+        if (at === undefined) put(f, pennant[cycle(t + p.x, 0.9, 2)], p.x + (p.key === "pine" ? 22 : 12), p.y + 6);
       }
     },
   };
