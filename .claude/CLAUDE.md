@@ -99,7 +99,8 @@ They do not govern the game layer or the terminal-styled pages: the renderer, ti
 - `npm run e2e`: builds, then runs the Playwright suite (`e2e/`) in Chromium and WebKit. It must pass without
   `GITHUB_TOKEN`. `npm run test:minimal` runs only the `/minimal` projects, against the `out/` already built.
 - `npm run test:mobile`: phone flight tests (Puppeteer, touch emulation).
-- `npm run world:build -- --seed 3 --n 10240 --cache`: builds the shipped world into `public/world/`.
+- `npm run world:build -- --seed 3 --n 10240 --cache --story`: builds the shipped world into `public/world/`. `--story`
+  bakes in the five monuments and the projects hall; never ship a world without it.
 
 <!-- ASTRYX:START -->
 Astryx v0.6.2 · 164 components
