@@ -8,7 +8,8 @@ export const KEY_VOLUME = "world.sound.volume";
 /** "on" | "off": read only once the headphones (HRTF) phase lands. */
 export const KEY_HEADPHONES = "world.sound.headphones";
 
-export const DEFAULT_VOLUME = 0.7;
+/** Half: −12 dB. (It was 0.7; the owner found that really loud on first hearing, 2026-11-19.) */
+export const DEFAULT_VOLUME = 0.5;
 
 /** The slice of Storage the prefs use. */
 export interface PrefStore {
@@ -57,7 +58,7 @@ export function writeVolume(store: PrefStore | null, volume: number): void {
   write(store, KEY_VOLUME, String(Math.round(Math.min(1, Math.max(0, volume)) * 100)));
 }
 
-/** The volume law: the master gain is the slider squared, so half way is −12 dB and the default 0.7 is −6 dB. */
+/** The volume law: the master gain is the slider squared, so half way (the default) is −12 dB and 0.7 is −6 dB. */
 export function volumeGain(volume: number): number {
   const v = Math.min(1, Math.max(0, volume));
   return v * v;

@@ -4,11 +4,11 @@
 // rendered in one go (the bench's unstepped mode, and how Firefox renders).
 
 import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
-import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, NIGHT_GULLS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, LOOPS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
 import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
 import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
 import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
-import { gullCues, nightKeeps, type Colony } from "../schedule/gulls.ts";
+import type { Colony } from "../schedule/gulls.ts";
 import { ferryCues, flockCues, planeCues, trainCues } from "../schedule/moments.ts";
 import { pipCues, tailCues } from "../schedule/probe.ts";
 import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
@@ -21,9 +21,12 @@ import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census
 import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
 import { createCensus } from "../census.ts";
 import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
+import { createFresh, ownGenerations, type Fresh } from "./fresh.ts";
+import { loadNoise } from "./noise-worklet.ts";
 import { createKit, spawnWorker, type Kit } from "./kit.ts";
 import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
-import { createLanes, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
+import { BRAIN_AHEAD, coloniesOf, gullCuesNear, REACH, unpackEmitters, type BrainAsk, type BrainInit, type BrainReply, type RemoteBrain } from "./brain.ts";
+import { createLanes, type EmitterState, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
 import { buildOpenSea, buildSurfBed } from "./sea.ts";
 import { createOneShots, createPool, type OneShots, type Pool } from "./slots.ts";
 import { buildSurf, type Surf } from "./waves.ts";
@@ -34,14 +37,24 @@ import { buildHub, type Hub } from "./hub.ts";
 import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
 import { buildRain } from "./rain.ts";
 import { buildRiverBed } from "./river.ts";
-import { buildWhistles, buildWhoosh, buildWind, type Voice } from "./wind.ts";
+import { buildWhistles, buildWhoosh, buildWind, type BedOpts, type Voice } from "./wind.ts";
 
 export interface EngineOptions {
   touch: boolean;
   /** The world's seed: where each noise loop is read from. */
   seed: number;
+  /**
+   * True once the fresh-noise worklet is loaded. Continuous noises built after that are made as they play. Absent,
+   * or false, those beds keep reading fresh loops (and a bed built before the module loads does too).
+   */
+  noise?: () => boolean;
   /** Rendering offline: build everything at once, world time maps to audio time exactly. */
   offline?: boolean;
+  /**
+   * On the page, a one-shot not due soon is made on a later, lighter frame, at the same audio time. Offline this is
+   * ignored: a render makes each as it is asked for. Defaults to on.
+   */
+  defer?: boolean;
   /** Plays the bench's stand-in pips and tails (the toggle, hide-show and stall scenes). */
   probe?: boolean;
   /** Mutes waves and every one-shot, to judge the continuous layers alone (the `-beds` renders). */
@@ -50,6 +63,12 @@ export interface EngineOptions {
   n?: number;
   /** No waves, laps or beds (a measuring arm). */
   noSurf?: boolean;
+  /**
+   * The lanes and the scheduler worked elsewhere (the ear's worker, on the page): the waves and the cues to start then
+   * come back from it with each Hearing, and the engine only starts them. Offline, and without one, it works them
+   * out itself.
+   */
+  brain?: RemoteBrain | null;
   /**
    * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
    * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
@@ -168,8 +187,8 @@ const MIX_EVERY = 1 / 30;
 const SCHED_EACH = 2;
 const HALF_VOICES = 1, HALF_EMITTERS = 2;
 
-/** What a frame did, as bits. */
-export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048 } as const;
+/** What a frame did, as bits. `fresh` is a request, a move or a cleanup of a bed's loop. */
+export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048, fresh: 4096 } as const;
 /** Level of the bench's pips and tails, dB. */
 const PIP_DB = -18, TAIL_DB = -22;
 /** The pad of digital silence at the head of every one-shot buffer, seconds. */
@@ -177,6 +196,18 @@ const PAD = 0.02;
 
 export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const offline = opts.offline === true;
+  const defer = !offline && opts.defer !== false;
+  // One reader for the whole engine: a buffer's generations are shared by every bed that reads it.
+  // (Offline, its own generations: a render does not depend on what was rendered on the kit before it.)
+  // A bed held here stays on the loop it was given: the measuring arm "nofresh", and LOOPS at 0 (the plain loops from
+  // before generations). The worklet only replaces a read that would have moved, so those renders stay sample for sample.
+  const moves = (bed?: string) => opts.skip !== "nofresh" && (bed === undefined || LOOPS[bed as keyof typeof LOOPS] !== 0);
+  const fresh: Fresh = createFresh(ctx, offline ? ownGenerations(ctx, kit, opts.seed) : kit, {
+    offline,
+    seed: opts.seed,
+    on: (_name, bed) => moves(bed),
+    worklet: (_name, bed) => opts.noise?.() === true && moves(bed),
+  });
   const master: Master = buildMaster(ctx);
   const busOn: Record<Bus, boolean> = { wind: true, water: true, life: true, moments: true, bells: true };
   const bindings: Binding[] = [
@@ -185,7 +216,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     bindHz(T.WORLD_HZ, [master.worldLow], WORLD_LOWPASS_HZ),
     bind(T.DUCK, [master.bus.wind.gain, master.bus.water.gain], (v, k) => (busOn[k === 0 ? "wind" : "water"] ? v : 0)),
   ];
-  const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40);
+  const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40, { defer });
   const sources: CueSource[] = [];
   if (opts.probe && !opts.beds) {
     sources.push({ kind: "pip", cues: (a, b, out) => pipCues(opts.seed, a, b, out), lookBack: 0 }, { kind: "tail", cues: tailCues, lookBack: TAIL_S });
@@ -214,13 +245,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const census: Census = { n, sources: abbeys.length ? [{ kind: "abbey", key: 0, x: abbeys[0].x, y: abbeys[0].y, h: 0 }] : [] };
   const wheelers = opts.gulls ?? [];
   /** The colonies: each site's wheelers, with the middle of where they wheel. */
-  const colonies: (Colony & { x: number; y: number })[] = [];
-  for (const w of wheelers) {
-    let c = colonies.find((k) => k.id === w.site);
-    if (!c) colonies.push((c = { id: w.site, birds: 0, town: w.town, x: 0, y: 0 }));
-    c.x += (w.x - c.x) / ++c.birds;
-    c.y += (w.y - c.y) / c.birds;
-  }
+  const colonies = coloniesOf(wheelers);
   const near: Colony[] = [];
   let gulls: Gulls | null = null;
   let lifePool: Pool | null = null;
@@ -234,24 +259,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         for (const c of opts.gullScript) if (c.t >= a && c.t < b) out.push(c);
         return;
       }
-      near.length = 0;
-      for (const c of colonies) {
-        const dx = torusDelta(last.x, c.x, n), dy = torusDelta(last.y, c.y, n);
-        if (dx * dx + dy * dy <= 350 * 350) near.push(c);
-      }
-      if (!near.length) return;
-      const from = out.length;
-      gullCues(opts.seed, near, a, b, out);
-      // At night the colonies roost: only a seeded share of the day's calls is made (the same ones each time).
-      const keep = 1 - (1 - NIGHT_GULLS) * last.night;
-      if (keep < 1) {
-        let w = from;
-        for (let r = from; r < out.length; r++) {
-          const c = out[r];
-          if (nightKeeps(opts.seed, c.colony ?? 0, c.k ?? 0, keep)) out[w++] = c;
-        }
-        out.length = w;
-      }
+      gullCuesNear(opts.seed, n, colonies, last.x, last.y, last.night, a, b, out, near);
     },
   };
   /** The clock and the moments, by the kind of their cues; built once their buffers are in. */
@@ -294,7 +302,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       },
     };
   /** Voices built when they can be heard and let go when they cannot: the surf bed and the open sea. */
-  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: { hub: Hub; seed: number; at: number }) => Voice;
+  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: BedOpts) => Voice;
   const demand = (name: string, gains: number[], make: Make, out: AudioNode, on: number, off: number, surfKit: boolean, riverKit = false) => ({
     name, gains, make, out, on, off, surfKit, riverKit, voice: null as Voice | null, built: false, quietSince: NaN,
   });
@@ -333,7 +341,18 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   let sendsFrom = -1;
   /** Cues found on the page and not yet played (see playQueued). */
   const queued: Due[] = [];
+  // With the lanes and the scheduler worked elsewhere (opts.brain): how many of the cue sources it has been told of;
+  // the waves and laps it has found, waiting for the waves' next turn; and the lanes as it left them.
+  let told = 0;
+  const waveWait: WaveStart[] = [];
+  const lapWait: LapStart[] = [];
+  const remoteEmitters: EmitterState[] = [];
+  let remoteMask = 0;
+  /** True in a frame whose lanes and scheduler are worked elsewhere. */
+  let elsewhere = false;
   let lastWaves = NaN;
+  /** World time of the fresh loops' last turn (on the page). */
+  let freshAt = -Infinity;
   /** Which of the two took the last turn: 0 the mix, 1 the waves. */
   let lastTurn = 1;
   let lastT = NaN;
@@ -418,7 +437,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       if (!offline) return;
     }
     if (!opts.hissOnly) {
-      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now });
+      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now, fresh });
       if (wind && !windBuilt) {
         if (stepVoice(wind)) {
           windBuilt = true;
@@ -448,7 +467,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       work |= WORK.build;
       if (!offline) return;
     }
-    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch });
+    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch, defer });
     if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river") && kit.ready("gulls")) {
       momentsBuilt = true;
       const o = {
@@ -541,7 +560,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       }
       if (!b.voice) {
         if (loud) {
-          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now });
+          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now, fresh });
           b.built = false;
           b.quietSince = NaN;
           // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
@@ -718,6 +737,15 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     nearestAbbey(pose);
     mix(pose, hearing, census, prefs, memory, targets);
     lastMix = pose.t;
+    if (elsewhere && opts.brain) {
+      // What the scheduler elsewhere needs of the page: which moments are in reach (it stands where they do).
+      last.x = pose.x;
+      last.y = pose.y;
+      last.night = pose.night ?? 0;
+      let reach = 0;
+      for (const [kind, m] of moments) if (inReach(m)) reach |= REACH[kind] ?? 0;
+      opts.brain.ask.reach = reach;
+    }
     tendBeds(pose.t, now);
     if (opts.skip === "nosends") return;
     if (split) {
@@ -759,19 +787,25 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     }
     const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
     lastWaves = pose.t;
-    waveStarts.length = 0;
-    lapStarts.length = 0;
-    lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
-    if (waveStarts.length) work |= WORK.wave;
-    if (lapStarts.length) work |= WORK.lap;
-    for (let i = 0; i < waveStarts.length; i++) startWave(waveStarts[i], pose, prefs.calm, now, look);
-    if (!opts.hissOnly) for (let i = 0; i < lapStarts.length; i++) playLap(lapStarts[i], pose, prefs.calm, now, look);
+    // Worked elsewhere, the lanes' finds are waiting; here, the lanes are stepped now.
+    const waves = elsewhere ? waveWait : waveStarts, laps = elsewhere ? lapWait : lapStarts;
+    if (!elsewhere) {
+      waveStarts.length = 0;
+      lapStarts.length = 0;
+      lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
+    }
+    if (waves.length) work |= WORK.wave;
+    if (laps.length) work |= WORK.lap;
+    for (let i = 0; i < waves.length; i++) startWave(waves[i], pose, prefs.calm, now, look);
+    if (!opts.hissOnly) for (let i = 0; i < laps.length; i++) playLap(laps[i], pose, prefs.calm, now, look);
+    waves.length = 0;
+    laps.length = 0;
   };
   /** Its second half: the emitters' sends, and what has finished let go. */
   const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
     if (!surf || opts.skip === "nowaves") return;
     work |= WORK.emitters;
-    sends += surf.update(pose, lanes.emitters, now, prefs.calm);
+    sends += surf.update(pose, elsewhere ? remoteEmitters : lanes.emitters, now, prefs.calm);
     surf.prune(now);
     shots.prune(now);
   };
@@ -787,9 +821,10 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   /**
    * Plays cues the scheduler has found (on the page): any due within a tenth of a second, and two more at most, so a
    * look that finds many (a peal) spreads their starting over frames; each was found a sixth of a second or more ahead.
+   * A frame that carried the mix or the voices plays none of those spare ones: only a rejoin, or one due within a tenth.
    */
   const playQueued = (pose: Pose, now: number, look: number, calm: boolean) => {
-    let spare = 2;
+    let spare = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
     for (let i = 0; i < queued.length; ) {
       const d = queued[i];
       if (d.rejoin || cueAt(d.cue) - now < 0.1 || spare > 0) {
@@ -801,6 +836,18 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   };
   /** A cue's audio time. */
   const cueAt = (cue: Cue) => cue.t + o;
+
+  /** After a mute, a hide or a cut: nothing of the brain's is left waiting, and it forgets what it started. */
+  const forget = () => {
+    lanes.clear();
+    scheduler.clear();
+    opts.brain?.clear();
+    waveWait.length = 0;
+    lapWait.length = 0;
+    queued.length = 0;
+    sendsFrom = -1;
+    half = 0;
+  };
 
   const readLimiter = (now: number) => {
     // By the context's own clock: a timeline scheduled ahead of its render has nothing to read yet.
@@ -900,7 +947,30 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
           lanesHalf(pose, hearing, prefs, now, look);
           emittersHalf(pose, prefs, now);
         }
+        // Offline, every move that is due is made in this step: a render must not wait for an idle frame.
+        if (fresh.frame(now)) work |= WORK.fresh;
         return;
+      }
+      // Where the lanes and the scheduler are worked elsewhere, what they found comes in here: the waves and laps wait
+      // for the waves' turn, the cues join the queue, and the page's own lanes and scheduler rest.
+      const brain = opts.brain && opts.brain.alive() ? opts.brain : null;
+      elsewhere = brain !== null;
+      if (brain) {
+        while (told < sources.length) brain.source(sources[told++].kind);
+        brain.ask.look = look;
+        brain.ask.surf = surfBuilt && surf !== null && !opts.beds;
+        for (let r = brain.take(); r !== null; r = brain.take()) {
+          if (r.waves) for (const w of r.waves) waveWait.push(w);
+          if (r.laps) for (const l of r.laps) lapWait.push(l);
+          if (r.due) {
+            work |= WORK.sched;
+            for (const d of r.due) queued.push(d);
+          }
+          unpackEmitters(r.emitters, remoteEmitters);
+          remoteMask = r.mask;
+        }
+        // It finds things a pass's length further ahead than the page would: a start may be that much further off.
+        look += BRAIN_AHEAD;
       }
       // On the page each comes in two halves, the second a frame after the first when that frame has nothing else
       // due: on a 120 Hz display every frame then carries a quarter of the work, where every other frame carried half
@@ -923,11 +993,25 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
       // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
       // frame as much as a first half. What it finds is played a few a frame.
-      if (sources.length && opts.skip !== "nosched") {
+      if (sources.length && !elsewhere && opts.skip !== "nosched") {
         runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
         schedNext = (schedNext + SCHED_EACH) % scheduler.size;
       }
+      // A crossfade waits for a frame with neither the mix nor the waves. At 60 Hz every frame has one or the other,
+      // so after a thirtieth of a second it takes a waves frame (the lighter), and after a tenth any frame.
+      const idle = (work & (WORK.mix | WORK.lanes)) === 0, since = pose.t - freshAt;
+      if (idle || since < 0 || (!(since < 1 / 30) && (work & WORK.mix) === 0) || !(since < 0.1)) {
+        freshAt = pose.t;
+        if (fresh.frame(now)) work |= WORK.fresh;
+      }
       if (queued.length) playQueued(pose, now, look, prefs.calm);
+      // One-shots not due soon were only recorded. A heavy frame makes the ones that have come due; any other frame
+      // also makes two of the soonest, so a peal's nodes are built off the mix and the voices.
+      if (defer) {
+        const max = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
+        shots.flush(now, max);
+        bells?.flush(now, max);
+      }
     },
     enable(first) {
       if (live) return;
@@ -950,11 +1034,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + 0.25);
       lastMoments = NaN;
       lastFalls = NaN;
-      half = 0;
-      sendsFrom = -1;
-      queued.length = 0;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
@@ -976,8 +1056,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now + TAU.hideRamp + 0.01);
       lastMoments = NaN;
       lastFalls = NaN;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
@@ -998,13 +1077,12 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       for (const m of moments.values()) m.stopAll(now);
       lastMoments = NaN;
       lastFalls = NaN;
-      lanes.clear();
-      scheduler.clear();
+      forget();
       lastT = NaN;
       lastWaves = NaN;
       lastClock = NaN;
     },
-    laneMask: () => lanes.mask(),
+    laneMask: () => (elsewhere ? remoteMask : lanes.mask()),
     work: () => work,
     built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && (abbeys.length === 0 || opts.beds === true || bellsBuilt) && beds.every((b) => !b.voice || b.built),
     setBus(bus, on) {
@@ -1088,8 +1166,20 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
     kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
   }
   const kit = kept;
-  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm });
   const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
+  // Where the ear is in its worker, the lanes and the scheduler are worked there too (the measuring arm "brainlocal"
+  // keeps them here).
+  const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
+  const brain = opts.arm === "brainlocal" || !listener.brain ? null : listener.brain({
+    seed: opts.seed, n: opts.n, touch: opts.touch, forced: opts.forced === true, colonies: coloniesOf(opts.gulls ?? []),
+    railway: railway ? { shore: [railway.anchors.shore[0], railway.anchors.shore[1]], halt: [railway.anchors.halt[0], railway.anchors.halt[1]] } : null,
+  });
+  // The module arrives while the first beds may still be built on loops. Later beds see the flag and use the worklet.
+  let noiseReady = false;
+  void loadNoise(ctx).then((ok) => {
+    noiseReady = ok;
+  });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm, brain, noise: () => noiseReady });
   let warped = false;
   let kitMs = 0;
   const gullList = opts.gulls ?? [];
@@ -1122,7 +1212,8 @@ export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: n
           censused = true;
         }
       }
-      if (kit.done()) {
+      // Generations keep being asked for after the jobs are in: adopt those too, still not in a frame that built a graph.
+      if (kit.done() && !kit.pending()) {
         kitMs = 0;
       } else {
         // A few slices of kit work, stopped as soon as they have taken a tenth of a millisecond.
@@ -1160,6 +1251,8 @@ interface Listener {
   setWarp(warp: Uint8Array): void;
   step(pose: Pose, seen: Seen, lanes: number): Hearing;
   hearing(): Hearing;
+  /** The engine's thinking, done where the ear is (its worker): asked once, before the engine is made. */
+  brain?(init: BrainInit): RemoteBrain;
   dispose(): void;
 }
 
@@ -1196,7 +1289,7 @@ export function remoteEar(n: number, land: Land): Listener | null {
   const spare: Uint32Array[] = [];
   const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
   /** The message and its transfer list, reused for every pass. */
-  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0, brain: null as BrainAsk | null };
   const transfer: ArrayBuffer[] = [];
   /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
   let into: Uint32Array | null = null;
@@ -1206,11 +1299,19 @@ export function remoteEar(n: number, land: Land): Listener | null {
   let lastT = NaN;
   let made = 0;
   let dead = false;
+  /**
+   * The brain, once the engine has asked for one: what the page wants of it (sent with each pass), its answers not yet
+   * taken (oldest first), and the epoch its asks carry (counted up at every clear).
+   */
+  let ask: BrainAsk | null = null;
+  const answers: BrainReply[] = [];
   worker.onmessage = (e: MessageEvent) => {
-    const reply = e.data as { heard: Float64Array; bake: Uint32Array };
+    const reply = e.data as { heard: Float64Array; bake: Uint32Array; brain?: BrainReply };
     unpackHearing(reply.heard, held);
     heardSpare.push(reply.heard);
     spare.push(reply.bake);
+    // An answer to an ask from before a clear is to something already stopped.
+    if (reply.brain && ask && reply.brain.epoch === ask.epoch) answers.push(reply.brain);
   };
   worker.onerror = () => {
     dead = true;
@@ -1275,6 +1376,14 @@ export function remoteEar(n: number, land: Land): Listener | null {
         message.alt = at.alt;
         message.t = at.t;
         message.lanes = at.lanes;
+        // The brain works at the dragon's place as the pass is sent, not as it began.
+        if (ask) {
+          ask.t = pose.t;
+          ask.x = pose.x;
+          ask.y = pose.y;
+          ask.night = pose.night ?? 0;
+        }
+        message.brain = ask;
         transfer[0] = into.buffer as ArrayBuffer;
         transfer[1] = heard.buffer as ArrayBuffer;
         worker.postMessage(message, transfer);
@@ -1283,6 +1392,23 @@ export function remoteEar(n: number, land: Land): Listener | null {
       return hearing;
     },
     hearing: () => hearing,
+    brain(init) {
+      worker.postMessage({ kind: "brain", init });
+      const mine: BrainAsk = (ask = { t: 0, x: 0, y: 0, night: 0, look: 0.25, reach: 0, surf: false, epoch: 0 });
+      return {
+        alive: () => !dead,
+        ask: mine,
+        take: () => answers.shift() ?? null,
+        source(kind) {
+          worker.postMessage({ kind: "source", source: kind });
+        },
+        clear() {
+          mine.epoch++;
+          answers.length = 0;
+          worker.postMessage({ kind: "clear" });
+        },
+      };
+    },
     dispose() {
       worker.terminate();
     },

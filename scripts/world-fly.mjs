@@ -21,7 +21,9 @@
 //                                           ear in the frame loop), nosurf (no waves or beds), muted (on, volume 0),
 //                                           and, each leaving one part of the frame's work out: nosched (the
 //                                           scheduler), nosends (the mix's sends), nowaves (the lanes and the
-//                                           emitters), novoices (the placed voices), nocensus (the census).
+//                                           emitters), novoices (the placed voices), nocensus (the census);
+//                                           brainlocal (the lanes and scheduler on the page, not in the worker);
+//                                           nofresh (the beds held on their first loops, as before §14.8).
 //   --rates 4          which CPU rates to fly at (default 1,<rate>)
 //   --warm 8           seconds to fly before the timed window starts (the kit and the graphs are built by then)
 //   --gc               traces V8's garbage collections on the main thread and counts them (adds overhead: its own runs)
