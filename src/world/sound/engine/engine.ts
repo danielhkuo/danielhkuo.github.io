@@ -50,6 +50,11 @@ export interface EngineOptions {
   noise?: () => boolean;
   /** Rendering offline: build everything at once, world time maps to audio time exactly. */
   offline?: boolean;
+  /**
+   * On the page, a one-shot not due soon is made on a later, lighter frame, at the same audio time. Offline this is
+   * ignored: a render makes each as it is asked for. Defaults to on.
+   */
+  defer?: boolean;
   /** Plays the bench's stand-in pips and tails (the toggle, hide-show and stall scenes). */
   probe?: boolean;
   /** Mutes waves and every one-shot, to judge the continuous layers alone (the `-beds` renders). */
@@ -191,6 +196,7 @@ const PAD = 0.02;
 
 export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   const offline = opts.offline === true;
+  const defer = !offline && opts.defer !== false;
   // One reader for the whole engine: a buffer's generations are shared by every bed that reads it.
   // (Offline, its own generations: a render does not depend on what was rendered on the kit before it.)
   // A bed held here stays on the loop it was given: the measuring arm "nofresh", and LOOPS at 0 (the plain loops from
@@ -210,7 +216,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
     bindHz(T.WORLD_HZ, [master.worldLow], WORLD_LOWPASS_HZ),
     bind(T.DUCK, [master.bus.wind.gain, master.bus.water.gain], (v, k) => (busOn[k === 0 ? "wind" : "water"] ? v : 0)),
   ];
-  const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40);
+  const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40, { defer });
   const sources: CueSource[] = [];
   if (opts.probe && !opts.beds) {
     sources.push({ kind: "pip", cues: (a, b, out) => pipCues(opts.seed, a, b, out), lookBack: 0 }, { kind: "tail", cues: tailCues, lookBack: TAIL_S });
@@ -461,7 +467,7 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
       work |= WORK.build;
       if (!offline) return;
     }
-    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch });
+    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch, defer });
     if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river") && kit.ready("gulls")) {
       momentsBuilt = true;
       const o = {
@@ -815,9 +821,10 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
   /**
    * Plays cues the scheduler has found (on the page): any due within a tenth of a second, and two more at most, so a
    * look that finds many (a peal) spreads their starting over frames; each was found a sixth of a second or more ahead.
+   * A frame that carried the mix or the voices plays none of those spare ones: only a rejoin, or one due within a tenth.
    */
   const playQueued = (pose: Pose, now: number, look: number, calm: boolean) => {
-    let spare = 2;
+    let spare = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
     for (let i = 0; i < queued.length; ) {
       const d = queued[i];
       if (d.rejoin || cueAt(d.cue) - now < 0.1 || spare > 0) {
@@ -998,6 +1005,13 @@ export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
         if (fresh.frame(now)) work |= WORK.fresh;
       }
       if (queued.length) playQueued(pose, now, look, prefs.calm);
+      // One-shots not due soon were only recorded. A heavy frame makes the ones that have come due; any other frame
+      // also makes two of the soonest, so a peal's nodes are built off the mix and the voices.
+      if (defer) {
+        const max = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
+        shots.flush(now, max);
+        bells?.flush(now, max);
+      }
     },
     enable(first) {
       if (live) return;
