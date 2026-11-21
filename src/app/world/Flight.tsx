@@ -133,10 +133,11 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
         onClose={panel.closed}
         onLeave={onLeave}
       />
+      {/* Under the title the world is held: the offer waits until the visitor is flying, then its few seconds. */}
       <QuestCard
         px={px}
-        lessonDone={flight.lessonDone}
-        covered={panel.open || shell.card !== null || drawer.open || at !== null}
+        lessonDone={flight.lessonDone && !held}
+        covered={held === true || panel.open || shell.card !== null || drawer.open || at !== null}
       />
       <FlightCard
         card={shell.card}
