@@ -16,6 +16,11 @@ export const SHADOW = 8;
 export const INK_SOFT = 9;
 /** The paper, half seen through: the touch stick's well, so the land shows under it. */
 export const PAPER_WASH = 10;
+/**
+ * The quest's five pieces, each in its own colour (story/stops.ts PIECE_RGB, in STOPS order): pine, desk, bell, mill,
+ * basket. Their slots in the count fill with these.
+ */
+export const PIECE_SLOTS = [11, 12, 13, 14, 15] as const;
 
 /** r, g, b, a (0–255) for each slot. The Codex sheet's colours, so the guides and the Codex read as one hand. */
 export const COLOURS: readonly (readonly [number, number, number, number])[] = [
@@ -30,6 +35,11 @@ export const COLOURS: readonly (readonly [number, number, number, number])[] = [
   [46, 42, 36, 80],
   [90, 82, 70, 255],
   [240, 232, 210, 92],
+  [74, 168, 90, 255],
+  [60, 112, 208, 255],
+  [232, 180, 60, 255],
+  [46, 166, 160, 255],
+  [226, 106, 44, 255],
 ];
 
 /** A small picture: w × h palette slots, row-major. */

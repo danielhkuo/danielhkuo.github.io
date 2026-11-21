@@ -36,3 +36,10 @@ export const INTERESTS: readonly { key: string; line: string }[] = [
 export const WORLD_COMMAND = "./world";
 
 export const WORLD_LINES = ["A world to fly over.", "Press ⏎ or choose Enter world."] as const;
+
+/**
+ * What the quest collects: the five panes of coloured glass missing from the projects hall's rose window, one kept at
+ * each of the five places (the owner's choice, 2026-11-21). `short` is the count's label in the flight view. This is
+ * the one place to change the words.
+ */
+export const GLASS = { one: "pane", many: "panes", short: "glass", whole: "panes of coloured glass" } as const;

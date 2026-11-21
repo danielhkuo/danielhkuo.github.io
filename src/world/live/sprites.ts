@@ -74,7 +74,11 @@ export function worldRowAt(f: LiveFrame, px: number, py: number): number {
  * out += (rgba − out) · alpha / 255 per channel, keeping out opaque; mirrored left to right when `flip`. Clipped at the
  * frame's edges, never wrapped across them. `cover` (0–255) scales every pixel's alpha; 255 leaves it unchanged.
  */
-export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, alt: number, flip: boolean, cover = 255): void {
+/** How a sprite's pixel meets the frame: laid over it, tinting it (the frame × the colour, as light through glass by
+ * day), or added to it (light in the dark). Alpha is how much. */
+export const BLEND_OVER = 0, BLEND_TINT = 1, BLEND_ADD = 2;
+
+export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, alt: number, flip: boolean, cover = 255, blend = BLEND_OVER): void {
   if (cover <= 0) return;
   const fade = cover >= 255 ? 255 : cover;
   const { out, rect, n } = f;
@@ -114,6 +118,22 @@ export function drawSprite(f: LiveFrame, s: LiveSprite, x: number, y: number, al
       if (worldRowAt(f, screenX, screenY) > depthCut) continue;
       const di = diRow + screenX;
       const src = rgba[sp];
+      if (blend !== BLEND_OVER) {
+        const dst = out[di];
+        const sR = src & 255, sG = (src >>> 8) & 255, sB = (src >>> 16) & 255;
+        let r = dst & 255, g = (dst >>> 8) & 255, b = (dst >>> 16) & 255;
+        if (blend === BLEND_ADD) {
+          r = Math.min(255, r + ((sR * a8) >> 8));
+          g = Math.min(255, g + ((sG * a8) >> 8));
+          b = Math.min(255, b + ((sB * a8) >> 8));
+        } else {
+          r = (r * (255 * 255 - a8 * (255 - sR))) / 65025 | 0;
+          g = (g * (255 * 255 - a8 * (255 - sG))) / 65025 | 0;
+          b = (b * (255 * 255 - a8 * (255 - sB))) / 65025 | 0;
+        }
+        out[di] = (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+        continue;
+      }
       if (a8 === 255) {
         out[di] = (src & 0x00ffffff) | 0xff000000;
         continue;
