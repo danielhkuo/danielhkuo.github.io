@@ -1388,8 +1388,6 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
     blocked: new Uint8Array(c.gN * c.gN), laid: new Map(), spurs: [], town: null,
   };
   for (const site of placed.sites) standLandmark(w, site, !opts.occupied || opts.occupied.has(site.id) || site.type === "abbey");
-  const monuments: Settlement["monuments"] = [];
-  for (const m of opts.monuments ?? []) monuments.push(standMonument(w, m.key, m.x, m.y));
 
   // Hamlets: one at the abbey's river crossing, the rest where the land is level and near water.
   const hamlets = pickHamlets(w, placed.sites);
@@ -1460,6 +1458,11 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
       for (const st of made.structures) w.structures.push(st);
     }
   }
+
+  // The quest's monuments come after everything, and as the wonders do only add to what is built: a world without
+  // them is the same world, and with them nothing but their own pads changes.
+  const monuments: Settlement["monuments"] = [];
+  for (const m of opts.monuments ?? []) monuments.push(standMonument(w, m.key, m.x, m.y));
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),

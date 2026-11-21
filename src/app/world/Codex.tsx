@@ -34,7 +34,7 @@ function pieceCss(packed: number): string {
   return `rgb(${packed & 255} ${(packed >>> 8) & 255} ${(packed >>> 16) & 255})`;
 }
 
-/** A stop's title: drop a leading "the ", then capitalise. "the small pine" → "Small pine". */
+/** A stop's title: drop a leading "the ", then capitalise. "the walled garden" → "Walled garden". */
 function stopTitle(name: string): string {
   return capitalised(name.replace(/^the /, ""));
 }

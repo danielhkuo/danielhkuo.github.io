@@ -3,11 +3,11 @@
 export type StopKey = "pine" | "desk" | "bell" | "mill" | "basket";
 
 export const STOPS: readonly { key: StopKey; interest: string; name: string; icon: StopKey }[] = [
-  { key: "pine", interest: "bonsai", name: "the small pine", icon: "pine" },
-  { key: "desk", interest: "reading", name: "the desk", icon: "desk" },
-  { key: "bell", interest: "faith", name: "the bell", icon: "bell" },
-  { key: "mill", interest: "homelab", name: "the mill-shed", icon: "mill" },
-  { key: "basket", interest: "basketball", name: "the basket", icon: "basket" },
+  { key: "pine", interest: "bonsai", name: "the walled garden", icon: "pine" },
+  { key: "desk", interest: "reading", name: "the stone book", icon: "desk" },
+  { key: "bell", interest: "faith", name: "the clock tower", icon: "bell" },
+  { key: "mill", interest: "homelab", name: "the engine house", icon: "mill" },
+  { key: "basket", interest: "basketball", name: "the court", icon: "basket" },
 ];
 
 /** True when `v` is one of the five stop keys. */

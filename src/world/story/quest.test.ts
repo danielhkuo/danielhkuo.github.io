@@ -91,7 +91,7 @@ test("five found survive leaving and rejoining, and leave nothing to point to", 
 
 test("the five stops, each with a line about Daniel", () => {
   assert.deepEqual(STOPS.map((s) => s.key), ["pine", "desk", "bell", "mill", "basket"]);
-  assert.deepEqual(STOPS.map((s) => s.name), ["the small pine", "the desk", "the bell", "the mill-shed", "the basket"]);
+  assert.deepEqual(STOPS.map((s) => s.name), ["the walled garden", "the stone book", "the clock tower", "the engine house", "the court"]);
   const keys = new Set(INTERESTS.map((i) => i.key));
   for (const s of STOPS) assert.ok(keys.has(s.interest), `${s.key}: no interest ${s.interest}`);
   assert.equal(new Set(INTERESTS.map((i) => i.key)).size, INTERESTS.length);
