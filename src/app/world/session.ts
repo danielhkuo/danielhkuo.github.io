@@ -3,7 +3,7 @@
 
 import type { FlightState } from "../../world/runtime/flight";
 import { startState } from "../../world/runtime/flight";
-import { easeHold, HELD_INPUT, holdCamera, holdStep, type HoldAt } from "../../world/runtime/hold";
+import { easeHold, HELD_INPUT, HOLD_IN_RATE, holdCamera, holdStep, type HoldAt } from "../../world/runtime/hold";
 import { makeLayers, type LayerContext } from "../../world/live/registry";
 import type { SoundControl, SoundLog } from "../../world/sound/control";
 import type { SoundState } from "../../world/sound/types";
@@ -23,7 +23,7 @@ import { createSky } from "../../world/sky/sky";
 import { styleFrom } from "../../world/sky/styles";
 import { parseWeather, weatherAt } from "../../world/sky/weather";
 import { restingPlaces, type Anchor } from "../../world/sites/anchor";
-import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
+import { advance, cameraAt, easeFocus, FOCUS_RATE, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
 import { drawQuest, SHOW } from "../../world/story/overlay";
@@ -598,8 +598,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         saveWhere(flight, worldN);
       }
       const settling = phase.kind !== "flying";
-      // Under reduced motion the camera cuts to the landmark and back instead of swooping.
-      clock.focus = reduced ? (settling ? 1 : 0) : easeFocus(clock.focus, settling, dt);
+      // Under reduced motion the camera cuts to the landmark and back instead of swooping. Held by the title, it leaves a
+      // landmark as fast as the title's window comes back, so the world is still by the time the window lands.
+      clock.focus = reduced ? (settling ? 1 : 0) : easeFocus(clock.focus, settling, dt, held ? HOLD_IN_RATE : FOCUS_RATE);
       // The camera eases down while the title holds the world, and back up once it is let go.
       clock.hold = easeHold(clock.hold, held, dt, reduced);
       const camera = holdCamera(cameraAt(flight, focusSite, clock.focus, worldN), clock.hold, fw, fh, setup.holdAt?.());
