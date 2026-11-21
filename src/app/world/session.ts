@@ -11,7 +11,8 @@ import { wondersOf } from "../../world/pack/manifest";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createRegionLand } from "../../world/runtime/regionLand";
-import { createDragon, flownDragon } from "../../world/dragon/index";
+import { createDragon, curledPath, flownDragon } from "../../world/dragon/index";
+import { REST_HEIGHT } from "../../world/dragon/body";
 import { RIVER_LENGTH } from "../../world/dragon/river";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
@@ -26,7 +27,7 @@ import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
 import { drawQuest, SHOW } from "../../world/story/overlay";
-import { HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
+import { HALL_ROSE, HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
 import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
@@ -580,6 +581,14 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
             setQuest(find(getQuest(), key));
             toYard();
           }
+        }
+        // With the five found, at the hall the dragon lies down asleep by the window's light: its chin at the light's
+        // east edge, curled up south-east of it (a hard cut from the landing's coil, as the world's changes are).
+        if (l && bakedHall && l.id === bakedHall.id && complete(getQuest()) && groundHeight && flight) {
+          const g = groundHeight;
+          const hx = bakedHall.x + 8, hy = bakedHall.y + HALL_ROSE.dy + 7;
+          flight = { ...flight, x: hx, y: hy, heading: Math.PI, alt: g(hx, hy) + REST_HEIGHT, speed: 0, bank: 0 };
+          dragon.lie(curledPath(hx, hy, 4.5, (x, y) => g(x, y) + REST_HEIGHT));
         }
         events.phase("landed", l);
         events.buzz?.("landed");

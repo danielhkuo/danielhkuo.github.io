@@ -106,7 +106,7 @@ function rolledRing(look: Look, r: number, band: boolean, spine: boolean, roll: 
   return pieceOf(v, look.ink, roll === 0);
 }
 
-function headPiece(look: Look): Piece {
+function headPiece(look: Look, shut = false): Piece {
   const v = vox(5, 4, 5);
   const skin = skinOf(look);
   // Jaw under, skull and snout over: at this size a few pixels each, so every one is placed with care.
@@ -117,8 +117,9 @@ function headPiece(look: Look): Piece {
   for (const side of [-1, 1]) {
     // Horns: back and up, pale at the tips.
     limb(v, -0.5, side * 1.2, 3, -3.8, side * 2, 4, 0.6, 0.6, (x) => (x < -2.5 ? look.tip : look.mane));
-    // The face, on the crown where no slice above can hide it: a bright eye beside an inked lid.
-    put(v, 1, side * 1.5, 3, look.tip);
+    // The face, on the crown where no slice above can hide it: a bright eye beside an inked lid; asleep, the lid
+    // is down and the eye an inked line.
+    put(v, 1, side * 1.5, 3, shut ? look.ink : look.tip);
     put(v, 0, side * 1.5, 3, look.ink);
   }
   put(v, 1, 0, 3, look.bodyLight);
@@ -169,6 +170,7 @@ function featherPiece(look: Look, length: number): Piece {
 
 interface Kit {
   head: Piece;
+  sleepHead: Piece;
   rings: Map<number, Piece>;
   locks: Piece[];
   frontFeet: Piece;
@@ -194,6 +196,7 @@ function kitOf(look: Look): Kit {
     for (let i = 0; i < WHISKER_POINTS - 1; i++) strand.push(i < 4 ? look.mane : look.tip);
     k = {
       head: headPiece(look),
+      sleepHead: headPiece(look, true),
       rings: new Map(),
       locks: [lockPiece(look, 3, 0.6), lockPiece(look, 3, 0.5), lockPiece(look, 2, 0.5)],
       frontFeet: feetPiece(look, ringRadius(FRONT_FEET)),
@@ -292,6 +295,8 @@ export function drawRiver(
       place(fig, kit.feather, px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
       continue;
     }
+    // Asleep, the fin is folded: the tail runs to the feather's point, no rays.
+    if (pose.asleep) continue;
     place(fig, kit.rays[m], px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
   }
   const fin = fig.count;
@@ -314,7 +319,7 @@ export function drawRiver(
     place(fig, lock, px[j] - Math.sin(ph[j]) * aside, py[j] + Math.cos(ph[j]) * aside, pa[j] + 0.8, ph[j] + sway);
   }
   const body = fig.count;
-  place(fig, kit.head, s.x, s.y, s.alt - 1.6, s.heading);
+  place(fig, pose.asleep ? kit.sleepHead : kit.head, s.x, s.y, s.alt - 1.6, s.heading);
 
   castShadow(out, rect, view, fig, n, shadowKeep);
   // The wind of a boost lies under the body, so the streaks peel out from behind its outline.

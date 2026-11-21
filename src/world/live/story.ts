@@ -420,8 +420,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
    * The window's light on the ground before the hall: the window cast on the open paving from the foot of the wall,
    * widening as it goes out (a squat trapezoid, the window's width at the wall and twice it at the far end). Inside, the
    * window's own five sectors in their places (its top falls farthest out, east kept east), with gaps for its tracery
-   * and a pale heart for its boss. By day each sector is a light tint over the paving, a paler rim along the wall; by
-   * night deeper colour added to the dark. The far edge is dithered out.
+   * and a pale heart for its boss. By day each sector is half its pane's colour over the paving, the stone between a
+   * step darker; by night deeper colour added to the dark.
    */
   const POOL_TOP = 9, POOL_BOTTOM = 17, POOL_H = 10;
   const POOL_W = POOL_BOTTOM;
@@ -448,8 +448,6 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         const r = Math.sqrt(wx * wx + wz * wz);
         if (r > 1.05) continue;
         const i = y * POOL_W + x;
-        // The far edge dithered out.
-        if (y >= POOL_H - 2 && ((x + y) & 1) === 1) continue;
         if (r < 0.24) {
           sp.rgba[i] = night ? 0xff3c8cb4 : mixed(0xff70d4f0, cream, 0.6);
           sp.alpha[i] = night ? 255 : 150;
@@ -459,16 +457,22 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         const turn = ((((Math.atan2(wx, wz) * 180) / PI_STORY) % 360) + 360) % 360;
         const k = Math.round(turn / 72) % 5;
         const off = Math.abs(turn - Math.round(turn / 72) * 72);
-        // The tracery between the lights, and the ring at the rim: no light.
-        if (off > 26 || r > 0.92) continue;
+        // The tracery between the lights, the ring at the rim and the stone round the boss: shadow by day, the paving
+        // a step darker, so the lights hold by contrast; by night the dark is shadow enough.
+        if (off > 26 || r > 0.92 || r < 0.4) {
+          if (night) continue;
+          sp.rgba[i] = 0xff283038;
+          sp.alpha[i] = 45;
+          continue;
+        }
         const c = PIECE_RGB[STOPS[k].key];
         if (night) {
           sp.rgba[i] = tint(c, 0.6);
           sp.alpha[i] = 255;
         } else {
-          // Along the wall the light is strongest: paler there.
-          sp.rgba[i] = mixed(c, cream, y === 0 ? 0.35 : 0.55);
-          sp.alpha[i] = 165;
+          // Half the pane's own colour over the paving; paler along the wall, where it is strongest.
+          sp.rgba[i] = y === 0 ? mixed(c, cream, 0.6) : c;
+          sp.alpha[i] = 128;
         }
       }
     }

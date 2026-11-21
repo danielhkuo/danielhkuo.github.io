@@ -84,7 +84,35 @@ export interface Dragon {
   draw(out: Uint32Array, rect: ViewRect, s: FlightState, view: Land, wind?: boolean): void;
   /** Colours the dragon for this air (cheap when the light has not moved a step), and fades its shadow with the sun. */
   setAir(air: Air): void;
+  /**
+   * Lays the body along `path` (tail first, head last, world cells and heights) and lets it fall asleep there: for a
+   * resting pose its flight never made. It wakes, eyes open and fin spread, as soon as it is stepped less than fully
+   * at rest.
+   */
+  lie(path: readonly { x: number; y: number; alt: number }[]): void;
   pose: Pose;
+}
+
+/**
+ * A curled-up resting path, tail first, head last: the head at (hx, hy) facing west, a short neck east of it, the body
+ * round a ring of `r` cells south of the neck, and the tail spiralling in inside the ring, so the curl is partly
+ * closed with the tail tucked within it and never meets the head. `alt` gives the height to lie at.
+ */
+export function curledPath(hx: number, hy: number, r: number, alt: (x: number, y: number) => number): { x: number; y: number; alt: number }[] {
+  const back: { x: number; y: number }[] = [{ x: hx, y: hy }];
+  const NECK_CELLS = 2.5, STEP = 0.35;
+  for (let d = STEP; d <= NECK_CELLS; d += STEP) back.push({ x: hx + d, y: hy });
+  // The ring's north point is the neck's end; going back along the body turns the ring the way the head came.
+  const nx = hx + NECK_CELLS, cx = nx, cy = hy + r;
+  let t = -Math.PI / 2;
+  const ringTurn = (300 / 180) * Math.PI, tailTurn = (230 / 180) * Math.PI;
+  for (let a = 0; a <= ringTurn; a += STEP / r) back.push({ x: cx + r * Math.cos(t + a), y: cy + r * Math.sin(t + a) });
+  t += ringTurn;
+  for (let a = 0; a <= tailTurn; a += STEP / r) {
+    const rr = r - (r - 2) * (a / tailTurn);
+    back.push({ x: cx + rr * Math.cos(t + a), y: cy + rr * Math.sin(t + a) });
+  }
+  return back.reverse().map((p) => ({ x: p.x, y: p.y, alt: alt(p.x, p.y) }));
 }
 
 /** The dragon on a world n cells across. Its motion depends only on the states and times it is stepped with. */
@@ -107,7 +135,17 @@ export function createDragon(n: number): Dragon {
       const plain = air.night === 0 && air.overcast === 0 && air.mist === 0 && Math.abs(air.time - 0.5) < 0.14;
       look = plain ? LACQUER : lookIn({ ...air, time: Math.round(air.time * STEPS) / STEPS });
     },
+    lie(path) {
+      pose.chain = createChain(n, PATH, PATH_STEP);
+      for (const p of path) pose.chain.push(((p.x % n) + n) % n, ((p.y % n) + n) % n, p.alt);
+      pose.asleep = true;
+      pose.swing = REST_SWING;
+      pose.vigour = 0;
+      lying = false;
+      pose.settle = 1;
+    },
     step(s, dt, rest = 0) {
+      if (rest < 0.99) pose.asleep = false;
       pose.chain.push(s.x, s.y, s.alt);
       pose.time += dt;
       // The wave quickens with speed, so a boost tightens the undulation.

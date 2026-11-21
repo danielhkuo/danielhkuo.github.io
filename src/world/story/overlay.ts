@@ -7,6 +7,7 @@ import { blit } from "../controls/blit.ts";
 import { blank, GOLD, haloed, INK, PAPER, PAPER_WASH, PIECE_SLOTS, text, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
 import { GLASS } from "../../components/terminal/content.ts";
 import { pcos, PI, psin } from "../core/psin.ts";
+import { ROSE_LIGHTS } from "../gen/monuments.ts";
 import type { arrowAt } from "./arrow.ts";
 import type { QuestState } from "./quest.ts";
 import { STOPS, type StopKey } from "./stops.ts";
@@ -106,37 +107,35 @@ function plate(w: number, h: number): Sprite {
   return s;
 }
 
-/** The rose window the count is drawn as: a ring of tracery round five lobes, a gold boss at its heart. */
-const ROSE = 21;
-const ROSE_R = 10;
-const LOBE_AT = 5.6;
-const LOBE_R = 3.3;
-/** Each lobe's centre in the rose's box: the first at the top, then round clockwise. */
-const LOBES = STOPS.map((_, i) => {
-  const a = -PI / 2 + (i * 2 * PI) / STOPS.length;
-  return { x: ROSE_R + LOBE_AT * pcos(a), y: ROSE_R + LOBE_AT * psin(a) };
-});
 /**
- * The rose with the lobes in `fills` filled (a palette slot each, 0 for clear glass), the rest the paper of an
- * unglazed light. Drawn by distance: the ring and each lobe's rim in ink.
+ * The rose window the count is drawn as: the hall's own window (gen/monuments.ts) at a little over two pixels a cell, a
+ * dark ring round pale stone tracery, its five lights dark until glazed, a gold boss at the heart.
  */
+const ROSE = 21;
+const ROSE_C = 10;
+const CELL = 2.2;
+/** Each light's centre in the rose's box, from its cells: the first at the top, then round clockwise. */
+const LOBES = ROSE_LIGHTS.map((cells) => {
+  let x = 0, z = 0;
+  for (const c of cells) { x += c.dx; z += c.dz; }
+  return { x: ROSE_C + (x / cells.length) * CELL, y: ROSE_C - (z / cells.length) * CELL };
+});
+const LIGHT_OF = new Map<string, number>();
+ROSE_LIGHTS.forEach((cells, k) => { for (const c of cells) LIGHT_OF.set(`${c.dx},${c.dz}`, k); });
+/** The rose with the lights in `fills` glazed (a palette slot each, 0 for unglazed). */
 function rose(fills: readonly number[]): Sprite {
   const s = blank(ROSE, ROSE);
   for (let y = 0; y < ROSE; y++) for (let x = 0; x < ROSE; x++) {
-    const dx = x - ROSE_R, dy = y - ROSE_R, d = Math.sqrt(dx * dx + dy * dy);
-    if (d > ROSE_R + 0.5) continue;
-    let c = 0;
-    if (d > ROSE_R - 1) c = INK;
-    else if (d < 1.6) c = GOLD;
+    const dx = x - ROSE_C, dy = y - ROSE_C, d = Math.sqrt(dx * dx + dy * dy);
+    if (d > ROSE_C + 0.5) continue;
+    let c: number;
+    if (d > ROSE_C - 1) c = INK;
     else {
-      for (let i = 0; i < LOBES.length; i++) {
-        const lx = x - LOBES[i].x, ly = y - LOBES[i].y, ld = Math.sqrt(lx * lx + ly * ly);
-        if (ld > LOBE_R + 0.5) continue;
-        c = ld > LOBE_R - 0.6 ? INK : fills[i] === 0 ? PAPER : fills[i];
-        break;
-      }
-      // The stone between the lobes is ink: the lobes read as lights in a dark wheel of tracery.
-      if (c === 0) c = INK;
+      const cell = `${Math.round(dx / CELL)},${Math.round(-dy / CELL)}`;
+      const k = LIGHT_OF.get(cell);
+      if (cell === "0,0") c = GOLD;
+      else if (k !== undefined) c = fills[k] === 0 ? INK : fills[k];
+      else c = PAPER_WASH;
     }
     s.px[y * ROSE + x] = c;
   }
