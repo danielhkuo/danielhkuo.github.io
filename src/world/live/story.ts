@@ -327,7 +327,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
   // from the south as the baked houses are: the roof's slope above, the front wall below, inked at the edges, with a
   // shadow cast to the east on the grass.
   const hallInk = {
-    k: [M.timber, 2], r: [M.roofLead, 9], R: [M.roofLead, 6], q: [M.roofLead, 12],
+    k: [M.timber, 2], r: [M.roofTile, 9], R: [M.roofTile, 6], q: [M.roofTile, 12],
     s: [M.plaster, 13], S: [M.plaster, 10], z: [M.plaster, 7], o: [M.opening, 1], O: [M.opening, 4],
     d: [M.timber, 6], D: [M.timber, 3], w: [M.whitewash, 14], l: [M.lantern, 10], c: [M.cobble, 10], C: [M.cobble, 7],
     g: "mane", h: [M.timber, 1, 90],

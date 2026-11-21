@@ -588,7 +588,8 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!paused) {
         const quest = getQuest();
         const ground = groundHeight;
-        const next = phase.kind === "flying" && ground ? nextStop(quest, flight, stops, worldN) : null;
+        // With the land prompt up, the place is in reach: the pointer stands down and leaves the head clear.
+        const next = phase.kind === "flying" && offer === null && ground ? nextStop(quest, flight, stops, worldN) : null;
         const arrow = next && ground
           ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12)
           : null;
