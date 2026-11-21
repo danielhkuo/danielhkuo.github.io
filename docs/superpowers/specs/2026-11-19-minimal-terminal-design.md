@@ -397,6 +397,15 @@ land here, so the page takes that window's font and colours.
 - **Size:** 15 px on a desktop with a mouse (the mock's), 16 px on phones and anything with a coarse pointer
   (section 4.5's rule, and no zoom on the search field). One size throughout: nano has no other.
 - **Width:** the text keeps to 100 columns, left-aligned, as a terminal does.
+- **Whole lines only** (2026-11-20). No line is ever half under the title bar or the status line, at any window size
+  and wherever a scroll comes to rest; the first build showed one cut line above `[ Read N lines ]` at every size.
+  Everything in the text is a whole number of lines tall (one size, one line height, blank lines as margins of whole
+  lines; no padding at the top, where the bar's own dark strip is the gap, and one blank line at the end). The foot
+  takes the remainder of the window below the last whole row, `mod(100dvh − bar − foot, line)`, and leaves it blank
+  under the keys, as a terminal leaves the pixels below its last row; so the space between the bars is a whole number
+  of lines. The page snaps to rows (`scroll-snap-type: y mandatory`, with a rail of one snap point per row down the
+  text's edge), so a scroll comes to rest with a row just under the title bar. The sizes live on the root, in pixels,
+  because the snap padding is set there. A browser without `mod()` keeps the old foot.
 - **Phones:** the decoration shortcuts are hidden and the four that work sit two to a row, each at least 44 px tall.
   The search field opens at the top of the screen, over the title bar, and the bottom rows hide while it has focus,
   so nothing is pinned at the bottom with the keyboard up (section 4.5). The field takes focus with `preventScroll`:
@@ -437,12 +446,11 @@ after screenshots and numbers are in the session notes (`minimal-terminal-shots/
 
 ### 13.5 Tests
 
-- **Unit:** the model (what each section holds, the empty-projects pointer, link targets) and the plain file (its
-  lines, padding, wrapping, the section line numbers).
 - **Unit (`npm test`), 18:** the model (what each section holds, the pointer when there are no repos, the link
   targets) and the plain file (padding, wrapping, blank lines, Go To Line's numbers); search (case, the next match,
   wrapping, text not pattern) and what nano says and a screen reader hears after it.
-- **WebKit (`npm run test:minimal`, `e2e/minimal/`), 43:** with JavaScript off, the headings, facts, links and
+- **WebKit (`npm run test:minimal`, `e2e/minimal/`), 61:** whole lines at three phone and three desktop sizes, as the
+  page opens, after scrolls and after Go To Line (`lines.spec.ts`, 18, written to fail first); with JavaScript off, the headings, facts, links and
   JSON-LD, Help and Go To Line working and nothing dead; at 320, 375 and 390 px no sideways scroll, text of 16 px or
   more, and the four keys two to a row at 44 px; the document as the only scroller, the bars stuck while reading, the
   last line clear of the keys at the end; nothing focused on load; Where Is the same box before and after the script;
@@ -452,7 +460,8 @@ after screenshots and numbers are in the session notes (`minimal-terminal-shots/
   test waits until the page has hydrated (Where Is turns into a button) before it presses a key: under load, once, a
   quiet network came first and Control+/ reached a page that was not yet listening.
 - **By hand in the iOS 26.5 Simulator (iPhone 17e, Safari):** the rows against Safari's bar, full size and minimised;
-  the search field with the keyboard up, Return, and the keyboard put away; Go To Line and Help by tap.
+  the search field with the keyboard up, Return, and the keyboard put away; Go To Line and Help by tap; whole lines as
+  the page opens, after a flick (which also shrank Safari's bar) and after a slow drag released between rows.
 
 ### 13.6 Before and after
 

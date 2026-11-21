@@ -138,8 +138,9 @@ Last updated 2026-11-19.
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
   ^G Help, ^F Where Is (search), ^/ Go To Line and ^X Exit work by key and by tap (Esc closes, or exits); the rest are
-  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. The interactive shell left this
-  page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
+  decoration a screen reader skips. Help, Go To Line and Exit work without JavaScript. It shows whole lines only: the
+  space between the bars is a whole number of rows and scrolls come to rest on a row (2026-11-20). The interactive
+  shell left this page for the title's terminal. Checked in the iOS Simulator's Safari: the shortcut rows clear Safari's bar, and the
   search field opens at the top with the keyboard up and nothing pinned above the keyboard. `/recruiter` forwards to
   it. Checks: `npm run test:minimal` (`e2e/minimal/`) and `npm run a11y`. Design:
   `specs/2026-11-19-minimal-terminal-design.md`, section 13. It replaced, the same day, a Terminal-window page with a
