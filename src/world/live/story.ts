@@ -418,17 +418,22 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
 
   /**
    * The window's light on the ground before the hall: a fan from the door, narrow at the wall and widening away from
-   * it, in five wedges whose order across matches the lights across the window. Its edge is dithered in a checker, its
-   * middle paler. By day it is pale colour laid on the ground in sunlight; by night it is light added to the dark.
+   * it, in five hard shafts of the panes' own colours whose order across matches the lights across the window, a
+   * pixel of shadow (the lead) between them. By day each shaft is a checker of its colour over the ground, so it holds
+   * in full sun, with an ink rim at its far end; by night it is light added to the dark.
    */
   const FAN_H = 13, FAN_TOP = 5, FAN_SPREAD = 6;
   const FAN_W = 2 * (FAN_TOP + FAN_SPREAD) + 1;
-  /** The wedges west to east: the window's lights by their place across it (gen/monuments.ts ROSE_LIGHTS). */
+  /** The shafts west to east: the window's lights by where they sit across it (gen/monuments.ts ROSE_LIGHTS). */
+  const across = (k: number): number => {
+    let sum = 0;
+    for (const l of ROSE_LIGHTS[k]) sum += l.dx;
+    return sum / ROSE_LIGHTS[k].length;
+  };
   const ACROSS: number[] = [];
-  for (const pick of ROSE_LIGHTS.map((_, i) => i)) {
-    const x = (k: number): number => ROSE_LIGHTS[k][0].dx + ROSE_LIGHTS[k][1].dx;
+  for (let pick = 0; pick < ROSE_LIGHTS.length; pick++) {
     let at = ACROSS.length;
-    while (at > 0 && x(ACROSS[at - 1]) > x(pick)) at--;
+    while (at > 0 && across(ACROSS[at - 1]) > across(pick)) at--;
     ACROSS.splice(at, 0, pick);
   }
   const fans = new Map<number, LiveSprite>();
@@ -438,38 +443,40 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     if (sp) return sp;
     const cx = FAN_TOP + FAN_SPREAD;
     sp = { w: FAN_W, h: FAN_H, rgba: new Uint32Array(FAN_W * FAN_H), alpha: new Uint8Array(FAN_W * FAN_H), ax: cx, ay: FAN_H - 1 };
+    const ink = 0xff20262b;
     for (let y = 0; y < FAN_H; y++) {
       const hw = FAN_TOP + (FAN_SPREAD * y) / (FAN_H - 1);
       for (let x = 0; x < FAN_W; x++) {
         const u = (x - cx) / hw;
         if (u < -1 || u > 1) continue;
-        // The edge, a pixel in from the sides and the far end, in a checker.
-        const edge = Math.abs(x - cx) > hw - 1 || y === FAN_H - 1;
-        if (edge && ((x + y) & 1) === 1) continue;
-        const band = Math.min(4, Math.floor(((u + 1) / 2) * 5));
-        const c = PIECE_RGB[STOPS[ACROSS[band]].key];
-        // Paler down the middle and near the wall, where the light is strongest.
-        const pale = Math.max(0, (night ? 0.45 : 0.6) - 0.35 * Math.abs(u) - (0.25 * y) / FAN_H) + (night ? 0 : 0.2);
-        const mix = (v: number): number => Math.round(v + (255 - v) * pale);
-        let r = mix(c & 255), g = mix((c >>> 8) & 255), b = mix((c >>> 16) & 255);
-        if (night) { r = Math.round(r * 0.75); g = Math.round(g * 0.75); b = Math.round(b * 0.75); }
         const i = y * FAN_W + x;
-        sp.rgba[i] = (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
-        sp.alpha[i] = night ? 255 : 165;
+        const at = ((u + 1) / 2) * 5;
+        const band = Math.min(4, Math.floor(at));
+        // The lead between two shafts: the pixel nearest each boundary is shadow.
+        const toEdge = Math.min(at - band, band + 1 - at) * 2 * hw / 5;
+        if (band > 0 && at - band < 0.5 && toEdge < 0.5) continue;
+        if (band < 4 && band + 1 - at < 0.5 && toEdge < 0.5) continue;
+        if (!night && y === FAN_H - 1) {
+          sp.rgba[i] = ink;
+          sp.alpha[i] = 200;
+          continue;
+        }
+        if (!night && ((x + y) & 1) === 1) continue;
+        const c = PIECE_RGB[STOPS[ACROSS[band]].key];
+        sp.rgba[i] = night ? tint(c, 0.85) : c;
+        sp.alpha[i] = 255;
       }
     }
     fans.set(key, sp);
     return sp;
   }
-  const lightSprites = new Map<string, LiveSprite>();
-  /** One light of the window in its pane's colour: as glass by day, lit from within (added) by night. */
-  function lightOf(key: StopKey, night: boolean): LiveSprite {
-    const id = `${key}${night ? "+" : ""}`;
-    let sp = lightSprites.get(id);
+  const lightSprites = new Map<StopKey, LiveSprite>();
+  /** One light of the window, in its pane's colour at every hour. */
+  function lightOf(key: StopKey): LiveSprite {
+    let sp = lightSprites.get(key);
     if (sp) return sp;
-    const c = night ? tint(PIECE_RGB[key], 1.2) : PIECE_RGB[key];
-    sp = { w: 1, h: 1, rgba: new Uint32Array([c]), alpha: new Uint8Array([255]), ax: 0, ay: 0 };
-    lightSprites.set(id, sp);
+    sp = { w: 1, h: 1, rgba: new Uint32Array([PIECE_RGB[key]]), alpha: new Uint8Array([255]), ax: 0, ay: 0 };
+    lightSprites.set(key, sp);
     return sp;
   }
   function drawHall(f: LiveFrame, h: { x: number; y: number }, found: readonly StopKey[]): void {
@@ -485,11 +492,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
       const key = STOPS[i].key;
       if (!found.includes(key)) continue;
       // Stood on the yard's first row, the ground before the gable (the gable's own row reads as the hall's top),
-      // and raised by that row's step back to the face. Lit from within only once the window is whole.
-      const lit = whole && night;
-      for (const l of ROSE_LIGHTS[i]) {
-        put(f, lightOf(key, lit), h.x + HALL_ROSE.dx + l.dx, h.y + HALL_ROSE.dy + 1, HALL_ROSE.z + l.dz + 0.8, false, lit ? BLEND_ADD : BLEND_OVER);
-      }
+      // and raised by that row's step back to the face.
+      for (const l of ROSE_LIGHTS[i]) put(f, lightOf(key), h.x + HALL_ROSE.dx + l.dx, h.y + HALL_ROSE.dy + 1, HALL_ROSE.z + l.dz + 0.8);
     }
   }
 

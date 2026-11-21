@@ -26,7 +26,7 @@ import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
 import { drawQuest, SHOW } from "../../world/story/overlay";
-import { HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
+import { HALL_ROSE, HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
 import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
@@ -456,10 +456,10 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       const t = targets.find((x) => x.id === bakedHall!.id);
       if (!t) return;
       t.x = bakedHall.x + HALL_YARD.dx;
-      // The far half of the light on the ground (live/story.ts, a fan 13 px deep from the gable), so the window's
-      // colours lie between the door and the dragon and show round it.
-      t.y = bakedHall.y + HALL_YARD.dy + 6;
-      t.radius = HALL_YARD.rx - 2;
+      // The middle of the light on the ground (live/story.ts, a fan 13 px deep from the gable), ringed once: the
+      // dragon lies in one loop round it, head to tail, and the window's colours show inside and either side.
+      t.y = bakedHall.y + HALL_ROSE.dy + 9;
+      t.radius = HALL_YARD.rx;
     };
     toYard();
 

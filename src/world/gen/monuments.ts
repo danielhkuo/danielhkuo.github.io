@@ -6,7 +6,7 @@
 //
 // Local coordinates: x east, y south; row h − 1 is the southmost (see gen/structures.ts).
 
-import { pcos, PI, psin } from "../core/psin.ts";
+import { patan2, pcos, PI, psin } from "../core/psin.ts";
 import { MATERIAL as M } from "../look/materials.ts";
 import type { Structure } from "./built.ts";
 import { drum, house, mark, paint, put, sculpt, T_EAST, T_FLAT, T_NORTH, T_RIDGE, T_WALL, T_WEST, tower } from "./structures.ts";
@@ -28,15 +28,25 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
  * clockwise as seen: each a petal of two cells (cells east, units up). The baked window is dark; the live layer glazes a light as its pane is found.
  */
 export const HALL_ROSE = { dx: 0, dy: 0, z: 10 } as const;
-export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = [
-  [{ dx: 0, dz: 2 }, { dx: 0, dz: 3 }],
-  [{ dx: 2, dz: 1 }, { dx: 3, dz: 1 }],
-  [{ dx: 1, dz: -2 }, { dx: 2, dz: -2 }],
-  [{ dx: -1, dz: -2 }, { dx: -2, dz: -2 }],
-  [{ dx: -2, dz: 1 }, { dx: -3, dz: 1 }],
-];
-/** The rose window's ring, cells from its heart. */
 export const ROSE_R = 4;
+/**
+ * Each light's cells: the ring's inside cut into five sectors, the first at the top and the rest clockwise as seen,
+ * with lead (left as stone) along the sector edges and round a gilt boss at the heart.
+ */
+export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = (() => {
+  const lights: { dx: number; dz: number }[][] = [[], [], [], [], []];
+  for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d < 1.4 || d > ROSE_R - 0.55) continue;
+    // Degrees clockwise from the top, as seen from the south.
+    const turn = (((90 - (patan2(dz, dx) * 180) / PI) % 360) + 360 + 36) % 360;
+    const into = turn % 72;
+    if (into < 9 || into > 63) continue;
+    lights[Math.floor(turn / 72) % 5].push({ dx, dz });
+  }
+  return lights;
+})();
+
 /** The paved yard before the hall, where the window's light falls once it is whole: its centre and half-sizes, cells. */
 export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 4 } as const;
 
@@ -62,7 +72,7 @@ export function projectsHall(): Structure {
   for (let z = 1; z <= 4; z++) for (let x = cx - 1; x <= cx + 1; x++) if (!(z === 4 && x !== cx)) mark(s, x, face, z, M.brick, 110);
   // Narrow slits either side of the door, unglazed stone in shadow: the rose is the window that matters.
   for (const x of [cx - 4, cx + 4]) for (let z = 2; z <= 4; z++) mark(s, x, face, z, M.stoneDark, 80);
-  // The rose window: a ring of dark stone, tracery within, a gilt boss, five dark lights of two cells each.
+  // The rose window: a ring of dark stone, tracery within, a gilt boss, five dark lights.
   const rz = HALL_ROSE.z, rx = cx + HALL_ROSE.dx;
   for (let dz = -ROSE_R; dz <= ROSE_R; dz++) for (let dx = -ROSE_R; dx <= ROSE_R; dx++) {
     const d = Math.sqrt(dx * dx + dz * dz);
@@ -70,7 +80,8 @@ export function projectsHall(): Structure {
     mark(s, rx + dx, face, rz + dz, M.stoneDark, d > ROSE_R - 0.55 ? 70 : 120);
   }
   mark(s, rx, face, rz, M.gilt, 150);
-  for (const petal of ROSE_LIGHTS) for (const l of petal) mark(s, rx + l.dx, face, rz + l.dz, M.opening, 60);
+  // Unglazed, the lights are dark stone, never lit at night: the panes, drawn live, are the window's only colour.
+  for (const petal of ROSE_LIGHTS) for (const l of petal) mark(s, rx + l.dx, face, rz + l.dz, M.stoneDark, 50);
   void cy;
   return s;
 }
