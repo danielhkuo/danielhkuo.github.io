@@ -1740,3 +1740,44 @@ of 8 or less, the arms alternating run by run.
 - *The title at /*: no AudioContext before the first gesture (state "waiting"); a click on the title starts the
   ambience behind it, at rest; Enter world as the first gesture starts it, fading in from −93 dB, no click, no
   console error (recorded from the page's own output).
+
+### 14.9 Cheaper fresh noise, and sound's heavy page frames (2026-11-21)
+
+**The audio thread.** The criterion is now fresh noise against the plain loops world/bigmap shipped, paired round
+by round: a median excess of 0.3 points or less. Two things the bench was measuring were not what the page pays:
+- A render made ahead schedules every future generation of a fresh loop from its first sample, and a source
+  scheduled to start later is in the graph all along (a model of the rain's six reads: 0.28 % plain, 0.57 % fresh
+  made ahead, 0.31 % fresh made just in time, as the page does). Offline, a stopped source now also leaves the graph
+  on its ended event, and made generations are cached for the process so a scene rendered again for its best time
+  does not time their arithmetic.
+- So the paired rounds are rendered a second at a time (`--mode chunks --best 5`, which schedules as the page does).
+
+Cuts: a bed's worklet noises in one node (wind 4 → 1, surf bed 5 → 1, rain's sheet and fizz 2 → 1; each node costs
+a call and its outputs a quantum: twelve empty nodes measured 0.27 % against 0.05 % for twelve buffer sources), and
+the grain computed every 8th sample (a blind critic heard the two grains as equal in all three shingle pairs, the
+difference −29 to −36 dB with the rattle's own shape). Result, three paired chunked rounds at load 2–5:
+
+| scene       | fresh       | plain       | excess |
+|-------------|-------------|-------------|--------|
+| coast-run   | 3.10–3.16 % | 2.97–3.01 % | 0.16   |
+| shower-pass | 3.73–3.77 % | 3.51–3.53 % | 0.22   |
+| rain-sea    | 1.55 %      | 1.48 %      | 0.07   |
+| river       | 1.30–1.31 % | 1.22–1.23 % | 0.08   |
+
+(Two findings from Cursor's diffs, fixed in review: the fresh-loop fallback made a new drift gain at every move and
+left it on the hub; the breeze briefly shared the rush's samples, which made the wind 0.24 dB louder. The kit's two
+loops are read seconds apart, so they have always been independent: the breeze draws its own again.)
+
+**The page.** Profiled at 4× (`.cache/prof-heavy.mjs`: each frame's sound call as one run of profile samples), sound's
+runs have a median of 84 µs and a 95th percentile of 850–880 µs. The heaviest 5 % hold no single culprit: they are
+frames where several 50–90 µs stages land together — the emitters' sends (waves.update), the ear's row copy and its
+pass, the census, the mix and its sends, a wave starting, one-shots and bell strokes being made. One-shots and
+strokes not due within 60 ms now wait for a frame without the mix or the voices (each still starts at its own audio
+time, tested against making each at once); that moved them, and the tail is now the other stages meeting.
+
+Gated pairs after it (five rounds, 4×, loads 2.5–7): sound on against off +0.6, +0.3, +0.6, +0.1, +0.3 ms (median
++0.3, was +0.4); plain loops against off median +0.2; the worklet a further +0.1–0.2, while the page's own sound time
+is the same in both arms (means 61–142 µs, the high ones at load 5–6). At 1× sound adds nothing. The +0.15 ms bar is
+not met: the best reached is +0.3. To go further: the ear's copy as one block a frame with the shift done in the
+worker (a row at a time is three times the cost of one copy), the emitters' sends spread over two frames, and the
+census off the emitters' frames.

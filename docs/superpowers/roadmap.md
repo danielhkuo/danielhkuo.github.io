@@ -339,9 +339,9 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   Headphones (HRTF) as an option (spec §6.3, last and optional). Night: an owl, crickets inland, perhaps no peal in the
   small hours. Tall falls listed in the manifest, so they are heard before they are seen. A town bed, the windmills,
   and sounds for the rare sights (whale, balloon, heron, tall ship). Clouds muffling sound.
-  - Sound's 4× frame p95: +0.4 ms against the +0.15 bar (mean 67 µs, within 100): +0.25 its heavy page frames, +0.15
-    the worklet (audio-thread contention, spec §14.8). shower-pass's audio thread 5.0–5.2 % against 5 %: cut the rain's
-    fresh-loop crossfades and the worklets' cost; defer the voices' half and the census on long frames.
+  - Sound's 4× frame p95: +0.3 ms against the +0.15 bar (spec §14.9): its heavy frames are several 50–90 µs stages
+    meeting. Next: the ear's copy as one block with the shift in the worker; the emitters' sends over two frames; the
+    census off the emitters' frames. The audio thread meets its paired criterion.
   - Owner's first listen (2026-11-19): default volume now Half, wind down 4 dB. The other voices went unnoticed: listen again with the wind down.
 
 ## Ideas: mobile, controls and wayfinding (owner, 2026-11-18 evening)
