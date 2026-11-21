@@ -217,6 +217,27 @@ test.describe("the title's window is the terminal", () => {
     await expect(page.getByRole("dialog", { name: "interactive terminal" })).toHaveCount(0);
   });
 
+  test("the prompt goes live in place: nothing above it moves, and it keeps the window's type", async ({ page }) => {
+    await page.goto(TITLE);
+    await settled(page);
+    const world = page.locator("header#about .nf-cmd.nf-world");
+    const idle = page.locator("header#about .nf-cmd.nf-idle");
+    const typeOf = (el: Element) => [getComputedStyle(el).fontSize, getComputedStyle(el).lineHeight];
+    const worldBefore = await world.boundingBox();
+    const idleBox = await idle.boundingBox();
+    const idleType = await idle.evaluate(typeOf);
+    await page.keyboard.press("h");
+    await expect(prompt(page)).toBeFocused();
+    const row = page.locator("header#about .term-inputrow");
+    const worldAfter = await world.boundingBox();
+    const rowBox = await row.boundingBox();
+    expect(Math.abs((worldAfter?.y ?? 0) - (worldBefore?.y ?? 0)), "the rows above stay put").toBeLessThan(0.5);
+    expect(Math.abs((rowBox?.y ?? 0) - (idleBox?.y ?? 0)), "the prompt stands where the idle one did").toBeLessThan(0.5);
+    expect(Math.abs((rowBox?.height ?? 0) - (idleBox?.height ?? 0)), "and is as tall").toBeLessThan(0.5);
+    expect(await row.evaluate(typeOf), "in the type of the window's command rows").toEqual(idleType);
+    expect(await page.locator("header#about .nf-body").evaluate((b) => b.scrollTop), "not scrolled").toBe(0);
+  });
+
   test("commands run in the window, which scrolls within itself: the neofetch goes up and out", async ({ page }) => {
     await page.goto(TITLE);
     await settled(page);

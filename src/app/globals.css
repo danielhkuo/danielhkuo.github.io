@@ -1021,6 +1021,18 @@ iframe[src*="hcaptcha"] {
 .nf-body p { text-wrap: initial; }
 .nf-cmd { color: var(--panel-on); }
 .nf-cmd.nf-idle { margin-top: 26px; }
+/* Live, the shell's rows start where the idle prompt stood, so going live
+   moves nothing; after `clear` (no rows above them) they start at the top. */
+.nf-body > .term-log { margin-top: 26px; }
+.nf-body > .term-log:first-child { margin-top: 0; }
+/* The shell's rows take the type of the window's command rows (<p>, set by
+   the reset's body tokens), not the body's: the live prompt is the idle one's
+   height, and output lines up with what ./world printed. */
+.nf-body > .term-log,
+.nf-body > .term-inputrow {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-leading);
+}
 /* The title runs ./world after the colour blocks, as a shell would: the command, then its lines. */
 .nf-cmd.nf-world { margin: 18px 0 0; }
 .nf-out { margin: 0; color: var(--panel-on); }

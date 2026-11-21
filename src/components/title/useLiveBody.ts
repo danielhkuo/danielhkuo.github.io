@@ -10,6 +10,19 @@ function bodyOf(root: RefObject<HTMLElement | null>): HTMLElement | null {
   return el instanceof HTMLElement ? el : null;
 }
 
+/**
+ * The body's border-box height with its fractions (offsetHeight rounds, and a window fixed a fraction shorter moves
+ * the centred window by half of it). 0 while it is not rendered.
+ */
+function heightOf(body: HTMLElement): number {
+  const cs = getComputedStyle(body);
+  const h = parseFloat(cs.height);
+  if (!Number.isFinite(h)) return 0;
+  if (cs.boxSizing === "border-box") return h;
+  const extra = [cs.paddingTop, cs.paddingBottom, cs.borderTopWidth, cs.borderBottomWidth];
+  return extra.reduce((sum, v) => sum + (parseFloat(v) || 0), h);
+}
+
 /** Pins the body at `height` (its border box, whatever box-sizing it has) and lets it scroll. */
 function pin(body: HTMLElement, height: number): void {
   body.style.boxSizing = "border-box";
@@ -29,7 +42,7 @@ export function useLiveBody(root: RefObject<HTMLElement | null>, live: boolean):
   const lock = useCallback(() => {
     if (locked.current != null) return;
     const body = bodyOf(root);
-    const height = body && body.offsetHeight > 0 ? body.offsetHeight : resting.current;
+    const height = (body && heightOf(body)) || resting.current;
     if (!height) return;
     locked.current = height;
     if (body) pin(body, height);
@@ -41,7 +54,8 @@ export function useLiveBody(root: RefObject<HTMLElement | null>, live: boolean):
     const body = bodyOf(root);
     if (!body) return;
     if (!live) {
-      if (locked.current == null && body.offsetHeight > 0) resting.current = body.offsetHeight;
+      const height = locked.current == null ? heightOf(body) : 0;
+      if (height > 0) resting.current = height;
       return;
     }
     if (locked.current == null && resting.current > 0) locked.current = resting.current;

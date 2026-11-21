@@ -12,9 +12,9 @@ import { useShell } from "../terminal/useShell";
 import { promptKey } from "./titleKeys";
 
 /**
- * The window body's width in cells of its own monospace font. `--term-cell` here is `1ch`, which
- * getComputedStyle leaves as specified, so the cell is measured. The count is the body's content
- * box, the same one useTermWindow reports for the pop-up.
+ * The window body's width in cells of the shell's monospace font, which the prompt's row carries.
+ * `--term-cell` here is `1ch`, which getComputedStyle leaves as specified, so the cell is measured.
+ * The count is the body's content box, the same one useTermWindow reports for the pop-up.
  */
 function useBodyCols(inputRef: RefObject<HTMLInputElement | null>): number {
   const [cols, setCols] = useState(80);
@@ -23,8 +23,10 @@ function useBodyCols(inputRef: RefObject<HTMLInputElement | null>): number {
     if (!(body instanceof HTMLElement)) return;
     let alive = true;
     const measure = () => {
-      if (!alive) return;
-      const next = gridSize(body, cellOf(body)).cols;
+      // While a full-screen program has the window there is no prompt row: the count stays.
+      const row = inputRef.current?.closest(".term-inputrow");
+      if (!alive || !(row instanceof HTMLElement)) return;
+      const next = gridSize(body, cellOf(row)).cols;
       setCols((c) => (c === next ? c : next));
     };
     const observer = new ResizeObserver(measure);
@@ -39,9 +41,9 @@ function useBodyCols(inputRef: RefObject<HTMLInputElement | null>): number {
   return cols;
 }
 
-/** One cell of `body`'s font, in CSS pixels. The probe is not in the window, so it cannot resize it. */
-function cellOf(body: HTMLElement): Cell {
-  const cs = getComputedStyle(body);
+/** One cell of `el`'s font, in CSS pixels. The probe is not in the window, so it cannot resize it. */
+function cellOf(el: HTMLElement): Cell {
+  const cs = getComputedStyle(el);
   const probe = document.createElement("span");
   probe.textContent = "0000000000";
   probe.style.position = "absolute";
