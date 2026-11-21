@@ -1,36 +1,24 @@
-// The landmarks the flight page offers to land at, worked out at build time: which site holds which project,
-// kept sticky by a committed file (design 5.6), and the register that points from any landmark to the others.
+// The landmarks a flight can land at: the abbey, the hall, and one stop for each of the five.
 
 import type { Project } from "../../lib/projects.ts";
-import { patan2, PI } from "../core/psin.ts";
-import { torusDelta } from "../core/torus.ts";
-import { CRUISE } from "../runtime/flight.ts";
-import { assignSites, type Assignments, type LandmarkType } from "./assign.ts";
+import type { PlaceType } from "./assign.ts";
+import { isStopKey, STOPS, type StopKey } from "../story/stops.ts";
 
-/** What the Codex shows of a Project. Stats are null when the build had none. */
-export interface ProjectEntry {
-  slug: string;
-  name: string;
-  summary: string;
-  repoUrl: string | null;
-  link: string | null;
-  language: string | null;
-  stars: number | null;
-  forks: number | null;
-  /** ISO 8601, or null when the build had no GitHub stats. */
-  updatedAt: string | null;
-}
+/** A project as the hall shows it: one Markdown file in projects/, read at build time (src/lib/projects.ts). */
+export type HallProject = Project;
 
-/** What a landmark holds: About Me (the abbey), a project, or nothing yet. */
-export type Holding = { kind: "about" } | { kind: "project"; project: ProjectEntry } | { kind: "none" };
+/** What a landmark holds: About Me at the abbey, every project at the hall, or one stop. */
+export type Holding = { kind: "about" } | { kind: "hall"; projects: HallProject[] } | { kind: "stop"; stop: StopKey };
 
 export interface Landmark {
-  /** The site's id in the manifest. */
+  /** The site's id in the manifest; `curio-<key>` or `hall-0` when it comes from the places file. */
   id: string;
-  type: LandmarkType;
+  type: PlaceType;
   /** World cells. */
   x: number;
   y: number;
+  /** Drawn by the story layer from places.json, not baked: it has no building to coil round. */
+  live?: boolean;
   holds: Holding;
 }
 
@@ -41,10 +29,11 @@ export interface LandmarkSet {
   landmarks: Landmark[];
 }
 
-const TYPES: readonly LandmarkType[] = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew"];
+const KINDS = ["abbey", "town", "lighthouse", "windmill", "bridge", "cathedral", "yew", "hall", "curio"] as const;
 
-function isLandmarkType(t: string): t is LandmarkType {
-  return (TYPES as readonly string[]).includes(t);
+function kindOf(type: string): PlaceType | null {
+  for (const kind of KINDS) if (kind === type) return kind;
+  return null;
 }
 
 /** A copy of `items` in `order`, stable: an insertion sort (Array.prototype.sort is not the same in every engine). */
@@ -62,78 +51,124 @@ function sortedBy<T>(items: readonly T[], order: (a: T, b: T) => number): T[] {
   return out;
 }
 
-/** A project as the Codex shows it. */
-export function entryOf(p: Project): ProjectEntry {
-  return {
-    slug: p.slug,
-    name: p.name,
-    summary: p.summary,
-    repoUrl: p.repoUrl,
-    link: p.link,
-    language: p.github?.language?.name ?? null,
-    stars: p.github ? p.github.stars : null,
-    forks: p.github ? p.github.forks : null,
-    updatedAt: p.github ? p.github.updatedAt : null,
-  };
+/** Lowest `order` first; a tie goes by name, in code-unit order. */
+function ordered(projects: readonly HallProject[]): HallProject[] {
+  return sortedBy(projects, (a, b) => {
+    if (a.order < b.order) return -1;
+    if (a.order > b.order) return 1;
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return 0;
+  });
+}
+
+interface ManifestSite {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+}
+
+function firstOf(sites: readonly ManifestSite[], type: string): ManifestSite | undefined {
+  for (const s of sites) if (s.type === type) return s;
+  return undefined;
+}
+
+function siteNamed(sites: readonly ManifestSite[], id: string): ManifestSite | undefined {
+  for (const s of sites) if (s.id === id) return s;
+  return undefined;
+}
+
+function located(site: ManifestSite | undefined): { id: string; type: PlaceType; x: number; y: number } | null {
+  if (!site) return null;
+  const type = kindOf(site.type);
+  if (!type) return null;
+  return { id: site.id, type, x: site.x, y: site.y };
+}
+
+/** The stop key of a curio site id `curio-<key>`, or null when the id names no stop. */
+function curioKey(id: string): StopKey | null {
+  const prefix = "curio-";
+  if (!id.startsWith(prefix)) return null;
+  const key = id.slice(prefix.length);
+  return isStopKey(key) ? key : null;
+}
+
+/** The hall from a places file for this world: a live building, drawn by the story layer, with no baked anchor. */
+function placedHall(places: unknown, worldId: string): { id: string; type: PlaceType; x: number; y: number; live: true } | null {
+  if (typeof places !== "object" || places === null) return null;
+  const file = places as { worldId?: unknown; hall?: unknown };
+  if (file.worldId !== worldId || typeof file.hall !== "object" || file.hall === null) return null;
+  const p = file.hall as { x?: unknown; y?: unknown };
+  if (typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+  return { id: "hall-0", type: "hall", x: p.x, y: p.y, live: true };
 }
 
 /**
- * The sticky file's assignments when the file belongs to world `worldId`; null for another world or anything that is
- * not `{ worldId, bySite }`. Entries that are not strings are dropped.
+ * Stops from a places file for this world. Unknown input, a file for another world, unknown keys and
+ * coordinates that are not finite numbers yield nothing, and never throw.
  */
-export function stickyFrom(file: unknown, worldId: string): Assignments | null {
-  if (!file || typeof file !== "object") return null;
-  const f = file as { worldId?: unknown; bySite?: unknown };
-  if (f.worldId !== worldId) return null;
-  if (!f.bySite || typeof f.bySite !== "object" || Array.isArray(f.bySite)) return null;
-  const bySite: Record<string, string> = {};
-  for (const [site, repo] of Object.entries(f.bySite)) if (typeof repo === "string") bySite[site] = repo;
-  return { bySite, features: {} };
-}
-
-/** The sticky file's text for `bySite`: sites in code-unit order, so a change shows as a small diff. */
-export function stickyText(worldId: string, bySite: Readonly<Record<string, string>>): string {
-  const sorted: Record<string, string> = {};
-  for (const site of sortedBy(Object.keys(bySite), (a, b) => (a < b ? -1 : a > b ? 1 : 0))) sorted[site] = bySite[site];
-  return `${JSON.stringify({ worldId, bySite: sorted }, null, 2)}\n`;
-}
-
-function sameAssignments(a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean {
-  const ka = Object.keys(a), kb = Object.keys(b);
-  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+function placedStops(places: unknown, worldId: string): Map<StopKey, { x: number; y: number }> {
+  const out = new Map<StopKey, { x: number; y: number }>();
+  if (typeof places !== "object" || places === null) return out;
+  const file = places as { worldId?: unknown; stops?: unknown };
+  if (file.worldId !== worldId) return out;
+  if (typeof file.stops !== "object" || file.stops === null) return out;
+  const stops = file.stops as Record<string, unknown>;
+  for (const stop of STOPS) {
+    const spot = stops[stop.key];
+    if (typeof spot !== "object" || spot === null) continue;
+    const point = spot as { x?: unknown; y?: unknown };
+    if (typeof point.x !== "number" || typeof point.y !== "number") continue;
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    out.set(stop.key, { x: point.x, y: point.y });
+  }
+  return out;
 }
 
 /**
- * Matches `projects` to the manifest's sites (assign.ts), in the order they are given. Only as many as there are
- * landmark sites besides the abbey stand at landmarks; the rest are left unassigned. The sticky file is the previous
- * assignment when it belongs to this world. `changed` is true when the file should be rewritten to the new `bySite`.
+ * The abbey, the hall, and one landmark per stop. A site of type `hall` is the hall; otherwise `town-0`,
+ * otherwise the first town. A manifest curio whose id is `curio-<key>` wins; once any stop has one, the
+ * places file is not used.
  */
 export function landmarksFor(
-  manifest: { worldId: string; n: number; sites: readonly { id: string; type: string; x: number; y: number }[] },
-  projects: readonly ProjectEntry[],
-  config: Readonly<Record<string, LandmarkType>>,
-  sticky: unknown,
-): { set: LandmarkSet; bySite: Record<string, string>; changed: boolean } {
-  const sites = manifest.sites.flatMap((s) => (isLandmarkType(s.type) ? [{ id: s.id, type: s.type, x: s.x, y: s.y }] : []));
-  const previous = stickyFrom(sticky, manifest.worldId);
-  const room = sites.filter((s) => s.type !== "abbey").length;
-  const standing = projects.slice(0, room);
-  const { bySite } = assignSites(sites, standing.map((p) => p.slug), config, previous, manifest.n);
-  const bySlug = new Map(projects.map((p) => [p.slug, p]));
-  const landmarks: Landmark[] = sites.map((s) => {
-    const slug = bySite[s.id];
-    const project = slug === undefined ? undefined : bySlug.get(slug);
-    const holds: Holding = s.type === "abbey" ? { kind: "about" } : project ? { kind: "project", project } : { kind: "none" };
-    return { ...s, holds };
-  });
-  return {
-    set: { worldId: manifest.worldId, n: manifest.n, landmarks },
-    bySite,
-    changed: previous === null || !sameAssignments(previous.bySite, bySite),
-  };
+  manifest: { worldId: string; n: number; sites: readonly ManifestSite[] },
+  projects: readonly HallProject[],
+  places: unknown,
+): { set: LandmarkSet } {
+  const sites = manifest.sites;
+  const landmarks: Landmark[] = [];
+  const abbey = located(firstOf(sites, "abbey"));
+  if (abbey) landmarks.push({ ...abbey, holds: { kind: "about" } });
+  const hall = located(firstOf(sites, "hall")) ?? placedHall(places, manifest.worldId) ?? located(siteNamed(sites, "town-0")) ?? located(firstOf(sites, "town"));
+  if (hall) landmarks.push({ ...hall, holds: { kind: "hall", projects: ordered(projects) } });
+
+  const curios = new Map<StopKey, ManifestSite>();
+  for (const s of sites) {
+    if (s.type !== "curio") continue;
+    const key = curioKey(s.id);
+    if (!key || curios.has(key)) continue;
+    curios.set(key, s);
+  }
+  if (curios.size > 0) {
+    for (const stop of STOPS) {
+      const s = curios.get(stop.key);
+      if (!s) continue;
+      landmarks.push({ id: s.id, type: "curio", x: s.x, y: s.y, holds: { kind: "stop", stop: stop.key } });
+    }
+  } else {
+    const points = placedStops(places, manifest.worldId);
+    for (const stop of STOPS) {
+      const point = points.get(stop.key);
+      if (!point) continue;
+      landmarks.push({ id: `curio-${stop.key}`, type: "curio", x: point.x, y: point.y, live: true, holds: { kind: "stop", stop: stop.key } });
+    }
+  }
+
+  return { set: { worldId: manifest.worldId, n: manifest.n, landmarks } };
 }
 
-const KIND_NAMES: Record<LandmarkType, string> = {
+const KIND_NAMES: Record<PlaceType, string> = {
   abbey: "abbey",
   town: "town",
   lighthouse: "lighthouse",
@@ -141,48 +176,20 @@ const KIND_NAMES: Record<LandmarkType, string> = {
   bridge: "bridge",
   cathedral: "ruined cathedral",
   yew: "churchyard yew",
+  hall: "hall",
+  curio: "curio",
 };
 
 /** The landmark's kind as the page names it. */
-export function kindName(type: LandmarkType): string {
+export function kindName(type: PlaceType): string {
   return KIND_NAMES[type];
 }
 
-/**
- * The discovery a landing logs. A project is keyed by its slug (design 5.4), so a new world keeps it; for the projects
- * seeded from the pinned repos the slug is the repository's name, so discoveries logged before carry over. The abbey
- * and an empty landmark are keyed by their own names.
- */
+/** The discovery a landing logs: the abbey, the hall, or the stop. */
 export function discoveryOf(l: Landmark): { id: string; label: string } {
-  if (l.holds.kind === "project") return { id: `landmark:repo:${l.holds.project.slug}`, label: `${l.holds.project.name}, at the ${kindName(l.type)}` };
   if (l.holds.kind === "about") return { id: "landmark:abbey", label: "The abbey: About me" };
-  return { id: `landmark:site:${l.id}`, label: `The ${kindName(l.type)}` };
-}
-
-const COMPASS = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"] as const;
-export type Compass = (typeof COMPASS)[number];
-
-export interface RegisterLine {
-  id: string;
-  type: LandmarkType;
-  /** The project's name, or "About me" at the abbey. */
-  title: string;
-  compass: Compass;
-  /** Seconds of flight at cruising speed, the short way round the world. */
-  seconds: number;
-}
-
-/** Where the abbey and every project lie from `here`, nearest first; `here` itself is left out. */
-export function registerFrom(here: { id: string; x: number; y: number }, set: LandmarkSet): RegisterLine[] {
-  const lines: { line: RegisterLine; d: number }[] = [];
-  for (const l of set.landmarks) {
-    if (l.id === here.id || l.holds.kind === "none") continue;
-    const dx = torusDelta(here.x, l.x, set.n), dy = torusDelta(here.y, l.y, set.n);
-    const d = Math.sqrt(dx * dx + dy * dy);
-    // y grows southward, so the angle runs clockwise from east, as COMPASS does.
-    const sector = ((Math.round(patan2(dy, dx) / (PI / 4)) % 8) + 8) % 8;
-    const title = l.holds.kind === "project" ? l.holds.project.name : "About me";
-    lines.push({ line: { id: l.id, type: l.type, title, compass: COMPASS[sector], seconds: Math.round(d / CRUISE) }, d });
-  }
-  return sortedBy(lines, (a, b) => a.d - b.d || (a.line.id < b.line.id ? -1 : 1)).map((l) => l.line);
+  if (l.holds.kind === "hall") return { id: "landmark:hall", label: "The hall: every project" };
+  const key = l.holds.stop;
+  const name = STOPS.find((s) => s.key === key)?.name ?? key;
+  return { id: `story:${key}`, label: name.charAt(0).toUpperCase() + name.slice(1) };
 }

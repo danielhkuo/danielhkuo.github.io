@@ -10,6 +10,8 @@ import { INK_SOFT, keyCap, plate, slip, text, VERMILION } from "../../world/cont
 import { ACTION_WORDS, keyWord, type Device } from "../../world/controls/guides";
 import type { PhaseKind } from "./session";
 import type { Options } from "../../world/controls/options";
+import { choose } from "../../world/story/quest";
+import { getQuest, setQuest, useQuest } from "./questStore";
 import type { Platform } from "../../world/mobile/layout";
 import { SOUND_UI, type SoundControl } from "../../world/sound/control";
 import styles from "./options.module.css";
@@ -170,6 +172,7 @@ function pxVar(px: number): CSSProperties {
 }
 
 export default function OptionsPanel({ open, px, options, device, platform, onChange, sound, onTeach, onClose, onLeave }: OptionsPanelProps) {
+  const quest = useQuest();
   const touch = device === "touch";
   const canBuzz = platform === "android" && typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
   const dialog = useRef<HTMLDialogElement>(null);
@@ -290,6 +293,16 @@ export default function OptionsPanel({ open, px, options, device, platform, onCh
         )}
         <Action px={px} onClick={onTeach}>
           <Words px={px}>show the lesson again</Words>
+        </Action>
+        <Action
+          px={px}
+          onClick={() => {
+            const q = getQuest();
+            setQuest(choose(q, q.mode === "on" ? "off" : "on"));
+            dialog.current?.close();
+          }}
+        >
+          <Words px={px}>{quest.mode === "on" ? "leave the quest" : "follow the quest"}</Words>
         </Action>
         <Link className={styles.action} href="/" onClick={onLeave && ((e) => {
           e.preventDefault();

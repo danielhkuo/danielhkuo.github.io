@@ -22,6 +22,11 @@ export interface Sky {
    * gather as the weather builds, and their shadows soften under overcast and at night.
    */
   setAir(air: Air): void;
+  /**
+   * A clearing in the clouds round a point of the frame (pixels), `amount` 0 (none) … 1 (open to radius `r`): the
+   * clouds there dissolve by their own dither, so a landed thing is not hidden. Null for none.
+   */
+  clear(hole: Hole | null): void;
   /** The field and the shapes, for tools and tests. */
   field: SkyField;
   shapes: readonly CloudShape[];
@@ -57,9 +62,20 @@ function mayShow(u: number, period: number, view: number, sprite: number): boole
  * outside the frame are skipped, never wrapped onto its other side. `cull` (default) passes over clouds far from the
  * frame before placing them exactly; false places every cloud, the plain path the tests hold it to.
  */
+/** A clearing in the clouds: centre (frame pixels), radius, and how far it has opened, 0–1. */
+export interface Hole {
+  x: number;
+  y: number;
+  r: number;
+  amount: number;
+}
+
+/** The width of a clearing's dithered edge, pixels. */
+const HOLE_EDGE = 10;
+
 export function drawClouds(
   out: Uint32Array, rect: ViewRect, field: SkyField, sprites: readonly Sprite[], t: number, layer: CloudLayer, layerAlpha: number,
-  cull = true, cloudiness = 0,
+  cull = true, cloudiness = 0, hole: Hole | null = null,
 ): void {
   if (layerAlpha <= 0) return;
   const n = field.n;
@@ -103,6 +119,17 @@ export function drawClouds(
     const y1 = sy + sh > fh ? fh - sy : sh;
     const alpha = sprite.alpha;
     const rgba = sprite.rgba;
+    // The clearing, when it reaches this cloud: inside `inner` nothing draws; across the edge the dither thins it.
+    let open = false, hx = 0, hy = 0, inner = 0, outer2 = 0;
+    if (hole && hole.amount > 0) {
+      inner = hole.r * hole.amount;
+      const outer = inner + HOLE_EDGE * hole.amount;
+      hx = hole.x - sx;
+      hy = hole.y - sy;
+      const nx = hx < 0 ? 0 : hx > sw ? sw : hx, ny = hy < 0 ? 0 : hy > sh ? sh : hy;
+      open = (nx - hx) * (nx - hx) + (ny - hy) * (ny - hy) < outer * outer;
+      outer2 = outer * outer;
+    }
 
     for (let py = y0; py < y1; py++) {
       const di0 = (sy + py) * fw + sx;
@@ -113,6 +140,13 @@ export function drawClouds(
         const a8 = alpha[sp];
         if (a8 === 0) continue;
         if (condense < 16 && order[px & 3] >= condense) continue;
+        if (open) {
+          const dx = px - hx, dy = py - hy, d2 = dx * dx + dy * dy;
+          if (d2 < outer2) {
+            const d = Math.sqrt(d2);
+            if (d < inner || order[px & 3] >= ((d - inner) / (Math.sqrt(outer2) - inner + 1e-6)) * 16) continue;
+          }
+        }
         const di = di0 + px;
         const src = rgba[sp];
         const a = a8 * scale;
@@ -285,6 +319,7 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
   let keep: readonly [number, number, number] = style.shadowKeep;
   let cloudiness = 0;
   let painted = -1;
+  let hole: Hole | null = null;
   return {
     field,
     shapes,
@@ -317,6 +352,9 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
         mist: Math.round(air.mist * WEATHER_STEPS) / WEATHER_STEPS,
       }));
     },
+    clear(h) {
+      hole = h;
+    },
     draw(out, rect, t, pass) {
       const lows = cloudiness > 0 ? gathered : low;
       if (pass === "below") {
@@ -325,11 +363,11 @@ export function createSky(seed: number, n: number, style: CloudStyle, opening?: 
           drawShadows(out, rect, banks, shapes, t, "bank", keep);
           drawShadows(out, rect, lows, shapes, t, "low", keep, true, cloudiness);
         }
-        drawClouds(out, rect, lows, sprites, t, "low", 255, true, cloudiness);
-        drawClouds(out, rect, banks, sprites, t, "bank", 255);
+        drawClouds(out, rect, lows, sprites, t, "low", 255, true, cloudiness, hole);
+        drawClouds(out, rect, banks, sprites, t, "bank", 255, true, 0, hole);
         return;
       }
-      drawClouds(out, rect, banks, sprites, t, "bank", style.veil);
+      drawClouds(out, rect, banks, sprites, t, "bank", style.veil, true, 0, hole);
     },
   };
 }

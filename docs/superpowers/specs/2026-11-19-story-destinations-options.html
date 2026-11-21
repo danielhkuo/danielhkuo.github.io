@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hall and destinations: rough options</title>
+<style>
+  :root { --paper: #efe6d0; --ink: #2b2622; --rubric: #b8402a; --rule: #cbbf9f; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.5 "IM Fell English", Georgia, serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; font-weight: normal; }
+  h2 { font-size: 22px; margin: 36px 0 4px; font-weight: normal; border-top: 1px solid var(--rule); padding-top: 20px; }
+  p { margin: 6px 0 14px; max-width: 70ch; }
+  .note { font-style: italic; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  figure { margin: 0; }
+  canvas { width: 100%; height: auto; image-rendering: pixelated; border: 2px solid var(--ink); display: block; background: var(--paper); }
+  figcaption { margin-top: 8px; }
+  figcaption b { color: var(--rubric); font-weight: normal; }
+</style>
+</head>
+<body>
+<main>
+<h1>The hall and the quest of five</h1>
+<p class="note">Rough sketches drawn by hand in the world's palette, to choose between. They are not renders from the
+engine: the real sprites are drawn and judged there once a direction is picked. The design is in
+<code>2026-11-19-story-destinations-design.md</code>.</p>
+
+<h2>The hall: three looks</h2>
+<p>One building beside the home town, in the first frame of a flight. Landing there opens every project.</p>
+<div class="grid">
+  <figure><canvas id="hallA" width="128" height="88"></canvas>
+    <figcaption><b>A. The long hall</b> (recommended). One long roof with a lantern on its ridge and a wide door. It
+    looks like none of the seven landmarks, and says "everything under one roof".</figcaption></figure>
+  <figure><canvas id="hallB" width="128" height="88"></canvas>
+    <figcaption><b>B. The cloth hall on the quay.</b> An open arcade at the water, stepped gables. It belongs to the
+    harbour, and may be lost among the town's own houses.</figcaption></figure>
+  <figure><canvas id="hallC" width="128" height="88"></canvas>
+    <figcaption><b>C. The library.</b> Tall traceried windows between buttresses. The handsomest, and the likeliest to
+    be taken for a church.</figcaption></figure>
+</div>
+
+<h2>Three of the five</h2>
+<p>The stops are odd things on the map, not buildings. Each has a red pennant until it is found. The visitor lands,
+the thing moves, and one line about Daniel appears.</p>
+<div class="grid">
+  <figure><canvas id="yew" width="128" height="88"></canvas>
+    <figcaption><b>The small pine.</b> A very small pine in a pot, below one very large yew. On landing: shears cut
+    one needle and a cone falls.</figcaption></figure>
+  <figure><canvas id="nave" width="128" height="88"></canvas>
+    <figcaption><b>The novelist.</b> A desk in a hay field. On landing: she turns a page and one page flies up.</figcaption></figure>
+  <figure><canvas id="light" width="128" height="88"></canvas>
+    <figcaption><b>The bell-striker.</b> A bell in a wood frame on a bare hill, and a wood figure with a hammer.
+    On landing: the figure hits the bell once.</figcaption></figure>
+</div>
+<h2>The count</h2>
+<p>Five quatrefoils in a corner of the screen. Here, two are found.</p>
+<canvas id="count" width="128" height="20" style="max-width:520px"></canvas>
+</main>
+<script>
+const C = { paper:"#efe6d0", ink:"#2b2622", stone:"#d9cfb8", shade:"#b9ad92", grass:"#c3cc9f", grass2:"#a9b785",
+  wood:"#8a6a48", slate:"#8fa3a0", teal:"#3f8a86", sea:"#a8c9c6", sea2:"#8fb8b6", red:"#c8452c", gold:"#c9a23a",
+  dark:"#4a4239", yew:"#55694c", yew2:"#3f5140", white:"#f6f0e0", fog:"#e4dfd0" };
+
+function board(id) {
+  const g = document.getElementById(id).getContext("2d");
+  const R = (x,y,w,h,c) => { g.fillStyle = c; g.fillRect(x,y,w,h); };
+  const O = (x,y,w,h,c) => { R(x,y,w,h,C.ink); R(x+1,y+1,w-2,h-2,c); };
+  const P = (x,y,c) => R(x,y,1,1,c);
+  // deterministic speckle: a hash of the cell, never Math.random
+  const hash = (x,y) => { let h = (x*374761393 + y*668265263) >>> 0; h = ((h ^ (h >>> 13)) * 1274126177) >>> 0; return (h >>> 16) & 255; };
+  const wash = (x,y,w,h,c,c2,dens) => { R(x,y,w,h,c); for (let j=y;j<y+h;j++) for (let i=x;i<x+w;i++) if (hash(i,j) < dens) P(i,j,c2); };
+  const hatch = (x,y,w,h,step,c) => { for (let j=0;j<h;j++) for (let i=0;i<w;i++) if ((i+j)%step===0) P(x+i,y+j,c); };
+  // a pointed arch: w wide, h tall, standing on (x, y+h)
+  const arch = (x,y,w,h,c) => { for (let j=0;j<h;j++) { const cut = Math.max(0, Math.ceil((w/2) - (j+1)*1.1)); if (w-2*cut>0) R(x+cut,y+j,w-2*cut,1,c); } };
+  // a roof seen from the south and above: a slope with an inked eave and ridge
+  const roof = (x,y,w,h,inset,c) => { for (let j=0;j<h;j++) { const k = Math.round(inset*(1-j/(h-1))); R(x+k,y+j,w-2*k,1,c); P(x+k,y+j,C.ink); P(x+w-1-k,y+j,C.ink); }
+    R(x+inset,y,w-2*inset,1,C.ink); R(x,y+h-1,w,1,C.ink); for (let j=2;j<h-1;j+=3) for (let i=x+inset+1;i<x+w-inset-1;i+=4) P(i+(j%2),y+j,C.dark); };
+  const blob = (cx,cy,rx,ry,c,c2) => { for (let j=-ry;j<=ry;j++) for (let i=-rx;i<=rx;i++) { const d=(i*i)/(rx*rx)+(j*j)/(ry*ry); if (d<=1) P(cx+i,cy+j, d>0.82?C.ink:(hash(cx+i,cy+j)<70?c2:c)); } };
+  const person = (x,y,c) => { P(x,y-4,C.ink); R(x-1,y-3,3,3,c); P(x-1,y,C.ink); P(x+1,y,C.ink); };
+  const pennant = (x,y,h) => { R(x,y-h,1,h,C.ink); R(x+1,y-h,4,1,C.red); R(x+1,y-h+1,3,1,C.red); P(x+1,y-h+2,C.red); };
+  const ground = (y) => { wash(0,y,128,88-y,C.grass,C.grass2,40); R(0,y,128,1,C.ink); };
+  const sky = () => wash(0,0,128,88,C.paper,"#e6dcc2",14);
+  return { g,R,O,P,wash,hatch,arch,roof,blob,person,pennant,ground,sky };
+}
+
+// A. the long hall
+(() => { const b = board("hallA"); b.sky(); b.ground(62);
+  b.R(14,64,100,2,C.grass2);                                  // its shadow on the grass
+  b.O(18,46,92,18,C.stone); b.hatch(19,47,90,16,7,C.shade);    // the wall
+  b.roof(14,28,100,19,10,C.slate);                             // one long roof
+  b.O(58,16,12,13,C.white); b.arch(61,19,6,8,C.dark);          // the lantern
+  for (let j=0;j<6;j++) b.R(64-j,10+j,2*j+1 < 14 ? 2*j+1 : 13,1,C.ink); b.R(60,13,9,3,C.slate); b.P(64,7,C.gold); b.R(64,8,1,2,C.gold);
+  for (let i=0;i<4;i++) { b.arch(24+i*8,50,5,10,C.dark); b.arch(79+i*8,50,5,10,C.dark); }
+  b.arch(57,46,14,18,C.ink); b.arch(59,49,10,15,C.red); b.R(64,50,1,14,C.ink); b.P(62,57,C.gold); b.P(66,57,C.gold);
+  b.R(52,64,24,1,C.shade); b.R(50,65,28,1,C.shade);            // steps
+  b.person(40,70,C.teal); b.person(88,72,C.wood);
+  b.blob(8,58,6,7,C.yew,C.yew2); b.blob(120,56,6,8,C.yew,C.yew2);
+  b.R(0,80,128,1,C.grass2); b.hatch(0,78,128,6,11,C.grass2);
+})();
+
+// B. the cloth hall on the quay
+(() => { const b = board("hallB"); b.sky(); b.ground(58);
+  b.wash(0,70,128,18,C.sea,C.sea2,60); b.R(0,69,128,1,C.ink); b.R(0,66,128,3,C.shade); b.R(0,66,128,1,C.ink); // quay and water
+  b.O(22,34,84,32,C.stone); b.hatch(23,35,82,12,6,C.shade);
+  for (let s=0;s<4;s++) { b.O(22+s*3,34-(s+1)*4,8,5,C.stone); b.O(98-s*3,34-(s+1)*4,8,5,C.stone); }       // stepped gables
+  b.roof(34,22,60,13,6,C.slate);
+  for (let i=0;i<6;i++) b.arch(27+i*13,50,9,16,C.dark);                                                   // the open arcade
+  for (let i=0;i<7;i++) { b.R(28+i*11,39,3,6,C.dark); }
+  b.R(22,48,84,1,C.ink);
+  b.person(46,65,C.red); b.person(72,65,C.teal);
+  b.R(84,74,16,3,C.wood); b.R(84,74,16,1,C.ink); b.R(91,64,1,10,C.ink); b.R(92,65,5,6,C.white);           // a boat
+  b.R(8,60,1,7,C.ink); b.R(116,60,1,7,C.ink);
+})();
+
+// C. the library
+(() => { const b = board("hallC"); b.sky(); b.ground(66);
+  b.O(30,34,68,34,C.stone); b.hatch(31,35,66,32,8,C.shade);
+  b.roof(26,14,76,21,24,C.slate);
+  b.blob(64,25,4,4,C.teal,C.gold); b.P(64,25,C.gold);                                                    // a small rose in the gable
+  for (let i=0;i<4;i++) b.O(28+i*22,40,5,28,C.shade);                                                    // buttresses
+  for (let i=0;i<3;i++) { const x=36+i*22; b.arch(x,38,13,26,C.ink); b.arch(x+1,40,11,23,C.teal); b.R(x+6,42,1,21,C.gold); b.R(x+2,52,9,1,C.gold); }
+  b.arch(59,56,10,12,C.ink); b.arch(61,58,6,10,C.wood);
+  b.person(50,74,C.wood); b.person(82,76,C.red);
+  b.blob(12,60,7,8,C.yew,C.yew2); b.blob(116,61,7,7,C.yew,C.yew2);
+})();
+
+// the small pine under the yew
+(() => { const b = board("yew"); b.sky();
+  for (let j=50;j<88;j++) { const k = Math.round(Math.max(0, 26 - (j-50)*2.2)); b.wash(k,j,128-2*k,1,C.grass,C.grass2,40); b.P(k,j,C.ink); b.P(127-k,j,C.ink); } // the rise
+  b.R(26,50,76,1,C.ink);
+  b.R(52,40,8,18,C.wood); b.R(52,40,1,18,C.ink); b.R(59,40,1,18,C.ink); b.R(49,57,14,1,C.ink);            // the trunk
+  b.blob(56,24,34,21,C.yew,C.yew2); b.blob(30,34,13,10,C.yew,C.yew2); b.blob(84,33,13,10,C.yew,C.yew2); b.blob(56,10,18,8,C.yew,C.yew2);
+  b.O(72,62,16,5,C.stone);                                                                                // the flat stone
+  b.R(78,59,5,3,C.red); b.R(78,59,5,1,C.ink);                                                             // the pot
+  b.R(80,55,1,4,C.wood); b.R(78,53,5,2,C.yew2); b.R(81,51,4,2,C.yew); b.R(76,55,3,1,C.yew);               // the pine
+  b.R(90,65,3,1,C.ink); b.P(93,64,C.ink);                                                                 // the shears
+  b.pennant(98,66,14);
+  b.hatch(0,74,128,10,9,C.grass2);
+})();
+
+// the novelist's desk in the hay meadow
+(() => { const b = board("nave"); b.sky(); b.wash(0,40,128,48,"#d9cf9a","#c9bb7c",70); b.R(0,40,128,1,C.ink);
+  for (let j=42;j<88;j+=3) for (let i=(j%2)*3;i<128;i+=6) b.R(i,j,1,2,"#b5a86a");                         // standing hay
+  for (let j=60;j<88;j++) { const x = 60 - Math.round((j-60)*0.5); b.R(x,j,9+Math.round((j-60)*0.3),1,C.grass); } // the mown path
+  b.wash(44,54,44,10,C.grass,C.grass2,40);                                                                // the mown patch
+  b.O(56,52,20,6,C.wood); b.R(58,58,1,6,C.ink); b.R(73,58,1,6,C.ink);                                     // the desk
+  b.R(60,51,7,1,C.white); b.P(70,50,C.gold); b.P(70,51,C.ink);                                            // the page, the inkwell
+  b.person(66,49,C.teal); b.R(64,60,5,1,C.ink); b.R(64,60,1,4,C.ink); b.R(68,60,1,4,C.ink);               // her, and the chair
+  b.O(80,56,10,7,C.dark); b.R(82,54,2,2,C.red); b.R(84,53,2,3,C.teal); b.R(86,54,2,2,C.gold);             // the books under the tarred cloth
+  b.pennant(48,62,13);
+  b.blob(14,34,9,7,C.yew,C.yew2); b.blob(112,35,8,6,C.yew,C.yew2); b.blob(100,36,5,4,C.yew,C.yew2);        // the far hedge
+})();
+
+// the bell-striker on the bare hill
+(() => { const b = board("light"); b.sky();
+  for (let j=46;j<88;j++) { const k = Math.round(Math.max(0, 40 - (j-46)*2.6)); b.wash(k,j,128-2*k,1,C.grass,C.grass2,30); b.P(k,j,C.ink); b.P(127-k,j,C.ink); }
+  b.R(40,46,48,1,C.ink); b.hatch(0,70,128,14,7,C.grass2);
+  b.R(50,22,2,26,C.wood); b.R(76,22,2,26,C.wood); b.R(46,20,36,3,C.wood); b.R(46,20,36,1,C.ink); b.R(50,22,1,26,C.ink); b.R(77,22,1,26,C.ink); // the frame
+  b.R(63,23,2,3,C.ink); for (let j=0;j<9;j++) { const w = 4 + Math.round(j*0.9); b.R(64-w/2|0,26+j,w,1,C.gold); } b.R(58,35,13,1,C.ink); b.P(64,37,C.ink); // the bell
+  b.R(84,30,5,6,C.wood); b.R(84,30,5,1,C.ink); b.R(85,26,3,4,C.wood); b.P(86,25,C.ink);                   // the oak figure: head and chest
+  b.R(84,36,2,10,C.wood); b.R(87,36,2,10,C.wood); b.R(83,46,7,1,C.ink);                                   // his legs
+  b.R(76,31,8,1,C.wood); b.R(73,29,3,4,C.dark);                                                           // his arm and the hammer
+  b.person(36,50,C.dark);                                                                                 // the brother, walking up
+  b.pennant(96,48,13);
+  b.R(104,52,1,3,C.ink); b.R(18,58,1,3,C.ink);
+})();
+
+// the count: five quatrefoils, two filled
+(() => { const b = board("count"); b.R(0,0,128,20,C.paper);
+  for (let n=0;n<5;n++) { const cx = 16 + n*24, cy = 10, fill = n < 2 ? C.red : C.paper;
+    for (const [dx,dy] of [[3,0],[-3,0],[0,3],[0,-3]]) b.blob(cx+dx,cy+dy,3,3,fill,fill);
+    b.R(cx-1,cy-1,3,3,fill); b.P(cx,cy,C.gold); }
+})();
+</script>
+</body>
+</html>

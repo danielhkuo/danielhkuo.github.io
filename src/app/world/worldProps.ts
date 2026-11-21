@@ -1,13 +1,12 @@
 // Server only: the world's build-time props, shared by /world and the title. Both pages hand Flight the same landmarks
-// and the same abbey terminal, so the warning about a changed assignment file stays in this one place.
+// (the abbey, the hall with every project, and the quest's stops) and the same abbey terminal.
 
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { Project } from "@/lib/projects";
 import { otherPages } from "@/lib/site-content";
-import { LANDMARK_CONFIG } from "@/world/landmarks.config";
-import sticky from "@/world/sites/assignments.json";
-import { entryOf, landmarksFor, stickyText, type LandmarkSet } from "@/world/sites/landmarks";
+import { landmarksFor, type LandmarkSet } from "@/world/sites/landmarks";
+import places from "@/world/story/places.json";
 import type { TerminalProps } from "./useTerminalDrawer";
 import { startBytes } from "./startBytes";
 
@@ -29,17 +28,7 @@ function shippedManifest(): { worldId: string; n: number; sites: { id: string; t
  */
 export function worldProps(projects: Project[]): { landmarks: LandmarkSet | null; terminal: TerminalProps; startBytes: number } {
   const manifest = shippedManifest();
-  let landmarks: LandmarkSet | null = null;
-  if (manifest) {
-    const placed = landmarksFor(manifest, projects.map(entryOf), LANDMARK_CONFIG, sticky);
-    landmarks = placed.set;
-    // A build from other project files, such as the e2e fixtures, has no place in the committed file.
-    if (placed.changed && !process.env.PROJECTS_DIR) {
-      console.warn(
-        `world: the projects at the landmarks have changed. Commit this as src/world/sites/assignments.json:\n${stickyText(manifest.worldId, placed.bySite)}`,
-      );
-    }
-  }
+  const landmarks: LandmarkSet | null = manifest ? landmarksFor(manifest, projects, places).set : null;
 
   // The terminal at the abbey gets the projects, and what only the build knows. The site's other pages are among
   // that: given them, its files are the minimal version's (a contact card that stands by itself, where the old home
