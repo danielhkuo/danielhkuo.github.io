@@ -1462,7 +1462,21 @@ export function settle(t: Terrain, opts: SettleOptions = {}): Settlement {
   // The quest's monuments come after everything, and as the wonders do only add to what is built: a world without
   // them is the same world, and with them nothing but their own pads changes.
   const monuments: Settlement["monuments"] = [];
-  for (const m of opts.monuments ?? []) monuments.push(standMonument(w, m.key, m.x, m.y));
+  for (const m of opts.monuments ?? []) {
+    monuments.push(standMonument(w, m.key, m.x, m.y));
+    // A track from its gate to the nearest lane, as a landmark has its spur: a thing on no way reads as dropped there.
+    const gx = m.x, gy = m.y + monument(m.key).h / 2 + 2;
+    let best = -1, bx = 0, by = 0;
+    for (const r of lanes) for (let k = 0; k + 1 < r.vertices.length; k += 2) {
+      const dx = torusDelta(gx, r.vertices[k], c.n), dy = torusDelta(gy, r.vertices[k + 1], c.n), d = dx * dx + dy * dy;
+      if (d < 500 * 500 && (best < 0 || d < best)) { best = d; bx = gx + dx; by = gy + dy; }
+    }
+    if (best >= 0) {
+      const len = Math.sqrt(best), bow = ((hash2(Math.floor(gx), Math.floor(gy), w.seed) & 7) - 3.5) * 0.05 * len;
+      const mx = (gx + bx) / 2 - ((by - gy) / (len || 1)) * bow, my = (gy + by) / 2 + ((bx - gx) / (len || 1)) * bow;
+      roads.push(curve([gx, gy, mx, my, bx, by], 1));
+    }
+  }
 
   return {
     sites: placed.sites, shortfall: placed.shortfall, displaced: placed.displaced, home: placed.home, hamlets: hamlets.filter((h) => h.houses > 0),

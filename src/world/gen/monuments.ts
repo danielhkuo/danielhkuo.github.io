@@ -16,8 +16,8 @@ export type MonumentKey = "pine" | "desk" | "bell" | "mill" | "basket";
 /** Where each monument's piece sits, from its raster's centre: cells east, cells south, and height over its base. */
 export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z: number }>> = {
   pine: { dx: 0, dy: 5, z: 3 },
-  desk: { dx: -2, dy: 4, z: 4 },
-  bell: { dx: 0, dy: 3, z: 16 },
+  desk: { dx: -1, dy: 2, z: 3 },
+  bell: { dx: 2, dy: 4, z: 15 },
   mill: { dx: -3, dy: 4, z: 11 },
   basket: { dx: 0, dy: -3, z: 13 },
 };
@@ -31,13 +31,6 @@ export function monument(key: MonumentKey): Structure {
   return courtPost();
 }
 
-/** Two stepped courses of dressed stone under the whole raster, the lower a cell wider all round. */
-function plinth(s: Structure, x0: number, y0: number, w: number, d: number): void {
-  for (let y = y0; y < y0 + d; y++) for (let x = x0; x < x0 + w; x++) {
-    const edge = x === x0 || y === y0 || x === x0 + w - 1 || y === y0 + d - 1;
-    put(s, x, y, edge ? 1.5 : 3, M.stoneDark, y === y0 + d - 1 ? T_WALL : y === y0 + d - 2 ? T_WALL : T_FLAT);
-  }
-}
 
 /**
  * Slow, careful work: a walled garden whose north wall carries an old pear trained flat against it, its branches in
@@ -47,7 +40,7 @@ function plinth(s: Structure, x0: number, y0: number, w: number, d: number): voi
 function knotGarden(): Structure {
   const W = 19, H = 15;
   const s = sculpt(W, H);
-  paint(s, 0, 0, W, H, M.path);
+  for (let y = 5; y < H; y++) s.paint[y * W + 9] = M.path;
   // The side and south walls, low, a gate in the south.
   for (let y = 4; y < H; y++) for (let x = 0; x < W; x++) {
     const edge = x === 0 || x === W - 1 || y === H - 1;
@@ -55,8 +48,7 @@ function knotGarden(): Structure {
   }
   // The north wall: high, coped, its south face the espalier's ground.
   const face = 3;
-  for (let y = 1; y <= face; y++) for (let x = 0; x < W; x++) put(s, x, y, 12, M.stoneDark, y === face ? T_WALL : y === 1 ? T_NORTH : T_RIDGE);
-  for (let x = 0; x < W; x++) put(s, x, 0, 10, M.stoneDark, T_NORTH);
+  for (let x = 0; x < W; x++) { put(s, x, face, 13, M.stoneDark, T_WALL); put(s, x, face - 1, 13.5, M.stoneDark, T_RIDGE); }
   // The tree on the wall's face: an old, leaning trunk and three tiers of branches of uneven reach, each turned up at
   // its ends, clumps of leaves along them, and pears.
   const cx = 9;
@@ -96,33 +88,33 @@ function knotGarden(): Structure {
  * lectern's front.
  */
 function stoneBook(): Structure {
-  const s = sculpt(17, 12);
-  plinth(s, 0, 0, 17, 12);
+  const W = 13, H = 10;
+  const s = sculpt(W, H);
+  // A single worn step under the lectern.
+  for (let y = 4; y <= 8; y++) for (let x = 3; x <= 9; x++) put(s, x, y, 1, M.stone, y === 8 ? T_WALL : T_FLAT);
   // The lectern: a dark stone post, and its desk whose top rises to the north, so the book tilts to the south.
-  for (let y = 5; y <= 7; y++) for (let x = 7; x <= 9; x++) put(s, x, y, 6, M.stoneDark, y === 7 ? T_WALL : T_FLAT);
-  for (let y = 2; y <= 8; y++) for (let x = 2; x <= 14; x++) {
-    const top = 8 + (8 - y) * 0.5;
-    put(s, x, y, top, M.stoneDark, y === 8 ? T_WALL : T_SOUTH);
+  for (let y = 5; y <= 7; y++) for (let x = 5; x <= 7; x++) put(s, x, y, 5, M.stoneDark, y === 7 ? T_WALL : T_FLAT);
+  for (let y = 1; y <= 6; y++) for (let x = 1; x <= 11; x++) {
+    const top = 7 + (6 - y) * 0.5;
+    put(s, x, y, top, M.stoneDark, y === 6 ? T_WALL : T_SOUTH);
   }
   // The book: its covers a cell proud of the pages, the pages humped up from a dark gutter, rows of text across them.
-  for (let y = 2; y <= 7; y++) for (let x = 2; x <= 14; x++) {
-    const lectern = 8 + (8 - y) * 0.5;
-    const edge = x === 2 || x === 14 || y === 2 || y === 7;
+  for (let y = 1; y <= 5; y++) for (let x = 1; x <= 11; x++) {
+    const lectern = 7 + (6 - y) * 0.5;
+    const edge = x === 1 || x === 11 || y === 1 || y === 5;
     if (edge) {
-      put(s, x, y, lectern + 0.8, M.timber, y === 7 ? T_WALL : T_EAST);
+      put(s, x, y, lectern + 0.8, M.timber, y === 5 ? T_WALL : T_EAST);
       continue;
     }
-    const fromSpine = Math.abs(x - 8);
-    const hump = fromSpine === 0 ? 0.4 : 1.2 + 1.4 * psin((fromSpine / 6) * PI);
-    const text = (y & 1) === 0 && fromSpine >= 2 && fromSpine <= 5;
-    const tone = x === 8 ? 80 : text ? 112 : x < 8 ? T_WEST : 150;
-    put(s, x, y, lectern + hump, x === 8 ? M.stoneDark : M.plaster, tone);
+    const fromSpine = Math.abs(x - 6);
+    const hump = fromSpine === 0 ? 0.4 : 1.2 + 1.2 * psin((fromSpine / 5) * PI);
+    const text = (y & 1) === 0 && fromSpine >= 2 && fromSpine <= 4;
+    const tone = x === 6 ? 80 : text ? 112 : x < 6 ? T_WEST : 150;
+    put(s, x, y, lectern + hump, x === 6 ? M.stoneDark : M.plaster, tone);
   }
-  // The ribbon from the spine down the lectern's face.
-  for (let z = 4; z <= 8; z++) mark(s, 8, 9, z, M.gilt, 150);
-  // The niche for the piece, beside the ribbon.
-  mark(s, 6, 9, 3, M.opening);
-  mark(s, 6, 9, 4, M.opening);
+  // The ribbon from the spine down the desk's face, and the niche the piece sits in on the post.
+  for (let z = 4; z <= 7; z++) mark(s, 6, 6, z, M.gilt, 150);
+  mark(s, 5, 7, 3, M.opening);
   return s;
 }
 
@@ -133,7 +125,6 @@ function stoneBook(): Structure {
  */
 function clockJack(): Structure {
   const s = sculpt(15, 11);
-  plinth(s, 0, 0, 15, 11);
   // The chapel to the west, its gable to the camera.
   house(s, 1, 3, 5, 7, 7, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofLead, openings: 0, chimney: false });
   for (let z = 2; z <= 5; z++) mark(s, 3, 9, z, M.opening);
@@ -176,7 +167,6 @@ function clockJack(): Structure {
  */
 function engineHouse(): Structure {
   const s = sculpt(15, 12);
-  plinth(s, 0, 0, 15, 12);
   // The race: a channel of water along the front, east of the door, the wheel turning in it.
   for (let x = 9; x <= 14; x++) { put(s, x, 11, 0.5, M.stoneDark, T_WALL); put(s, x, 8, 1.2, M.stoneDark, T_FLAT); }
   for (let y = 9; y <= 10; y++) for (let x = 9; x <= 14; x++) put(s, x, y, 0.15, M.river, T_FLAT);
@@ -202,9 +192,9 @@ function engineHouse(): Structure {
   mark(s, wx, wy, hub, M.stoneDark, 80);
   // The mast: a lattice of timber on the roof's ridge, cross-arms at its head, and a gilt finial.
   const mx = 5, my = 6;
-  for (let z = 15; z <= 25; z++) mark(s, mx, my, z, M.stone, 140);
-  for (let x = mx - 1; x <= mx + 1; x++) mark(s, x, my, 23, M.stone, 140);
-  mark(s, mx, my, 28, M.gilt, 160);
+  for (let z = 15; z <= 20; z++) mark(s, mx, my, z, M.stone, 150);
+  for (let x = mx - 1; x <= mx + 1; x++) mark(s, x, my, 19, M.stone, 150);
+  mark(s, mx, my, 21, M.gilt, 160);
   return s;
 }
 

@@ -382,8 +382,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     "..............cCcCcCcCcC................",
   ], 19, 17, hallInk);
 
-  // The pieces: a small cut glass in each stop's own colour, inked round, lit on its upper left, set in the monument.
-  const pieceRows = ["..k..", ".kLk.", "kLcCk", ".kCk.", "..k.."];
+  // The pieces: a glint of glass in each stop's own colour, lit on its upper left, set into the monument's face.
+  const pieceRows = [".c.", "cLC", ".C."];
   const pieces = new Map<StopKey, LiveSprite>();
   let piecesAir: Air | null = null;
   const tint = (c: number, f: number): number => {
@@ -401,12 +401,12 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
     const o = { time: air.time, season: air.season, overcast: air.overcast * 0.6, mist: air.mist * 0.5 };
     const base = PIECE_RGB[key];
     const ink = { k: gradeRgb(0xff1d2228, o, 0.35), c: gradeRgb(base, o, 0.75), L: gradeRgb(tint(base, 1.45), o, 1), C: gradeRgb(tint(base, 0.6), o, 0.35) } as Record<string, number>;
-    sp = { w: 5, h: 5, rgba: new Uint32Array(25), alpha: new Uint8Array(25), ax: 2, ay: 4 };
-    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+    sp = { w: 3, h: 3, rgba: new Uint32Array(9), alpha: new Uint8Array(9), ax: 1, ay: 2 };
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
       const ch = pieceRows[y][x];
       if (ch === ".") continue;
-      sp.rgba[y * 5 + x] = ink[ch];
-      sp.alpha[y * 5 + x] = 255;
+      sp.rgba[y * 3 + x] = ink[ch];
+      sp.alpha[y * 3 + x] = 255;
     }
     pieces.set(key, sp);
     return sp;
