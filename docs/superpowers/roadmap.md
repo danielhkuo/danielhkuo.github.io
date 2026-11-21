@@ -409,6 +409,9 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 
 ## Backlog: cosmetic and look
 
+- The world's landmark caption fades in and out (`.caption { transition: opacity 400ms }` in `flight.module.css`),
+  against the owner's "nothing fades": arrive by a step or a slide instead. Found by the title's critic, 2026-11-21.
+
 From the clouds and water (2026-11-18):
 - Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
   50 px from small puffs; a bank can drift over a landmark.
