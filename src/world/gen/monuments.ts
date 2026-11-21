@@ -40,13 +40,7 @@ export function monument(key: MonumentKey): Structure {
 function knotGarden(): Structure {
   const W = 19, H = 15;
   const s = sculpt(W, H);
-  for (let y = 5; y < H; y++) s.paint[y * W + 9] = M.path;
-  // The side and south walls, low, a gate in the south.
-  for (let y = 4; y < H; y++) for (let x = 0; x < W; x++) {
-    const edge = x === 0 || x === W - 1 || y === H - 1;
-    if (edge && !(y === H - 1 && x >= 8 && x <= 10)) put(s, x, y, 4.5, M.stoneDark, y === H - 1 ? T_WALL : T_FLAT);
-    if (y === H - 1 && (x === 7 || x === 11)) put(s, x, y, 6, M.stone, T_WALL);
-  }
+  for (let y = 5; y < H - 2; y++) s.paint[y * W + 9] = M.path;
   // The north wall: high, coped, its south face the espalier's ground.
   const face = 3;
   for (let x = 0; x < W; x++) { put(s, x, face, 13, M.stoneDark, T_WALL); put(s, x, face - 1, 13.5, M.stoneDark, T_RIDGE); }
@@ -93,10 +87,10 @@ function knotGarden(): Structure {
 function stoneBook(): Structure {
   const s = sculpt(15, 11);
   // The hall behind, its ridge east to west, tall lancets along its south wall.
-  house(s, 1, 0, 13, 6, 8, 5, { gable: 0, wallMat: M.stone, roofMat: M.roofLead, openings: 0, chimney: false });
+  house(s, 1, 0, 13, 6, 8, 5, { gable: 0, wallMat: M.stone, roofMat: M.roofSlate, openings: 0, chimney: false });
   for (const x of [2, 4, 10, 12]) for (let z = 3; z <= 6; z++) mark(s, x, 5, z, z === 6 ? M.opening : M.lantern, 140);
   // The porch: a gabled bay to the camera, a pointed arch in it, and the rose window above.
-  house(s, 5, 4, 5, 6, 10, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofLead, openings: 0, chimney: false });
+  house(s, 5, 4, 5, 6, 10, 4, { gable: 1, wallMat: M.stone, roofMat: M.roofSlate, openings: 0, chimney: false });
   const face = 9;
   for (let z = 1; z <= 5; z++) for (let x = 6; x <= 8; x++) if (!(z === 5 && x !== 7)) mark(s, x, face, z, M.opening, 70);
   // The lectern and its open book, within the arch.
@@ -199,10 +193,6 @@ function courtPost(): Structure {
   const s = sculpt(18, 14);
   // The court: paving, and the low wall round it with a gap in the south side.
   paint(s, 0, 0, 18, 14, M.earthRed);
-  for (let y = 0; y < 14; y++) for (let x = 0; x < 18; x++) {
-    const wall = x === 0 || x === 17 || y === 0 || y === 13;
-    if (wall && !(y === 13 && x >= 7 && x <= 10)) put(s, x, y, 2.6, M.stoneDark, y === 13 ? T_WALL : T_FLAT);
-  }
   // The lines: the half-court circle and the key, in white paint on the paving.
   for (const [y0, y1, yl] of [[3, 5, 5], [8, 10, 8]] as const) {
     for (let y = y0; y <= y1; y++) { s.paint[y * 18 + 6] = M.plaster; s.paint[y * 18 + 11] = M.plaster; }
@@ -218,8 +208,8 @@ function courtPost(): Structure {
   // Benches along the east and west walls.
   for (let y = 4; y <= 9; y++) { put(s, 1, y, 1.8, M.stone, T_FLAT); put(s, 16, y, 1.8, M.stone, T_FLAT); }
   // The stand along the north side: a long low roof on posts.
-  house(s, 1, 0, 16, 3, 3, 2, { gable: 0, wallMat: M.timber, roofMat: M.roofTile, openings: 0, chimney: false });
-  for (let x = 2; x <= 15; x += 3) for (let z = 1; z <= 2; z++) mark(s, x, 2, z, M.opening, 70);
+  house(s, 0, 0, 18, 3, 4, 3, { gable: 0, wallMat: M.stone, roofMat: M.roofTile, openings: 0, chimney: false });
+  for (let x = 1; x <= 16; x += 3) for (let z = 1; z <= 3; z++) mark(s, x, 2, z, M.opening, 70);
   // The post at the north end, its shaft standing clear of the wall, the backboard on top and the ring hung toward
   // the court.
   for (let y = 1; y <= 2; y++) for (let x = 7; x <= 10; x++) put(s, x, y, 12, M.stoneDark, x < 9 ? T_WEST : T_EAST);

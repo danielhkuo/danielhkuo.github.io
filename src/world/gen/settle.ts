@@ -213,7 +213,7 @@ function standMonument(w: Work, key: MonumentKey, x: number, y: number): { id: s
   const st = monument(key);
   const rx = st.w / 2 + 2, ry = st.h / 2 + 2;
   const level = padLevel(w, x, y, rx, ry);
-  addConform(w, flat(x, y, rx + 1, ry + 1, false, level, 8));
+  addConform(w, flat(x, y, rx + 1, ry + 1, true, level, 10));
   block(w, x, y, rx + 4, ry + 4);
   w.structures.push(S.standAt(st, x, y, level));
   return { id: `curio-${key}`, key, x, y };
