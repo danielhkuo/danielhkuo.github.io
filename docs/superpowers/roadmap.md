@@ -146,11 +146,14 @@ Last updated 2026-11-21.
   as one tab shows it. The quest offer wraps its sentence (it was cut off, on a desktop too) and on a phone stands
   centred and holds the flight until it is answered, clear of the thumbs. The options panel takes the visible height,
   not Safari's taller 100vh, and its choices are 44 px. The Codex keeps inside the safe areas (the Dynamic Island covered
-  its border) and stands beside the corner's column sideways, with 44 px buttons and links. The quest's count and arrow
-  keep inside the safe areas, and the arrow out from under the corner's controls. `/minimal`'s Where Is waits for the
-  keyboard to go before it scrolls to the match (Safari was left panned, the title bar off the top). The phone title is
-  16 px throughout. Checks: `e2e/site/phone.spec.ts` (inside the safe areas, 44 px targets, 16 px text). Issue list and
-  before-and-after shots: the coordinator's side-session notes, `ios-pass/`.
+  its border) and stands beside the corner's column sideways, with 44 px buttons and links; on that short sheet the
+  hall's Look for the glass stands beside Take off (it was squeezed to a sliver, and Take off was cut off with Safari's
+  tab bar). The quest's count and arrow keep inside the safe areas, and the arrow out from under the corner's controls.
+  `/minimal`'s Where Is waits for the keyboard to go before it scrolls to the match (Safari was left panned, the title
+  bar off the top). The phone title is 16 px throughout. Left: with all five found, the hall's ending lines sit behind
+  its one-row register on a phone held sideways (they show in full at the fifth stop). Checks: `e2e/site/phone.spec.ts`
+  (inside the safe areas, 44 px targets, 16 px text, the hall at 338 and 292 px tall), `e2e/minimal/tap.spec.ts`.
+  Issue list and before-and-after shots: the coordinator's side-session notes, `ios-pass/`.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
