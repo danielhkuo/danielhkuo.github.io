@@ -19,3 +19,11 @@ export const PROFILE = {
   location: "Houston, TX",
   building: "AI products · self-hosted systems · developer tools",
 } as const;
+
+/**
+ * What the title's terminal runs after neofetch, and the lines it prints under it.
+ * A ⏎ in a line is drawn as a key cap, not left as the character alone.
+ */
+export const WORLD_COMMAND = "./world";
+
+export const WORLD_LINES = ["A world to fly over.", "Press ⏎ or choose Enter world."] as const;
