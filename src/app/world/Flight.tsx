@@ -50,9 +50,14 @@ export interface FlightProps {
   onLeave?: () => void;
   /** The first full view is drawn. */
   onReady?: () => void;
+  /**
+   * The abbey's "Open the terminal" on a desktop. The title's window is that terminal, so the button calls this
+   * instead of opening the world's own drawer.
+   */
+  onTerminal?: () => void;
 }
 
-export default function Flight({ landmarks, terminal, startBytes, held, holdAt, onLeave, onReady }: FlightProps) {
+export default function Flight({ landmarks, terminal, startBytes, held, holdAt, onLeave, onReady, onTerminal }: FlightProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const windowFit = useFrameFit();
@@ -88,8 +93,17 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
   const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref, title);
   const options = useOptions();
   const revealed = useReveal(REVEAL_MS);
-  // What the abbey's button opens, and says it opens.
-  const about = shell.phone ? PHONE_ABOUT : { open: drawer.show, label: "Open the terminal" };
+  // What the abbey's button opens, and says it opens. A phone still opens the minimal version. On the title the
+  // window itself is the terminal, so the button brings that back and the world's drawer is not mounted.
+  const about = shell.phone
+    ? PHONE_ABOUT
+    : {
+        open: (trigger: HTMLElement) => {
+          if (onTerminal) onTerminal();
+          else drawer.show(trigger);
+        },
+        label: "Open the terminal",
+      };
 
   if (flight.failed) return <LoadFailed />;
 
@@ -117,7 +131,9 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
       {at ? (
         <Codex landmark={at} onTakeOff={flight.takeOff} onOpenTerminal={about.open} openLabel={about.label} />
       ) : null}
-      {at?.holds.kind === "about" && !shell.phone ? <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} /> : null}
+      {at?.holds.kind === "about" && !shell.phone && !onTerminal ? (
+        <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} />
+      ) : null}
       <OptionsPanel
         open={panel.open}
         px={px}

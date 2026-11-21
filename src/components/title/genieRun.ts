@@ -55,6 +55,7 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
   // lighter as the copies take over.
   if (shadow) layer.style.filter = shadow;
   const wraps: HTMLDivElement[] = [];
+  const copies: HTMLElement[] = [];
   for (let k = 0; k < BANDS; k++) {
     const from = sample[k].from;
     const height = sample[k].to - from;
@@ -82,6 +83,7 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
     wrap.appendChild(copy);
     layer.appendChild(wrap);
     wraps.push(wrap);
+    copies.push(copy);
   }
 
   const paint = (t: number) => {
@@ -98,6 +100,17 @@ export function runGenie(el: HTMLElement, opts: { reverse: boolean; slow: boolea
   // ancestors (the header's padding and corners, the title's sizes for a short screen). Fixed, the layer still covers
   // the viewport, since nothing between here and the page transforms.
   (el.parentElement ?? document.body).appendChild(layer);
+  // A copy does not keep the window's scroll. Set it once the copies are in the page, or the genie shows the top of
+  // the neofetch while the live window had already scrolled on.
+  const source = el.querySelector(".nf-body");
+  const top = source instanceof HTMLElement ? source.scrollTop : 0;
+  for (const copy of copies) {
+    const body = copy.querySelector(".nf-body");
+    if (!(body instanceof HTMLElement)) continue;
+    // Laid out now, so the scroll position sticks.
+    void body.offsetHeight;
+    body.scrollTop = top;
+  }
 
   const ms = GENIE_MS * (opts.slow ? GENIE_SLOW : 1);
   let start = 0;

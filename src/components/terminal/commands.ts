@@ -294,5 +294,15 @@ export function buildCommands(api: TerminalApi, session: Session): CommandMap {
     },
   };
 
+  // The title's window has a world to go into, and has just printed how. Hidden, so help does not list it again.
+  const enterWorld = api.enterWorld;
+  if (enterWorld) {
+    cmds["./world"] = {
+      desc: "enter the world",
+      hidden: true,
+      run: () => enterWorld(),
+    };
+  }
+
   return cmds;
 }

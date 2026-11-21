@@ -513,3 +513,48 @@ test("neofetch is left to such a host to draw", () => {
 test("ls still arrives as rows: a listing is columns of cells in any host", () => {
   assert.deepEqual(rich("ls").kinds, ["text"]);
 });
+
+// ---- ./world ------------------------------------------------------------------
+
+test("./world goes into the world where the page has one to go into (the title's window), and prints nothing", () => {
+  let entered = 0;
+  const api: TerminalApi = {
+    openUrl: () => undefined,
+    getProjects: () => REPOS,
+    getTheme: () => "dark",
+    setTheme: () => "dark",
+    close: () => undefined,
+    site: SITE,
+    enterWorld: () => {
+      entered += 1;
+    },
+  };
+  const session: Session = { root: siteTree(REPOS, SITE), cwd: () => HOME, oldCwd: () => HOME, chdir: () => undefined };
+  const commands = buildCommands(api, session);
+  const out: string[] = [];
+  const errs: string[] = [];
+  const ctx: CommandContext = {
+    out: (t) => out.push(t),
+    ok: (t) => out.push(t),
+    err: (t) => errs.push(t),
+    rows: () => undefined,
+    text: () => undefined,
+    clear: () => undefined,
+    close: () => undefined,
+    program: () => undefined,
+    cols: 80,
+  };
+  execute("./world", commands, ctx);
+  assert.equal(entered, 1);
+  assert.deepEqual(out, []);
+  assert.deepEqual(errs, []);
+  assert.ok(commands["./world"]?.hidden, "help does not list it: the window has just printed it");
+});
+
+test("./world is not found where the page has no world to go into", () => {
+  const { run, commands } = shell();
+  assert.equal(commands["./world"], undefined);
+  const { errs } = run("./world");
+  assert.equal(errs.length, 1);
+  assert.match(errs[0], /not found|no such file/);
+});
