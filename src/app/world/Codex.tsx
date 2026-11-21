@@ -391,7 +391,7 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
           <Links links={[{ href: LINKS.email, label: "Write to Daniel", external: false }]} />
         </>
       ) : quest.mode !== "on" ? (
-        <button type="button" className={styles.button} onClick={onFollow}>
+        <button type="button" className={`${styles.button} ${styles.follow}`} onClick={onFollow}>
           Look for the glass
         </button>
       ) : null}
@@ -514,6 +514,13 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
           <button type="button" className={styles.button} onClick={onTakeOff} aria-keyshortcuts="Space">
             Take off <kbd>Space</kbd>
           </button>
+          {/* On a short window the hall's register has no room for its button, and it stands here, beside Take off
+              (codex.module.css shows one of the two). */}
+          {hallList && !complete(quest) && quest.mode !== "on" ? (
+            <button type="button" className={`${styles.button} ${styles.followAction}`} onClick={follow}>
+              Look for the glass
+            </button>
+          ) : null}
         </p>
       </div>
     </dialog>

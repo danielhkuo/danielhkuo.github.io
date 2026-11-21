@@ -899,7 +899,8 @@
 /* Every button and link in the Codex is a finger's height on a touch screen: 44 px, Apple's least. */
 @media (hover: none) and (pointer: coarse) {
   .actions .button,
-  .back .button {
+  .back .button,
+  .register > .button {
     min-height: 44px;
   }
 
@@ -908,5 +909,37 @@
     align-items: center;
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* The hall's Look for the glass: under the five in the register, except on a short window, where the register is
+   one row beside the quatrefoils and squeezed the button to a sliver. There it stands beside Take off instead. */
+.followAction {
+  display: none;
+}
+
+@media (max-height: 520px) {
+  .hallLeaf .register > .follow {
+    display: none;
+  }
+
+  .hallLeaf .followAction {
+    display: inline-flex;
+  }
+
+  /* One line, so the register keeps the quatrefoils whole when the sheet is short: the heading gives way to them, as
+     they show the count too, and keeps its words for a reader. */
+  .hallLeaf .register h3 {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Sideways in Safari with its tab bar showing (292 px), the hall keeps two rows of its list, so Take off stays in the
+   sheet. */
+@media (max-height: 320px) {
+  .projectScroll {
+    min-height: calc(44px * 2);
   }
 }

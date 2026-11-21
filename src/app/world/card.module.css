@@ -131,9 +131,13 @@
 .card.quest {
   position: absolute;
   z-index: 16;
-  left: 50%;
+  /* Centred by its margins across the whole width, so its sentence has the frame's width to stand in (centred from
+     left: 50% it had only half of it, and wrapped on a 1280 px window). */
+  right: 0;
   bottom: max(env(safe-area-inset-bottom, 0px), 16px);
-  transform: translateX(-50%);
+  left: 0;
+  width: fit-content;
+  margin-inline: auto;
   max-height: none;
 }
 

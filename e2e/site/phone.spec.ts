@@ -137,6 +137,44 @@ test.describe("a phone held sideways", { tag: "@phone" }, () => {
     await expectFingers(codex.getByRole("button", { name: /^(Take off|Read the minimal version)/ }), "the Codex's buttons");
     await expectFingers(codex.getByRole("link"), "the Codex's links");
   });
+
+  for (const height of [SIDEWAYS.height, 292]) {
+    test(`the hall keeps Take off and Look for the glass whole at ${height} px tall`, async ({ page, browserName }) => {
+      // 338 px is Safari with one tab, 292 px with its tab bar showing.
+      const insets = await sideways(page, browserName);
+      await page.setViewportSize({ width: SIDEWAYS.width, height });
+      await skipLesson(page);
+      await questAnswered(page);
+      await openWorld(page);
+      const hall = (await probe(page)).landmarks?.find((l) => l.holds === "hall");
+      if (!hall) throw new Error("no hall in the world");
+      await page.goto(`${WORLD}&at=${hall.id}`);
+      await page.waitForFunction(() => (window as unknown as { __flight?: Probe }).__flight?.readyAt != null, null, { timeout: 30_000 });
+      await takeWing(page);
+      await expect
+        .poll(
+          async () => {
+            await page.keyboard.press(" ");
+            return (await flier(page)).phase;
+          },
+          { timeout: 20_000, message: "landing at the hall" },
+        )
+        .not.toBe("flying");
+      const codex = page.getByRole("dialog", { name: "Projects", exact: true });
+      await expect(codex).toBeVisible({ timeout: 20_000 });
+      await expectInside(page, codex, insets, "the hall");
+      const box = await codex.boundingBox();
+      if (!box) throw new Error("no Codex box");
+      const buttons = codex.getByRole("button", { name: /^(Take off|Look for the glass)/ });
+      await expect(buttons).toHaveCount(2);
+      await expectFingers(buttons, "the hall's buttons");
+      for (const b of await buttons.all()) {
+        const r = await b.boundingBox();
+        if (!r) throw new Error("no button box");
+        expect(r.y + r.height, "a button's foot inside the sheet").toBeLessThanOrEqual(box.y + box.height + 0.5);
+      }
+    });
+  }
 });
 
 test("the phone's title sets every word at 16 px or more", { tag: "@phone" }, async ({ page }) => {
