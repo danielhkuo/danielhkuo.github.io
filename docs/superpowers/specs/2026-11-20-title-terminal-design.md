@@ -13,13 +13,14 @@ Approved by the owner on 2026-11-20 ("Yes, build it"), from the round-7 mock, va
    Enter world." The words live in `src/components/terminal/content.ts` (`WORLD_COMMAND`, `WORLD_LINES`), so they
    change in one place.
 3. **The world arrives.** Behind the window, the live world comes in pixel by pixel from the dragon outward, at the
-   world's own pixel grid, with an 8×8 ordered-dither edge, over 2.8 s. Each pixel switches from paper to world in one
-   step: nothing fades. It starts when both the intro is over and the world's first full view is drawn.
-4. **The ways in.** Under the window: **Enter world** (with a ⏎ key cap), and below it a row of three small links:
-   **Minimal version**, **agents.md**, **Settings**.
+   world's own pixel grid, the dragon first and then a narrow 8×8 ordered-dither front, over 2 s. Each pixel switches
+   from paper to world in one step: nothing fades. It starts when both the intro is over and the world's first full
+   view is drawn; ⏎ during it cuts it short and goes in.
+4. **The ways in,** once the world has arrived. Under the window: **Enter world** (with a ⏎ key cap), and below it a
+   row of three small links: **Minimal version**, **agents.md**, **Settings**.
 
 The world behind is live (clouds, water, birds, light) but held: the dragon waits in place with its body laid out
-behind it, low in the frame (80% of the way down), under the window. No guide, caption, lesson, corner or sound toggle
+behind it, beside the ways in and facing them, clear of the window. No guide, caption, lesson, corner or sound toggle
 is drawn while it is held, and no key reaches it.
 
 ## The ways in
@@ -42,18 +43,37 @@ A phone gets its own title (`src/components/title/phone/`), with the minimal ver
 ## How it is built
 
 - **The hold** (`src/world/runtime/hold.ts`, wired through `session.ts`, `controls.ts`, `useFlight.ts`, `Flight.tsx`):
-  `FlightSetup.held()` read each frame; held, the flight is asked for nothing (`HELD_INPUT`, pace 0), a speed under
-  `HOLD_STOP` is stopped outright, and `holdCamera` shifts the camera by an eased share (`easeHold`, 1.25 s) so the head
-  sits `HOLD_LOW` of the frame's height below centre. Held from the start, the dragon starts at speed 0 as a
-  `flownDragon`. `FlightSetup.leave()` and `FlightEvents.ready()` let the title take Esc and start the arrival.
+  `FlightSetup.held()` read each frame; held, the flight is asked for nothing (`HELD_INPUT`, pace 0) and reins in
+  (`HOLD_BRAKE`) until a speed under `HOLD_STOP` is stopped outright. `holdCamera` shifts the camera by an eased share
+  so the head is drawn at `holdAt()`, which the title measures from its layout: left of the ways in, level with Enter
+  world, facing them, clear of the window. The share eases in as fast as the window comes back (`HOLD_IN_RATE`) and out
+  over 1.25 s as the dragon gathers speed. Held from the start, the dragon starts at speed 0 as a `flownDragon`.
+  `FlightSetup.leave()` and `FlightEvents.ready()` let the title take Esc and start the arrival. The dragon is let go
+  once the window has gone; a dragon just let go is offered no landing for 1.5 s. The flight leaves a key another part
+  of the page has taken alone.
 - **The genie** (`src/components/title/genie.ts`, pure, frame-tested; `genieRun.ts`, DOM): the window cut into 40
-  horizontal bands, each a clipped clone of the window mapped onto its piece of the funnel with a projective
-  `matrix3d`. The bottom edge is drawn down into the neck first (to t = 0.42), then the rest flows through after it;
-  the sides are S-curves from the window's top corners to the neck.
-- **The arrival** (`src/components/title/arrival.ts`, pure, tested): a threshold per world pixel (distance from the
-  dragon, plus the Bayer dither), and a paper mask drawn over the world at its own pixel size, alpha 0 or 255 only.
+  horizontal bands, each a clipped copy of the window (built beside it, so its styles reach the copies) mapped onto its
+  piece of the funnel with a projective `matrix3d`; each band laps the next by a row, and the funnel casts the window's
+  own shadow as drop-shadow filters. The sides keep square shoulders, bend in an S and run down a long neck off the
+  bottom of the screen. The bottom is drawn into the neck first (it lands at t = 0.40) and the top starts down a little
+  before that (0.32), so the two parts overlap.
+- **The arrival** (`src/components/title/arrival.ts`, pure, tested; `ArrivalPaper.tsx`): the dragon's head and fore-body
+  first, then a threshold per world pixel (distance from the dragon with a narrow 8×8 ordered dither) and a paper mask
+  over the world at its own pixel size, alpha 0 or 255 only, over 2 s. The ways in come once all of it has arrived; ⏎
+  during it cuts it short and goes in.
+- **The grow** (`grow.ts`): the window's frame runs to the viewport while its text scales to the minimal version's size
+  (`nanoText.ts`, held to `minimal.css` by a test: 15 px on a desktop with a mouse), so the cut to `/minimal` changes no
+  size.
+- **The window's projects** (`src/components/headerProjects.ts`): the first six by order. A project GitHub has no stats
+  for (a build without a token, or no repository) shows its name and one-line summary, never "n/a" and zero counts.
 - **The title** (`src/components/title/Title.tsx`): one mode, `title` → `leaving` → `flying` → `returning` → `title`,
   shown as `data-title` for the tests. The terminal's launcher stays for the shell, without its corner button.
+
+## Decisions
+
+- **The window's macOS chrome stays as it is** (the owner, 2026-11-20: "Keep them"). The traffic lights, the folder
+  icon and the ⑂ glyph are the terminal's own, drawn smooth as on a Mac, not as pixel art. The title's own symbols (the
+  ⏎ key cap) are pixel art.
 
 ## Tests
 
