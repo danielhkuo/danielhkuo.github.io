@@ -95,8 +95,9 @@ export interface Dragon {
 
 /**
  * A curled-up resting path, tail first, head last: the head at (hx, hy) facing west, a short neck east of it, the body
- * round a ring of `r` cells south of the neck, and the tail spiralling in inside the ring, so the curl is partly
- * closed with the tail tucked within it and never meets the head. `alt` gives the height to lie at.
+ * round three quarters of a ring of `r` cells south of the neck (west, then south, then east), open on its east side
+ * away from the head, and the tail spiralling in to fill the ring's middle, so no ground shows inside and the tail
+ * never meets the head. `alt` gives the height to lie at.
  */
 export function curledPath(hx: number, hy: number, r: number, alt: (x: number, y: number) => number): { x: number; y: number; alt: number }[] {
   const back: { x: number; y: number }[] = [{ x: hx, y: hy }];
@@ -105,12 +106,12 @@ export function curledPath(hx: number, hy: number, r: number, alt: (x: number, y
   // The ring's north point is the neck's end; going back along the body turns the ring the way the head came.
   const nx = hx + NECK_CELLS, cx = nx, cy = hy + r;
   let t = -Math.PI / 2;
-  const ringTurn = (300 / 180) * Math.PI, tailTurn = (230 / 180) * Math.PI;
-  for (let a = 0; a <= ringTurn; a += STEP / r) back.push({ x: cx + r * Math.cos(t + a), y: cy + r * Math.sin(t + a) });
-  t += ringTurn;
+  const ringTurn = (225 / 180) * Math.PI, tailTurn = (330 / 180) * Math.PI;
+  for (let a = 0; a <= ringTurn; a += STEP / r) back.push({ x: cx + r * Math.cos(t - a), y: cy + r * Math.sin(t - a) });
+  t -= ringTurn;
   for (let a = 0; a <= tailTurn; a += STEP / r) {
-    const rr = r - (r - 2) * (a / tailTurn);
-    back.push({ x: cx + rr * Math.cos(t + a), y: cy + rr * Math.sin(t + a) });
+    const rr = r - (r - 0.8) * (a / tailTurn);
+    back.push({ x: cx + rr * Math.cos(t - a), y: cy + rr * Math.sin(t - a) });
   }
   return back.reverse().map((p) => ({ x: p.x, y: p.y, alt: alt(p.x, p.y) }));
 }

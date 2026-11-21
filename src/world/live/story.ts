@@ -420,7 +420,7 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
    * The window's light on the ground before the hall: the window cast on the open paving from the foot of the wall,
    * widening as it goes out (a squat trapezoid, the window's width at the wall and twice it at the far end). Inside, the
    * window's own five sectors in their places (its top falls farthest out, east kept east), with gaps for its tracery
-   * and a pale heart for its boss. By day each sector is half its pane's colour over the paving, the stone between a
+   * and a pale heart for its boss. By day each sector is three parts its pane's colour to one of the paving, the stone between a
    * step darker; by night deeper colour added to the dark.
    */
   const POOL_TOP = 9, POOL_BOTTOM = 17, POOL_H = 10;
@@ -462,7 +462,8 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
         if (off > 26 || r > 0.92 || r < 0.4) {
           if (night) continue;
           sp.rgba[i] = 0xff283038;
-          sp.alpha[i] = 45;
+          // The rim round the whole cast a little darker still, so it stands apart from the pale paving.
+          sp.alpha[i] = r > 0.92 ? 80 : 45;
           continue;
         }
         const c = PIECE_RGB[STOPS[k].key];
@@ -470,9 +471,9 @@ export function storyLayer(ctx: StoryContext): StoryLayer {
           sp.rgba[i] = tint(c, 0.6);
           sp.alpha[i] = 255;
         } else {
-          // Half the pane's own colour over the paving; paler along the wall, where it is strongest.
-          sp.rgba[i] = y === 0 ? mixed(c, cream, 0.6) : c;
-          sp.alpha[i] = 128;
+          // Three parts the pane's own colour to one of the paving; paler along the wall, where it is strongest.
+          sp.rgba[i] = y === 0 ? mixed(c, cream, 0.7) : c;
+          sp.alpha[i] = 190;
         }
       }
     }

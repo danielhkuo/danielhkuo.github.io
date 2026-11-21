@@ -27,7 +27,7 @@ export const PIECE_AT: Readonly<Record<MonumentKey, { dx: number; dy: number; z:
  * height over its base), and the five lights round it in the order the quest's count fills them, top first and then
  * clockwise as seen: each a petal of two cells (cells east, units up). The baked window is dark; the live layer glazes a light as its pane is found.
  */
-export const HALL_ROSE = { dx: 0, dy: -1, z: 10 } as const;
+export const HALL_ROSE = { dx: 0, dy: -2, z: 10 } as const;
 export const ROSE_R = 4;
 /**
  * Each light's cells: five lobes about a gilt boss, the first at the top and the rest clockwise as seen, as the HUD's
@@ -41,17 +41,17 @@ export const ROSE_LIGHTS: readonly { dx: number; dz: number }[][] = [
   [{ dx: -3, dz: 0 }, { dx: -2, dz: 0 }, { dx: -3, dz: 1 }, { dx: -2, dz: 1 }],
 ];
 /** The paved yard before the hall, where the window's light falls once it is whole: its centre and half-sizes, cells. */
-export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 5 } as const;
+export const HALL_YARD = { dx: 0, dy: 5, rx: 6, ry: 6 } as const;
 
 /**
- * The projects hall (15 × 22, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
+ * The projects hall (15 × 24, 14 tall): a long hall of stone under a tile roof, its gable to the camera with a wide
  * door and, over it, a rose window of five lights; before it an open paved yard, where the window's light
  * falls.
  */
 export function projectsHall(): Structure {
-  const W = 15, H = 22;
+  const W = 15, H = 24;
   const s = sculpt(W, H);
-  const cx = 7, cy = 11;
+  const cx = 7, cy = 12;
   // The yard: open paving, where the window's light falls; no wall, so it is ground, not part of the hall.
   paint(s, 0, 11, W, H - 11, M.path);
   // The hall, buttressed down its sides.

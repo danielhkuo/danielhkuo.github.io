@@ -586,7 +586,7 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         // east edge, curled up south-east of it (a hard cut from the landing's coil, as the world's changes are).
         if (l && bakedHall && l.id === bakedHall.id && complete(getQuest()) && groundHeight && flight) {
           const g = groundHeight;
-          const hx = bakedHall.x + 8, hy = bakedHall.y + HALL_ROSE.dy + 7;
+          const hx = bakedHall.x + 6, hy = bakedHall.y + HALL_ROSE.dy + 7;
           flight = { ...flight, x: hx, y: hy, heading: Math.PI, alt: g(hx, hy) + REST_HEIGHT, speed: 0, bank: 0 };
           dragon.lie(curledPath(hx, hy, 4.5, (x, y) => g(x, y) + REST_HEIGHT));
         }

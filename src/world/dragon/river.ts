@@ -291,12 +291,12 @@ export function drawRiver(
   for (let m = FIN_PAIRS; m >= 0; m--) {
     const j = FIN_ROOT + 2 * m;
     const flutter = 0.1 * (m + 1) * Math.sin(pose.wave * 2.2 - m * 0.9) + FIN_THROW * turn[j];
+    // Asleep, the fin is folded away: the tail tapers to its point, no rays and no feather.
+    if (pose.asleep) continue;
     if (m === FIN_PAIRS) {
       place(fig, kit.feather, px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
       continue;
     }
-    // Asleep, the fin is folded: the tail runs to the feather's point, no rays.
-    if (pose.asleep) continue;
     place(fig, kit.rays[m], px[j], py[j], pa[j] - 0.55, ph[j] + flutter);
   }
   const fin = fig.count;

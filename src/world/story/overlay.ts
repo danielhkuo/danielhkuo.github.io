@@ -4,7 +4,7 @@
 // pixel colours (controls/glyphs.ts), drawn after the dragon and the guide.
 
 import { blit } from "../controls/blit.ts";
-import { blank, GOLD, haloed, INK, PAPER, PAPER_WASH, PIECE_SLOTS, text, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
+import { blank, GOLD, haloed, INK, INK_SOFT, PAPER, PAPER_WASH, PIECE_SLOTS, text, VERMILION, VERMILION_DARK, type Sprite } from "../controls/glyphs.ts";
 import { GLASS } from "../../components/terminal/content.ts";
 import { pcos, PI, psin } from "../core/psin.ts";
 import { ROSE_LIGHTS } from "../gen/monuments.ts";
@@ -109,7 +109,7 @@ function plate(w: number, h: number): Sprite {
 
 /**
  * The rose window the count is drawn as: the hall's own window (gen/monuments.ts) at a little over two pixels a cell, a
- * dark ring round pale stone tracery, its five lights dark until glazed, a gold boss at the heart.
+ * dark ring round pale stone tracery, its five lights mid stone until glazed, a gold boss at the heart.
  */
 const ROSE = 21;
 const ROSE_C = 10;
@@ -134,8 +134,11 @@ function rose(fills: readonly number[]): Sprite {
       const cell = `${Math.round(dx / CELL)},${Math.round(-dy / CELL)}`;
       const k = LIGHT_OF.get(cell);
       if (cell === "0,0") c = GOLD;
-      else if (k !== undefined) c = fills[k] === 0 ? INK : fills[k];
-      else c = PAPER_WASH;
+      else if (k !== undefined) {
+        // Rounded: a light's pixels far from its own centre are tracery. Unglazed, it is mid stone, waiting for glass.
+        const lx = LOBES[k].x - x, ly = LOBES[k].y - y;
+        c = lx * lx + ly * ly > CELL * CELL * 1.6 ? PAPER_WASH : fills[k] === 0 ? INK_SOFT : fills[k];
+      } else c = PAPER_WASH;
     }
     s.px[y * ROSE + x] = c;
   }
