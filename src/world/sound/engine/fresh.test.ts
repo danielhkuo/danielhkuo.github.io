@@ -328,3 +328,22 @@ test("a read feeds its sources' fades straight into the nodes it is given: no ga
     assert.deepEqual(fade.outs.map((o) => o.to).sort(), [left, right].sort(), "each fade reaches both");
   }
 });
+
+test("offline, a source is let go when it has ended (its ended event), never before: so a long render does not carry every old generation", () => {
+  const ctx = new FakeContext();
+  const kit = genKit(0);
+  const fresh = createFresh(ctx as unknown as Ctx, kit, { offline: true, seed: 3 });
+  let unwired = 0;
+  fresh.read("drops", { at: 0, offset: 0, wire: () => () => void unwired++ });
+  run(ctx, kit, fresh, 60, 30);
+  const stopped = sources(ctx).filter((s) => s.stopped !== null);
+  assert.ok(stopped.length >= 3);
+  // Before any has ended, nothing is let go (a render made ahead runs every frame first).
+  assert.equal(unwired, 0);
+  for (const s of stopped) {
+    assert.equal(typeof s.onended, "function", "each stopped source is let go by its ended event");
+    (s.onended as () => void)();
+  }
+  assert.equal(unwired, stopped.length);
+  for (const s of stopped) assert.equal((s.outs[0].to as FakeNode).outs.length, 0, "its fade leads nowhere once it has ended");
+});

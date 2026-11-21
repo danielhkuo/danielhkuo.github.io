@@ -149,6 +149,18 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
   /** False holds the read on the loop it has: no request for it, and no move. */
   const onRead = (read: Read): boolean => opts.on?.(read.name, read.bed) !== false;
 
+  /** Undoes a source's drive and takes its fade out of the graph, once. */
+  const letGo = (p: Playing): void => {
+    if (p.gone) return;
+    p.unwire();
+    try {
+      p.fade.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+    p.gone = true;
+  };
+
   const halt = (p: Playing, when: number): void => {
     const at = Math.max(when, p.at);
     if (p.stopAt === p.stopAt) return;
@@ -158,20 +170,17 @@ export function createFresh(ctx: Ctx, kit: FreshKit, opts: {
       // Already stopped.
     }
     p.stopAt = at;
+    // Offline the stop is only scheduled. frame() has already run, ahead of the first sample, and a disconnect is
+    // not scheduled, so the chain leaves when the render reaches this end and the ended event fires.
+    if (opts.offline) p.node.onended = () => letGo(p);
   };
 
   /** A source that finished its fade is unwired once the stop has had a moment to land. */
   const release = (p: Playing, now: number): boolean => {
-    // Offline nothing is let go: a render made ahead runs every frame before the first sample, and a disconnect is not
-    // scheduled, so it would take a source out for the whole render (a render ends; nothing is kept for long).
+    // Offline, frame() lets nothing go: that disconnect would land before the first sample and silence the source
+    // for the whole render. The ended event lets it go once the render has really reached its stop.
     if (opts.offline || p.gone || p.stopAt !== p.stopAt || !(now > p.stopAt + 0.1)) return false;
-    p.unwire();
-    try {
-      p.fade.disconnect();
-    } catch {
-      // Already disconnected.
-    }
-    p.gone = true;
+    letGo(p);
     return true;
   };
 
