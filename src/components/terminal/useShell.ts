@@ -55,6 +55,8 @@ export interface ShellOptions {
   featured?: readonly string[];
   /** `clear` has emptied the scrollback. The host drops whatever it had drawn above the prompt. */
   onClear?: () => void;
+  /** A full-screen program has taken over the body (true), or handed it back (false). */
+  onProgram?: (running: boolean) => void;
 }
 
 interface Log {
@@ -76,7 +78,7 @@ const cleared = (log: Log): Log => ({ entries: [], nextId: log.nextId });
  * width in cells, which `ls` and `cat` lay their output out to.
  */
 export function useShell(api: TerminalApi, onClose: () => void, cols: number, options: ShellOptions = {}): Shell {
-  const { rich = false, greet = true, featured, onClear } = options;
+  const { rich = false, greet = true, featured, onClear, onProgram } = options;
   const [log, setLog] = useState(() => append({ entries: [], nextId: 0 }, greet ? welcomeLines(new Date()) : []));
   const [input, setInput] = useState("");
   // Where the shell is, and where it was before the last `cd` (for `cd -`).
@@ -126,7 +128,10 @@ export function useShell(api: TerminalApi, onClose: () => void, cols: number, op
       onClear?.();
     },
     close: () => window.setTimeout(onClose, 120),
-    program: (p) => setProgram(p),
+    program: (p) => {
+      setProgram(p);
+      onProgram?.(true);
+    },
   };
 
   const run = (line: string) => {
@@ -167,6 +172,7 @@ export function useShell(api: TerminalApi, onClose: () => void, cols: number, op
 
   const endProgram = (output?: TerminalLine[]) => {
     setProgram(null);
+    onProgram?.(false);
     if (output?.length) print(...output);
   };
 

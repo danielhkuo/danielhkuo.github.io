@@ -77,16 +77,16 @@ export default function TitleTerminal({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const cols = useBodyCols(inputRef);
-  const [cleared, setCleared] = useState(false);
+  // After `clear` the window's static rows stay gone; a full-screen program hides them only while it runs.
+  const cleared = useRef(false);
   const shell = useShell(api, () => inputRef.current?.blur(), cols, {
     greet: false,
-    onClear: () => setCleared(true),
+    onClear: () => {
+      cleared.current = true;
+      onBare(true);
+    },
+    onProgram: (running) => onBare(running || cleared.current),
   });
-
-  const bare = cleared || shell.program !== null;
-  useEffect(() => {
-    onBare(bare);
-  }, [bare, onBare]);
 
   // The latest insert, read when the counter changes. A later render's insert belongs to a later request.
   const insertRef = useRef(insert);

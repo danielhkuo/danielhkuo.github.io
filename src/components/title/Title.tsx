@@ -14,7 +14,6 @@ import NeofetchHeader, { type HeaderProject } from "../NeofetchHeader";
 import type { SiteInfo, TerminalApi } from "../terminal/types";
 import type { Project } from "../../lib/projects";
 import { useFrameFit } from "../../app/world/useFrameScale";
-import { HOLD_AT, type HoldAt } from "../../world/runtime/hold";
 import ArrivalPaper, { type ArrivalStart } from "./ArrivalPaper";
 import { runGenie } from "./genieRun";
 import { growToScreen } from "./grow";
@@ -22,20 +21,13 @@ import { MINIMAL_PAGE } from "./phone/copy";
 import { PHONE_QUERY } from "./phone/phone";
 import ReturnKey from "./ReturnKey";
 import TitleTerminal from "./TitleTerminal";
+import { useHoldPlace } from "./useHoldPlace";
+import { useLiveBody } from "./useLiveBody";
 import { titleKey } from "./titleKeys";
 import styles from "./title.module.css";
 
 type Mode = "title" | "leaving" | "flying" | "returning";
 
-/**
- * The held dragon's head is drawn this many CSS pixels left of the ways in, level with the Enter world button: it
- * faces them, and its body trails off into the open, clear of the window, the button and the links.
- */
-const HEAD_LEFT = 44;
-/** Frame pixels kept between the window's bottom edge and the held head, whose crest stands above its anchor. */
-const HEAD_CLEAR = 7;
-/** Frame pixels kept under the held head for the body that trails down behind it, where the window allows. */
-const TAIL_ROOM = 18;
 
 export interface TitleProps {
   world: Omit<FlightProps, "held" | "holdAt" | "onLeave" | "onReady">;
@@ -122,7 +114,6 @@ export default function Title({ world, header, shell }: TitleProps) {
   // The ways in come up once the world has arrived, all of it.
   const [arrived, setArrived] = useState(false);
   const waysShown = arrived;
-  const [holdAt, setHoldAt] = useState<HoldAt>(HOLD_AT);
   // The prompt stays live once it has been: the shell is mounted for the page, and the scrollback survives a flight.
   const [live, setLive] = useState(false);
   const [focusN, setFocusN] = useState(0);
@@ -130,10 +121,10 @@ export default function Title({ world, header, shell }: TitleProps) {
   // `clear`, or a full-screen program: the neofetch rows above the prompt go.
   const [bare, setBare] = useState(false);
   const liveRef = useRef(false);
-  // The body's height before the prompt went live, and the one locked at that moment.
-  const resting = useRef(0);
-  const locked = useRef<number | null>(null);
   const fit = useFrameFit();
+  // Once live, the window keeps its height and scrolls within itself; `lockBody` fixes the height as it goes live.
+  const lockBody = useLiveBody(rootRef, live);
+
   const reduced = useSyncExternalStore(subscribeReduced, reducedNow, () => false);
   const phone = useSyncExternalStore(subscribePhone, phoneNow, phoneAtFirstPaint);
   const introDone = useSyncExternalStore(subscribeIntro, introFinished, () => false);
@@ -145,25 +136,12 @@ export default function Title({ world, header, shell }: TitleProps) {
     return el instanceof HTMLElement ? el : null;
   };
 
-  const bodyEl = (): HTMLElement | null => {
-    const el = rootRef.current?.querySelector(".nf-body");
-    return el instanceof HTMLElement ? el : null;
-  };
-
-  // Lock the window at the height it has now, before the live rows replace the idle one. It then scrolls within
-  // itself: what a command prints pushes the neofetch up and out, and the window does not grow.
-  const lockBody = () => {
-    if (locked.current != null) return;
-    const body = bodyEl();
-    const h = body && body.offsetHeight > 0 ? body.offsetHeight : resting.current;
-    if (!h) return;
-    locked.current = h;
-    if (body) {
-      // The height just measured is the border box. Pin that, whatever box-sizing the body is using.
-      body.style.boxSizing = "border-box";
-      body.style.height = `${h}px`;
-    }
-  };
+  // The held dragon waits beside the ways in, facing them.
+  const holdAt = useHoldPlace(
+    { frame, ways: waysEl, button: enterRef, steady: () => modeRef.current === "title" && !grew.current },
+    desk,
+    fit,
+  );
 
   const makeLive = (text: string) => {
     lockBody();
@@ -270,32 +248,6 @@ export default function Title({ world, header, shell }: TitleProps) {
     return () => window.removeEventListener("keydown", onSkip, true);
   }, []);
 
-  // The held dragon's place follows the ways in, which keep their place in the layout while they wait (hidden, not
-  // gone): measured whenever the window or the ways change size (the observer reports once as it starts), as shares of
-  // the world's frame. Not while the window is leaving or growing: the dragon stays put.
-  useLayoutEffect(() => {
-    const el = desk ? frame() : null;
-    const ways = waysEl.current;
-    const button = enterRef.current;
-    if (!el || !ways || !button) return;
-    const observer = new ResizeObserver(() => {
-      if (modeRef.current !== "title" || grew.current) return;
-      const w = fit.w * fit.css;
-      const h = fit.h * fit.css;
-      if (!w || !h) return;
-      const r = ways.getBoundingClientRect();
-      const b = button.getBoundingClientRect();
-      // Level with the button, but not so low that the body, trailing down behind the head, runs off the screen; and
-      // never so high that the window hides the head. On a short screen the head wins: a clipped tail reads, a
-      // clipped head does not.
-      const level = Math.min(b.top + b.height / 2, h - TAIL_ROOM * fit.css);
-      const y = Math.max(el.getBoundingClientRect().bottom + HEAD_CLEAR * fit.css, level);
-      setHoldAt({ x: Math.max(0.04, (r.left - HEAD_LEFT) / w), y: Math.min(0.97, y / h) });
-    });
-    observer.observe(el);
-    observer.observe(ways);
-    return () => observer.disconnect();
-  }, [desk, fit.w, fit.h, fit.css]);
 
   useLayoutEffect(() => {
     if (mode !== "leaving" && mode !== "returning") return;
@@ -330,51 +282,6 @@ export default function Title({ world, header, shell }: TitleProps) {
   useEffect(() => {
     if (mode === "title") focusBack();
   }, [mode]);
-
-  // Remember the resting height, and once live keep the locked one on the body. React redraws the class from props;
-  // the height is set here because only this component measured it.
-  useLayoutEffect(() => {
-    const body = bodyEl();
-    if (!body) return;
-    if (locked.current == null) {
-      if (!live && body.offsetHeight > 0) resting.current = body.offsetHeight;
-      else if (live && resting.current > 0) locked.current = resting.current;
-    }
-    if (!live) return;
-    if (locked.current != null) {
-      body.style.boxSizing = "border-box";
-      body.style.height = `${locked.current}px`;
-    }
-    body.classList.add("nf-live");
-  });
-
-  // New output grows inside the locked body. Keep the last row — the prompt — in view.
-  useEffect(() => {
-    if (!live) return;
-    const body = bodyEl();
-    if (!body) return;
-    const pin = () => {
-      body.scrollTop = body.scrollHeight;
-    };
-    const observer = new ResizeObserver(pin);
-    const watch = () => {
-      observer.disconnect();
-      body.querySelectorAll<HTMLElement>(".term-log, .term-inputrow, .term-screen, .nf-grid").forEach((el) => {
-        observer.observe(el);
-      });
-    };
-    const mutations = new MutationObserver(() => {
-      watch();
-      pin();
-    });
-    watch();
-    mutations.observe(body, { childList: true, subtree: true });
-    pin();
-    return () => {
-      observer.disconnect();
-      mutations.disconnect();
-    };
-  }, [live]);
 
   useEffect(() => () => growCancel.current?.(), []);
 
