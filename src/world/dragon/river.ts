@@ -115,8 +115,8 @@ function headPiece(look: Look, shut = false): Piece {
   ball(v, 2.5, 0, 1.4, 2.1, 1.2, 0.9, skin);
   put(v, 4, 0, 2, look.bodyLight);
   for (const side of [-1, 1]) {
-    // Horns: back and up, pale at the tips.
-    limb(v, -0.5, side * 1.2, 3, -3.8, side * 2, 4, 0.6, 0.6, (x) => (x < -2.5 ? look.tip : look.mane));
+    // Horns: back and up, pale at the tips (asleep, no pale point near the face to read as an open eye).
+    limb(v, -0.5, side * 1.2, 3, -3.8, side * 2, 4, 0.6, 0.6, (x) => (x < -2.5 && !shut ? look.tip : look.mane));
     // The face, on the crown where no slice above can hide it: a bright eye beside an inked lid; asleep, the lid
     // is down and the eye an inked line.
     put(v, 1, side * 1.5, 3, shut ? look.ink : look.tip);

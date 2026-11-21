@@ -108,20 +108,16 @@ function plate(w: number, h: number): Sprite {
 }
 
 /**
- * The rose window the count is drawn as: the hall's own window (gen/monuments.ts) at a little over two pixels a cell, a
+ * The rose window the count is drawn as: the hall's own window (gen/monuments.ts) drawn as a badge, a
  * dark ring round pale stone tracery, its five lights mid stone until glazed, a gold boss at the heart.
  */
 const ROSE = 21;
 const ROSE_C = 10;
-const CELL = 2.2;
-/** Each light's centre in the rose's box, from its cells: the first at the top, then round clockwise. */
-const LOBES = ROSE_LIGHTS.map((cells) => {
-  let x = 0, z = 0;
-  for (const c of cells) { x += c.dx; z += c.dz; }
-  return { x: ROSE_C + (x / cells.length) * CELL, y: ROSE_C - (z / cells.length) * CELL };
+/** Each light's centre in the rose's box: the first at the top, then round clockwise, evenly, as the window's are. */
+const LOBES = ROSE_LIGHTS.map((_, i) => {
+  const a = -PI / 2 + (i * 2 * PI) / ROSE_LIGHTS.length;
+  return { x: ROSE_C + 5.4 * pcos(a), y: ROSE_C + 5.4 * psin(a) };
 });
-const LIGHT_OF = new Map<string, number>();
-ROSE_LIGHTS.forEach((cells, k) => { for (const c of cells) LIGHT_OF.set(`${c.dx},${c.dz}`, k); });
 /** The rose with the lights in `fills` glazed (a palette slot each, 0 for unglazed). */
 function rose(fills: readonly number[]): Sprite {
   const s = blank(ROSE, ROSE);
@@ -130,15 +126,17 @@ function rose(fills: readonly number[]): Sprite {
     if (d > ROSE_C + 0.5) continue;
     let c: number;
     if (d > ROSE_C - 1) c = INK;
+    else if (d < 1.6) c = GOLD;
     else {
-      const cell = `${Math.round(dx / CELL)},${Math.round(-dy / CELL)}`;
-      const k = LIGHT_OF.get(cell);
-      if (cell === "0,0") c = GOLD;
-      else if (k !== undefined) {
-        // Rounded: a light's pixels far from its own centre are tracery. Unglazed, it is mid stone, waiting for glass.
-        const lx = LOBES[k].x - x, ly = LOBES[k].y - y;
-        c = lx * lx + ly * ly > CELL * CELL * 1.6 ? PAPER_WASH : fills[k] === 0 ? INK_SOFT : fills[k];
-      } else c = PAPER_WASH;
+      // Each light the same rounded lobe, turned to point at the ring; the stone between them is the tracery.
+      // Unglazed, a light is mid stone, waiting for glass.
+      c = PAPER_WASH;
+      for (let k = 0; k < LOBES.length; k++) {
+        const lx = x - LOBES[k].x, ly = y - LOBES[k].y;
+        const ox = (LOBES[k].x - ROSE_C) / 5.4, oy = (LOBES[k].y - ROSE_C) / 5.4;
+        const along = lx * ox + ly * oy, across = -lx * oy + ly * ox;
+        if ((along * along) / (2.6 * 2.6) + (across * across) / (2.4 * 2.4) <= 1) { c = fills[k] === 0 ? INK_SOFT : fills[k]; break; }
+      }
     }
     s.px[y * ROSE + x] = c;
   }
