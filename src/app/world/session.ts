@@ -11,7 +11,8 @@ import { wondersOf } from "../../world/pack/manifest";
 import { LOAD_FAILED, loadWorld } from "../../world/runtime/load";
 import { createPool, type WorkerLike } from "../../world/runtime/pool";
 import { createRegionLand } from "../../world/runtime/regionLand";
-import { createDragon, flownDragon } from "../../world/dragon/index";
+import { createDragon, curledPath, flownDragon } from "../../world/dragon/index";
+import { REST_HEIGHT } from "../../world/dragon/body";
 import { RIVER_LENGTH } from "../../world/dragon/river";
 import { createDiscoveries } from "../../world/runtime/discoveries";
 import { createStreamView } from "../../world/runtime/stream";
@@ -25,8 +26,9 @@ import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
-import { drawQuest } from "../../world/story/overlay";
-import { find, nextStop, type StopPlace } from "../../world/story/quest";
+import { drawQuest, SHOW } from "../../world/story/overlay";
+import { HALL_ROSE, HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
+import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
 import { blit } from "../../world/controls/blit";
 import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
@@ -176,6 +178,8 @@ interface FlightProbe {
   workerErrors: string[];
   /** Where the flight is, for the tests: position, heading, speed, phase, whether a pause holds it still, and whether the title holds it. */
   state?: () => { x: number; y: number; heading: number; speed: number; phase: string; paused: boolean; workers: number; rate: number; held: boolean };
+  /** The quest's arrow this frame (null when none shows), the stop it points to, and the stops found: for the tests. */
+  quest?: { arrow: { mode: string; x: number; y: number; angle: number } | null; next: string | null; nextAt: { x: number; y: number } | null; found: string[]; offer: string | null };
   /** The landmarks the build placed, and what each holds, for the end-to-end tests. */
   landmarks?: { id: string; holds: string; name: string | null }[];
 }
@@ -391,12 +395,21 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
     // The stops, read into byId with the other landmarks. The live layer is fixed with the view below, so this is
     // before that; the landing places are filled once the world size is known.
     const stops: StopPlace[] = [];
+    // A find being taken: its key, where its piece sat (cells, and height over the ground), and when.
+    let taking: { key: StopPlace["key"]; x: number; y: number; z: number; t0: number } | null = null;
+    const drawnStops: { key: StopPlace["key"]; x: number; y: number; baked: boolean }[] = [];
     let liveHall: { x: number; y: number } | undefined;
+    let bakedHall: { id: string; x: number; y: number } | undefined;
     if (landmarks && landmarks.worldId === loaded.manifest.worldId) {
       for (const l of landmarks.landmarks) {
         byId.set(l.id, l);
-        if (l.holds.kind === "stop") stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+        if (l.holds.kind === "stop") {
+          stops.push({ key: l.holds.stop, x: l.x, y: l.y });
+          // From the manifest, its monument is baked into the world; from places.json, the layer draws it whole.
+          drawnStops.push({ key: l.holds.stop, x: l.x, y: l.y, baked: !l.live });
+        }
         if (l.holds.kind === "hall" && l.live) liveHall = { x: l.x, y: l.y };
+        else if (l.holds.kind === "hall" && l.type === "hall") bakedHall = { id: l.id, x: l.x, y: l.y };
       }
     }
     const layerContext: LayerContext = {
@@ -411,7 +424,9 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       // ?sights=all shows every rare sight at once, to look them over without waiting for them.
       forceSights: params.get("sights") === "all",
       structures: loaded.core.world.built?.built.structures,
-      ...(stops.length > 0 || liveHall ? { story: { stops, hall: liveHall, found: () => getQuest().found } } : {}),
+      ...(stops.length > 0 || liveHall || bakedHall
+        ? { story: { stops: drawnStops, hall: liveHall, bakedHall, found: () => getQuest().found } }
+        : {}),
     };
     const sound = setup.sound?.() ?? null;
     if (probe) probe.soundLog = sound?.log() ?? null;
@@ -435,6 +450,19 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       for (const t of places.targets) targets.push(t);
       for (const [id, a] of places.anchors) anchors.set(id, a);
     }
+    // With the five found, the dragon comes down at the hall in its yard, where the rose window's light falls, and
+    // curls up there: the hall's landing rings the yard, close.
+    const toYard = () => {
+      if (!bakedHall || !complete(getQuest())) return;
+      const t = targets.find((x) => x.id === bakedHall!.id);
+      if (!t) return;
+      // Beside the light on the yard (live/story.ts), east of it, on a ring wider than the body is long: the dragon
+      // lies in an open curl, its head free, never a closed ring, and the window's light shows whole beside it.
+      t.x = bakedHall.x + HALL_YARD.dx + 16;
+      t.y = bakedHall.y + HALL_YARD.dy;
+      t.radius = 8;
+    };
+    toYard();
 
     // ?at=<id> starts just south of a site, heading for it: a preview, like ?sights=all. A stop's id is not a
     // site in the manifest; the landmark of that id is started the same way.
@@ -543,7 +571,24 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         if (l) {
           const d = discoveryOf(l);
           discoveries.discover(d.id, d.label);
-          if (l.holds.kind === "stop") setQuest(find(getQuest(), l.holds.stop));
+          if (l.holds.kind === "stop") {
+            const key = l.holds.stop;
+            // The first time only, its piece is taken: it flies from its place on the monument to its slot.
+            if (!getQuest().found.includes(key)) {
+              const o = PIECE_AT[key];
+              taking = { key, x: l.x + o.dx, y: l.y + o.dy, z: o.z, t0: t / 1000 };
+            }
+            setQuest(find(getQuest(), key));
+            toYard();
+          }
+        }
+        // With the five found, at the hall the dragon lies down asleep by the window's light: its chin at the light's
+        // east edge, curled up south-east of it (a hard cut from the landing's coil, as the world's changes are).
+        if (l && bakedHall && l.id === bakedHall.id && complete(getQuest()) && groundHeight && flight) {
+          const g = groundHeight;
+          const hx = bakedHall.x + 9, hy = bakedHall.y + HALL_ROSE.dy + 7;
+          flight = { ...flight, x: hx, y: hy, heading: Math.PI, alt: g(hx, hy) + REST_HEIGHT, speed: 0, bank: 0 };
+          dragon.lie(curledPath(hx, hy, 4.5, (x, y) => g(x, y) + REST_HEIGHT));
         }
         events.phase("landed", l);
         events.buzz?.("landed");
@@ -632,7 +677,12 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
         const arrow = next && ground
           ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12)
           : null;
-        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced);
+        const took = taking && ground
+          ? { key: taking.key, since: t / 1000 - taking.t0, from: guideAnchor({ x: taking.x, y: taking.y, alt: ground(taking.x, taking.y) + taking.z }, camera, fw, fh, worldN) }
+          : null;
+        if (took && took.since > SHOW) taking = null;
+        if (probe) probe.quest = { arrow, next: next?.key ?? null, nextAt: next ? { x: next.x, y: next.y } : null, found: quest.found.slice(), offer: offer?.id ?? null };
+        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took);
       }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";

@@ -76,8 +76,19 @@ They do not govern the game layer or the terminal-styled pages: the renderer, ti
     cursor-delegate plugin, whose state is shared across worktrees.
   - Claude reviews every diff, runs the checks and judges the renders. It implements only where Cursor fails twice, or
     where the work is judged by eye. Art is never Cursor's alone: the owner rejected Cursor-built clouds on 2026-11-18.
-  - Creative work gets a hard audit before the owner sees it, from fresh critics and Claude's own review on renders.
-    The owner spot-checks.
+  - Creative work gets a hard audit before the owner sees it: Claude's own review on renders, plus critics held to the
+    rules below. The owner spot-checks.
+- **Critic rules** (owner, 2026-11-21: critics must be constructive, and must not loop).
+  - Before any critic runs, write a short rubric from the brief: three to five criteria, each with what passing looks
+    like.
+  - A critic scores each criterion. For every one that fails, it gives a concrete fix: what to change, where, and why
+    that would pass. A complaint without a fix doesn't count.
+  - A later round is given the earlier findings and what was changed. It checks whether each fix worked and doesn't
+    reopen settled points. A new point is allowed only if it is severe, and is marked as new.
+  - At most two critic rounds on one piece. Then Claude decides on the renders, or brings the best version and the open
+    points to the coordinator.
+  - No yes-or-no "spot the odd one" tests: they say nothing about how to improve.
+  - When critics contradict each other, choose one with a stated reason; don't chase both.
 
 ## Commands
 
@@ -88,7 +99,8 @@ They do not govern the game layer or the terminal-styled pages: the renderer, ti
 - `npm run e2e`: builds, then runs the Playwright suite (`e2e/`) in Chromium and WebKit. It must pass without
   `GITHUB_TOKEN`. `npm run test:minimal` runs only the `/minimal` projects, against the `out/` already built.
 - `npm run test:mobile`: phone flight tests (Puppeteer, touch emulation).
-- `npm run world:build -- --seed 3 --n 10240 --cache`: builds the shipped world into `public/world/`.
+- `npm run world:build -- --seed 3 --n 10240 --cache --story`: builds the shipped world into `public/world/`. `--story`
+  bakes in the five monuments and the projects hall; never ship a world without it.
 
 <!-- ASTRYX:START -->
 Astryx v0.6.2 · 164 components

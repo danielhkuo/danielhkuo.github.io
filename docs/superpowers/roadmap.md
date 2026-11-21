@@ -317,7 +317,16 @@ land-ship are live only. `npm run world:live -- --view moments` draws each one. 
   the Codex (`INTERESTS` in `content.ts`), a pointer at the frame's edge to the next, and five quatrefoils. The clouds
   part over a landing (`Sky.clear`). Places for the shipped world are in `places.json` (`scripts/story-places.ts`
   finds them for another world). Follow-ups: the owner may swap any of the five (six more are written in the design);
-  a baked hall if the live one is not enough; the landscape phone Codex covers the stop.
+  the landscape phone Codex covers the stop.
+  **Since (2026-11-21):** the five are baked monuments (a walled garden, a stone library, a clock tower, an engine
+  house, a court) and the hall is baked with a rose window and yard (`gen/monuments.ts`, `world:build --story`). The
+  owner chose the glass framing: the five are panes for the hall's rose window, the HUD count is a five-lobed rose,
+  and when all five are found the window lights, its colours fall before the hall, and the dragon lands curled in them.
+  Blind "added later?" audits: the clock tower and engine house pass about as often as the originals; the garden,
+  library and court are still flagged, as the original yew is in every round (low landmarks read as added).
+  Shipped 2026-11-21 as world `c75fc713183d` (`npm run world:build -- --seed 3 --n 10240 --cache --story`), replacing
+  `3a2f194713e2`: 8.5 MB in all and 1.34 MB before first flight, as before. Browser check: ready 1.54 s and frame p95
+  2.7 ms at 120 fps; at 4× CPU throttle, ready 2.70 s and p95 3.6 ms; no errors.
 - ~~**Where the projects come from**~~ (owner, 2026-11-20). Built on `world/projects`: one Markdown file per project
   in `projects/`, any number of them, in the owner's `order`, read at build by `src/lib/projects.ts` (`loadProjects`,
   `Project`). The owner edits them in the browser, on github.com or in Pages CMS (`.pages.yml`; he signs in at

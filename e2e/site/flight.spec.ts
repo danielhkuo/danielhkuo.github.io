@@ -91,14 +91,14 @@ test.describe("flight", () => {
       }
     }, QUEST_KEY);
     await openWorld(page);
-    const card = page.getByRole("dialog", { name: "the quest" });
+    const card = page.getByRole("dialog", { name: "the rose window" });
     await expect(card).toBeVisible({ timeout: 8_000 });
-    await card.getByRole("button", { name: "follow the quest" }).click();
+    await card.getByRole("button", { name: "look for them" }).click();
     await expect(card).toBeHidden();
     const raw = await page.evaluate((key) => window.localStorage.getItem(key), QUEST_KEY);
     expect(JSON.parse(raw ?? "").mode).toBe("on");
     await page.keyboard.press("o");
-    await expect(page.getByRole("dialog", { name: "options" }).getByRole("button", { name: "leave the quest" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "options" }).getByRole("button", { name: "stop looking for the glass" })).toBeVisible();
   });
 
   test("Esc leaves the world", async ({ page }) => {

@@ -121,7 +121,7 @@ test("a landing is logged by what is kept there", () => {
   const { set } = landmarksFor(MANIFEST, NINE, PLACES);
   assert.deepEqual(discoveryOf(byId(set.landmarks, "abbey-0")!), { id: "landmark:abbey", label: "The abbey: About me" });
   assert.deepEqual(discoveryOf(byId(set.landmarks, "town-0")!), { id: "landmark:hall", label: "The hall: every project" });
-  assert.deepEqual(discoveryOf(byId(set.landmarks, "curio-pine")!), { id: "story:pine", label: "The small pine" });
+  assert.deepEqual(discoveryOf(byId(set.landmarks, "curio-pine")!), { id: "story:pine", label: "The walled garden" });
 });
 
 test("every kind of landmark has a name to show", () => {

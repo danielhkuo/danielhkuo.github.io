@@ -302,7 +302,7 @@ export default function OptionsPanel({ open, px, options, device, platform, onCh
             dialog.current?.close();
           }}
         >
-          <Words px={px}>{quest.mode === "on" ? "leave the quest" : "follow the quest"}</Words>
+          <Words px={px}>{quest.mode === "on" ? "stop looking for the glass" : "look for the glass"}</Words>
         </Action>
         <Link className={styles.action} href="/" onClick={onLeave && ((e) => {
           e.preventDefault();

@@ -24,6 +24,8 @@ export interface Pose {
   vigour: number;
   /** The share of the way to the ground the body is to sink before it is next drawn (the draw knows the land). */
   settle: number;
+  /** Lying curled asleep (Dragon.lie): eyes shut, the tail's fin folded to a point. Cleared once it stirs. */
+  asleep?: boolean;
 }
 
 /** Resting, a point of the body's path lies this far over the ground: the body's own half-height. */
