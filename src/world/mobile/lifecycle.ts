@@ -1,6 +1,7 @@
 // Why a flight on a touch screen is held still (spec 5, "Pausing"). Every reason is a hold; the flight runs only when
-// none is left. Some holds lift themselves (the options panel closing); the rest wait for the visitor's Fly on, so
-// they can re-grip the phone before the dragon moves. Pure: events in, holds out, and which card the page shows.
+// none is left. Some holds lift themselves (the options panel closing, the quest offer answered); the rest wait for
+// the visitor's Fly on, so they can re-grip the phone before the dragon moves. Pure: events in, holds out, and which
+// card the page shows.
 
 export type Hold =
   /** The first card, until Take wing. */
@@ -9,6 +10,8 @@ export type Hold =
   | "upright"
   /** The options panel is open. */
   | "options"
+  /** The quest offer is up on a touch screen: until it is answered. */
+  | "offer"
   /** The page was hidden, frozen or left: until Fly on. */
   | "away"
   /** Back was pressed: until Fly on. */
@@ -29,7 +32,9 @@ export type LifeEvent =
   | "upright"
   | "level"
   | "optionsOpen"
-  | "optionsClose";
+  | "optionsClose"
+  | "offerOpen"
+  | "offerClose";
 
 /** Holds that only Fly on lifts. */
 const RESUMABLE: readonly Hold[] = ["away", "back", "fullscreen", "rest"];
@@ -42,7 +47,7 @@ export function startLife(gated: boolean): Life {
   return new Set<Hold>(gated ? ["gate"] : []);
 }
 
-/** The holds after `e`. While the gate is up, only Take wing, the phone's orientation and the panel count. */
+/** The holds after `e`. While the gate is up, only Take wing, the phone's orientation, the panel and the quest offer count. */
 export function lifeAfter(life: Life, e: LifeEvent): Life {
   const next = new Set(life);
   const gated = life.has("gate");
@@ -77,6 +82,12 @@ export function lifeAfter(life: Life, e: LifeEvent): Life {
       break;
     case "optionsClose":
       next.delete("options");
+      break;
+    case "offerOpen":
+      next.add("offer");
+      break;
+    case "offerClose":
+      next.delete("offer");
       break;
   }
   return next;

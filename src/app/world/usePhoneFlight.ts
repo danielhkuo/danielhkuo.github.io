@@ -6,9 +6,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type RefObject } from "react";
 import { fitFrame } from "../../world/runtime/fit";
-import { layerTransform } from "../../world/mobile/turned";
+import { layerTransform, toLayer } from "../../world/mobile/turned";
+import type { KeepClear } from "../../world/story/overlay";
 import { getOptions } from "./optionsStore";
-import { createTouchLayer } from "./touchLayer";
+import { createTouchLayer, type LayerView } from "./touchLayer";
 import type { TouchLink } from "./useFlight";
 import { getFrameFit, type WindowFrame } from "./useFrameScale";
 import { useShell, type Shell } from "./useShell";
@@ -50,21 +51,39 @@ export function usePhoneFlight(root: RefObject<HTMLDivElement | null>, panelOpen
     }
   }, []);
 
-  const touch = useMemo<TouchLink>(
-    () => ({
+  // The last measure of the controls, and when it was taken. Reading them forces a layout, so a second must pass first.
+  const kept = useRef<{ at: number; rects: readonly KeepClear[] }>({ at: -Infinity, rects: [] });
+
+  const touch = useMemo<TouchLink>(() => {
+    return {
       paused: link.paused,
       stall: link.stall,
       phone: () => phoneRef.current,
       buzz,
       frame: () => turnedFit.current ?? getFrameFit(),
+      // The layer's safe areas are CSS pixels; the frame counts them in its own pixels, rounded up.
+      insets: () => {
+        const css = (turnedFit.current ?? getFrameFit()).css;
+        const src = view().insets;
+        const side = (px: number) => (css > 0 ? Math.ceil(px / css) : 0);
+        return { top: side(src.top), right: side(src.right), bottom: side(src.bottom), left: side(src.left) };
+      },
+      // The corner and the sound toggle, in frame pixels.
+      keepClear: () => {
+        const now = performance.now();
+        if (now - kept.current.at < 1000) return kept.current.rects;
+        kept.current.at = now;
+        const el = root.current;
+        kept.current.rects = el ? controlsOnFrame(el, view()) : [];
+        return kept.current.rects;
+      },
       touch: (canvas, hooks) => {
         const el = root.current;
         if (!el) return null;
         return createTouchLayer({ root: el, canvas, options: hooks.options, platform, view, ghost: hooks.ghost, touched: hooks.touched });
       },
-    }),
-    [link, view, platform, buzz, root],
-  );
+    };
+  }, [link, view, platform, buzz, root, kept]);
   return { shell, touch };
 }
 
@@ -95,4 +114,38 @@ export function phoneFrame(shell: Shell, windowFit: WindowFrame): PhoneFrame {
     transform: turned ? layerTransform(shell.layer.h, shell.layer.w, shell.turn) : undefined,
   } as CSSProperties;
   return { fit: turned ? layerFit(shell.layer) : windowFit, page, turned };
+}
+
+/** A screen rectangle in the layer's coordinates. With no turn `toLayer` leaves each corner where it is. */
+function rectOnLayer(r: DOMRect, v: LayerView): { left: number; top: number; right: number; bottom: number } {
+  const a = toLayer(r.left, r.top, v.screenW, v.screenH, v.turn);
+  const b = toLayer(r.right, r.bottom, v.screenW, v.screenH, v.turn);
+  return { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) };
+}
+
+/**
+ * The page's own controls, each element marked `data-keep-clear`, as rectangles of the frame in frame pixels. One
+ * that is hidden, faded out, or empty is not in the way. The canvas's width in the layer is one frame across.
+ */
+function controlsOnFrame(root: HTMLElement, v: LayerView): KeepClear[] {
+  const canvas = root.querySelector("canvas");
+  if (!canvas || canvas.width === 0) return [];
+  const c = rectOnLayer(canvas.getBoundingClientRect(), v);
+  const canvasWidth = c.right - c.left;
+  if (canvasWidth === 0) return [];
+  const k = canvasWidth / canvas.width;
+  const out: KeepClear[] = [];
+  for (const el of root.querySelectorAll("[data-keep-clear]")) {
+    const box = rectOnLayer(el.getBoundingClientRect(), v);
+    if (box.right === box.left || box.bottom === box.top) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === "hidden" || Number(style.opacity) === 0) continue;
+    out.push({
+      x0: Math.floor((box.left - c.left) / k),
+      y0: Math.floor((box.top - c.top) / k),
+      x1: Math.ceil((box.right - c.left) / k),
+      y1: Math.ceil((box.bottom - c.top) / k),
+    });
+  }
+  return out;
 }

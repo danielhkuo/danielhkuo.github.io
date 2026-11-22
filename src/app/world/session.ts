@@ -26,7 +26,7 @@ import { restingPlaces, type Anchor } from "../../world/sites/anchor";
 import { advance, cameraAt, easeFocus, FOCUS_RATE, land, offered, pullUp, restShare, takeOff, type Phase, type Target } from "../../world/sites/landing";
 import { discoveryOf, type Landmark, type LandmarkSet } from "../../world/sites/landmarks";
 import { arrowAt } from "../../world/story/arrow";
-import { drawQuest, SHOW } from "../../world/story/overlay";
+import { drawQuest, SHOW, type KeepClear } from "../../world/story/overlay";
 import { HALL_ROSE, HALL_YARD, PIECE_AT } from "../../world/gen/monuments";
 import { complete, find, nextStop, type StopPlace } from "../../world/story/quest";
 import { STOPS } from "../../world/story/stops";
@@ -34,6 +34,7 @@ import { blit } from "../../world/controls/blit";
 import { bodyOnScreen, guideAnchor, guideFor, NO_PLACEMENT, placeGuide, SLOTS, SLOTS_HIGH, type Device } from "../../world/controls/guides";
 import { LESSON_KEY, newLesson, stepLesson } from "../../world/controls/lesson";
 import type { Options } from "../../world/controls/options";
+import { NO_INSETS, type Insets } from "../../world/mobile/layout";
 import { createPacer, phoneWorkers } from "../../world/mobile/perf";
 import { createControls } from "./controls";
 import { storage } from "./optionsStore";
@@ -130,6 +131,16 @@ export interface FlightSetup {
   touch?: (canvas: HTMLCanvasElement, hooks: { options(): Options; ghost(): boolean; touched(): void }) => TouchLayer | null;
   /** The frame size wanted, in frame pixels, read each frame: the session resizes its frame when it changes. */
   frame(): { w: number; h: number };
+  /**
+   * The safe-area insets in frame pixels, read each frame: a phone's notch or Dynamic Island, its rounded corners and
+   * its home indicator. None on a desktop.
+   */
+  insets?(): Insets;
+  /**
+   * Rectangles of the frame, in frame pixels, that the page covers with its own controls (the corner's options and the
+   * sound toggle): the quest's arrow keeps out of them. Read each frame.
+   */
+  keepClear?(): readonly KeepClear[];
   /** The world's sound, if the page has it: its ear joins the live layers, and it is given each frame. */
   sound?(): SoundControl | null;
 }
@@ -673,17 +684,18 @@ export function startFlight(canvas: HTMLCanvasElement, setup: FlightSetup, event
       if (!paused) {
         const quest = getQuest();
         const ground = groundHeight;
+        const inset = setup.insets?.() ?? NO_INSETS;
         // With the land prompt up, the place is in reach: the pointer stands down and leaves the head clear.
         const next = phase.kind === "flying" && offer === null && ground ? nextStop(quest, flight, stops, worldN) : null;
         const arrow = next && ground
-          ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12)
+          ? arrowAt(guideAnchor({ x: next.x, y: next.y, alt: ground(next.x, next.y) }, camera, fw, fh, worldN), fw, fh, 12, inset)
           : null;
         const took = taking && ground
           ? { key: taking.key, since: t / 1000 - taking.t0, from: guideAnchor({ x: taking.x, y: taking.y, alt: ground(taking.x, taking.y) + taking.z }, camera, fw, fh, worldN) }
           : null;
         if (took && took.since > SHOW) taking = null;
         if (probe) probe.quest = { arrow, next: next?.key ?? null, nextAt: next ? { x: next.x, y: next.y } : null, found: quest.found.slice(), offer: offer?.id ?? null };
-        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took);
+        drawQuest(frame, fw, fh, quest, arrow, t / 1000, reduced, took, inset, setup.keepClear?.() ?? []);
       }
       touchLayer?.draw(frame, fw, fh);
       const say = guide?.say ?? "";

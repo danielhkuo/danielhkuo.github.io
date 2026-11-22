@@ -343,10 +343,14 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
   return (
     <section className={styles.register} aria-labelledby="codex-five">
       <h3 id="codex-five">
-        {"Glass for the rose window · "}
-        <span className={styles.figures}>{n}</span>
-        {" of "}
-        <span className={styles.figures}>{STOPS.length}</span>
+        {"Glass for the rose window"}
+        {/* The count, which a short hall sheet leaves to the quatrefoils beside it (codex.module.css). */}
+        <span className={styles.count}>
+          {" · "}
+          <span className={styles.figures}>{n}</span>
+          {" of "}
+          <span className={styles.figures}>{STOPS.length}</span>
+        </span>
       </h3>
       {done ? null : (
         <p className={styles.questLine}>
@@ -391,7 +395,7 @@ function Five({ quest, onFollow, shown }: { quest: QuestState; onFollow: () => v
           <Links links={[{ href: LINKS.email, label: "Write to Daniel", external: false }]} />
         </>
       ) : quest.mode !== "on" ? (
-        <button type="button" className={styles.button} onClick={onFollow}>
+        <button type="button" className={`${styles.button} ${styles.follow}`} onClick={onFollow}>
           Look for the glass
         </button>
       ) : null}
@@ -514,6 +518,19 @@ export default function Codex({ landmark, onTakeOff, onOpenTerminal, openLabel }
           <button type="button" className={styles.button} onClick={onTakeOff} aria-keyshortcuts="Space">
             Take off <kbd>Space</kbd>
           </button>
+          {/* On a short window the hall's register has no room for its button, and it stands here, beside Take off
+              (codex.module.css shows one of the two). */}
+          {hallList && !complete(quest) && quest.mode !== "on" ? (
+            <button type="button" className={`${styles.button} ${styles.followAction}`} onClick={follow}>
+              Look for the glass
+            </button>
+          ) : null}
+          {/* So does the ending's link, once all five are found. */}
+          {hallList && complete(quest) ? (
+            <a className={`${styles.button} ${styles.writeAction}`} href={LINKS.email}>
+              Write to Daniel
+            </a>
+          ) : null}
         </p>
       </div>
     </dialog>

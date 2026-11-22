@@ -150,12 +150,14 @@ export default function Flight({ landmarks, terminal, startBytes, held, holdAt, 
         onLeave={onLeave}
       />
       {/* Under the title the world is held: the offer waits until the visitor is flying, then its few seconds, each time
-          they set off (a new card each time the title holds or lets go), so it never covers a take-off. */}
+          they set off (a new card each time the title holds or lets go), so it never covers a take-off. On a phone
+          it holds the flight while it is up, as the phone's other cards do: its thumbs are where the card would be. */}
       <QuestCard
         key={held ? "held" : "free"}
         px={px}
         lessonDone={flight.lessonDone && !held}
         covered={held === true || panel.open || shell.card !== null || drawer.open || at !== null}
+        hold={shell.phone ? shell.offer : undefined}
       />
       <FlightCard
         card={shell.card}

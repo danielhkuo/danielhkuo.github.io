@@ -12,6 +12,10 @@
 
 .panel {
   max-height: calc(100vh - 2rem);
+  /* The visible area, not 100vh: Safari's 100vh is its large viewport, taller than what shows on a phone held
+     sideways, so the panel ran off the top and under the home indicator. A touch flight's page carries the visible
+     height as --vvh; the panel keeps a margin at each end at least as deep as the notch or the home indicator. */
+  max-height: calc(var(--vvh, 100dvh) - 2 * max(1rem, env(safe-area-inset-top), env(safe-area-inset-bottom)));
   padding: calc(var(--px) * 5) calc(var(--px) * 7) calc(var(--px) * 6);
   overflow: auto;
   background: var(--paper);
@@ -181,6 +185,32 @@
   clip-path: inset(50%);
 }
 
+/* On a touch screen each choice, key and action is a finger's target, 44 px at least each way, its plate drawn as
+   before in the middle of it. The rows stand a target apart; on a phone held sideways the panel then scrolls, about
+   six rows to a screen. */
+@media (hover: none) and (pointer: coarse) {
+  .panel .row {
+    margin-bottom: 0;
+  }
+
+  .choice,
+  .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .actions {
+    row-gap: 0;
+  }
+
+  .action {
+    min-height: 44px;
+  }
+}
+
 /* ---- The corner ---- */
 
 .corner {
@@ -218,11 +248,12 @@
   outline-offset: var(--px);
 }
 
-/* A finger needs more than the plate: pad the target without moving what is drawn. */
+/* A finger needs more than the plate: pad the target without moving what is drawn, to 44 px tall at least (the plate is
+   12 glyph pixels, so 2 px glyphs need 10 px of padding each way). */
 @media (pointer: coarse) {
   .cornerItem {
-    padding: calc(var(--px) * 4);
-    margin: calc(var(--px) * -4);
+    padding: max(calc(var(--px) * 4), 10px);
+    margin: min(calc(var(--px) * -4), -10px);
   }
 }
 

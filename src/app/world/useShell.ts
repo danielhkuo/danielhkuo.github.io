@@ -38,6 +38,8 @@ export interface Shell {
   otherWay(): void;
   /** The options panel opened or closed: on a touch screen it holds the flight. */
   panel(open: boolean): void;
+  /** The quest offer shown or answered: on a touch screen it holds the flight while it is up. */
+  offer(open: boolean): void;
 }
 
 const TOUCH_FIRST = "(hover: none) and (pointer: coarse)";
@@ -328,6 +330,7 @@ export function useShell(root: RefObject<HTMLElement | null>): Shell {
     setTurn(next);
   }, []);
   const panel = useCallback((open: boolean) => dispatch(open ? "optionsOpen" : "optionsClose"), [dispatch]);
+  const offer = useCallback((open: boolean) => dispatch(open ? "offerOpen" : "offerClose"), [dispatch]);
 
   const link = useMemo<ShellLink>(
     () => ({
@@ -364,5 +367,6 @@ export function useShell(root: RefObject<HTMLElement | null>): Shell {
     playSideways,
     otherWay,
     panel,
+    offer,
   };
 }
