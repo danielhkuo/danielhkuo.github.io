@@ -1,28 +1,29 @@
 // Shared types for the interactive terminal. No React, no `any`.
 
+import type { Project } from "../../lib/projects.ts";
 import type { CellRun, Screen } from "./tty/screen";
-
-/** A serializable slice of a pinned GitHub repo, passed from the server page. */
-export interface SlimProject {
-  name: string;
-  description: string;
-  url: string;
-  homepageUrl: string | null;
-  primaryLanguage: { name: string; color: string } | null;
-  /** Largest first, as GitHub reports them. */
-  languages: { name: string; percentage: number }[];
-  stargazerCount: number;
-  forkCount: number;
-  /** ISO 8601. */
-  updatedAt: string;
-}
 
 /** What only the build knows about the site, passed from the server page. */
 export interface SiteInfo {
-  /** When the site was built, ISO 8601: the date on every file that is not a repo. */
+  /** When the site was built, ISO 8601: the date on every file GitHub gives no date for. */
   builtAt: string;
   /** The résumé PDF's size, for `ls -l`. */
   resumeBytes: number;
+  /**
+   * The site's other pages. Given, the tree holds the files the minimal
+   * version prints as its sections: ~/sitemap.md from these, projects/README.md
+   * and a contact card that stands by itself. The minimal version and the
+   * abbey's terminal in /world give them; the old home page, whose contact
+   * card points at the form at its foot, does not. See site.ts.
+   */
+  pages?: readonly PageLink[];
+}
+
+/** A page of the site as ~/sitemap.md lists it. */
+export interface PageLink {
+  title: string;
+  path: string;
+  summary: string;
 }
 
 /** A key/value pair rendered as a two-column row (help). */
@@ -43,6 +44,11 @@ export interface TextRun {
   bold?: boolean;
   underline?: boolean;
   href?: string;
+  /**
+   * The command line this text stands for (`cat about.md` for a file `ls`
+   * lists). A host with buttons makes it one; the others ignore it.
+   */
+  run?: string;
 }
 
 /**
@@ -58,7 +64,11 @@ export type TerminalLine =
   /** Rows a program laid out itself, at the width the window had when it ran. */
   | { kind: "text"; rows: TextRun[][] }
   /** A finished character grid, as a full-screen program prints on exit. */
-  | { kind: "screen"; rows: CellRun[][] };
+  | { kind: "screen"; rows: CellRun[][] }
+  /** A markdown file, for a host that sets it as a document instead of rows of cells. */
+  | { kind: "doc"; source: string }
+  /** `neofetch`, for a host that draws it itself. */
+  | { kind: "neofetch" };
 
 /** What a full-screen program can ask of the terminal that hosts it. */
 export interface ProgramHost {
@@ -118,6 +128,13 @@ export interface CommandContext {
   rows(rows: readonly TerminalRow[], title?: string): void;
   /** Rows the command laid out itself, for a window `cols` wide. */
   text(rows: TextRun[][]): void;
+  /**
+   * Print a markdown file as a document. Only a host that sets type itself
+   * has this; without it the command lays the file out in rows.
+   */
+  doc?(source: string): void;
+  /** Print `neofetch`. Only a host that draws it itself has this. */
+  neofetch?(): void;
   /** The window's width in cells. */
   readonly cols: number;
   clear(): void;
@@ -148,10 +165,15 @@ export type ThemeMode = "dark" | "light";
 /** The bridge the terminal uses to reach the surrounding page and the browser. */
 export interface TerminalApi {
   openUrl(url: string): void;
-  getProjects(): SlimProject[];
+  getProjects(): Project[];
   getTheme(): ThemeMode;
   /** Choose a mode, flip it, or with "auto" go back to the system's. Returns the mode now showing. */
   setTheme(mode: ThemeMode | "toggle" | "auto"): ThemeMode;
   close(): void;
   site: SiteInfo;
+  /**
+   * Go into the world. Only the title's window has one to go into: elsewhere
+   * the command is absent, and `./world` is simply not found.
+   */
+  enterWorld?(): void;
 }

@@ -32,6 +32,9 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import puppeteer from "puppeteer";
+// The key the pre-paint script reads. Imported, not copied: seeding any other
+// key leaves the stored cases following the OS and failing for the wrong reason.
+import { STORAGE_KEY } from "../src/lib/theme-constants.ts";
 
 const ROOT = "out";
 
@@ -182,10 +185,12 @@ try {
     await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: os }]);
     await page.evaluateOnNewDocument(installHelpers);
     await page.evaluateOnNewDocument(
-      (value) => {
-        if (value === null) localStorage.removeItem("theme");
-        else localStorage.setItem("theme", value);
+      // Runs in the browser, so the key has to arrive as an argument.
+      (key, value) => {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
       },
+      STORAGE_KEY,
       stored,
     );
 

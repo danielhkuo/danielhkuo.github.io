@@ -1,0 +1,274 @@
+/* The desktop title: the terminal window over the live world, and the ways in under it. Game layer, hand-written.
+   Nothing fades. The paper is a hard cut, and the page does not scroll. */
+
+.title {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Covers the world until both the intro and the first view are done, then it is simply not there. */
+.paper {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--bg);
+  pointer-events: none;
+}
+
+/* Once the arrival is playing, the canvas inside is the paper: the cover itself goes clear. */
+.paper[data-state="play"] {
+  background: none;
+}
+
+.paper[data-arrived="true"] {
+  display: none;
+}
+
+/* The arrival's paper, at the world's own pixel size and place (ArrivalPaper.tsx). */
+.arrival {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.front {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 0.75rem 1.25rem;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.front:not([hidden]) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(6.75rem, 1fr);
+  justify-items: center;
+  align-items: center;
+}
+
+.front[hidden] {
+  display: none;
+}
+
+/* The header centres itself in a screen of its own. Here the grid does that, and the ways in take the row under it,
+   reserved from the first frame so the window does not jump when they appear. */
+.front :global(header.nf) {
+  grid-row: 2;
+  min-height: 0;
+  height: auto;
+  width: min(896px, 100%);
+  padding: 0;
+  pointer-events: auto;
+}
+
+/* The header's scroll-dock is for a page that scrolls under it. This page does not, so the window stays where the grid put it. */
+.front :global(.nf-dock) {
+  animation: none;
+}
+
+/* The ways in, as the approved mock drew them: on the terminal's own dark panel and in its monospace, so they read as
+   part of the window above. Hover and focus invert them in one step, and a press sinks a button by a pixel. */
+.ways {
+  grid-row: 3;
+  align-self: start;
+  margin-top: 1.25rem;
+  pointer-events: auto;
+  font-family: var(--font-mono-family);
+  color: var(--panel-on);
+}
+
+.ways {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+/* Waiting, the ways in keep their place (hidden, not gone): the window does not move when they come, and the title can
+   set the held dragon beside them before they do. */
+.ways[hidden] {
+  visibility: hidden;
+}
+
+/* The way in that matters: a size and a rim above the small links, so the eye goes window, then here, then there. */
+.enter {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  padding: 12px 14px 12px 26px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 10px;
+  background: var(--panel-ink);
+  color: var(--panel-on);
+  font: 600 17px/1 var(--font-mono-family);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.4);
+  transition: none;
+}
+
+.enter kbd {
+  display: block;
+  line-height: 0;
+}
+
+.enter kbd svg {
+  display: block;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links a,
+.links button {
+  appearance: none;
+  display: block;
+  margin: 0;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--panel-ink);
+  color: var(--panel-on);
+  font: 12.5px/1 var(--font-mono-family);
+  text-decoration: none;
+  cursor: pointer;
+  transition: none;
+}
+
+/* Hover inverts; keyboard focus rings it, so the title looks the same when focus comes back to Enter world. */
+.enter:hover,
+.links a:hover,
+.links button:hover {
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+
+.enter:focus-visible,
+.links a:focus-visible,
+.links button:focus-visible {
+  outline: 2px solid var(--panel-on);
+  outline-offset: 3px;
+}
+
+.enter:active,
+.links a:active,
+.links button:active {
+  translate: 0 1px;
+}
+
+/* The window over the world sits higher than it does on paper, so it casts a deeper shadow there. */
+.front :global(.nf-frame) {
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
+/* 1280×720, and a full set of pins: the window and the ways in still sit inside the screen. */
+@media (max-height: 820px) {
+  .front:not([hidden]) {
+    grid-template-rows: minmax(0, 1fr) auto minmax(5.5rem, 1fr);
+    padding-block: 0.35rem;
+  }
+
+  .front :global(header.nf) {
+    --nf-body-y: 14px;
+    --nf-body-x: 24px;
+  }
+
+  .front :global(.nf-body) {
+    padding-bottom: 12px;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .front :global(.nf-grid) {
+    margin-top: 8px;
+    gap: 18px;
+    grid-template-columns: 140px 1fr;
+  }
+
+  .front :global(.nf-face img) {
+    width: 140px;
+    height: 140px;
+  }
+
+  .front :global(.nf-swatches) {
+    margin-top: 8px;
+  }
+
+  .front :global(.nf-cmd.nf-idle),
+  .front :global(.nf-cmd.nf-world),
+  .front :global(.nf-body > .term-log:not(:first-child)) {
+    margin-top: 10px;
+  }
+
+  .ways {
+    margin-top: 0.75rem;
+  }
+
+  .ways {
+    gap: 0.6rem;
+  }
+}
+
+/* A short screen (820×640, a laptop with the browser's bars): the window a size down again, so the ways in and the
+   dragon beside them still fit under it. */
+@media (max-height: 700px) {
+  .front:not([hidden]) {
+    grid-template-rows: minmax(0, 1fr) auto minmax(4.75rem, 1fr);
+  }
+
+  .front :global(header.nf) {
+    --nf-body-y: 10px;
+    --nf-body-x: 20px;
+  }
+
+  .front :global(.nf-body) {
+    padding-bottom: 8px;
+    font-size: 11.5px;
+    line-height: 1.38;
+  }
+
+  .front :global(.nf-grid) {
+    margin-top: 6px;
+    gap: 14px;
+    grid-template-columns: 112px 1fr;
+  }
+
+  .front :global(.nf-face img) {
+    width: 112px;
+    height: 112px;
+  }
+
+  .front :global(.nf-cmd.nf-idle),
+  .front :global(.nf-cmd.nf-world),
+  .front :global(.nf-body > .term-log:not(:first-child)) {
+    margin-top: 6px;
+  }
+
+  .ways {
+    margin-top: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .enter {
+    padding: 9px 12px 9px 20px;
+    font-size: 15px;
+  }
+}

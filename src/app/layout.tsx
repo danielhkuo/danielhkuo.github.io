@@ -76,10 +76,26 @@ export default function RootLayout({
             leave <html> with no attribute at all, which would drop the page back
             to following the OS. The key, the attribute name and the theme name
             are interpolated from lib/theme-constants.ts and the built theme, so
-            this string cannot drift from the runtime toggle. */}
+            this string cannot drift from the runtime toggle.
+            Last, the header's intro: data-intro="play" is stamped on the first
+            load of the home page in a tab and never again that session — not
+            on a deep link, not under reduced motion, and not on the 404 page,
+            which would spend the flag on a page with no header. The CSS it
+            gates (globals.css, "Intro") is the only reader, so a reload or a
+            no-JS visit gets the finished header. The attribute comes off again
+            when the last row has printed (exactly one of .nf-idle and
+            .nf-actions is displayed at any width, and both print last) or at
+            the first key press, whichever is sooner: a Tab during the intro
+            would otherwise pass over links that have not printed yet. */}
+        {/* suppressHydrationWarning: extensions inject their own <script> into
+            <head> before React hydrates, and React then pairs this element
+            with theirs and reports its src and contents as a mismatch. This
+            one has run by then and never changes, so there is nothing for
+            hydration to check. */}
         <script
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: `(function(){var e=document.documentElement,c=document.querySelector('meta[name="theme-color"]'),m='light';try{if(window.matchMedia('(prefers-color-scheme:dark)').matches)m='dark'}catch(_){}try{var t=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});if(t==='dark'||t==='light')m=t}catch(_){}e.setAttribute(${JSON.stringify(ATTR)},m);e.setAttribute('data-astryx-theme',${JSON.stringify(flexokiTheme.name)});if(c)c.content=${JSON.stringify(THEME_COLOR)}[m]})()`,
+            __html: `(function(){var e=document.documentElement,c=document.querySelector('meta[name="theme-color"]'),m='light';try{if(window.matchMedia('(prefers-color-scheme:dark)').matches)m='dark'}catch(_){}try{var t=localStorage.getItem(${JSON.stringify(STORAGE_KEY)});if(t==='dark'||t==='light')m=t}catch(_){}e.setAttribute(${JSON.stringify(ATTR)},m);e.setAttribute('data-astryx-theme',${JSON.stringify(flexokiTheme.name)});if(c)c.content=${JSON.stringify(THEME_COLOR)}[m];try{if(location.pathname==='/'&&!location.hash&&!window.matchMedia('(prefers-reduced-motion:reduce)').matches&&!sessionStorage.getItem('intro')){sessionStorage.setItem('intro','1');e.setAttribute('data-intro','play');var f=function(v){if(v.type==='keydown'||(v.animationName==='nf-held'&&v.target.matches('.nf-idle,.nf-actions'))){e.removeAttribute('data-intro');e.removeEventListener('animationend',f);e.removeEventListener('keydown',f,true)}};e.addEventListener('animationend',f);e.addEventListener('keydown',f,true)}}catch(_){}})()`,
           }}
         />
         {/* Preconnect to external domains for faster loading */}

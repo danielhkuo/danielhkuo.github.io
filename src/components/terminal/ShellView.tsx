@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type RefObject,
   type SyntheticEvent,
 } from "react";
 import { isPlain, runClass, runStyle, trimRuns } from "./screenHtml";
@@ -15,6 +16,79 @@ import { xtermToCss } from "./tty/colors";
 import type { CellRun } from "./tty/screen";
 import type { TerminalLine, TextRun } from "./types";
 import type { Shell } from "./useShell";
+
+/** The scrollback: one row per line the shell has printed. */
+export function ShellLog({ shell, logRef }: { shell: Shell; logRef?: RefObject<HTMLDivElement | null> }) {
+  return (
+    <div ref={logRef} className="term-log" aria-live="polite">
+      {shell.entries.map(({ id, line }) => (
+        <LogLine key={id} line={line} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The prompt line: the prompt, the input, and the drawn cursor and ghost.
+ * `onKeyDown` runs before the shell's own keys and may cancel them by
+ * returning true — a host that wants the key itself (⏎ into the world, Tab
+ * out to the page) does that without the shell also taking it.
+ */
+export function PromptRow({
+  shell,
+  inputRef,
+  onKeyDown: onKey,
+  id,
+}: {
+  shell: Shell;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => boolean | void;
+  id?: string;
+}) {
+  // Where the drawn block cursor sits (the native caret is hidden), counted
+  // back from the end of the line — where the caret stays while typing.
+  const [caretFromEnd, setCaretFromEnd] = useState(0);
+  const caret = Math.max(0, shell.input.length - caretFromEnd);
+
+  const syncCaret = (e: SyntheticEvent<HTMLInputElement>) => {
+    const { selectionStart, value } = e.currentTarget;
+    setCaretFromEnd(value.length - (selectionStart ?? value.length));
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (onKey?.(e)) return;
+    if (e.defaultPrevented) return;
+    const { selectionStart, value } = e.currentTarget;
+    if (shell.key(e.key, selectionStart === value.length)) e.preventDefault();
+  };
+
+  return (
+    <div className="term-inputrow">
+      <span className="term-ps">{promptFor(shell.cwd)}</span>
+      <div className="term-inputwrap">
+        <input
+          ref={inputRef}
+          id={id}
+          className="term-input"
+          value={shell.input}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="terminal input"
+          onChange={(e) => {
+            shell.setInput(e.target.value);
+            syncCaret(e);
+          }}
+          onSelect={syncCaret}
+          // History recall and completion replace the value, which moves
+          // the caret without a select event.
+          onKeyUp={syncCaret}
+          onKeyDown={onKeyDown}
+        />
+        <InputGhost input={shell.input} caret={caret} suggestion={shell.suggestion} />
+      </div>
+    </div>
+  );
+}
 
 /**
  * The terminal body at the shell prompt: the scrollback, then the prompt line
@@ -26,10 +100,6 @@ export default function ShellView({ shell }: { shell: Shell }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Where the drawn block cursor sits (the native caret is hidden), counted
-  // back from the end of the line — where the caret stays while typing.
-  const [caretFromEnd, setCaretFromEnd] = useState(0);
-  const caret = Math.max(0, shell.input.length - caretFromEnd);
 
   // The prompt takes focus whenever it appears: the terminal opening, or a
   // program handing the body back.
@@ -49,16 +119,6 @@ export default function ShellView({ shell }: { shell: Shell }) {
     return () => observer.disconnect();
   }, []);
 
-  const syncCaret = (e: SyntheticEvent<HTMLInputElement>) => {
-    const { selectionStart, value } = e.currentTarget;
-    setCaretFromEnd(value.length - (selectionStart ?? value.length));
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    const { selectionStart, value } = e.currentTarget;
-    if (shell.key(e.key, selectionStart === value.length)) e.preventDefault();
-  };
-
   return (
     // role=presentation: click-to-focus is a pointer convenience. The prompt
     // is the control, and it already has focus.
@@ -71,34 +131,8 @@ export default function ShellView({ shell }: { shell: Shell }) {
         focusAtEnd(inputRef.current);
       }}
     >
-      <div ref={logRef} className="term-log" aria-live="polite">
-        {shell.entries.map(({ id, line }) => (
-          <LogLine key={id} line={line} />
-        ))}
-      </div>
-      <div className="term-inputrow">
-        <span className="term-ps">{promptFor(shell.cwd)}</span>
-        <div className="term-inputwrap">
-          <input
-            ref={inputRef}
-            className="term-input"
-            value={shell.input}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label="terminal input"
-            onChange={(e) => {
-              shell.setInput(e.target.value);
-              syncCaret(e);
-            }}
-            onSelect={syncCaret}
-            // History recall and completion replace the value, which moves
-            // the caret without a select event.
-            onKeyUp={syncCaret}
-            onKeyDown={onKeyDown}
-          />
-          <InputGhost input={shell.input} caret={caret} suggestion={shell.suggestion} />
-        </div>
-      </div>
+      <ShellLog shell={shell} logRef={logRef} />
+      <PromptRow shell={shell} inputRef={inputRef} />
     </div>
   );
 }
@@ -124,6 +158,10 @@ function LogLine({ line }: { line: TerminalLine }) {
           {line.text}
         </div>
       );
+    // Only a host that sets documents itself is sent these (useShell's `rich`).
+    case "doc":
+    case "neofetch":
+      return null;
     case "rows":
       return (
         <div className="term-block">

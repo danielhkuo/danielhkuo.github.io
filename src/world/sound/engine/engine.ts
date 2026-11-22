@@ -1,0 +1,1416 @@
+// The engine: the only code that touches Web Audio (design §6). It takes a BaseAudioContext, so the page and the
+// offline render run the same code. Each frame it runs the scheduler; thirty times a second it runs the mix and sends
+// the targets that moved. Every method takes the audio time to act at, so a whole timeline can be scheduled ahead and
+// rendered in one go (the bench's unstepped mode, and how Firefox renders).
+
+import { easeFor, easeOffset, lateness, LOOKAHEAD, lookaheadFor, SAMPLE_EVERY, sampleOffset, whenFor, type ClockReading } from "../clock.ts";
+import { BED_OFF, BED_OFF_S, BED_ON, FADE_IN, K_SURF, K_WIND, LIMITER_DELAY_S, LIMITER_METER_SETTLE_S, LOOPS, TAU, WORLD_LOWPASS_HZ } from "../levels.ts";
+import { mix, moved, newMemory, newTargets, SEND, T } from "../mix.ts";
+import { bellCues, HAMMER, LONGEST_RING } from "../schedule/bells.ts";
+import { clockCues, WHIRR_END } from "../schedule/chimes.ts";
+import type { Colony } from "../schedule/gulls.ts";
+import { ferryCues, flockCues, planeCues, trainCues } from "../schedule/moments.ts";
+import { pipCues, tailCues } from "../schedule/probe.ts";
+import { leadOf, ROCK, SHINGLE } from "../schedule/waves.ts";
+import { torusDelta } from "../../core/torus.ts";
+import { airCutoff, dbToGain, distanceGain, offsetTo, panOf, SMALL, southCutoff, southGain, southOf } from "../space.ts";
+import { RING_S, TENOR } from "../synth/bells.ts";
+import { IR_TAPS } from "../synth/ir.ts";
+import { TAIL_S } from "../synth/probe.ts";
+import { emptyHearing, HEARING_FLOATS, pooledHearing, unpackHearing, type Census, type Cue, type Hearing, type Places, type Pose, type Prefs, type Pt, type Startle, type Wheeler } from "../types.ts";
+import { bind, bindHz, buildMaster, gain, type Binding, type Bus, type Ctx, type Master } from "./graph.ts";
+import { createCensus } from "../census.ts";
+import { copyRows, createEar, latticeOf, PASS, type Seen } from "../ear.ts";
+import { createFresh, ownGenerations, type Fresh } from "./fresh.ts";
+import { loadNoise } from "./noise-worklet.ts";
+import { createKit, spawnWorker, type Kit } from "./kit.ts";
+import { createScheduler, STALL, type CueSource, type Due, type Scheduler } from "./scheduler.ts";
+import { BRAIN_AHEAD, coloniesOf, gullCuesNear, REACH, unpackEmitters, type BrainAsk, type BrainInit, type BrainReply, type RemoteBrain } from "./brain.ts";
+import { createLanes, type EmitterState, type Lanes, type LapStart, type WaveStart } from "./lanes.ts";
+import { buildOpenSea, buildSurfBed } from "./sea.ts";
+import { createOneShots, createPool, type OneShots, type Pool } from "./slots.ts";
+import { buildSurf, type Surf } from "./waves.ts";
+import { buildBells, buildReverb, type Bells } from "./bells.ts";
+import { buildFalls, type Falls } from "./falls.ts";
+import { buildGulls, type Gulls } from "./gulls.ts";
+import { buildHub, type Hub } from "./hub.ts";
+import { buildClock, buildFerry, buildFlock, buildPlane, buildTrain, type Moment } from "./moments.ts";
+import { buildRain } from "./rain.ts";
+import { buildRiverBed } from "./river.ts";
+import { buildWhistles, buildWhoosh, buildWind, type BedOpts, type Voice } from "./wind.ts";
+
+export interface EngineOptions {
+  touch: boolean;
+  /** The world's seed: where each noise loop is read from. */
+  seed: number;
+  /**
+   * True once the fresh-noise worklet is loaded. Continuous noises built after that are made as they play. Absent,
+   * or false, those beds keep reading fresh loops (and a bed built before the module loads does too).
+   */
+  noise?: () => boolean;
+  /** Rendering offline: build everything at once, world time maps to audio time exactly. */
+  offline?: boolean;
+  /**
+   * On the page, a one-shot not due soon is made on a later, lighter frame, at the same audio time. Offline this is
+   * ignored: a render makes each as it is asked for. Defaults to on.
+   */
+  defer?: boolean;
+  /** Plays the bench's stand-in pips and tails (the toggle, hide-show and stall scenes). */
+  probe?: boolean;
+  /** Mutes waves and every one-shot, to judge the continuous layers alone (the `-beds` renders). */
+  beds?: boolean;
+  /** The world's size in cells (positions wrap every n). */
+  n?: number;
+  /** No waves, laps or beds (a measuring arm). */
+  noSurf?: boolean;
+  /**
+   * The lanes and the scheduler worked elsewhere (the ear's worker, on the page): the waves and the cues to start then
+   * come back from it with each Hearing, and the engine only starts them. Offline, and without one, it works them
+   * out itself.
+   */
+  brain?: RemoteBrain | null;
+  /**
+   * A measuring arm on the page (?stats&soundarm=…, world-fly --arms), each leaving one part of the frame's work out:
+   * "nosched" (the scheduler), "nosends" (the mix's sends), "nowaves" (the lanes and the emitters), "novoices" (the
+   * placed voices). Never set otherwise.
+   */
+  skip?: string;
+  /** Only the waves' hiss path sounds (no wind, no beds, no other part of a wave): the repetition check's render. */
+  hissOnly?: boolean;
+  /** A calibration tone into the master chain: dBFS peak and Hz. */
+  tone?: { db: number; hz: number };
+  /** The world's abbeys: the nearest one rings. None, and there are no bells. */
+  abbeys?: readonly Pt[];
+  /** In place of the abbey's hours: one stroke of the tenor under its hammer at this world time (the bench's `bell-stroke`). */
+  oneStroke?: number;
+  /** In place of any bell: one sample of 1 into the reverb's send bus at this world time, so a render is the reverb's own response (the bench's `reverb-impulse`). */
+  impulse?: number;
+  /** The world's wheeling gulls (live/life.ts's `wheelersOf`): they call, by colony. */
+  gulls?: readonly Wheeler[];
+  /** In place of the colonies' own calling: these calls, each from its own fixed place (the bench's `gull-calls`). */
+  gullScript?: readonly Cue[];
+  /** The world's towns (the first has the clock) and wonders (the railway has the train, the cove hotel the seaplane). */
+  towns?: readonly Pt[];
+  wonders?: Places["wonders"];
+  /** The page's `?sights=all`: every moment loops with no gap. */
+  forced?: boolean;
+  /** Of the clock, only the tune's chimes (the bench's `clock-tune`). */
+  tuneOnly?: boolean;
+}
+
+/** When a frame is: given by the bench; read from the context by the page. */
+export interface Timing {
+  /** Audio time of this frame. */
+  now: number;
+  /** Audio time minus world time. */
+  o: number;
+}
+
+export interface EngineStats {
+  /** The most the limiter pulled down, dB (0 = it never worked); null when it could not be read. */
+  limiterMinDb: number | null;
+  /** Audio times at which every one-shot started is heard at the output (its start, past its pad and the limiter's delay). */
+  onsets: number[];
+  oneShots: number;
+  dropped: number;
+  nodes: number;
+  /** Parameter sends made by the mix. */
+  sends: number;
+  /** Waves started in each lane, and the world times every wave started at (with its lane and train). */
+  wavesByLane: number[];
+  waves: { t: number; when: number; lane: number; train: number; kind: number; strength: number; lasts: number }[];
+  /** Every bell stroke started: its hour, bell (5 the hour's hammer) and number, its world time, the audio time it was started at, and how far into its ring (0: from its top, with its strike). */
+  strokes: { H: number; bell: number; k: number; t: number; when: number; offset: number }[];
+  /** Falls: how many were given a chain outright, how many took the spare from a weaker one, and each of those moments (audio time, the fall's place). */
+  fallsBound: number;
+  fallHandovers: number;
+  fallLog: { when: number; x: number; y: number; handover: boolean }[];
+  /** Gulls: every call started (world time, colony, bird, kind), calls dropped for want of a slot, and startled birds voiced. */
+  gullCalls: { t: number; when: number; colony: number; bird: number; call: number }[];
+  gullsDropped: number;
+  gullStartles: number;
+  gullKeks: { when: number; d: number; run: number }[];
+  /** Every cue of the clock and the moments that was played: its kind, what it is (`variant`), its number, its world time and the audio time it was started at. */
+  momentCues: { kind: string; variant: number; k: number; t: number; when: number }[];
+}
+
+export interface Engine {
+  /** One frame. Nothing is sent while muted or hidden. */
+  frame(pose: Pose, hearing: Hearing, prefs: Prefs, timing?: Timing): void;
+  /** Sound is wanted: the first enable fades in slowly once the wind is built; a later one (unmute, tab shown) quickly. */
+  enable(first: boolean): void;
+  /** The mute fade; every one-shot is stopped 250 ms on and the ledgers are cleared. The caller suspends the device. */
+  mute(at?: number): void;
+  /** Tab hidden: hold, a 200 ms ramp to 0 on the audio clock, everything stopped. The caller suspends the device. */
+  hide(at?: number): void;
+  /** The device was interrupted (its clock is frozen, nothing is heard): silence at once, everything stopped. */
+  cut(): void;
+  /** The bench's mute boxes. */
+  setBus(bus: Bus, on: boolean): void;
+  /** The sectors that hold a lane, as bits: for the ear. */
+  laneMask(): number;
+  /** What the last frame did, as bits (WORK): for the probe, to say where a long frame went. */
+  work(): number;
+  /** True when no graph is waiting to be built. */
+  built(): boolean;
+  /** True once sound has been enabled and not muted or hidden since. */
+  readonly live: boolean;
+  stats(): EngineStats;
+  dispose(): void;
+}
+
+/**
+ * The master's mute gain, as scheduled: an exponential approach, or straight lines through points (time, value). Kept
+ * so a fade can be taken over from the value it has reached, at any time, the same way in every browser.
+ */
+type Fade = { kind: "still"; v: number } | { kind: "target"; v0: number; t0: number; to: number; tau: number } | { kind: "line"; pts: number[] };
+
+function fadeAt(f: Fade, t: number): number {
+  if (f.kind === "still") return f.v;
+  if (f.kind === "target") return t <= f.t0 ? f.v0 : f.to + (f.v0 - f.to) * Math.exp(-(t - f.t0) / f.tau);
+  const p = f.pts;
+  if (t <= p[0]) return p[1];
+  for (let i = 2; i < p.length; i += 2) {
+    if (t <= p[i]) return p[i - 1] + ((p[i + 1] - p[i - 1]) * (t - p[i - 2])) / (p[i] - p[i - 2]);
+  }
+  return p[p.length - 1];
+}
+
+/** Segments in a fade-in: straight lines in amplitude that follow a straight line in decibels. */
+const FADE_STEPS = 12;
+/** Seconds from silence to the foot of a fade-in's line. */
+const FADE_FOOT = 0.02;
+
+const MIX_EVERY = 1 / 30;
+/** The scheduler looks at most this often on the page, seconds (a hair under a sixtieth, so a 60 Hz display looks every frame). */
+/** Sources the scheduler asks a frame on the page (offline renders ask them all every step). */
+const SCHED_EACH = 2;
+const HALF_VOICES = 1, HALF_EMITTERS = 2;
+
+/** What a frame did, as bits. `fresh` is a request, a move or a cleanup of a bed's loop. */
+export const WORK = { build: 1, kit: 2, mix: 4, wave: 8, lap: 16, enable: 32, clock: 64, lanes: 128, sched: 256, census: 512, voices: 1024, emitters: 2048, fresh: 4096 } as const;
+/** Level of the bench's pips and tails, dB. */
+const PIP_DB = -18, TAIL_DB = -22;
+/** The pad of digital silence at the head of every one-shot buffer, seconds. */
+const PAD = 0.02;
+
+export function createEngine(ctx: Ctx, kit: Kit, opts: EngineOptions): Engine {
+  const offline = opts.offline === true;
+  const defer = !offline && opts.defer !== false;
+  // One reader for the whole engine: a buffer's generations are shared by every bed that reads it.
+  // (Offline, its own generations: a render does not depend on what was rendered on the kit before it.)
+  // A bed held here stays on the loop it was given: the measuring arm "nofresh", and LOOPS at 0 (the plain loops from
+  // before generations). The worklet only replaces a read that would have moved, so those renders stay sample for sample.
+  const moves = (bed?: string) => opts.skip !== "nofresh" && (bed === undefined || LOOPS[bed as keyof typeof LOOPS] !== 0);
+  const fresh: Fresh = createFresh(ctx, offline ? ownGenerations(ctx, kit, opts.seed) : kit, {
+    offline,
+    seed: opts.seed,
+    on: (_name, bed) => moves(bed),
+    worklet: (_name, bed) => opts.noise?.() === true && moves(bed),
+  });
+  const master: Master = buildMaster(ctx);
+  const busOn: Record<Bus, boolean> = { wind: true, water: true, life: true, moments: true, bells: true };
+  const bindings: Binding[] = [
+    bind(T.MASTER, [master.volume.gain]),
+    bind(T.WORLD, [master.world.gain]),
+    bindHz(T.WORLD_HZ, [master.worldLow], WORLD_LOWPASS_HZ),
+    bind(T.DUCK, [master.bus.wind.gain, master.bus.water.gain], (v, k) => (busOn[k === 0 ? "wind" : "water"] ? v : 0)),
+  ];
+  const shots: OneShots = createOneShots(ctx, opts.touch ? 20 : 40, { defer });
+  const sources: CueSource[] = [];
+  if (opts.probe && !opts.beds) {
+    sources.push({ kind: "pip", cues: (a, b, out) => pipCues(opts.seed, a, b, out), lookBack: 0 }, { kind: "tail", cues: tailCues, lookBack: TAIL_S });
+  }
+  const scheduler: Scheduler = createScheduler(sources);
+  const due: Due[] = [];
+  const onsets: number[] = [];
+  const memory = newMemory();
+  const targets = newTargets();
+  let nodes = master.nodes.length;
+  let sends = 0;
+
+  let wind: Voice | null = null;
+  let windBuilt = false;
+  const n = opts.n ?? 10240;
+  const touch = opts.touch;
+  const lanes: Lanes = createLanes({ lanes: touch ? 2 : 4, emitters: touch ? 4 : 8, seed: opts.seed });
+  let surf: Surf | null = null;
+  let surfBuilt = false;
+  let pool: Pool | null = null;
+  const waveStarts: WaveStart[] = [];
+  const lapStarts: LapStart[] = [];
+  const waveLog: EngineStats["waves"] = [];
+  const abbeys = opts.abbeys ?? [];
+  /** What the mix is told is there: the nearest abbey. */
+  const census: Census = { n, sources: abbeys.length ? [{ kind: "abbey", key: 0, x: abbeys[0].x, y: abbeys[0].y, h: 0 }] : [] };
+  const wheelers = opts.gulls ?? [];
+  /** The colonies: each site's wheelers, with the middle of where they wheel. */
+  const colonies = coloniesOf(wheelers);
+  const near: Colony[] = [];
+  let gulls: Gulls | null = null;
+  let lifePool: Pool | null = null;
+  const gullLog: EngineStats["gullCalls"] = [];
+  /** Where the dragon was at the last frame (colonies are asked for calls only within 350 cells of it), and how dark. */
+  const last = { x: 0, y: 0, night: 0 };
+  const gullSource: CueSource = {
+    kind: "gull", lookBack: 0,
+    cues(a, b, out) {
+      if (opts.gullScript) {
+        for (const c of opts.gullScript) if (c.t >= a && c.t < b) out.push(c);
+        return;
+      }
+      gullCuesNear(opts.seed, n, colonies, last.x, last.y, last.night, a, b, out, near);
+    },
+  };
+  /** The clock and the moments, by the kind of their cues; built once their buffers are in. */
+  const moments = new Map<string, Moment>();
+  let momentsBuilt = false, reverbBuilt = false;
+  const momentLog: EngineStats["momentCues"] = [];
+  let lastMoments = NaN;
+  const forced = opts.forced === true;
+  const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
+  const hotel = opts.wonders?.find((w) => w.type === "cove-hotel");
+  const bathsAt = opts.wonders?.find((w) => w.type === "baths");
+  const church = opts.wonders?.find((w) => w.type === "drowned-church");
+  const wantMoments = (opts.towns?.length ?? 0) > 0 || !!railway || !!hotel || !!bathsAt || !!church;
+  /** A moment is asked for cues, and followed, only within this many cells (the medium class is gone by 450). */
+  const MOMENT_REACH = 480;
+  const inReach = (m: Moment) => {
+    const dx = torusDelta(last.x, m.x, n), dy = torusDelta(last.y, m.y, n);
+    return dx * dx + dy * dy <= MOMENT_REACH * MOMENT_REACH;
+  };
+  let falls: Falls | null = null;
+  const fallLog: EngineStats["fallLog"] = [];
+  /** World time of the falls' last update, and the audio time of the one running. */
+  let lastFalls = NaN, fallNow = 0;
+  const noteFall = (x: number, y: number, handover: boolean) => {
+    if (fallLog.length < 500) fallLog.push({ when: fallNow, x, y, handover });
+  };
+  let bells: Bells | null = null;
+  let bellsBuilt = false;
+  const strokeLog: EngineStats["strokes"] = [];
+  let impulsed = false;
+  const bellSource: CueSource = opts.impulse !== undefined
+    ? { kind: "bell", lookBack: 0, cues() {} }
+    : opts.oneStroke === undefined
+    ? { kind: "bell", cues: (a, b, out) => bellCues(opts.seed, a, b, out), lookBack: LONGEST_RING }
+    : {
+      kind: "bell", lookBack: LONGEST_RING,
+      cues(a, b, out) {
+        const t = opts.oneStroke as number;
+        if (t >= a && t < b) out.push({ t, kind: "bell", key: "one", lasts: RING_S[TENOR], soft: true, H: 0, bell: HAMMER, k: 0, take: 0, ringDb: 0, strikeDb: 5 });
+      },
+    };
+  /** Voices built when they can be heard and let go when they cannot: the surf bed and the open sea. */
+  type Make = (ctx: Ctx, kit: Kit, out: AudioNode, o: BedOpts) => Voice;
+  const demand = (name: string, gains: number[], make: Make, out: AudioNode, on: number, off: number, surfKit: boolean, riverKit = false) => ({
+    name, gains, make, out, on, off, surfKit, riverKit, voice: null as Voice | null, built: false, quietSince: NaN,
+  });
+  const beds = [
+    demand("bed", [T.BED_HISS, T.BED_BODY, T.BED_RUMBLE, T.BED_RATTLE], buildSurfBed, master.bus.water, BED_ON, BED_OFF, true),
+    demand("open", [T.OPEN], buildOpenSea, master.bus.water, BED_ON, BED_OFF, true),
+    demand("river", [T.RIVER_FLOW, T.RIVER_BROOK, T.RIVER_RIFFLE], buildRiverBed, master.bus.water, BED_ON, BED_OFF, true, true),
+    // Rain: only while a shower is heard (its noises and the brook's bubbles come with the surf's and the river's kits).
+    demand("rain", [T.RAIN_PATTER, T.RAIN_SHEET, T.RAIN_FIZZ], buildRain, master.bus.water, BED_ON, BED_OFF, true, true),
+    // The whistles: only when the dragon is going fast enough for them to be heard (they are 26 dB under the rush at
+    // cruise). On above 30 % of their fullest (s > 1.1), off after two seconds under 25 %.
+    // The whoosh: only round a turn.
+    demand("whoosh", [T.W_GAIN], buildWhoosh, master.windIn, BED_ON, BED_OFF, false),
+    ...(touch ? [] : [demand("whistles", [T.D_GAIN], buildWhistles, master.windIn, 0.3 * K_WIND.d, 0.25 * K_WIND.d, false)]),
+  ];
+  let hub: Hub | null = null;
+  let toneNodes: AudioScheduledSourceNode[] = [];
+
+  /** What `enable` asked for, done by the next frame that can (it needs that frame's targets). */
+  let pending: "first" | "again" | null = null;
+  let live = false;
+  let fade: Fade = { kind: "still", v: 0 };
+  /** True while the mute gain is on its way to 0 (a mute or a hide). */
+  let falling = false;
+  let o = NaN;
+  /** World time of the last clock sample, the lookahead it gave, and the reading it is made into (reused). */
+  let lastClock = NaN;
+  let lookahead = LOOKAHEAD;
+  const reading: ClockReading = { currentTime: 0, outputLatency: 0, stamp: null, now: 0 };
+  let lastMix = NaN;
+  /** The first of the sources the scheduler asks next (on the page). */
+  let schedNext = 0;
+  /** A second half waiting for this frame: HALF_VOICES (the mix's) or HALF_EMITTERS (the waves'), or 0. */
+  let half = 0;
+  /** Where the mix's second half takes up its sends (−1: none waiting). */
+  let sendsFrom = -1;
+  /** Cues found on the page and not yet played (see playQueued). */
+  const queued: Due[] = [];
+  // With the lanes and the scheduler worked elsewhere (opts.brain): how many of the cue sources it has been told of;
+  // the waves and laps it has found, waiting for the waves' next turn; and the lanes as it left them.
+  let told = 0;
+  const waveWait: WaveStart[] = [];
+  const lapWait: LapStart[] = [];
+  const remoteEmitters: EmitterState[] = [];
+  let remoteMask = 0;
+  /** True in a frame whose lanes and scheduler are worked elsewhere. */
+  let elsewhere = false;
+  let lastWaves = NaN;
+  /** World time of the fresh loops' last turn (on the page). */
+  let freshAt = -Infinity;
+  /** Which of the two took the last turn: 0 the mix, 1 the waves. */
+  let lastTurn = 1;
+  let lastT = NaN;
+  let limiterMin: number | null = null;
+  let limiterNext = 0;
+  let disposed = false;
+  let work = 0;
+  let turn = 0;
+
+  const timeOf = (at?: number) => at ?? ctx.currentTime;
+
+  /**
+   * Takes the mute gain over at `now` from wherever its fade has brought it: cancel, then set the value the fade has
+   * reached (worked out here; the same in every browser, and at any future time). cancelAndHoldAtTime is not used:
+   * Firefox lacks it, and in Chrome a ramp that follows it starts from a stale value once the earlier fade has settled.
+   */
+  const hold = (now: number): number => {
+    const p = master.mute.gain;
+    const v = fadeAt(fade, now);
+    p.cancelScheduledValues(now);
+    p.setValueAtTime(v, now);
+    fade = { kind: "still", v };
+    return v;
+  };
+
+  /** Fades the mute gain in from `v` (its held value at `now`): a straight line in decibels up to 1. */
+  const fadeIn = (now: number, v: number, shape: { seconds: number; fromDb: number }) => {
+    const p = master.mute.gain;
+    const from = Math.max(v, dbToGain(shape.fromDb));
+    // Starting part of the way up (a quick return), the line is that much shorter.
+    const seconds = shape.seconds * Math.min(1, Math.log(from) / Math.log(dbToGain(shape.fromDb)));
+    const pts = [now, v];
+    // Up to the foot of the line in 20 ms (it is under −50 LUFS there), then along it.
+    let t0 = now;
+    if (from > v) {
+      t0 = now + FADE_FOOT;
+      p.linearRampToValueAtTime(from, t0);
+      pts.push(t0, from);
+    }
+    for (let i = 1; i <= FADE_STEPS; i++) {
+      const u = i / FADE_STEPS;
+      const value = i === FADE_STEPS ? 1 : Math.pow(from, 1 - u);
+      const at = t0 + Math.max(seconds, 0.02) * u;
+      p.linearRampToValueAtTime(value, at);
+      pts.push(at, value);
+    }
+    fade = { kind: "line", pts };
+  };
+
+  const startTone = (now: number) => {
+    if (!opts.tone || toneNodes.length) return;
+    const osc = ctx.createOscillator();
+    osc.frequency.value = opts.tone.hz;
+    const g = gain(ctx, dbToGain(opts.tone.db));
+    osc.connect(g);
+    g.connect(master.sum);
+    osc.start(now);
+    toneNodes = [osc];
+    nodes += 2;
+  };
+
+  /** One build step of a voice (all of them offline). True when the voice is whole. */
+  const stepVoice = (v: { steps: (() => void)[] }): boolean => {
+    work |= WORK.build;
+    do {
+      const step = v.steps.shift();
+      if (step) step();
+    } while (offline && v.steps.length);
+    return v.steps.length === 0;
+  };
+
+  /** World time before which build() is not asked again (it had nothing to do). */
+  let buildIdleUntil = -Infinity;
+  /** At most one build step a frame on the page, so no frame pays for a whole graph. */
+  const build = (now: number) => {
+    if (opts.tone) return;
+    const base = kit.ready("noise") && kit.ready("controls");
+    if (base && !hub) {
+      hub = buildHub(ctx, kit, opts.seed, now);
+      nodes += 6;
+      work |= WORK.build;
+      if (!offline) return;
+    }
+    if (!opts.hissOnly) {
+      if (!wind && base && hub) wind = buildWind(ctx, kit, master.windIn, { hub, seed: opts.seed, at: now, fresh });
+      if (wind && !windBuilt) {
+        if (stepVoice(wind)) {
+          windBuilt = true;
+          bindings.push(...wind.bindings);
+          nodes += wind.nodes.length;
+        }
+        if (!offline) return;
+      }
+    } else windBuilt = true;
+    if (!base || !hub) return;
+    const surfReady = kit.ready("surf") && !opts.noSurf;
+    if (surfReady && !surf && !opts.beds) surf = buildSurf(ctx, kit, master.bus.water, { hub, emitters: touch ? 4 : 8, seed: opts.seed, n, at: now, hissOnly: opts.hissOnly });
+    if (surf && !surfBuilt) {
+      if (stepVoice(surf)) {
+        surfBuilt = true;
+        nodes += surf.nodes;
+        pool = createPool(ctx, touch ? 6 : 12, master.bus.water);
+      }
+      if (!offline) return;
+    }
+    // The falls: nothing is built until one is heard (each chain is made when its first fall is bound).
+    if (!falls && !opts.noSurf && kit.ready("surf") && kit.ready("river")) falls = buildFalls(ctx, kit, master.bus.water, { hub, touch, n, seed: opts.seed, onBind: noteFall });
+    // The reverb: its response comes with the bells' buffers.
+    if (!reverbBuilt && !opts.beds && kit.ready("bells")) {
+      reverbBuilt = true;
+      nodes += buildReverb(ctx, kit, master).length;
+      work |= WORK.build;
+      if (!offline) return;
+    }
+    if (abbeys.length && !opts.beds && !bells && kit.ready("bells")) bells = buildBells(ctx, kit, master, { hub, touch, defer });
+    if (wantMoments && !momentsBuilt && !opts.beds && kit.ready("moments") && kit.ready("surf") && kit.ready("river") && kit.ready("gulls")) {
+      momentsBuilt = true;
+      const o = {
+        kit, master, n, seed: opts.seed, forced, at: now,
+        onset: (when: number) => {
+          onsets.push(when + LIMITER_DELAY_S);
+        },
+        play: ((buffer, dest, when, level, x) => {
+          const ok = shots.play(buffer, dest, { when, gain: level, offset: x?.offset, low: x?.low, detune: x?.detune });
+          if (ok && x?.onset) onsets.push(when + PAD + LIMITER_DELAY_S);
+          return ok;
+        }) as Parameters<typeof buildClock>[1]["play"],
+      };
+      const town = opts.towns?.[0];
+      if (town) {
+        const clock = buildClock(ctx, { ...o, town, tuneOnly: opts.tuneOnly });
+        moments.set("clock", clock);
+        sources.push({ kind: "clock", lookBack: WHIRR_END, cues: (a, b, out) => (inReach(clock) ? clockCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (railway) {
+        const shore = railway.anchors.shore, halt = railway.anchors.halt;
+        const train = buildTrain(ctx, { ...o, shore, halt, level: railway.level });
+        moments.set("train", train);
+        sources.push({ kind: "train", lookBack: 0, cues: (a, b, out) => (inReach(train) ? trainCues(opts.seed, shore, halt, n, forced, a, b, out) : undefined) });
+      }
+      if (hotel) {
+        const plane = buildPlane(ctx, { ...o, pontoon: hotel.anchors.pontoon ?? [hotel.x, hotel.y] });
+        moments.set("plane", plane);
+        sources.push({ kind: "plane", lookBack: 0, cues: (a, b, out) => (inReach(plane) ? planeCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (bathsAt) {
+        const ferry = buildFerry(ctx, { ...o, quay: bathsAt.anchors.quay ?? [bathsAt.x, bathsAt.y], baths: bathsAt, level: bathsAt.level, drift: hub.drift });
+        moments.set("ferry", ferry);
+        sources.push({ kind: "ferry", lookBack: 0, cues: (a, b, out) => (inReach(ferry) ? ferryCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      if (church) {
+        const flock = buildFlock(ctx, { ...o, tower: church.anchors.tower ?? [church.x, church.y], level: church.level });
+        moments.set("flock", flock);
+        sources.push({ kind: "flock", lookBack: 0, cues: (a, b, out) => (inReach(flock) ? flockCues(opts.seed, forced, a, b, out) : undefined) });
+      }
+      for (const m of moments.values()) nodes += m.nodes;
+      work |= WORK.build;
+      if (!offline) return;
+    }
+    if (!gulls && !opts.beds && kit.ready("gulls")) {
+      lifePool = createPool(ctx, 4, master.bus.life);
+      gulls = buildGulls(ctx, kit, master, {
+        touch, seed: opts.seed, n, wheelers, pool: lifePool,
+        play(buffer, dest, when, level, rate) {
+          const ok = shots.play(buffer, dest, { when, gain: level, rate });
+          if (ok) onsets.push(when + PAD / rate + LIMITER_DELAY_S);
+          return ok;
+        },
+      });
+      if (wheelers.length > 0 || opts.gullScript) sources.push(gullSource);
+      work |= WORK.build;
+      if (!offline) return;
+    }
+    if (bells && !bellsBuilt) {
+      if (stepVoice(bells)) {
+        bellsBuilt = true;
+        bindings.push(...bells.bindings);
+        nodes += bells.nodes;
+        // From here the strokes are scheduled: rings already sounding are joined in progress.
+        sources.push(bellSource);
+      }
+      if (!offline) return;
+    }
+    for (const b of beds) {
+      if (!b.voice || b.built) continue;
+      if (stepVoice(b.voice)) {
+        b.built = true;
+        bindings.push(...b.voice.bindings);
+        nodes += b.voice.nodes.length;
+      }
+      if (!offline) return;
+    }
+  };
+
+  /** Builds a bed when one of its gains can be heard, and lets it go after two seconds when none can. */
+  const tendBeds = (t: number, now: number) => {
+    if (opts.hissOnly || !hub || !kit.ready("noise") || !kit.ready("controls")) return;
+    for (const b of beds) {
+      if (b.surfKit && (opts.noSurf || !kit.ready("surf"))) continue;
+      if (b.riverKit && !kit.ready("river")) continue;
+      let loud = false, quiet = true;
+      for (const i of b.gains) {
+        if (targets[i] > b.on) loud = true;
+        if (targets[i] >= b.off) quiet = false;
+      }
+      if (!b.voice) {
+        if (loud) {
+          b.voice = b.make(ctx, kit, b.out, { hub, seed: opts.seed, at: now, fresh });
+          b.built = false;
+          b.quietSince = NaN;
+          // Its graph is built from the next frame on, as it always was: an idle build() is not left to wait.
+          buildIdleUntil = -Infinity;
+        }
+        continue;
+      }
+      if (!b.built) continue;
+      if (!quiet) {
+        b.quietSince = NaN;
+        continue;
+      }
+      if (b.quietSince !== b.quietSince) b.quietSince = t;
+      else if (t - b.quietSince >= BED_OFF_S) {
+        // Under −60 dB for two seconds: to nothing, then its sources stop.
+        const mine = new Set(b.voice.bindings);
+        for (const x of mine) if (SEND[x.i].unit === "gain") for (const p of x.params) p.setTargetAtTime(0, now, 0.05);
+        for (const src of b.voice.sources) src.stop(now + 0.5);
+        for (let i = bindings.length - 1; i >= 0; i--) if (mine.has(bindings[i])) bindings.splice(i, 1);
+        nodes -= b.voice.nodes.length;
+        b.voice = null;
+        b.built = false;
+      }
+    }
+  };
+
+  const spot = { gain: 0, hz: 0, pan: 0 };
+  /** A lap at world (x, y): a one-shot through a pooled chain set for where the dragon is now. */
+  const playLap = (l: LapStart, pose: Pose, calm: boolean, now: number, lookahead: number) => {
+    if (!pool || !kit.ready("surf")) return;
+    const cue = l.cue;
+    let when: number;
+    if (offline) when = Math.max(now, cue.t + o);
+    else {
+      if (lateness(cue.t, o, now) > 0.03) return;
+      when = whenFor(cue.t, o, now, lookahead);
+    }
+    const at = offsetTo(pose.x, pose.y, pose.alt, l.x, l.y, 0, n);
+    const b = southOf(at.dx, at.dy);
+    spot.gain = K_SURF.lap * distanceGain(SMALL, at.d) * southGain(b) * dbToGain(l.db);
+    if (spot.gain < 1e-4) return;
+    const buffer = kit.buffer(`lap${(cue.variant ?? 0) & 3}`);
+    const rate = cue.rate ?? 1;
+    const chain = pool.take(now, when + buffer.duration / rate + 0.05, spot.gain, airCutoff(at.d) * southCutoff(b), panOf(at.dx, at.dy, calm));
+    if (!chain) return;
+    if (shots.play(buffer, chain, { when, gain: 1, rate, low: true })) onsets.push(when + PAD / rate + LIMITER_DELAY_S);
+  };
+
+  const startWave = (w: WaveStart, pose: Pose, calm: boolean, now: number, lookahead: number) => {
+    if (!surf) return;
+    const cue = w.cue;
+    // A wave is soft: found late, it starts at once. Joined in progress, it starts now, part of the way in.
+    const when = w.offset > 0 ? now + 0.005 : offline ? Math.max(now, cue.t + o) : whenFor(cue.t, o, now, lookahead);
+    surf.start(w, when, now, pose, calm);
+    waveLog.push({ t: cue.t, when, lane: w.lane, train: cue.train ?? 0, kind: w.kind, strength: w.strength, lasts: (cue.lasts ?? 4) - w.offset });
+    // The boom of a rock wave and the crash on shingle are meant to start sharply: their moment is an onset.
+    if ((w.kind === ROCK || w.kind === SHINGLE) && w.offset < leadOf(w.kind)) onsets.push(when + leadOf(w.kind) - w.offset + LIMITER_DELAY_S);
+  };
+
+  /** Sends the targets that moved. `outright` sets every parameter to its target at once: only ever under a mute gain at 0. */
+  /**
+   * Sends the targets of bindings [from, to) that have moved. `fresh`: the first call of a mix (it turns which half of
+   * the slow targets is looked at).
+   */
+  const apply = (now: number, calm: boolean, outright: boolean, from = 0, to = Infinity, fresh = true) => {
+    const silent = outright || fadeAt(fade, now) < 1e-3;
+    // Slow targets (time constants of 150 ms or more) are looked at on alternate mixes, half of them each time, so a
+    // mix sends about half as much; the quick ones (the whoosh, pans, the volume) every time.
+    if (fresh) turn ^= 1;
+    const end = Math.min(to, bindings.length);
+    for (let k = from; k < end; k++) {
+      const b = bindings[k];
+      if (!outright && !offline && (k & 1) === turn && SEND[b.i].down >= 0.15 && SEND[b.i].up >= 0.15 && b.sent === b.sent) continue;
+      const v = targets[b.i];
+      if (outright) {
+        for (let k = 0; k < b.params.length; k++) {
+          b.params[k].cancelScheduledValues(now);
+          b.params[k].setValueAtTime(b.map(v, k), now);
+        }
+        b.sent = v;
+        sends += b.params.length;
+        continue;
+      }
+      if (!moved(b.i, b.sent, v)) continue;
+      const rule = SEND[b.i];
+      const first = b.sent !== b.sent;
+      if (first && (silent || rule.unit !== "gain")) {
+        // A voice's first values: its level gains are still at 0 (or the master is), so nothing is heard to jump.
+        for (let k = 0; k < b.params.length; k++) b.params[k].setValueAtTime(b.map(v, k), now);
+      } else {
+        const tau = first && !b.prompt ? TAU.late : (first || v > b.sent ? rule.up : rule.down) * (rule.unit === "pan" && calm ? 2 : 1);
+        for (let k = 0; k < b.params.length; k++) b.params[k].setTargetAtTime(b.map(v, k), now, tau);
+      }
+      b.sent = v;
+      sends += b.params.length;
+    }
+  };
+
+  /** The abbey the mix hears: the nearest. */
+  const nearestAbbey = (pose: Pose) => {
+    if (abbeys.length < 2) return;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < abbeys.length; i++) {
+      const dx = torusDelta(pose.x, abbeys[i].x, n), dy = torusDelta(pose.y, abbeys[i].y, n);
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    census.sources[0].x = abbeys[best].x;
+    census.sources[0].y = abbeys[best].y;
+  };
+
+  const strike = (cue: Cue, when: number, offset: number, calm: boolean) => {
+    // Out of earshot (beyond 1500 cells the abbey's gain is nothing), a stroke is not started at all.
+    if (!bells || !(targets[T.BELL_GAIN] > 1e-4)) return;
+    const started = bells.stroke(cue, when, offset, calm);
+    if (started === 0) return;
+    strokeLog.push({ H: cue.H ?? 0, bell: cue.bell ?? 0, k: cue.k ?? 0, t: cue.t, when, offset });
+    if (started === 2) onsets.push(when + PAD + LIMITER_DELAY_S);
+  };
+
+  const play = (d: Due, pose: Pose, now: number, lookahead: number, calm: boolean) => {
+    const worldNow = pose.t;
+    const cue = d.cue;
+    let when: number, offset = 0;
+    if (d.rejoin) {
+      when = now + 0.005;
+      offset = Math.max(0, worldNow - cue.t);
+    } else if (offline) {
+      when = Math.max(now, cue.t + o);
+    } else {
+      // A sharp cue that would start more than 30 ms late is dropped; a soft one starts at once.
+      if (!cue.soft && lateness(cue.t, o, now) > 0.03) return;
+      when = whenFor(cue.t, o, now, lookahead);
+    }
+    if (cue.kind === "pip" && kit.ready("probe")) {
+      if (shots.play(kit.buffer("pip"), master.bus.moments, { when, gain: dbToGain(PIP_DB + (cue.db ?? 0)), rate: cue.rate, low: true })) onsets.push(when + PAD / (cue.rate ?? 1) + LIMITER_DELAY_S);
+    } else if (cue.kind === "tail" && kit.ready("probe")) {
+      const ok = shots.play(kit.buffer("tail"), master.bus.moments, { when, offset, gain: dbToGain(TAIL_DB), fadeIn: d.rejoin });
+      if (ok && !d.rejoin) onsets.push(when + PAD + LIMITER_DELAY_S);
+    } else if (cue.kind === "bell") {
+      strike(cue, when, offset, calm);
+    } else if (moments.has(cue.kind)) {
+      (moments.get(cue.kind) as Moment).cue(cue, when, offset, now);
+      if (momentLog.length < 4000) momentLog.push({ kind: cue.kind, variant: cue.variant ?? 0, k: cue.k ?? 0, t: cue.t, when });
+    } else if (cue.kind === "gull" && gulls) {
+      if (gulls.call(cue, when, now, pose, calm)) gullLog.push({ t: cue.t, when, colony: cue.colony ?? -1, bird: cue.bird ?? 0, call: cue.call ?? 0 });
+    }
+  };
+
+  /** The scheduler's look: the cues falling due in its window, each played. */
+  const runScheduler = (pose: Pose, dt: number, look: number, now: number, calm: boolean, first = 0, count = Infinity) => {
+    work |= WORK.sched;
+    due.length = 0;
+    last.night = pose.night ?? 0;
+    scheduler.pass(pose.t, dt, look, due, first, count);
+    last.x = pose.x;
+    last.y = pose.y;
+    // Offline every cue is played as it is found; on the page they wait in a queue, played a few a frame.
+    if (offline) for (const d of due) play(d, pose, now, look, calm);
+    else for (const d of due) queued.push(d);
+    shots.prune(now);
+    bells?.prune(now);
+  };
+  /**
+   * The mix's first half: the targets, the beds they call for, and the sends; with `split`, only the first half of
+   * the sends, the rest going with the second half.
+   */
+  const mixHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, split: boolean) => {
+    lastTurn = 0;
+    work |= WORK.mix;
+    nearestAbbey(pose);
+    mix(pose, hearing, census, prefs, memory, targets);
+    lastMix = pose.t;
+    if (elsewhere && opts.brain) {
+      // What the scheduler elsewhere needs of the page: which moments are in reach (it stands where they do).
+      last.x = pose.x;
+      last.y = pose.y;
+      last.night = pose.night ?? 0;
+      let reach = 0;
+      for (const [kind, m] of moments) if (inReach(m)) reach |= REACH[kind] ?? 0;
+      opts.brain.ask.reach = reach;
+    }
+    tendBeds(pose.t, now);
+    if (opts.skip === "nosends") return;
+    if (split) {
+      sendsFrom = (bindings.length + 1) >> 1;
+      apply(now, prefs.calm, false, 0, sendsFrom);
+    } else apply(now, prefs.calm, false);
+  };
+  /** Its second half: the rest of the sends, and the voices placed by where they are (the moments, the gulls, the falls). */
+  const voicesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number) => {
+    work |= WORK.voices;
+    if (opts.skip === "novoices") return;
+    if (sendsFrom >= 0) {
+      apply(now, prefs.calm, false, sendsFrom, Infinity, false);
+      sendsFrom = -1;
+    }
+    if (moments.size) {
+      const since = lastMoments === lastMoments ? pose.t - lastMoments : 0;
+      lastMoments = pose.t;
+      for (const m of moments.values()) if (inReach(m)) sends += m.update(pose, since > 0 && since <= STALL ? since : 0, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+    }
+    if (gulls) {
+      if (hearing.startled.length) gulls.startle(hearing.startled, pose, now, (t) => Math.max(now + 0.005, t + o), prefs.calm);
+      sends += gulls.update(pose, now, prefs.calm);
+    }
+    if (falls) {
+      const since = lastFalls === lastFalls ? pose.t - lastFalls : 0;
+      lastFalls = pose.t;
+      fallNow = now;
+      sends += falls.update(pose, hearing.falls, since > 0 && since <= STALL ? since : 0, now, prefs.calm);
+    }
+  };
+  /** The waves' first half: the lanes choose them, and each starts. */
+  const lanesHalf = (pose: Pose, hearing: Hearing, prefs: Prefs, now: number, look: number) => {
+    lastTurn = 1;
+    work |= WORK.lanes;
+    if (opts.skip === "nowaves") {
+      lastWaves = pose.t;
+      return;
+    }
+    const since = lastWaves === lastWaves ? pose.t - lastWaves : 0;
+    lastWaves = pose.t;
+    // Worked elsewhere, the lanes' finds are waiting; here, the lanes are stepped now.
+    const waves = elsewhere ? waveWait : waveStarts, laps = elsewhere ? lapWait : lapStarts;
+    if (!elsewhere) {
+      waveStarts.length = 0;
+      lapStarts.length = 0;
+      lanes.step(hearing, pose.t, since, look, waveStarts, lapStarts);
+    }
+    if (waves.length) work |= WORK.wave;
+    if (laps.length) work |= WORK.lap;
+    for (let i = 0; i < waves.length; i++) startWave(waves[i], pose, prefs.calm, now, look);
+    if (!opts.hissOnly) for (let i = 0; i < laps.length; i++) playLap(laps[i], pose, prefs.calm, now, look);
+    waves.length = 0;
+    laps.length = 0;
+  };
+  /** Its second half: the emitters' sends, and what has finished let go. */
+  const emittersHalf = (pose: Pose, prefs: Prefs, now: number) => {
+    if (!surf || opts.skip === "nowaves") return;
+    work |= WORK.emitters;
+    sends += surf.update(pose, elsewhere ? remoteEmitters : lanes.emitters, now, prefs.calm);
+    surf.prune(now);
+    shots.prune(now);
+  };
+  /**
+   * Whether the next frame (a frame's time on) will have neither the mix nor the waves due, the mix last run at
+   * `mixAt` and the waves at `wavesAt`: room for a second half.
+   */
+  const roomNext = (t: number, dt: number, mixAt: number, wavesAt: number): boolean => {
+    const next = t + (dt > 0 && dt < STALL ? dt : 1 / 60);
+    if (!(next - mixAt < MIX_EVERY - 1e-4)) return false;
+    return !(surfBuilt && surf !== null && !opts.beds && !(next - wavesAt < MIX_EVERY - 1e-4));
+  };
+  /**
+   * Plays cues the scheduler has found (on the page): any due within a tenth of a second, and two more at most, so a
+   * look that finds many (a peal) spreads their starting over frames; each was found a sixth of a second or more ahead.
+   * A frame that carried the mix or the voices plays none of those spare ones: only a rejoin, or one due within a tenth.
+   */
+  const playQueued = (pose: Pose, now: number, look: number, calm: boolean) => {
+    let spare = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
+    for (let i = 0; i < queued.length; ) {
+      const d = queued[i];
+      if (d.rejoin || cueAt(d.cue) - now < 0.1 || spare > 0) {
+        if (!(d.rejoin || cueAt(d.cue) - now < 0.1)) spare--;
+        queued.splice(i, 1);
+        play(d, pose, now, look, calm);
+      } else i++;
+    }
+  };
+  /** A cue's audio time. */
+  const cueAt = (cue: Cue) => cue.t + o;
+
+  /** After a mute, a hide or a cut: nothing of the brain's is left waiting, and it forgets what it started. */
+  const forget = () => {
+    lanes.clear();
+    scheduler.clear();
+    opts.brain?.clear();
+    waveWait.length = 0;
+    lapWait.length = 0;
+    queued.length = 0;
+    sendsFrom = -1;
+    half = 0;
+  };
+
+  const readLimiter = (now: number) => {
+    // By the context's own clock: a timeline scheduled ahead of its render has nothing to read yet.
+    if (now < limiterNext || ctx.currentTime < LIMITER_METER_SETTLE_S) return;
+    limiterNext = now + 0.1;
+    const r = master.limiter.reduction;
+    if (typeof r === "number" && r === r) limiterMin = limiterMin === null ? r : Math.min(limiterMin, r);
+  };
+
+  return {
+    get live() {
+      return live;
+    },
+    frame(pose, hearing, prefs, timing) {
+      if (disposed) return;
+      work = 0;
+      let now: number, look = LOOKAHEAD;
+      if (timing) {
+        now = timing.now;
+        o = timing.o;
+      } else {
+        now = ctx.currentTime;
+        // The offset is sampled ten times a second (and at once after any gap), not every frame.
+        const since = pose.t - lastClock;
+        if (!(since < SAMPLE_EVERY) || since < 0) {
+          const c = ctx as AudioContext;
+          reading.currentTime = now;
+          reading.outputLatency = c.outputLatency;
+          reading.stamp = typeof c.getOutputTimestamp === "function" ? c.getOutputTimestamp() : null;
+          reading.now = performance.now();
+          o = since > 0 && since < STALL ? easeOffset(o, sampleOffset(reading), easeFor(since)) : sampleOffset(reading);
+          lookahead = lookaheadFor(reading);
+          lastClock = pose.t;
+          work |= WORK.clock;
+        }
+        look = lookahead;
+      }
+      // Once the kit is in and a pass of build() has nothing left to do, it is asked again only twice a second. A bed
+      // made by tendBeds asks at once (it would otherwise come in up to half a second late), and every other voice is
+      // built once, while the kit comes in. Offline renders build every frame.
+      if (offline || !(pose.t < buildIdleUntil) || pose.t < buildIdleUntil - 1) {
+        build(now);
+        if (!offline && (work & WORK.build) === 0 && kit.done()) buildIdleUntil = pose.t + 0.5;
+      }
+      readLimiter(now);
+      if (!live && pending === null) return;
+
+      const dt = lastT === lastT ? pose.t - lastT : 0;
+      lastT = pose.t;
+      const ready = opts.tone ? true : windBuilt;
+
+      // A fade-out still on its way down is left to finish (its stops come at its end): sound always returns from silence.
+      if (pending !== null && ready && !(falling && fadeAt(fade, now) >= 1e-3)) {
+        // Enabling: every parameter goes to its target under a master at 0, then the master fades in.
+        const v = hold(now);
+        falling = false;
+        work |= WORK.enable;
+        nearestAbbey(pose);
+        mix(pose, hearing, census, prefs, memory, targets);
+        lastMix = pose.t;
+        const quiet = v < 1e-3;
+        if (quiet) apply(now, prefs.calm, true);
+        fadeIn(now, quiet ? 0 : v, pending === "first" ? FADE_IN.first : FADE_IN.again);
+        startTone(now);
+        pending = null;
+        live = true;
+      }
+      if (!live) return;
+
+      if (opts.impulse !== undefined && bellsBuilt && !impulsed && o === o) {
+        impulsed = true;
+        const click = ctx.createBuffer(1, 8, ctx.sampleRate);
+        click.getChannelData(0)[0] = 1;
+        const src = ctx.createBufferSource();
+        src.buffer = click;
+        src.connect(master.send);
+        const at = Math.max(now, opts.impulse + o);
+        src.start(at);
+        // The response's early taps are single reflections, sharp by design: each is an onset.
+        for (const tap of IR_TAPS) onsets.push(at + tap[0] + LIMITER_DELAY_S);
+      }
+
+      // Thirty times a second each: the mix and its sends; and the waves (lanes choose them, each takes an emitter
+      // where it breaks) with the emitters' own sends. Cues are found a quarter of a second ahead, so a thirtieth of a
+      // second between looks loses nothing.
+      const mixDue = !(pose.t - lastMix < MIX_EVERY - 1e-4) || dt < 0;
+      const wavesDue = surfBuilt && surf !== null && !opts.beds && (!(pose.t - lastWaves < MIX_EVERY - 1e-4) || dt < 0 || dt > STALL);
+      if (offline) {
+        // Offline: the scheduler every step, then whatever falls due, whole. (Renders do not depend on how the page
+        // spreads its work.)
+        if (sources.length) runScheduler(pose, dt, look, now, prefs.calm);
+        if (mixDue) {
+          mixHalf(pose, hearing, prefs, now, false);
+          voicesHalf(pose, hearing, prefs, now);
+        }
+        if (wavesDue && surf) {
+          lanesHalf(pose, hearing, prefs, now, look);
+          emittersHalf(pose, prefs, now);
+        }
+        // Offline, every move that is due is made in this step: a render must not wait for an idle frame.
+        if (fresh.frame(now)) work |= WORK.fresh;
+        return;
+      }
+      // Where the lanes and the scheduler are worked elsewhere, what they found comes in here: the waves and laps wait
+      // for the waves' turn, the cues join the queue, and the page's own lanes and scheduler rest.
+      const brain = opts.brain && opts.brain.alive() ? opts.brain : null;
+      elsewhere = brain !== null;
+      if (brain) {
+        while (told < sources.length) brain.source(sources[told++].kind);
+        brain.ask.look = look;
+        brain.ask.surf = surfBuilt && surf !== null && !opts.beds;
+        for (let r = brain.take(); r !== null; r = brain.take()) {
+          if (r.waves) for (const w of r.waves) waveWait.push(w);
+          if (r.laps) for (const l of r.laps) lapWait.push(l);
+          if (r.due) {
+            work |= WORK.sched;
+            for (const d of r.due) queued.push(d);
+          }
+          unpackEmitters(r.emitters, remoteEmitters);
+          remoteMask = r.mask;
+        }
+        // It finds things a pass's length further ahead than the page would: a start may be that much further off.
+        look += BRAIN_AHEAD;
+      }
+      // On the page each comes in two halves, the second a frame after the first when that frame has nothing else
+      // due: on a 120 Hz display every frame then carries a quarter of the work, where every other frame carried half
+      // of it (and the frames' 95th percentile is set by the heaviest). At 60 Hz a frame never has room, so each runs
+      // whole, as it always did. The mix and the waves still take turns.
+      if (half === HALF_VOICES) voicesHalf(pose, hearing, prefs, now);
+      else if (half === HALF_EMITTERS) emittersHalf(pose, prefs, now);
+      half = 0;
+      if (mixDue && (!wavesDue || lastTurn !== 0)) {
+        const room = roomNext(pose.t, dt, pose.t, lastWaves);
+        mixHalf(pose, hearing, prefs, now, room);
+        if (room) half = HALF_VOICES;
+        else voicesHalf(pose, hearing, prefs, now);
+      } else if (wavesDue && surf) {
+        const room = roomNext(pose.t, dt, lastMix, pose.t);
+        lanesHalf(pose, hearing, prefs, now, look);
+        if (room) half = HALF_EMITTERS;
+        else emittersHalf(pose, prefs, now);
+      }
+      // The scheduler asks two of its sources a frame, round the list: each keeps its own window, reaching a quarter of
+      // a second ahead, so what it finds is still a fifth of a second off or more; asking them all at once cost a
+      // frame as much as a first half. What it finds is played a few a frame.
+      if (sources.length && !elsewhere && opts.skip !== "nosched") {
+        runScheduler(pose, dt, look, now, prefs.calm, schedNext, SCHED_EACH);
+        schedNext = (schedNext + SCHED_EACH) % scheduler.size;
+      }
+      // A crossfade waits for a frame with neither the mix nor the waves. At 60 Hz every frame has one or the other,
+      // so after a thirtieth of a second it takes a waves frame (the lighter), and after a tenth any frame.
+      const idle = (work & (WORK.mix | WORK.lanes)) === 0, since = pose.t - freshAt;
+      if (idle || since < 0 || (!(since < 1 / 30) && (work & WORK.mix) === 0) || !(since < 0.1)) {
+        freshAt = pose.t;
+        if (fresh.frame(now)) work |= WORK.fresh;
+      }
+      if (queued.length) playQueued(pose, now, look, prefs.calm);
+      // One-shots not due soon were only recorded. A heavy frame makes the ones that have come due; any other frame
+      // also makes two of the soonest, so a peal's nodes are built off the mix and the voices.
+      if (defer) {
+        const max = (work & (WORK.mix | WORK.voices)) !== 0 ? 0 : 2;
+        shots.flush(now, max);
+        bells?.flush(now, max);
+      }
+    },
+    enable(first) {
+      if (live) return;
+      pending = first ? "first" : "again";
+    },
+    mute(at) {
+      const now = timeOf(at);
+      pending = null;
+      if (!live) return;
+      live = false;
+      const v = hold(now);
+      master.mute.gain.setTargetAtTime(0, now, TAU.mute);
+      fade = { kind: "target", v0: v, t0: now, to: 0, tau: TAU.mute };
+      falling = true;
+      shots.stopAll(now + 0.25);
+      surf?.stopAll(now + 0.25);
+      bells?.stopAll(now + 0.25);
+      falls?.stopAll(now + 0.25);
+      gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now + 0.25);
+      lastMoments = NaN;
+      lastFalls = NaN;
+      forget();
+      lastT = NaN;
+      lastWaves = NaN;
+      lastClock = NaN;
+    },
+    hide(at) {
+      const now = timeOf(at);
+      pending = null;
+      if (!live) return;
+      live = false;
+      const v = hold(now);
+      master.mute.gain.linearRampToValueAtTime(0, now + TAU.hideRamp);
+      fade = { kind: "line", pts: [now, v, now + TAU.hideRamp, 0] };
+      falling = true;
+      shots.stopAll(now + TAU.hideRamp + 0.01);
+      surf?.stopAll(now + TAU.hideRamp + 0.01);
+      bells?.stopAll(now + TAU.hideRamp + 0.01);
+      falls?.stopAll(now + TAU.hideRamp + 0.01);
+      gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now + TAU.hideRamp + 0.01);
+      lastMoments = NaN;
+      lastFalls = NaN;
+      forget();
+      lastT = NaN;
+      lastWaves = NaN;
+      lastClock = NaN;
+    },
+    cut() {
+      const now = ctx.currentTime;
+      pending = null;
+      live = false;
+      master.mute.gain.cancelScheduledValues(now);
+      master.mute.gain.setValueAtTime(0, now);
+      fade = { kind: "still", v: 0 };
+      falling = false;
+      shots.stopAll(now);
+      surf?.stopAll(now);
+      bells?.stopAll(now);
+      falls?.stopAll(now);
+      gulls?.clear();
+      for (const m of moments.values()) m.stopAll(now);
+      lastMoments = NaN;
+      lastFalls = NaN;
+      forget();
+      lastT = NaN;
+      lastWaves = NaN;
+      lastClock = NaN;
+    },
+    laneMask: () => (elsewhere ? remoteMask : lanes.mask()),
+    work: () => work,
+    built: () => windBuilt && (opts.noSurf === true || opts.beds === true || surfBuilt) && (abbeys.length === 0 || opts.beds === true || bellsBuilt) && beds.every((b) => !b.voice || b.built),
+    setBus(bus, on) {
+      busOn[bus] = on;
+      const now = ctx.currentTime;
+      if (bus !== "wind" && bus !== "water") master.bus[bus].gain.setTargetAtTime(on ? 1 : 0, now, 0.03);
+      else for (const b of bindings) if (b.i === T.DUCK) for (let k = 0; k < b.params.length; k++) b.params[k].setTargetAtTime(b.map(targets[T.DUCK] || 1, k), now, 0.03);
+    },
+    stats() {
+      return { limiterMinDb: limiterMin, onsets: [...onsets], oneShots: shots.started, dropped: shots.dropped, nodes, sends, wavesByLane: [...lanes.started], waves: [...waveLog], strokes: [...strokeLog], fallsBound: falls?.tracker.bound ?? 0, fallHandovers: falls?.tracker.handovers ?? 0, fallLog: [...fallLog], gullCalls: [...gullLog], gullsDropped: gulls?.dropped ?? 0, gullStartles: gulls?.startles ?? 0, gullKeks: gulls ? [...gulls.keks] : [], momentCues: [...momentLog] };
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      live = false;
+      const now = ctx.currentTime;
+      for (const s of [...(wind?.sources ?? []), ...toneNodes]) {
+        try {
+          s.stop(now);
+        } catch {
+          // never started
+        }
+      }
+      shots.stopAll(now);
+      bells?.stopAll(now);
+      falls?.stopAll(now);
+      surf?.end(now);
+      for (const src of hub?.sources ?? []) src.stop(now);
+      for (const b of beds) for (const src of b.voice?.sources ?? []) {
+        try {
+          src.stop(now);
+        } catch {
+          // never started
+        }
+      }
+      try {
+        master.mute.disconnect();
+      } catch {
+        // already disconnected
+      }
+    },
+  };
+}
+
+// ── What the control loads lazily ────────────────────────────────────────────────────────────────────────────────────
+
+/** Everything behind the control's lazy import: the kit, the ear and an engine on the page's context. */
+export interface Runtime {
+  /** One frame: the ear, the engine, then at most one slice of kit work. */
+  frame(pose: Pose, prefs: Prefs, seen: Seen): void;
+  /** Main-thread ms the kit took in the last frame. */
+  kitMs(): number;
+  /** What the last frame did, as bits (WORK). */
+  work(): number;
+  /** True once every buffer is made and every graph built. */
+  settled(): boolean;
+  /** The Hearing in force. */
+  hearing(): Hearing;
+  enable(first: boolean): void;
+  mute(): void;
+  hide(): void;
+  cut(): void;
+  readonly live: boolean;
+  stats(): EngineStats;
+  /** Stops and disconnects the engine. The kit is kept: a rebuild is graph construction only. */
+  dispose(): void;
+}
+
+const NO_FRAME = { bake: null, rect: null };
+
+/** Kit work in one frame: at most this many slices, and none started after this many ms. */
+const KIT_SLICES = 2;
+const KIT_MS = 0.05;
+
+/** The kit outlives engines (its buffers are not tied to a context), as long as the sample rate is the same. */
+let kept: Kit | null = null;
+
+export function createRuntime(ctx: AudioContext, opts: { touch: boolean; seed: number; n: number; land: { gN: number; ground: ArrayLike<number> } | null; abbeys?: readonly Pt[]; gulls?: readonly Wheeler[]; towns?: readonly Pt[]; wonders?: Places["wonders"]; forced?: boolean; arm?: string }): Runtime {
+  if (!kept || kept.sampleRate !== ctx.sampleRate) {
+    kept?.dispose();
+    kept = createKit({ sampleRate: ctx.sampleRate, seed: opts.seed, spawn: spawnWorker });
+  }
+  const kit = kept;
+  const listener = opts.arm === "earoff" ? deafEar() : opts.arm === "earlocal" ? localEar(opts.n, opts.land) : (remoteEar(opts.n, opts.land) ?? localEar(opts.n, opts.land));
+  // Where the ear is in its worker, the lanes and the scheduler are worked there too (the measuring arm "brainlocal"
+  // keeps them here).
+  const railway = opts.wonders?.find((w) => w.type === "railway" && w.anchors.shore && w.anchors.halt);
+  const brain = opts.arm === "brainlocal" || !listener.brain ? null : listener.brain({
+    seed: opts.seed, n: opts.n, touch: opts.touch, forced: opts.forced === true, colonies: coloniesOf(opts.gulls ?? []),
+    railway: railway ? { shore: [railway.anchors.shore[0], railway.anchors.shore[1]], halt: [railway.anchors.halt[0], railway.anchors.halt[1]] } : null,
+  });
+  // The module arrives while the first beds may still be built on loops. Later beds see the flag and use the worklet.
+  let noiseReady = false;
+  void loadNoise(ctx).then((ok) => {
+    noiseReady = ok;
+  });
+  const engine = createEngine(ctx, kit, { touch: opts.touch, seed: opts.seed, n: opts.n, abbeys: opts.abbeys, gulls: opts.gulls, towns: opts.towns, wonders: opts.wonders, forced: opts.forced, noSurf: opts.arm === "nosurf", skip: opts.arm, brain, noise: () => noiseReady });
+  let warped = false;
+  let kitMs = 0;
+  const gullList = opts.gulls ?? [];
+  const census = createCensus(opts.n);
+  const startlePool: Startle[] = [];
+  let censusAt = NaN;
+  /** Whether this frame ran the census (a work bit). */
+  let censused = false;
+  return {
+    frame(pose, prefs, seen) {
+      if (!warped && kit.ready("surf")) {
+        // The picture's own bend of the wave fronts, made by the worker: from here on shore points can be timed.
+        listener.setWarp(kit.bytes("warp"));
+        warped = true;
+      }
+      const hearing = listener.step(pose, seen, engine.laneMask());
+      censused = false;
+      engine.frame(pose, hearing, prefs);
+      // The census: which gulls the flier has just put up, fifteen times a second, after the engine's frame and on a
+      // frame that carried neither the mix's nor the waves' first half, where it can wait a frame for one. (The birds
+      // it finds are voiced by the mix's second half, a frame or two on.)
+      if ((gullList.length > 0 || seen.bake) && opts.arm !== "nocensus") {
+        const since = pose.t - censusAt;
+        if (!(since < 1 / 15) && ((engine.work() & (WORK.mix | WORK.lanes)) === 0 || !(since < 1 / 15 + 1 / 30) || since < 0)) {
+          censusAt = pose.t;
+          // The beaches' lattice is walked only where the ear has found beach or shingle in the frame.
+          let beach = hearing.surf[0].e > 0 || hearing.surf[1].e > 0;
+          for (let i = 0; !beach && i < hearing.shores.length; i++) beach = hearing.shores[i].kind === 1 || hearing.shores[i].kind === 2;
+          census.run(beach ? seen : NO_FRAME, pose, opts.seed, gullList, hearing.startled, startlePool);
+          censused = true;
+        }
+      }
+      // Generations keep being asked for after the jobs are in: adopt those too, still not in a frame that built a graph.
+      if (kit.done() && !kit.pending()) {
+        kitMs = 0;
+      } else {
+        // A few slices of kit work, stopped as soon as they have taken a tenth of a millisecond.
+        const a = performance.now();
+        let b = a;
+        // None in a frame that built part of a graph; and making a buffer (megabytes) ends the frame's share.
+        if ((engine.work() & WORK.build) === 0) {
+          for (let i = 0; i < KIT_SLICES && b - a < KIT_MS && kit.step() && !kit.heavy(); i++) b = performance.now();
+          b = performance.now();
+        }
+        kitMs = b - a;
+      }
+    },
+    kitMs: () => kitMs,
+    work: () => engine.work() | (kitMs > 0 || !kit.done() ? WORK.kit : 0) | (censused ? WORK.census : 0),
+    settled: () => kit.done() && engine.built(),
+    hearing: () => listener.hearing(),
+    enable: (first) => engine.enable(first),
+    mute: () => engine.mute(),
+    hide: () => engine.hide(),
+    cut: () => engine.cut(),
+    get live() {
+      return engine.live;
+    },
+    stats: () => engine.stats(),
+    dispose() {
+      engine.dispose();
+      listener.dispose();
+    },
+  };
+}
+
+/** What listens for the runtime: the ear in its worker, or (where no worker can be made) the ear in the frame loop. */
+interface Listener {
+  setWarp(warp: Uint8Array): void;
+  step(pose: Pose, seen: Seen, lanes: number): Hearing;
+  hearing(): Hearing;
+  /** The engine's thinking, done where the ear is (its worker): asked once, before the engine is made. */
+  brain?(init: BrainInit): RemoteBrain;
+  dispose(): void;
+}
+
+type Land = { gN: number; ground: ArrayLike<number> } | null;
+
+/** No ear at all (a measuring arm): open, silent land. */
+function deafEar(): Listener {
+  const hearing = emptyHearing();
+  return { setWarp() {}, step: () => hearing, hearing: () => hearing, dispose() {} };
+}
+
+function localEar(n: number, land: Land): Listener {
+  const ear = createEar();
+  ear.setWorld({ n, land });
+  return { setWarp: (w) => ear.setWarp(w), step: (pose, seen, lanes) => ear.step(pose, seen, lanes), hearing: () => ear.hearing(), dispose() {} };
+}
+
+/**
+ * The ear in its worker. Each frame the page copies the share of the frame's rows that the time since the last frame
+ * calls for (a native copy a row; it used to gather the lattice itself, a read a sample, the sound's largest cost on
+ * the page) into a frame laid out as the pass's first; ten times a second the buffer is handed over, the worker
+ * gathers its lattice from it, and the Hearing comes back a moment later. Two buffers take turns.
+ */
+export function remoteEar(n: number, land: Land): Listener | null {
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("../ear.worker.ts", import.meta.url), { type: "module" });
+  } catch {
+    return null;
+  }
+  // The Hearing is filled in place from numbers the worker hands back: nothing is cloned and nothing allocated.
+  const held = pooledHearing();
+  const hearing = held.hearing;
+  const spare: Uint32Array[] = [];
+  const heardSpare: Float64Array[] = [new Float64Array(HEARING_FLOATS), new Float64Array(HEARING_FLOATS)];
+  /** The message and its transfer list, reused for every pass. */
+  const message = { kind: "pass" as const, bake: null as Uint32Array | null, packed: false, heard: null as Float64Array | null, rect: { x: 0, y: 0, w: 0, h: 0 }, x: 0, y: 0, alt: 0, t: 0, lanes: 0, brain: null as BrainAsk | null };
+  const transfer: ArrayBuffer[] = [];
+  /** The pass being gathered: its buffer, the frame it began with, the dragon then, and how far it has got (0 … 1). */
+  let into: Uint32Array | null = null;
+  const home = { x: 0, y: 0, w: 0, h: 0 };
+  const at = { x: 0, y: 0, alt: 0, t: 0, lanes: 0 };
+  let progress = 0;
+  let lastT = NaN;
+  let made = 0;
+  let dead = false;
+  /**
+   * The brain, once the engine has asked for one: what the page wants of it (sent with each pass), its answers not yet
+   * taken (oldest first), and the epoch its asks carry (counted up at every clear).
+   */
+  let ask: BrainAsk | null = null;
+  const answers: BrainReply[] = [];
+  worker.onmessage = (e: MessageEvent) => {
+    const reply = e.data as { heard: Float64Array; bake: Uint32Array; brain?: BrainReply };
+    unpackHearing(reply.heard, held);
+    heardSpare.push(reply.heard);
+    spare.push(reply.bake);
+    // An answer to an ask from before a clear is to something already stopped.
+    if (reply.brain && ask && reply.brain.epoch === ask.epoch) answers.push(reply.brain);
+  };
+  worker.onerror = () => {
+    dead = true;
+  };
+  // The land, as a byte a node: which are sea.
+  let sea: Uint8Array | null = null;
+  if (land) {
+    sea = new Uint8Array(land.gN * land.gN);
+    for (let i = 0; i < sea.length; i++) sea[i] = land.ground[i] < 0 ? 1 : 0;
+  }
+  worker.postMessage({ kind: "world", n, gN: land?.gN ?? 0, sea }, sea ? [sea.buffer] : []);
+  return {
+    setWarp(warp) {
+      // A copy: the kit keeps its own.
+      worker.postMessage({ kind: "warp", warp: warp.slice() });
+    },
+    step(pose, seen, lanes) {
+      const dt = lastT === lastT ? pose.t - lastT : 0;
+      lastT = pose.t;
+      const bake = seen.bake, rect = seen.rect;
+      if (dead || !bake || !rect || !(dt > 0)) return hearing;
+      if (!into) {
+        // A new pass, when a buffer is free: it begins with this frame's rect and this frame's dragon.
+        const size = rect.w * rect.h;
+        if (heardSpare.length === 0) return hearing;
+        let buffer = spare.pop();
+        // A buffer too small for this frame (the window has grown) is let go and a bigger one takes its place, so two
+        // always take turns. (Buffers once had to match the lattice exactly, and its size changes with the parity of
+        // the frame's first row: two crossings into flight both were thrown away and the ear stopped for good.)
+        if (buffer && buffer.length < size) buffer = new Uint32Array(size);
+        if (!buffer && made < 2) {
+          buffer = new Uint32Array(size);
+          made++;
+        }
+        if (!buffer) return hearing;
+        into = buffer;
+        home.x = Math.floor(rect.x);
+        home.y = Math.floor(rect.y);
+        home.w = rect.w;
+        home.h = rect.h;
+        at.x = pose.x;
+        at.y = pose.y;
+        at.alt = pose.alt;
+        at.t = pose.t;
+        at.lanes = lanes;
+        progress = 0;
+      }
+      const rows = latticeOf(home).rows;
+      const to = Math.min(1, progress + dt / PASS);
+      copyRows(into, home, bake, rect, Math.floor(progress * rows), Math.floor(to * rows));
+      progress = to;
+      if (to >= 1) {
+        const heard = heardSpare.pop() as Float64Array;
+        message.bake = into;
+        message.heard = heard;
+        message.rect.x = home.x;
+        message.rect.y = home.y;
+        message.rect.w = home.w;
+        message.rect.h = home.h;
+        message.x = at.x;
+        message.y = at.y;
+        message.alt = at.alt;
+        message.t = at.t;
+        message.lanes = at.lanes;
+        // The brain works at the dragon's place as the pass is sent, not as it began.
+        if (ask) {
+          ask.t = pose.t;
+          ask.x = pose.x;
+          ask.y = pose.y;
+          ask.night = pose.night ?? 0;
+        }
+        message.brain = ask;
+        transfer[0] = into.buffer as ArrayBuffer;
+        transfer[1] = heard.buffer as ArrayBuffer;
+        worker.postMessage(message, transfer);
+        into = null;
+      }
+      return hearing;
+    },
+    hearing: () => hearing,
+    brain(init) {
+      worker.postMessage({ kind: "brain", init });
+      const mine: BrainAsk = (ask = { t: 0, x: 0, y: 0, night: 0, look: 0.25, reach: 0, surf: false, epoch: 0 });
+      return {
+        alive: () => !dead,
+        ask: mine,
+        take: () => answers.shift() ?? null,
+        source(kind) {
+          worker.postMessage({ kind: "source", source: kind });
+        },
+        clear() {
+          mine.epoch++;
+          answers.length = 0;
+          worker.postMessage({ kind: "clear" });
+        },
+      };
+    },
+    dispose() {
+      worker.terminate();
+    },
+  };
+}

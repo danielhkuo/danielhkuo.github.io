@@ -102,41 +102,45 @@ export default function ContactForm() {
         tabIndex={-1}
       />
 
-      <div className="mb-6">
-        <label
-          htmlFor="name"
-          className="caps-label mb-2 block text-xs text-text-muted"
-        >
-          Name
-        </label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          required
-          className="w-full border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          placeholder="Your name"
-        />
+      {/* Name and Email share a row from `sm` up — the same breakpoint the
+          loading placeholder in page.tsx gets one row shorter at. */}
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label
+            htmlFor="name"
+            className="caps-label mb-2 block text-xs text-text-muted"
+          >
+            Name
+          </label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            required
+            className="w-full border border-divider bg-bg px-4 py-2 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            placeholder="Your name"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="email"
+            className="caps-label mb-2 block text-xs text-text-muted"
+          >
+            Email
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            className="w-full border border-divider bg-bg px-4 py-2 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            placeholder="your@email.com"
+          />
+        </div>
       </div>
 
-      <div className="mb-6">
-        <label
-          htmlFor="email"
-          className="caps-label mb-2 block text-xs text-text-muted"
-        >
-          Email
-        </label>
-        <input
-          type="email"
-          id="email"
-          name="email"
-          required
-          className="w-full border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-          placeholder="your@email.com"
-        />
-      </div>
-
-      <div className="mb-6">
+      <div className="mb-4">
         <label
           htmlFor="message"
           className="caps-label mb-2 block text-xs text-text-muted"
@@ -147,8 +151,8 @@ export default function ContactForm() {
           id="message"
           name="message"
           required
-          rows={6}
-          className="min-h-36 w-full resize-y border border-divider bg-bg px-4 py-3 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          rows={3}
+          className="min-h-20 w-full resize-y border border-divider bg-bg px-4 py-2 font-body text-base text-text-primary placeholder:text-text-muted/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           placeholder="What are you building, hiring for, or trying to untangle?"
         />
       </div>
@@ -163,7 +167,7 @@ export default function ContactForm() {
           column on phones; .captcha-fit scales it down to fit there (see
           globals.css). overflow-hidden stays as a backstop so no width can ever
           push a horizontal scrollbar onto the page. */}
-      <div className="mb-4 flex flex-wrap items-stretch gap-3 overflow-hidden">
+      <div className="flex flex-wrap items-stretch gap-3 overflow-hidden">
         <div className="captcha-fit">
           <HCaptcha
             ref={captchaRef}
@@ -177,7 +181,7 @@ export default function ContactForm() {
         <button
           type="submit"
           disabled={isSubmitting || !captchaToken}
-          className="min-h-[78px] flex-1 basis-28 whitespace-nowrap bg-primary px-4 font-body text-xs font-medium tracking-[var(--tracking-label)] text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-active)] disabled:cursor-not-allowed disabled:opacity-40"
+          className="min-h-11 flex-1 basis-28 whitespace-nowrap bg-primary px-4 font-body text-xs font-medium tracking-[var(--tracking-label)] text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-active)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isSubmitting ? "Sending…" : "Send Message"}
         </button>

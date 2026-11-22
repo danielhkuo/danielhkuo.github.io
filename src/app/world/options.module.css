@@ -1,0 +1,269 @@
+/* The options panel and the corner that leads to it: game layer, drawn in the guides' pixels. Every length is a
+   whole number of glyph pixels (--px), so rules and glyphs share one grid. The colours are the Codex sheet's. */
+
+.panel,
+.corner {
+  --ink: #2e2a24;
+  --paper: #f0e8d2;
+  --face: #f8f2e1;
+  --vermilion: #cf3f2b;
+  color: var(--ink);
+}
+
+.panel {
+  max-height: calc(100vh - 2rem);
+  /* The visible area, not 100vh: Safari's 100vh is its large viewport, taller than what shows on a phone held
+     sideways, so the panel ran off the top and under the home indicator. A touch flight's page carries the visible
+     height as --vvh; the panel keeps a margin at each end at least as deep as the notch or the home indicator. */
+  max-height: calc(var(--vvh, 100dvh) - 2 * max(1rem, env(safe-area-inset-top), env(safe-area-inset-bottom)));
+  padding: calc(var(--px) * 5) calc(var(--px) * 7) calc(var(--px) * 6);
+  overflow: auto;
+  background: var(--paper);
+  border: var(--px) solid var(--ink);
+  box-shadow:
+    inset 0 0 0 var(--px) var(--face),
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 rgb(46 42 36 / 0.3);
+}
+
+.panel::backdrop {
+  background: rgb(46 42 36 / 0.22);
+}
+
+.panel ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.title {
+  margin: 0 0 calc(var(--px) * 4);
+  line-height: 0;
+}
+
+.row,
+.keys {
+  min-width: 0;
+  margin: 0 0 calc(var(--px) * 2);
+  padding: 0;
+  border: 0;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/*
+ * Out of flow, a legend is not drawn in the fieldset's border: it sits at the row's left, centred on the choices. (A
+ * float did this in Chromium only: WebKit drops the float of a flex container's child and draws the legend on a line
+ * of its own above the choices.) It takes no room, which is safe while every row is narrower than the keys below it.
+ */
+.legend {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  line-height: 0;
+}
+
+/* The keys are a section of their own, headed in vermilion over a dotted rule, as the Codex heads its register. */
+.keysTitle {
+  width: 100%;
+  margin: calc(var(--px) * 2) 0 calc(var(--px) * 2);
+  padding: 0 0 calc(var(--px) * 1);
+  line-height: 0;
+  border-bottom: var(--px) dotted rgb(46 42 36 / 0.45);
+}
+
+.choices {
+  display: flex;
+  gap: calc(var(--px) * 2);
+}
+
+.choice {
+  position: relative;
+  line-height: 0;
+  cursor: pointer;
+}
+
+/* The five keys two to a row, each name with its cap. */
+.keyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--px) * 1) calc(var(--px) * 10);
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--px) * 4);
+}
+
+/* Land and take off, the odd one out, takes the whole row, its cap at the right edge with the choices above. */
+.keyRow:last-child {
+  grid-column: 1 / -1;
+}
+
+.keyWord {
+  line-height: 0;
+}
+
+.key,
+.action {
+  padding: 0;
+  font: inherit;
+  line-height: 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.note {
+  display: grid;
+  gap: calc(var(--px) * 1);
+  margin: calc(var(--px) * 2) 0 0;
+  line-height: 0;
+  opacity: 0.7;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  justify-items: start;
+  gap: calc(var(--px) * 3) calc(var(--px) * 10);
+  margin: calc(var(--px) * 5) 0 0;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+}
+
+/* A pilcrow before each action, so it reads as something to press: soft at rest, rubricated under the pointer. */
+.mark {
+  display: inline-grid;
+  line-height: 0;
+}
+
+.markRest,
+.markHot {
+  grid-area: 1 / 1;
+}
+
+.markHot,
+.action:hover .markRest,
+.action:focus-visible .markRest {
+  visibility: hidden;
+}
+
+.action:hover .markHot,
+.action:focus-visible .markHot {
+  visibility: visible;
+}
+
+/* Focus is an ink ring with a paper gap, so it never reads as a choice (choices are vermilion). */
+.choice:has(input:focus-visible),
+.key:focus-visible,
+.action:focus-visible {
+  outline: var(--px) solid var(--ink);
+  outline-offset: var(--px);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* On a touch screen each choice, key and action is a finger's target, 44 px at least each way, its plate drawn as
+   before in the middle of it. The rows stand a target apart; on a phone held sideways the panel then scrolls, about
+   six rows to a screen. */
+@media (hover: none) and (pointer: coarse) {
+  .panel .row {
+    margin-bottom: 0;
+  }
+
+  .choice,
+  .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .actions {
+    row-gap: 0;
+  }
+
+  .action {
+    min-height: 44px;
+  }
+}
+
+/* ---- The corner ---- */
+
+.corner {
+  position: absolute;
+  z-index: 12;
+  /* Now the frame fills the window, the corner keeps out of a phone's notch and rounded corners (0 on a desktop). */
+  top: max(calc(var(--px) * 3), env(safe-area-inset-top));
+  right: max(calc(var(--px) * 3), calc(env(safe-area-inset-right) + var(--px) * 2));
+  display: flex;
+  gap: calc(var(--px) * 5);
+  opacity: 0;
+  transition: opacity 400ms;
+}
+
+.cornerShown,
+.corner:focus-within {
+  opacity: 1;
+}
+
+.cornerItem {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 1);
+  padding: 0;
+  line-height: 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.cornerItem:focus-visible {
+  outline: var(--px) solid var(--ink);
+  outline-offset: var(--px);
+}
+
+/* A finger needs more than the plate: pad the target without moving what is drawn, to 44 px tall at least (the plate is
+   12 glyph pixels, so 2 px glyphs need 10 px of padding each way). */
+@media (pointer: coarse) {
+  .cornerItem {
+    padding: max(calc(var(--px) * 4), 10px);
+    margin: min(calc(var(--px) * -4), -10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner {
+    transition: none;
+  }
+}
+
+/* The options' own reduced motion, set on the page. */
+:global([data-motion="reduced"]) .corner {
+  transition: none;
+}

@@ -1,0 +1,504 @@
+/* =========================================================================
+   The minimal version: daniel.txt, open in nano.
+
+   nano's screen in the site's own terminal: the inverse title bar, the text,
+   the status line and two rows of shortcuts. The face and the colours are
+   the title's terminal window's (globals.css: --font-mono-family on
+   --panel-ink, text in --panel-on), because the title grows that window to
+   fill the screen and lands here. The inverse bars swap the two.
+
+   The document scrolls, in the browser's own scroller; the title bar sticks
+   to the top and the foot to the bottom. Nothing positions anything by
+   script. On a phone the search field opens at the top and the foot hides
+   while it has focus, so nothing is pinned at the bottom with the keyboard
+   up (the spec, sections 4.5 and 13).
+
+   Hand-written like the rest of the terminal replica: Astryx does not govern
+   it. Design: docs/superpowers/specs/2026-11-19-minimal-terminal-design.md.
+   ========================================================================= */
+
+:root:has(.nano),
+:root:has(.nano) body {
+  background: var(--panel-ink);
+  color-scheme: dark;
+}
+
+/* Whole lines only. nano draws a terminal's rows, so no line is ever half
+   under the title bar or the status line. Three things make that so:
+   - everything in the text is a whole number of lines tall (one size, one
+     line height, blank lines as margins of whole lines, no other padding);
+   - the foot takes up the remainder of the window below the last whole row,
+     so the space between the bars is always a whole number of lines;
+   - the page snaps to rows (the rail in Text.tsx), so wherever a scroll comes
+     to rest a row starts just under the title bar.
+   The sizes are set here, on the root, where the snap is, in pixels rather
+   than lh, which would be the root's own line. */
+:root:has(.nano) {
+  /* 16px on phones and anything with a coarse pointer: easy to read, and no
+     zoom when the search field takes focus. A desktop with a mouse gets the
+     mock's 15px. One size throughout: nano has no other. */
+  --nano-size: 16px;
+  --nano-line: calc(var(--nano-size) * 1.5);
+  /* The dark strip under the title bar, part of the bar. */
+  --nano-gap: 8px;
+  --nano-bar-h: calc(var(--nano-line) + var(--nano-gap) + env(safe-area-inset-top));
+  --nano-key-row: var(--nano-line);
+  /* The status line, the two rows of keys and their padding. */
+  --nano-foot-base: calc(var(--nano-line) + 2px + 2 * var(--nano-key-row) + 6px + env(safe-area-inset-bottom));
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--nano-bar-h);
+}
+@media (min-width: 640px) and (hover: hover) and (pointer: fine) {
+  :root:has(.nano) {
+    --nano-size: 15px;
+  }
+}
+/* A finger gets 44pt for each key: on a touch screen, and wherever the rows
+   are the phone's two of two. */
+@media (pointer: coarse), (max-width: 719px) {
+  :root:has(.nano) {
+    --nano-key-row: 44px;
+  }
+}
+
+.nano {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--panel-ink);
+  color: var(--panel-on);
+  font-family: var(--font-mono-family);
+  font-size: var(--nano-size);
+  line-height: var(--nano-line);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* The site's own type stops at the door: everything in nano is the one face,
+   the one size and the two colours, wrapping as a terminal wraps, with no
+   transitions. Zero specificity past .nano, so every rule below still sets
+   its own colours (the inverse bars, the keys). */
+.nano :where(h1, h2, p, ul, li, dl, dt, dd, a, button, label, input, span, kbd) {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+  color: inherit;
+  transition: none;
+}
+/* The site balances its headings and evens out its paragraphs; a terminal
+   wraps each line as it comes. (Only the style: the bars' nowrap stands.) */
+.nano :where(h1, h2, p) {
+  text-wrap-style: auto;
+}
+.nano ::selection {
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+
+/* ---- The bars: title, status, shortcuts --------------------------------- */
+
+.nano-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 2ch;
+  box-sizing: border-box;
+  height: var(--nano-bar-h);
+  padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  border-bottom: var(--nano-gap) solid var(--panel-ink);
+  background: var(--panel-on);
+  color: var(--panel-ink);
+  white-space: nowrap;
+}
+.nano-file {
+  text-align: center;
+}
+
+/* The foot is its rows and the rest of the window below the last whole row
+   of text, which it leaves blank under the keys, as a terminal leaves the
+   pixels below its last row. Without mod(), the foot is only its rows. */
+.nano-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  min-height: calc(var(--nano-foot-base) + mod(100dvh - var(--nano-bar-h) - var(--nano-foot-base), var(--nano-line)));
+  padding: 0 max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: var(--panel-ink);
+}
+.nano-status {
+  height: var(--nano-line);
+  margin: 0;
+  text-align: center;
+}
+.nano-message {
+  padding: 0 6px;
+  background: var(--panel-on);
+  color: var(--panel-ink);
+  white-space: pre;
+}
+
+/* nano's two rows: six to a row where there is room, as nano draws them. */
+.nano-keys {
+  display: grid;
+  grid-template-columns: repeat(6, max-content);
+  grid-auto-rows: var(--nano-key-row);
+  gap: 0 28px;
+  padding-top: 2px;
+}
+.nano-key {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nano-key kbd {
+  margin-right: 6px;
+  padding: 0 2px;
+  background: var(--panel-on);
+  color: var(--panel-ink);
+  font: inherit;
+}
+:is(a, button).nano-key {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  :is(a, button).nano-key:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+.nano-key:focus-visible {
+  outline: 2px solid var(--panel-on);
+  outline-offset: 2px;
+}
+
+/* Narrow: only the four keys that work, two to a row. */
+@media (max-width: 719px) {
+  .nano-keys {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+  }
+  .nano-deco {
+    display: none;
+  }
+}
+
+/* ---- The search prompt (^F) --------------------------------------------- */
+
+.nano-find {
+  display: flex;
+  gap: 1ch;
+  align-items: center;
+  /* In the status line's place, and as tall. */
+  height: var(--nano-line);
+  margin: 0;
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+.nano-find label {
+  white-space: pre;
+}
+.nano-find input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  caret-color: currentColor;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* While the prompt is open it takes the status line's place; the status line
+   stays in the page, out of sight, to announce what the search found. */
+.nano-find ~ .nano-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* On a phone the prompt opens at the top of the screen, over the title bar,
+   where the keyboard cannot cover it and Safari has no reason to pan; and the
+   shortcut rows hide while it has focus. A narrow window with a mouse does
+   the same, which costs it nothing. */
+@media (pointer: coarse), (max-width: 719px) {
+  .nano-find {
+    height: auto;
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 3;
+    min-height: 44px;
+    padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  }
+  .nano-foot:has(.nano-find input:focus) .nano-keys {
+    visibility: hidden;
+  }
+}
+
+/* ---- The text ------------------------------------------------------------ */
+
+/* No padding at the top (the bar's strip is the gap) and a blank line at the
+   end: the text starts on the row under the bar and ends on a row. */
+.nano-text {
+  position: relative;
+  flex: 1;
+  padding: 0 max(12px, env(safe-area-inset-right)) var(--nano-line) max(12px, env(safe-area-inset-left));
+}
+/* The rail: one snap point every row, down the text's left edge. It is as
+   long as the text and no longer; its extra rows are clipped, and add no
+   scroll. */
+.nano-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  overflow: clip;
+  pointer-events: none;
+}
+.nano-rail i {
+  display: block;
+  height: var(--nano-line);
+  scroll-snap-align: start;
+}
+.nano-doc {
+  max-width: 100ch;
+}
+.nano-doc :where(h1, h2, p, ul, li, dl, dt, dd) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+}
+.nano-doc :where(h1, h2) {
+  font-weight: 700;
+  /* A blank row above a heading that a link or Go To Line jumps to (the
+     root's scroll padding keeps it clear of the title bar). */
+  scroll-margin-top: var(--nano-line);
+}
+.nano-doc :where(h1, h2):focus {
+  outline: none;
+}
+.nano-doc ul {
+  list-style: none;
+}
+/* The file's blank lines: one after the title, two before each heading and
+   one after it, one between entries. */
+.nano-doc > .nano-facts {
+  margin-top: 1lh;
+}
+.nano-doc section {
+  margin-top: 2lh;
+}
+.nano-doc h2 {
+  margin-bottom: 1lh;
+}
+.nano-entries {
+  display: grid;
+  row-gap: 1lh;
+}
+/* Columns in ch, as the file pads them: a label column wide enough for the
+   longest label, a name column for each list's longest name. */
+.nano-facts > div,
+.nano-noted {
+  display: grid;
+  grid-template-columns: var(--nano-label) minmax(0, 1fr);
+}
+.nano-noted {
+  grid-template-columns: var(--nano-name) minmax(0, 1fr);
+}
+.nano-facts dd {
+  overflow-wrap: anywhere;
+}
+/* A phone's 38 columns: the label column keeps one space after the longest
+   label rather than the file's three, so an address like the LinkedIn one
+   fits on its line. */
+@media (max-width: 479px) {
+  .nano-facts > div {
+    grid-template-columns: calc(var(--nano-label) - 2ch) minmax(0, 1fr);
+  }
+}
+.nano-under {
+  padding-left: var(--nano-indent);
+}
+
+.nano-doc a,
+.nano-help-text a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.nano-doc a:focus-visible,
+.nano-panel a:focus-visible {
+  background: var(--panel-on);
+  color: var(--panel-ink);
+  outline: 2px solid transparent;
+}
+@media (hover: hover) {
+  .nano-doc a:hover,
+  .nano-panel a:hover {
+    background: var(--panel-on);
+    color: var(--panel-ink);
+  }
+}
+
+/* ---- Help (^G) and Go To Line (^/) ---------------------------------------- */
+
+/* Dialogs shown as popovers: the UA's box (centred, bordered, light) is
+   cleared. Each sets its own display only while open: a closed one keeps the
+   UA's display: none. */
+.nano-panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--panel-ink);
+  color: var(--panel-on);
+  font: inherit;
+  max-width: none;
+  max-height: none;
+}
+.nano-panel-keys {
+  display: flex;
+  gap: 28px;
+  padding: 2px max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+/* Help covers the whole screen, as nano's does, with its own bar and keys.
+   The screen itself scrolls, with the bar and the keys stuck to its ends, so
+   the scroller holds the Close key: a keyboard can reach it and scroll it. */
+.nano-help:popover-open {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  height: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.nano-help-text {
+  flex: 1;
+  padding: 8px max(12px, env(safe-area-inset-right)) 18px max(12px, env(safe-area-inset-left));
+}
+.nano-help .nano-panel-keys {
+  position: sticky;
+  bottom: 0;
+  background: var(--panel-ink);
+}
+.nano-help-text > * {
+  max-width: 80ch;
+  margin: 0 0 1lh;
+  font: inherit;
+}
+.nano-help-title {
+  font-weight: 700;
+}
+.nano-help-keys > div {
+  display: grid;
+  grid-template-columns: 8ch minmax(0, 1fr);
+}
+.nano-help-keys dd {
+  margin: 0;
+}
+.nano-help-keys kbd {
+  font: inherit;
+}
+
+/* Go To Line rises from the foot, over the shortcut rows, as nano's prompt
+   takes their place. */
+.nano-goto:popover-open {
+  position: fixed;
+  inset: auto 0 0;
+  display: block;
+  width: auto;
+  height: auto;
+  max-height: 70vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 -1px 0 var(--panel-on);
+}
+.nano-prompt {
+  margin: 0;
+  padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  background: var(--panel-on);
+  color: var(--panel-ink);
+}
+.nano-goto-list {
+  margin: 0;
+  padding: 4px max(12px, env(safe-area-inset-right)) 4px max(12px, env(safe-area-inset-left));
+  list-style: none;
+}
+.nano-goto-list a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.nano-goto-list a:focus-visible,
+.nano-goto-list a:hover {
+  text-decoration: underline;
+}
+@media (pointer: coarse), (max-width: 719px) {
+  .nano-goto-list a {
+    min-height: 44px;
+  }
+}
+.nano-line {
+  display: inline-block;
+  min-width: 5ch;
+  margin-right: 2ch;
+  text-align: right;
+}
+
+/* Read by a screen reader, not shown. */
+.nano-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .nano-bar,
+  .nano-message,
+  .nano-key kbd,
+  .nano-prompt,
+  .nano-find {
+    outline: 1px solid CanvasText;
+  }
+}
+
+@media print {
+  :root:has(.nano),
+  :root:has(.nano) body,
+  .nano {
+    background: #fff;
+    color: #000;
+  }
+  .nano-bar,
+  .nano-foot {
+    display: none;
+  }
+}

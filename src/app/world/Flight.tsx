@@ -1,0 +1,178 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import Terminal from "../../components/terminal/Terminal";
+import type { LandmarkSet } from "../../world/sites/landmarks";
+import Codex from "./Codex";
+import FlightCard from "./FlightCard";
+import QuestCard from "./QuestCard";
+import styles from "./flight.module.css";
+import mobile from "./mobile.module.css";
+import OptionsPanel, { Corner } from "./OptionsPanel";
+import { setOptions, useOptions } from "./optionsStore";
+import { DiscoveryCaption, GuideLine, LoadFailed, StatsReadout } from "./Overlays";
+import SoundToggle from "./SoundToggle";
+import { HOLD_AT, type HoldAt } from "../../world/runtime/hold";
+import { useFlight, type TitleLink } from "./useFlight";
+import { useSound } from "./useSound";
+import { useFrameFit } from "./useFrameScale";
+import { usePanel, useReveal } from "./usePanel";
+import { phoneFrame, usePhoneFlight } from "./usePhoneFlight";
+import { useTerminalDrawer, type TerminalProps } from "./useTerminalDrawer";
+import { MINIMAL_PAGE } from "../../components/title/phone/copy";
+
+/** The corner shows this long after the page opens and after the pointer last moved, ms. */
+const REVEAL_MS = 4000;
+
+/**
+ * On a phone the abbey has no terminal (the shell lives in the desktop title's): its button opens the minimal version
+ * instead, the whole site as one text file, and says so.
+ */
+const PHONE_ABOUT = {
+  open: (): void => {
+    window.location.href = MINIMAL_PAGE;
+  },
+  label: "Read the minimal version",
+};
+
+export interface FlightProps {
+  /** The landmarks and what each holds, worked out at build time; null when the build had no world. */
+  landmarks: LandmarkSet | null;
+  /** What the terminal at the abbey is handed, as on the home page. */
+  terminal: TerminalProps;
+  /** Bytes fetched before the first view (the core and the start's regions), from the build; 0 when unknown. */
+  startBytes: number;
+  /** The world waits behind the title. */
+  held?: boolean;
+  /** Where the held head is drawn, as shares of the frame from its top-left corner (beside the title's button). */
+  holdAt?: HoldAt;
+  /** Esc and Leave go back to the title instead of to "/". */
+  onLeave?: () => void;
+  /** The first full view is drawn. */
+  onReady?: () => void;
+  /**
+   * The abbey's "Open the terminal" on a desktop. The title's window is that terminal, so the button calls this
+   * instead of opening the world's own drawer.
+   */
+  onTerminal?: () => void;
+}
+
+export default function Flight({ landmarks, terminal, startBytes, held, holdAt, onLeave, onReady, onTerminal }: FlightProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const windowFit = useFrameFit();
+  const drawer = useTerminalDrawer(terminal);
+  const panel = usePanel();
+  const { shell, touch } = usePhoneFlight(rootRef, panel.open);
+  // The sound's control is made first, so the flight finds it when the world has loaded.
+  const sound = useSound();
+  // The title's latest values, which the frame loop reads through one link built once. They are written after each
+  // render, before the next frame, so the loop never sees a render React threw away.
+  const latest = useRef({ held, holdAt, onLeave, onReady });
+  useLayoutEffect(() => {
+    latest.current = { held, holdAt, onLeave, onReady };
+  });
+  // /world passes none of them, so it gets no link and its flight is unchanged.
+  const [title] = useState<TitleLink | undefined>(() =>
+    held === undefined && onLeave === undefined && onReady === undefined
+      ? undefined
+      : {
+        held: () => latest.current.held ?? false,
+        holdAt: () => latest.current.holdAt ?? HOLD_AT,
+        leave: () => latest.current.onLeave?.(),
+        ready: () => latest.current.onReady?.(),
+      },
+  );
+  // The title's Settings opens the world's options. show is stable, so the listener is added once.
+  const openOptions = panel.show;
+  useEffect(() => {
+    const open = () => openOptions();
+    window.addEventListener("world:options", open);
+    return () => window.removeEventListener("world:options", open);
+  }, [openOptions]);
+  const flight = useFlight(canvasRef, landmarks, drawer.link, panel.link, touch, sound.ref, title);
+  const options = useOptions();
+  const revealed = useReveal(REVEAL_MS);
+  // What the abbey's button opens, and says it opens. A phone still opens the minimal version. On the title the
+  // window itself is the terminal, so the button brings that back and the world's drawer is not mounted.
+  const about = shell.phone
+    ? PHONE_ABOUT
+    : {
+        open: (trigger: HTMLElement) => {
+          if (onTerminal) onTerminal();
+          else drawer.show(trigger);
+        },
+        label: "Open the terminal",
+      };
+
+  if (flight.failed) return <LoadFailed />;
+
+  const { fit, page: touchPage, turned } = phoneFrame(shell, windowFit);
+  const at = flight.phase.at;
+  // The panel and the corner draw their glyphs a step finer than the world's pixel, 2 or 3 CSS pixels, so the panel
+  // stays small on any window.
+  const px = Math.max(2, Math.min(3, Math.round(fit.css) - 1));
+  // The frame covers the window from its top-left corner; the session sizes the canvas itself to fit.w × fit.h.
+  const stage = { width: fit.w * fit.css, height: fit.h * fit.css } as CSSProperties;
+  // Round the frame the page takes the paper's colour in the hour's light: dark at night, as the frame is.
+  const paper = flight.paper ? ({ background: flight.paper } as CSSProperties) : undefined;
+  // On a touch-first screen the page is also the game layer: sized to the visible area, and turned when played sideways.
+  const page = paper || touchPage ? { ...paper, ...touchPage } : undefined;
+  return (
+    <div ref={rootRef} className={`${styles.page} ${touchPage ? mobile.touchPage : ""}`} style={page} data-motion={options.motion}>
+      {held ? null : <SoundToggle control={sound.control} />}
+      <div className={styles.stage} style={stage}>
+        <canvas ref={canvasRef} className={styles.canvas} />
+        {panel.open || held ? null : <Corner px={px} device={flight.device} phase={flight.phase.kind} shown={revealed} onOpen={panel.show} onLeave={onLeave} />}
+      </div>
+      <GuideLine say={flight.say} />
+      {/* Held by the title, or while a landmark's Codex is open (its title is already on the card), the discovery line waits. */}
+      {held || at ? null : <DiscoveryCaption caption={flight.caption} />}
+      {at ? (
+        <Codex landmark={at} onTakeOff={flight.takeOff} onOpenTerminal={about.open} openLabel={about.label} />
+      ) : null}
+      {at?.holds.kind === "about" && !shell.phone && !onTerminal ? (
+        <Terminal open={drawer.open} onClose={drawer.link.close} api={drawer.api} />
+      ) : null}
+      <OptionsPanel
+        open={panel.open}
+        px={px}
+        options={options}
+        device={flight.device}
+        platform={shell.platform}
+        onChange={setOptions}
+        sound={sound.control}
+        onTeach={() => {
+          flight.teachAgain();
+          panel.link.toggle();
+        }}
+        onClose={panel.closed}
+        onLeave={onLeave}
+      />
+      {/* Under the title the world is held: the offer waits until the visitor is flying, then its few seconds, each time
+          they set off (a new card each time the title holds or lets go), so it never covers a take-off. On a phone
+          it holds the flight while it is up, as the phone's other cards do: its thumbs are where the card would be. */}
+      <QuestCard
+        key={held ? "held" : "free"}
+        px={px}
+        lessonDone={flight.lessonDone && !held}
+        covered={held === true || panel.open || shell.card !== null || drawer.open || at !== null}
+        hold={shell.phone ? shell.offer : undefined}
+      />
+      <FlightCard
+        card={shell.card}
+        px={px}
+        phone={shell.phone}
+        homeScreenHint={shell.platform === "ios" && shell.phone && !shell.standalone}
+        sideways={turned}
+        startBytes={startBytes}
+        onTakeWing={shell.takeWing}
+        onFlyOn={shell.flyOn}
+        onSideways={shell.playSideways}
+        onOtherWay={shell.otherWay}
+        onOptions={panel.show}
+      />
+      {flight.stats ? <StatsReadout stats={flight.stats} /> : null}
+    </div>
+  );
+}
