@@ -26,6 +26,9 @@ Last updated 2026-11-21.
 
 ## Done
 
+- **Live** (2026-11-21). The dragon world shipped to `main` and danielhkuo.github.io in
+  [#5](https://github.com/danielhkuo/danielhkuo.github.io/pull/5), with world `c75fc713183d`. The deploy builds on
+  Node 26. The project summaries were rewritten from each repo's own README first.
 - **Terrain**, nine look rounds, critics at 2.8 of 4. Coasts, the town and the sea read as beautiful; peaks are the
   weakest. See the look ledger.
 - **First flight** (`/world`). Seed 3 ships as one 3.1 MB file. Workers paint the land ahead of the flier at
