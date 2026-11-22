@@ -1,6 +1,6 @@
 ---
 name: DermAtlas
-summary: Main Repo I guess
+summary: Finds expert-labeled skin lesion cases that look like a patient's, to support primary care doctors.
 repo: DermAtlas-413/DermAtlas
 order: 2
 ---
