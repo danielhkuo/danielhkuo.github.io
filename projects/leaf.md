@@ -1,6 +1,6 @@
 ---
 name: leaf
-summary: Small Discord Bot, like Bereal but for Discord
+summary: "A daily photo journal for Discord, like BeReal: post each day, then browse it back as a calendar."
 repo: danielhkuo/leaf
 order: 4
 ---
