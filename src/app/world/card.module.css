@@ -112,13 +112,32 @@
   clip-path: inset(50%);
 }
 
-/* The quest offer: at the foot of the frame, centred, clear of the dragon and between a phone's two thumbs. */
+/* A sentence set word by word, so it wraps between words where the card is narrow: the font's space (two columns and
+   a column of tracking each side) between words, its line (one row) between lines. */
+.sentence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--px) calc(var(--px) * 4);
+  line-height: 0;
+}
+
+/* The quest offer is wide enough for its sentence on one line wherever there is room. */
+.card.offer {
+  max-width: min(100%, calc(var(--px) * 240));
+}
+
+/* On a desktop: at the foot of the frame, centred, clear of the dragon, and the flight goes on round it. On a phone it
+   stands on the veil instead, centred, and holds the flight (QuestCard). */
 .card.quest {
   position: absolute;
   z-index: 16;
-  left: 50%;
+  /* Centred by its margins across the whole width, so its sentence has the frame's width to stand in (centred from
+     left: 50% it had only half of it, and wrapped on a 1280 px window). */
+  right: 0;
   bottom: max(env(safe-area-inset-bottom, 0px), 16px);
-  transform: translateX(-50%);
+  left: 0;
+  width: fit-content;
+  margin-inline: auto;
   max-height: none;
 }
 

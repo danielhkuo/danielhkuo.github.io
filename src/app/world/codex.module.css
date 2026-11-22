@@ -876,3 +876,93 @@
     display: block;
   }
 }
+
+/* A touch screen wide enough for the side panel, a phone held sideways among them: the panel keeps inside the safe
+   areas, clear of the Dynamic Island or notch at the side and of the home indicator at the foot. */
+@media (hover: none) and (pointer: coarse) and (min-width: 761px) {
+  .codex {
+    right: max(clamp(0.75rem, 3vw, 2.5rem), env(safe-area-inset-right));
+    max-height: min(calc(var(--vvh, 100dvh) - var(--codex-clear) - max(var(--codex-foot), env(safe-area-inset-bottom))), 46rem);
+  }
+}
+
+/* Sideways on a phone the window is short, and under the corner's column (the options plate over the sound toggle)
+   the panel was left a strip. It stands beside that column instead, from just under the options plate (three glyph
+   pixels from the top, 12 rows of up to 3 px) to the foot: on an iPhone 17 270 px of sheet where there were 206. */
+@media (hover: none) and (pointer: coarse) and (min-width: 761px) and (max-height: 520px) {
+  .codex {
+    --codex-clear: calc(max(0.5rem, env(safe-area-inset-top)) + 2.5rem);
+    right: calc(max(0.75rem, env(safe-area-inset-right)) + 44px + 0.6rem);
+  }
+}
+
+/* Every button and link in the Codex is a finger's height on a touch screen: 44 px, Apple's least. */
+@media (hover: none) and (pointer: coarse) {
+  .actions .button,
+  .back .button,
+  .register > .button {
+    min-height: 44px;
+  }
+
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* The hall's Look for the glass: under the five in the register, except on a short window, where the register is
+   one row beside the quatrefoils and squeezed the button to a sliver. There it stands beside Take off instead. */
+.followAction {
+  display: none;
+}
+
+/* The same for the ending's Write to Daniel, once all five are found. */
+.writeAction {
+  display: none;
+  text-decoration: none;
+}
+
+@media (max-height: 520px) {
+  .hallLeaf .register > .follow,
+  .hallLeaf .register > .links {
+    display: none;
+  }
+
+  .hallLeaf .followAction,
+  .hallLeaf .writeAction {
+    display: inline-flex;
+  }
+
+  /* One line, so the register keeps the quatrefoils whole when the sheet is short. The count gives way to them, as
+     they show it too, and keeps its figures for a reader; the heading's words stay whole. */
+  .hallLeaf .register h3 {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* The register is then its one row. The quest's line, the five places under it (which every stop and the abbey
+     show in full) and the ending's lines (the five lit quatrefoils say it) are kept for a reader, not cut to a sliver
+     of type under the row. */
+  .hallLeaf .register h3 .count,
+  .hallLeaf .register > .questLine,
+  .hallLeaf .register > .closing,
+  .hallLeaf .register > .pieces {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+}
+
+/* Sideways in Safari with its tab bar showing (292 px), the hall keeps two rows of its list, so Take off stays in the
+   sheet. */
+@media (max-height: 320px) {
+  .projectScroll {
+    min-height: calc(44px * 2);
+  }
+}

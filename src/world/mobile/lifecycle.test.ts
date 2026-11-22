@@ -45,6 +45,20 @@ test("the options panel holds the flight while open and lets it go when closed",
   assert.equal(running(after(open, "hidden", "optionsClose")), false);
 });
 
+test("the quest offer holds a phone's flight while it is up, with no card of its own, and lets go when answered", () => {
+  const up = after(startLife(false), "offerOpen");
+  assert.equal(running(up), false);
+  assert.equal(cardOf(up), null);
+  assert.equal(running(lifeAfter(up, "offerClose")), true);
+  // Fly on is not an answer: only the offer's own buttons (or its going away) let go.
+  assert.equal(running(lifeAfter(up, "flyOn")), false);
+  // Answering does not lift a pause that came while it was up, and the panel's hold is separate from the offer's.
+  assert.equal(running(after(up, "hidden", "offerClose")), false);
+  assert.equal(running(after(up, "optionsOpen", "optionsClose")), false);
+  assert.equal(running(after(up, "optionsOpen", "offerClose")), false);
+  assert.equal(running(after(up, "optionsOpen", "offerClose", "optionsClose")), true);
+});
+
 test("the gate outranks the turn card, which outranks Paused", () => {
   assert.equal(cardOf(after(startLife(true), "upright")), "gate");
   assert.equal(cardOf(after(startLife(true), "upright", "takeWing")), "upright");

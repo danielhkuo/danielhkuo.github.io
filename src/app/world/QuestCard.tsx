@@ -1,10 +1,12 @@
 "use client";
 
-// The quest offer: a small card a few seconds after the lesson. It asks one thing and does not stop the flight. It
-// takes no focus, so Space and the arrows still fly: Q follows, Esc is not now, or a click.
+// The quest offer: a small card a few seconds after the lesson. It asks one thing. On a desktop it does not stop the
+// flight and takes no focus, so Space and the arrows still fly: Q follows, Esc is not now, or a click. On a phone the
+// thumbs are on the glass where the card would sit, so it holds the flight like the phone's other cards, centred over
+// the frame, until it is answered.
 // Game layer: hand-drawn, not Astryx.
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { text, VERMILION } from "../../world/controls/glyphs";
 import { cardPlate, titleFoil } from "../../world/mobile/art";
 import { choose, offerDue } from "../../world/story/quest";
@@ -22,6 +24,11 @@ export interface QuestCardProps {
   lessonDone: boolean;
   /** The options, a flight card, the terminal or the Codex is open. */
   covered: boolean;
+  /**
+   * A phone: the card is centred on a veil and holds the flight while it is up (`hold(true)`, then `hold(false)` when
+   * it is answered or goes). Without it the card sits at the foot of the frame and the flight goes on.
+   */
+  hold?: (up: boolean) => void;
 }
 
 function Words({ children, px, ink }: { children: string; px: number; ink?: number }) {
@@ -33,7 +40,29 @@ function Words({ children, px, ink }: { children: string; px: number; ink?: numb
   );
 }
 
-export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
+/** The words of `s`, each keyed by itself and how many times it has come before (a word may repeat). */
+function wordsOf(s: string): { word: string; key: string }[] {
+  const seen = new Map<string, number>();
+  return s.split(" ").map((word) => {
+    const n = (seen.get(word) ?? 0) + 1;
+    seen.set(word, n);
+    return { word, key: `${word}#${n}` };
+  });
+}
+
+/** A sentence that wraps between its words as the card narrows: a glyph a word, one string for readers. */
+function Sentence({ children, px }: { children: string; px: number }) {
+  return (
+    <span className={styles.sentence}>
+      {wordsOf(children).map(({ word, key }) => (
+        <PixelGlyph key={key} sprite={text(word)} px={px} />
+      ))}
+      <span className={styles.sr}>{children}</span>
+    </span>
+  );
+}
+
+export default function QuestCard({ px, lessonDone, covered, hold }: QuestCardProps) {
   const quest = useQuest();
   const [waited, setWaited] = useState(false);
   const shown = offerDue(quest, lessonDone) && waited && !covered;
@@ -56,20 +85,22 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
     };
     window.addEventListener("keydown", take, true);
     setQuestCardUp(true);
+    hold?.(true);
     return () => {
       setQuestCardUp(false);
+      hold?.(false);
       window.removeEventListener("keydown", take, true);
     };
-  }, [shown]);
+  }, [shown, hold]);
 
   if (!shown) return null;
 
   const pick = (mode: "on" | "off") => setQuest(choose(getQuest(), mode));
-  return (
-    // Non-modal, as the Codex is: the flight keeps its keys.
+  const card: ReactNode = (
+    // Non-modal, as the Codex is: on a desktop the flight keeps its keys.
     <dialog
       open
-      className={`${styles.card} ${styles.quest}`}
+      className={`${styles.card} ${styles.offer} ${hold ? "" : styles.quest}`}
       style={{ "--px": `${px}px` } as CSSProperties}
       aria-labelledby="quest-title"
       aria-live="polite"
@@ -82,7 +113,7 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
         </Words>
       </h2>
       <p className={styles.line}>
-        <Words px={px}>{"the hall's window is missing five panes of glass."}</Words>
+        <Sentence px={px}>{"the hall's window is missing five panes of glass."}</Sentence>
       </p>
       <p className={styles.buttons}>
         <button type="button" className={styles.button} onClick={() => pick("off")}>
@@ -95,5 +126,14 @@ export default function QuestCard({ px, lessonDone, covered }: QuestCardProps) {
         </button>
       </p>
     </dialog>
+  );
+  // On a phone the card stands on the same veil as the phone's other cards, and turns with the flight when played
+  // sideways. It is not one of the shell's cards: [data-card] stays theirs.
+  return hold ? (
+    <div className={styles.veil} data-touch-skip="">
+      {card}
+    </div>
+  ) : (
+    card
   );
 }

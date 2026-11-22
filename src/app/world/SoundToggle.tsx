@@ -104,7 +104,7 @@ export default function SoundToggle({ control }: { control: SoundControl | null 
   const ui = { [SOUND_UI]: "" };
 
   return (
-    <div className={`${styles.sound} ${fell.variable}`} {...ui}>
+    <div className={`${styles.sound} ${fell.variable}`} data-keep-clear="" {...ui}>
       {/* Always in the DOM: it is the switch's description and a polite live region. */}
       {/* role="status" is a polite live region of its own; no aria-live attribute, so the flight guide stays the page's one p[aria-live]. */}
       <p id={hintId} className={styles.hint} role="status" data-shown={hint ? "true" : "false"}>

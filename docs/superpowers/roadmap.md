@@ -3,7 +3,7 @@
 The one list of what is done, what is next, and every idea not built yet. Update it when something finishes, is decided or
 is dropped. Details live in the documents it links; this page says what and in which order.
 
-Last updated 2026-11-19.
+Last updated 2026-11-21.
 
 ## Where things are written down
 
@@ -141,6 +141,20 @@ Last updated 2026-11-19.
   `./world` enters the world; Esc clears a typed line. The abbey's "Open the terminal" brings this window back with its
   scrollback, the prompt focused and the world held, and leaving again flies on from the abbey. The separate pop-up
   window is gone on a desktop; the world's drawer stays only for `/world` opened on its own. Phones are unchanged.
+- **The iPhone pass** (2026-11-21, `fix/ios-pass`, Opus with Cursor, after the owner's look in the Simulator). Every
+  screen checked in the iOS 26.5 Simulator on the iPhone 17 and 17e, upright and both ways sideways, with Safari's chrome
+  as one tab shows it. The quest offer wraps its sentence (it was cut off, on a desktop too) and on a phone stands
+  centred and holds the flight until it is answered, clear of the thumbs. The options panel takes the visible height,
+  not Safari's taller 100vh, and its choices are 44 px. The Codex keeps inside the safe areas (the Dynamic Island covered
+  its border) and stands beside the corner's column sideways, with 44 px buttons and links; on that short sheet the
+  hall's Look for the glass stands beside Take off (it was squeezed to a sliver, and Take off was cut off with Safari's
+  tab bar). The quest's count and arrow keep inside the safe areas, and the arrow out from under the corner's controls.
+  `/minimal`'s Where Is waits for the keyboard to go before it scrolls to the match (Safari was left panned, the title
+  bar off the top). The phone title is 16 px throughout. With all five found, the short sheet keeps the ending's Write
+  to Daniel beside Take off (it was behind a scroll), and the register's count gives way to the quatrefoils rather than
+  cutting its heading short. Checks: `e2e/site/phone.spec.ts` (inside the safe areas, 44 px targets, 16 px text, the
+  hall at 338 and 292 px tall, before and after the quest), `e2e/minimal/tap.spec.ts`.
+  Issue list and before-and-after shots: the coordinator's side-session notes, `ios-pass/`.
 - **The minimal version, as nano** (2026-11-19, Opus, on the owner's decision). `/minimal` is daniel.txt open in nano:
   the whole site as one plain text file (the profile, PROJECTS, CONTACT, ELSEWHERE), built from content.ts and the
   pinned repos, in the title window's face and colours, with nano's title bar, status line and two rows of shortcuts.
@@ -411,6 +425,14 @@ minimap (a map is for fun only). Researched, designed and built 2026-11-19 (see 
 
 - The world's landmark caption fades in and out (`.caption { transition: opacity 400ms }` in `flight.module.css`),
   against the owner's "nothing fades": arrive by a step or a slide instead. Found by the title's critic, 2026-11-21.
+- With all five panes found, the hall's register on a desktop (1280 × 720) shows the five places and the ending in full
+  and leaves the project list about one row. Below 520 px tall it is already one row (the quatrefoils, then Write to
+  Daniel beside Take off); the same in the hall at any height would give the projects their room back, since each stop
+  and the abbey show the five in full. Found in the iPhone pass's review, 2026-11-21.
+- WebKit's "the abbey's Codex reads down by keyboard" (`e2e/site/landing.spec.ts`) fails now and then: its second
+  `page.goto` cancels the first page's region fetch, and WebKit logs that as "Fetch API cannot load … due to access
+  control checks", which the error check counts. Passes alone. Fix: let the check skip that message for this site's own
+  URLs (a same-origin request has no access control to fail).
 
 From the clouds and water (2026-11-18):
 - Big cumulus masses read a little like piles of similar bubbles; ground shadows ignore terrain height and sit about
@@ -537,6 +559,11 @@ land was decided (grow it) and is built (spec 6.7).
   `research/2026-11-19-webkit-pass.md`. A phone on the LAN needs HTTPS, or the world will not load.
 - Owner: open `/minimal` on a real iPhone: scroll it, tap the four keys, search for a word. The search field and the
   rows against Safari's bar are checked in the iOS 26.5 Simulator only, with synthesised touches, and not on iOS 27.
+  Since the iPhone pass a search waits for the keyboard to go (its `visualViewport` resize, or 800 ms) before it
+  scrolls: on a real phone the match should land in the middle with the title bar in place.
+- Owner, the iPhone pass on a real phone (2026-11-21): the Codex beside the corner's column and the quest's arrow and
+  count in landscape on a phone with the Dynamic Island on each side; the quest offer holding the flight; 44 px targets
+  under a real thumb; the edge swipe near the cards.
 - Owner, sound: on an iPhone, the first enable, a sliding tap, lock and unlock, background and back, silent mode
   ("ambient" session); in desktop Safari, a sound panned hard left (WebKit 257447; the engine pans by gain pairs, not
   StereoPannerNode); with Bluetooth headphones, whether the abbey's bells meet the clock's figures. Listening set:
