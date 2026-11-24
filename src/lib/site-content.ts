@@ -35,33 +35,31 @@ export const SITE_PAGES: readonly SitePage[] = [
   {
     path: TEXT_PAGE,
     title: "Text version",
-    summary:
-      "The whole site as one page of plain text: profile, projects and contact, as a single file open in nano. The quickest read on any device, and the one for screen readers.",
+    summary: "The entire site on one plain-text page, styled like nano.",
     isText: true,
   },
   {
     path: "/",
     title: "Title menu",
-    summary: "The front door, offering every way into the site.",
+    summary: "The home page, with an interactive terminal and links across the site.",
     isText: false,
   },
   {
     path: "/world",
     title: "Flight",
-    summary:
-      "Fly a dragon over an inked, procedurally generated realm. A canvas game that needs JavaScript; it has nothing to read that the text version lacks.",
+    summary: "Dragon-flight canvas for browsing projects and landmarks (requires JS).",
     isText: false,
   },
   {
     path: "/agents.md",
     title: "Agent guide",
-    summary: "The person, the projects and the way around the site, written for AI agents.",
+    summary: "Full plain-Markdown reference of the site for AI agents.",
     isText: true,
   },
   {
     path: "/llms.txt",
     title: "llms.txt",
-    summary: "A short index of the site, in the llms.txt format.",
+    summary: "Short link index of the site in llms.txt format.",
     isText: true,
   },
 ];
@@ -127,9 +125,9 @@ export function personJsonLd(): Record<string, unknown> {
   };
 }
 
-/** "Full-stack product builder & team architect. Rice University · CS, Houston, TX. Building …." */
+/** "Full-stack product builder & team architect based in Houston, TX (Rice University · CS), building …." */
 export function profileSummary(): string {
-  return `${PROFILE.title}. ${PROFILE.school}, ${PROFILE.location}. Building ${PROFILE.building}.`;
+  return `${PROFILE.title} based in ${PROFILE.location} (${PROFILE.school}), building ${PROFILE.building}.`;
 }
 
 /** The profile below the name and title, each field labelled by its name: "Previously", "School" and so on. */
