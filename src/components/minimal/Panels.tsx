@@ -45,36 +45,38 @@ export function Help() {
           Help
         </p>
         <p>
-          This is {FILE_NAME}: the whole site as one plain text file, open in nano. Scroll it, follow its links, and use
-          these keys:
+          This is {FILE_NAME}&mdash;the entire site as a single plain-text file inside nano. Scroll through, follow
+          any link, or use these shortcuts:
         </p>
         <dl className="nano-help-keys">
           <div>
             <Key shown="^G" spoken="Control G" />
-            <dd>Show this help. ^X or Esc closes it.</dd>
+            <dd>Open or close this help window (^X or Esc also closes it).</dd>
           </div>
           <div>
             <Key shown="^F" spoken="Control F" />
             <dd>
-              Search: type a word and press Enter to go to it. Enter on an empty search goes to the next one. Without
-              JavaScript, use the browser&rsquo;s own find.
+              Search the page. Type a term and press Enter to jump to a match; press Enter again on an empty prompt to
+              find the next one. Without JavaScript, use your browser&rsquo;s find shortcut.
             </dd>
           </div>
           <div>
             <Key shown="^/" spoken="Control slash" />
-            <dd>Go to a section: the top, PROJECTS, CONTACT or ELSEWHERE.</dd>
+            <dd>Jump directly to a section: the top, PROJECTS, CONTACT, or ELSEWHERE.</dd>
           </div>
           <div>
             <Key shown="^X" spoken="Control X" />
-            <dd>Close the file and go back to the title menu.</dd>
+            <dd>Close the file and return to the title menu.</dd>
           </div>
           <div>
             <Key shown="Esc" spoken="Escape" />
-            <dd>Close what is open. With nothing open, the same as ^X.</dd>
+            <dd>Close the open dialog or search prompt, or return to the title menu when nothing is open.</dd>
           </div>
         </dl>
-        <p>On a phone, tap the keys at the foot of the screen. The other keys there are nano&rsquo;s own, shown as nano
-          shows them; they do nothing here.</p>
+        <p>
+          On mobile, tap any active shortcut at the bottom of the screen. The remaining dimmed shortcuts are part of
+          nano&rsquo;s classic bar and are inactive here.
+        </p>
       </div>
       <div className="nano-panel-keys">
         <Close panel={HELP} />

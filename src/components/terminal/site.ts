@@ -21,7 +21,7 @@ ${PROFILE.title}.
 - **Location** ${PROFILE.location}
 - **Building** ${PROFILE.building}
 
-The work is in \`projects/\`. To get in touch, \`cat contact.md\` or \`open resume.pdf\`.
+Explore projects in \`projects/\` (or run \`work\`), check \`cat contact.md\` to get in touch, or \`open resume.pdf\`.
 `;
 
 const CONTACT = `# Contact
@@ -85,7 +85,7 @@ function projectsIndex(projects: readonly Project[]): string {
 /** contact.md where the page has no contact form: every way to get in touch, the résumé among them. */
 function contactCard(): string {
   const links = contactLinks().map((c) => `- **${c.label}** [${c.text}](${c.href})`);
-  return ["# Contact", "", ...links, ""].join("\n");
+  return ["# Contact", "", ...links, "", "Best reached by email, or open the résumé directly.", ""].join("\n");
 }
 
 /** sitemap.md: the site's other pages, each with what it is. */

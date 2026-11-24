@@ -2,9 +2,9 @@
 
 Project-specific guidance for AI coding agents.
 
-## What this site is becoming
+## What this site is
 
-danielhkuo.github.io is being rebuilt, on `feat/dragon-world`, as a world you explore on dragonback.
+danielhkuo.github.io is a world you explore on dragonback. It went live on 2026-11-21.
 
 The title screen at `/` is the site's own terminal (`src/components/terminal/`), floating over the live world. Below it are an "Enter world" button and small links to the other ways in. It is built (`src/components/title/`, design `docs/superpowers/specs/2026-11-20-title-terminal-design.md`). The four ways in:
 
@@ -59,12 +59,11 @@ They do not govern the game layer or the terminal-styled pages: the renderer, ti
 - **Roadmap.** `docs/superpowers/roadmap.md` is the one list of next steps, ideas and backlog. Update it in the same
   branch as the work that changes it.
 - **Branches.**
-  - `feat/dragon-world` is the integration branch until the world ships to `main`.
-  - For now `world/bigmap` collects finished work below it. Session branches (named by the app,
-    `claude/<topic>-<id>`) merge into `world/bigmap` with `git merge --no-ff` once tests, types, lint and e2e pass and
-    any visual change has been judged on renders.
-  - The owner decides when `world/bigmap` merges into `feat/dragon-world`.
-  - Other work gets its own branch: `world/<topic>`, `fix/<topic>` or `docs/<topic>`.
+  - `main` is the live site: every merge to it deploys.
+  - `world/bigmap` is the integration branch. Session branches (named by the app, `claude/<topic>-<id>`) merge into it
+    with `git merge --no-ff` once tests, types, lint and e2e pass and any visual change has been judged on renders.
+  - `world/bigmap` goes to `main` by pull request when the owner says so.
+  - Other work gets its own branch off `world/bigmap`: `world/<topic>`, `fix/<topic>` or `docs/<topic>`.
   - Delete a branch after its merge.
   - Nothing is pushed without the owner's say-so.
 - **Coordination.** One coordinator session runs the side sessions, merges their branches and ships worlds. Sessions

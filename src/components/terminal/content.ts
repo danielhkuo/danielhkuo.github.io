@@ -17,7 +17,7 @@ export const PROFILE = {
   previously: "Summer Analyst @ Goldman Sachs AWM",
   school: "Rice University · CS",
   location: "Houston, TX",
-  building: "AI products · self-hosted systems · developer tools",
+  building: "AI products, self-hosted systems, and developer tools",
 } as const;
 
 /** One line for each of the five interests. The quest and the Codex read this list. */

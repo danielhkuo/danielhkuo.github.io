@@ -37,7 +37,7 @@ function pageItem(page: SitePage): string {
 }
 
 /** What stands in for the project list when there are no projects. */
-const GITHUB_PROFILE = linkItem("GitHub profile", LINKS.github, "the code is there");
+const GITHUB_PROFILE = linkItem("GitHub profile", LINKS.github, "source repositories and recent work");
 
 function lead(): string[] {
   return [`# ${PROFILE.name}`, "", `> ${profileSummary()}`, ""];
@@ -49,7 +49,7 @@ export function llmsTxt(projects: readonly Project[]): string {
   const otherPages = SITE_PAGES.filter((p) => !p.isText);
   const lines = [
     ...lead(),
-    `${PROFILE.name}'s personal site is a world explored on dragonback, entered through a title menu. Everything on it is also in the plain text version, and agents.md describes it in more detail.`,
+    `${PROFILE.name}'s personal site pairs an interactive dragon-flight world and an in-browser terminal with a plain-text mirror. Every project and profile detail lives in the text version, and agents.md provides the full reference.`,
     "",
     "## Site",
     "",
@@ -108,7 +108,7 @@ function projectSection(p: Project): string[] {
 export function agentsMd(projects: readonly Project[]): string {
   const lines = [
     ...lead(),
-    `This is ${PROFILE.name}'s personal site, described for AI agents. The site is a world explored on dragonback, entered through a title menu; everything on it is also in the plain text version. This file is generated each time the site is built, from the same profile and project list the site shows. For a short index, read [llms.txt](${absoluteUrl(LLMS_TXT)}).`,
+    `This guide documents ${PROFILE.name}'s personal site for AI agents. The site pairs an interactive dragon-flight world and terminal shell with a complete plain-text mirror, all built from the same profile and project data. This file is generated at build time; for a concise index, see [llms.txt](${absoluteUrl(LLMS_TXT)}).`,
     "",
     "## Profile",
     "",
@@ -123,7 +123,7 @@ export function agentsMd(projects: readonly Project[]): string {
     "## Projects",
     "",
     ...(projects.length
-      ? ["The projects, in the order the site lists them.", "", ...projects.flatMap(projectSection)]
+      ? ["Featured projects, listed in portfolio order:", "", ...projects.flatMap(projectSection)]
       : [GITHUB_PROFILE, ""]),
     "## Pages",
     "",
@@ -131,10 +131,10 @@ export function agentsMd(projects: readonly Project[]): string {
     "",
     "## Notes for agents",
     "",
-    `- Read the [text version](${absoluteUrl(TEXT_PAGE)}) or this file. The title menu and the flight are interactive ways through the same content and add no facts of their own. The text version is dressed as a file open in nano; its shortcuts only search and move around that page.`,
-    "- Every page is static: a plain HTTP GET returns all of it, with no sign-in. Only the flight needs JavaScript.",
-    "- The project list is kept by hand in the site's repository; the stars, forks and languages come from GitHub when the site is built. This file is as current as the site's last build.",
-    `- To reach ${PROFILE.name}, email [${EMAIL}](${LINKS.email}).`,
+    `- Start with this file or the [text version](${absoluteUrl(TEXT_PAGE)}). The title menu and flight mode are interactive ways through the same portfolio (plus a small side quest in the world). The text version is styled as a file open in nano, where shortcuts only search and jump between sections on that page.`,
+    "- Every route is static and readable via plain HTTP GET without authentication; only the interactive flight canvas requires JavaScript.",
+    "- Project entries are curated by hand in the repository's `projects/` directory, while GitHub stars, forks, languages, and update dates are fetched at build time.",
+    `- To reach ${PROFILE.name} directly, email [${EMAIL}](${LINKS.email}).`,
   ];
   return `${lines.join("\n")}\n`;
 }
