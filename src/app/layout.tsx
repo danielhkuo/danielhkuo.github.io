@@ -11,7 +11,8 @@ const iconVersion = "5";
 
 export const metadata: Metadata = {
   title: "Daniel Kuo - Portfolio",
-  description: "Kami-styled portfolio for Daniel Kuo, software engineer and product builder.",
+  description:
+    "Personal site and interactive portfolio for Daniel Kuo—software engineer and Rice CS student building AI products, self-hosted systems, and developer tools.",
   icons: {
     icon: [
       { url: `/favicon.ico?v=${iconVersion}` },

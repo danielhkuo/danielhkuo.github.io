@@ -1,6 +1,6 @@
 ---
 name: DermAtlas
-summary: Finds expert-labeled skin lesion cases that look like a patient's, to support primary care doctors.
+summary: Helps primary care doctors match a patient's skin lesion against similar, expert-labeled clinical cases.
 repo: DermAtlas-413/DermAtlas
 order: 2
 ---
